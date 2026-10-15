@@ -3,124 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Satellite settings</title>
-<!-- The ESP32 firmware's "Satellite settings" page (/device; #154 setup page, #267 status rows in the
-     shared UI's Device status): WiFi (first setup + change network), camper unit, the satellite's switches. SOURCE: tools/gen_c_dict.py renders it into
-     index_gen.html (the double-brace placeholders: generated constants, the strings.json table and
-     the page script from page.js) and strings_gen.h; never edit those. Self-contained: no external
-     assets. -->
+<title>Satellite WiFi</title>
+<!-- /device: the WiFi recovery page (a way back onto WiFi if the UI at / fails). Rendered by
+     tools/gen_c_dict.py (the {{ }} placeholders: tools/wifi_consts.py); colours: calictl/webui/app.css. -->
 <style>
-:root{--bg:#f6f6f3;--fg:#1d1d1b;--muted:#6b6b66;--card:#fff;--line:#deded8;--accent:#1f6f5c;--bad:#a8322d}
-@media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ececea;--muted:#9a9a94;--card:#21211f;--line:#34342f;--accent:#5bbf9f;--bad:#e0716b}}
+:root{--bg:#eef1f5;--fg:#1a1d24;--muted:#6b7280;--card:#fff;--border:#e2e6ee;--accent:#2f6fed;--error:#d0453b}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1116;--fg:#eef0f4;--muted:#9aa1b0;--card:#1a1d25;--border:#262a34;--error:#ef6b62}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:720px;margin:0 auto;padding:16px}
-h1{font-size:20px;margin:0 0 12px}
-h2{font-size:16px;margin:0 0 8px}
-.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 12px}
-.muted{color:var(--muted)}.bad{color:var(--bad)}
-#banner{display:none;background:var(--bad);color:#fff;border-radius:8px;padding:8px 12px;margin:0 0 12px}
-[hidden]{display:none!important}
-label{display:block;margin:10px 0 4px;color:var(--muted)}
-select,input,button{font:inherit;width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
-button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px;cursor:pointer}
-button.secondary{background:transparent;color:var(--accent)}
-button.danger{background:var(--bad);border-color:var(--bad)}
-button:disabled{opacity:.45;cursor:default}
-.acts{display:flex;flex-wrap:wrap;gap:0 8px;align-items:center}.acts>*{flex:1 1 8em}.acts>span,.acts>input{flex-basis:100%;margin-top:8px}
-a{color:var(--accent)}
-input[type=checkbox]{width:auto;margin-right:6px}
-.tgl{display:flex;align-items:center;gap:12px;min-height:44px;margin:4px 0}.tgl>span:first-child{flex:1}
-button.sw{flex:none;width:56px;height:44px;margin:0;padding:0;border:0;background:none;position:relative}
-button.sw::before,button.sw::after{content:"";position:absolute;transition:.15s}
-button.sw::before{left:2px;top:7px;width:52px;height:30px;border-radius:15px;background:var(--muted)}
-button.sw::after{left:5px;top:10px;width:24px;height:24px;border-radius:50%;background:#fff}
-button.sw[aria-checked=true]::before{background:var(--accent)}button.sw[aria-checked=true]::after{left:27px}
-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.step{display:flex;gap:8px}.step button{width:48px;height:44px;margin:0;padding:0}
-.sec{margin:20px 0 8px}p:empty{margin:0}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:480px;margin:auto;padding:16px}
+h1{font-size:20px;margin:0}
+form{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:12px 0}
+.muted{color:var(--muted)}.bad{color:var(--error)}
+label{display:block;margin:10px 0 4px}
+select,input,button{font:inherit;width:100%;min-height:44px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg)}
+button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px}
+#rescan{background:none;color:var(--accent)}
+input[type=checkbox]{width:auto;min-height:0;margin-right:6px}
+a{color:var(--accent)}[hidden]{display:none}
 </style>
 </head>
 <body>
 <main>
-<p id="device"></p>
-<h1 id="title"></h1>
-<div id="banner"></div>
-<p id="loading" class="muted"></p>
-<section id="setup" class="box" hidden>
-  <h2 id="setup-title"></h2>
-  <p id="wifi-now"></p>
-  <button id="wifi-change" class="secondary" type="button" hidden></button>
-  <div id="wifi-form">
-    <p id="setup-hint" class="muted"></p>
-    <label for="ssid" id="ssid-label"></label>
-    <select id="ssid"></select>
-    <p id="scan-empty" class="muted" hidden></p>
-    <input id="ssid-name" autocomplete="off" autocapitalize="none" spellcheck="false" hidden>
-    <label for="psk" id="psk-label"></label>
-    <input id="psk" type="password" autocomplete="off">
-    <label><input id="psk-show" type="checkbox"><span id="psk-show-l"></span></label>
-    <span id="wifi-acts" class="acts"><button id="connect" type="button"></button></span>
-    <button id="rescan" class="secondary" type="button"></button>
-  </div>
-  <div id="wifi-switch" hidden></div>
-  <p id="setup-msg" aria-live="polite"></p>
-</section>
-<section id="pair" class="box" hidden>
-  <h2 id="pair-title"></h2>
-  <p id="pair-status"></p>
-  <a id="pair-link"></a>
-</section>
-<section id="ac" class="box" hidden>
-  <h2 id="ac-title"></h2>
-  <div class="tgl"><span id="ac-status"></span><button id="ac-toggle" class="sw" type="button" role="switch" aria-labelledby="ac-status" hidden></button></div>
-  <p id="ac-msg" class="bad"></p>
-</section>
-<section id="scr" class="box" hidden>
-  <h2 id="scr-title"></h2>
-  <p id="scr-status"></p>
-  <div class="tgl"><span id="scr-auto-status"></span><button id="scr-auto-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-auto-status" hidden></button></div>
-  <div class="tgl"><span id="scr-prox-status"></span><button id="scr-prox-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-prox-status" hidden></button></div>
-  <div class="tgl"><span id="scr-motion-status"></span><button id="scr-motion-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-motion-status" hidden></button></div>
-  <div class="tgl"><span id="scr-off"></span><span class="step"><button id="scr-dn" class="secondary" type="button">−</button><button id="scr-up" class="secondary" type="button">+</button></span></div>
-  <p id="scr-msg" class="bad"></p>
-</section>
-<section id="fw" class="box" hidden>
-  <h2 id="fw-title"></h2>
-  <p id="fw-status"></p>
-  <button id="fw-install" type="button" hidden></button>
-  <button id="fw-check" class="secondary" type="button" hidden></button>
-  <label for="fw-channel" id="fw-channel-l" hidden></label><select id="fw-channel" hidden><option value="stable"></option><option value="latest"></option></select>
-  <p id="fw-msg" class="bad"></p>
-</section>
-<h2 id="adv-title" class="sec" hidden></h2>
-<section id="ux" class="box" hidden>
-  <div class="tgl"><span id="ux-status"></span><button id="ux-toggle" class="sw" type="button" role="switch" aria-labelledby="ux-status" hidden></button></div>
-  <p id="ux-msg" class="bad"></p>
-</section>
-<section id="exp" class="box" hidden>
-  <h2 id="exp-title"></h2>
-  <p id="exp-hint" class="muted"></p>
-  <div class="tgl"><span id="exp-status"></span><button id="exp-toggle" class="sw" type="button" role="switch" aria-labelledby="exp-status" hidden></button></div>
-  <p id="exp-msg" class="bad"></p>
-</section>
-<section id="sens" class="box" hidden>
-  <h2 id="sens-title"></h2>
-  <p id="sens-hint" class="muted"></p>
-  <div id="sens-cfg"></div>
-  <div id="sens-seen"></div>
-  <p id="sens-msg" class="bad" aria-live="polite"></p>
-</section>
-<p id="time" class="muted"></p>
-<p id="sd" class="muted"></p>
-<p id="res" class="muted"></p>
-<p id="battery" class="muted"></p>
+<h1 id="h"></h1>
+<p id="why" class="muted"></p>
+<p id="now" aria-live="polite"></p>
+<form id="f">
+<label for="ssid" id="l-ssid"></label><select id="ssid"></select>
+<input id="name" autocomplete="off" autocapitalize="none" spellcheck="false" hidden>
+<label for="psk" id="l-psk"></label><input id="psk" type="password" autocomplete="off">
+<label><input id="show" type="checkbox"><span id="l-show"></span></label>
+<button id="go"></button><button id="rescan" type="button"></button>
+</form>
+<p id="msg" aria-live="polite"></p>
+<p><a href="/" id="app"></a></p>
 </main>
 <script>
-const CFG = {pollMs: {{NET_PAGE_POLL_MS}}, connectTimeoutMs: {{NET_CONNECT_TIMEOUT_MS}}, connectRetryMs: {{NET_CONNECT_RETRY_MS}}, host: "{{NET_HOSTNAME}}", ap: "{{NET_AP_SSID}}", apPsk: "{{NET_AP_PSK}}", apAddr: "{{NET_AP_ADDR}}", ssidMax: {{NET_SSID_MAX}}, pskMin: {{NET_PSK_MIN}}, pskMax: {{NET_PSK_MAX}}};
-const STR = {{STRINGS}};
+"use strict";
+const L = {
+  en: {h: "Satellite WiFi", why: "A way back onto WiFi if the camper UI does not load.", ssid: "Network", other: "Other network…",
+    name: "Network name", psk: "Password", show: "Show password", go: "Connect", rescan: "Search again", app: "Open the camper UI",
+    station: "Connected to {s} · {ip}", setup: "Setup hotspot {{NET_AP_SSID}}: not on a WiFi network", off: "WiFi off", fail: "last join failed",
+    bad_ssid: "Choose a network (1–{{NET_SSID_MAX}} characters).", bad_psk: "The password needs {{NET_PSK_MIN}}–{{NET_PSK_MAX}} characters.",
+    store: "Could not save the WiFi settings.", rejected: "The satellite rejected the request.", none: "No answer from the satellite.",
+    ok: "Saved — the satellite joins {s} now. Join it with this phone too, then open"},
+  de: {h: "Satellit-WLAN", why: "Ein Weg zurück ins WLAN, falls die Camper-Oberfläche nicht lädt.", ssid: "Netzwerk", other: "Anderes Netzwerk…",
+    name: "Netzwerkname", psk: "Passwort", show: "Passwort anzeigen", go: "Verbinden", rescan: "Erneut suchen", app: "Camper-Oberfläche öffnen",
+    station: "Verbunden mit {s} · {ip}", setup: "Einrichtungs-Hotspot {{NET_AP_SSID}}: in keinem WLAN", off: "WLAN aus", fail: "letzte Verbindung fehlgeschlagen",
+    bad_ssid: "Wähle ein Netzwerk (1–{{NET_SSID_MAX}} Zeichen).", bad_psk: "Das Passwort braucht {{NET_PSK_MIN}}–{{NET_PSK_MAX}} Zeichen.",
+    store: "Die WLAN-Einstellungen konnten nicht gespeichert werden.", rejected: "Der Satellit hat die Anfrage abgelehnt.", none: "Keine Antwort vom Satelliten.",
+    ok: "Gespeichert — der Satellit verbindet sich jetzt mit {s}. Verbinde auch dieses Telefon damit und öffne"}};
+const lang = navigator.language.slice(0, 2) === "de" ? "de" : "en", S = /** @type {Record<string, string>} */ (L[lang]);
+const $ = (/** @type {string} */ id) => /** @type {HTMLInputElement} */ (document.getElementById(id));
+document.documentElement.lang = lang;
+document.title = S.h;
+for (const k of ["h", "why", "go", "rescan", "app"]) $(k).textContent = S[k];
+for (const k of ["ssid", "psk", "show"]) $("l-" + k).textContent = S[k];
+$("name").placeholder = S.name;
+$("show").onchange = () => { $("psk").type = $("show").checked ? "text" : "password"; };
+const other = () => { $("name").hidden = $("ssid").value !== ""; };
+$("ssid").onchange = other;
+// GET /api/wifi: the mode line + (scan) the list; each GET also starts a (rate-limited) scan
+async function read(scan = false) {
+  try {
+    const w = await (await fetch("/api/wifi", {cache: "no-store"})).json();
+    $("now").textContent = S[w.mode].replace("{s}", w.ssid).replace("{ip}", w.ip)
+      + (w.mode !== "station" && w.last_error ? " · " + S.fail + " (" + w.last_error + ")" : "");
+    if (!scan) return w;
+    const sel = $("ssid"), keep = sel.value;
+    sel.replaceChildren(...w.scan.filter((/** @type {any} */ a) => a.secure)
+      .map((/** @type {any} */ a) => new Option(a.ssid + " (" + a.rssi + " dBm)", a.ssid)), new Option(S.other, ""));
+    if (keep) sel.value = keep;
+    other();
+    return w;
+  } catch (e) { $("now").textContent = S.none; return null; }
+}
+const scan = () => { read(true); setTimeout(read, 4000, true); };
+$("rescan").onclick = scan;
+$("f").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const ssid = $("ssid").value || $("name").value.trim(), psk = $("psk").value, msg = $("msg");
+  msg.className = "bad";
+  if (!ssid || ssid.length > {{NET_SSID_MAX}}) { msg.textContent = S.bad_ssid; return; }
+  if (psk.length < {{NET_PSK_MIN}} || psk.length > {{NET_PSK_MAX}}) { msg.textContent = S.bad_psk; return; }
+  try {
+    const r = await (await fetch("/api/wifi", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ssid: ssid, psk: psk})})).json();
+    if (!r.ok) { msg.textContent = r.error === "ssid" ? S.bad_ssid : r.error === "psk" ? S.bad_psk : r.error === "store" ? S.store : S.rejected; return; }
+    $("psk").value = "";
+    msg.className = "";
+    const a = document.createElement("a");
+    a.href = a.textContent = "http://{{NET_HOSTNAME}}.local/";
+    msg.replaceChildren(S.ok.replace("{s}", ssid) + " ", a);
+    for (let i = 0; i < 30; i++) {   // watch the join for a minute: the mode line shows how it ends
+      await new Promise((done) => setTimeout(done, {{NET_PAGE_POLL_MS}}));
+      const w = await read();
+      if (w && w.mode === "station" && w.ssid === ssid) break;
+    }
+  } catch (e) { msg.textContent = S.none; }
+};
+scan();
 </script>
-<script>
-{{PAGE_JS}}</script>
 </body>
 </html>

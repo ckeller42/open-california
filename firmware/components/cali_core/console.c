@@ -155,7 +155,7 @@ static void wifi_status(void) {
 }
 
 /* "wifi set <ssid> <psk>": both single tokens (an SSID with spaces cannot be typed here — use the
- * setup page), stored like POST /api/wifi (kv "wifi_ssid"/"wifi_psk", then the runner). args points
+ * WiFi setup screen), stored like POST /api/wifi (kv "wifi_ssid"/"wifi_psk", then the runner). args points
  * into the caller's line buffer, which the caller zeroes afterwards (it holds the passphrase). */
 static void wifi_set(char *args) {
     char *ssid = strtok(args, " \t"), *psk = strtok(NULL, " \t");

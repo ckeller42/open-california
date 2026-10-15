@@ -128,7 +128,7 @@ def _hides_calictl_only_chrome(sat):
     menu = sat.locator(".menupop")
     expect(menu.get_by_text("Device status")).to_be_visible()
     # the pairing wizard runs on the satellite too (R_FW_PAIRING_WIZARD); the fixture holds a bond
-    # no pairing in the menu (owner 2026-10-15): banner, Device status and /device hold it
+    # no pairing in the menu (owner 2026-10-15): the banner and Device status hold it
     assert menu.locator("[role=menuitem]").all_inner_texts() == ["Device status", "Help", "Deutsch"]
 
 
@@ -145,7 +145,7 @@ def test_menu_device_status_screen(sat, stub):
     """The in-app Device-status screen as two cards (UX review 3.2 / M4): "Camper unit" (connection,
     pairing with the MAC behind Details, Unpair…) and "Satellite" (firmware, WiFi ssid · ip · dBm,
     uptime, storage, battery, resources, Satellite settings ›); no buspi card, no "BLE link" row
-    duplicating the connection, the battery labelled like /device (L6). Satellite settings › opens
+    duplicating the connection, the battery labelled like the old /device page (L6). Satellite settings › opens
     the settings screen in the same app."""
     sat.click("#menu")
     sat.locator(".menupop").get_by_text("Device status").click()
@@ -284,45 +284,36 @@ def test_api_refuses_every_path_but_state_on_the_satellite(sat, stub):
     assert set(stub.requests) <= ALLOWED, stub.requests
 
 
-def test_device_page_links_to_the_ui_in_every_mode(stub, error_gated_page):
-    """Station mode: back to / (the UI). Setup hotspot: to /app — the UI with the pairing wizard,
-    since / is the setup page there."""
-    with error_gated_page(stub.base + "/device") as pg:
-        pg.wait_for_selector('#device a[href="/"]')
-    stub.mode = "setup"
-    with error_gated_page(stub.base + "/device") as pg:
-        expect(pg.locator('#device a[href="/app"]')).to_have_text("‹ Camper UI")
-        expect(pg.locator('#pair-link[href="/app#pair"]')).to_have_text("Pair now ›")
-        assert pg.locator('#device a[href="/"]').count() == 0
+def test_device_is_the_recovery_page_with_a_link_to_the_ui(stub, error_gated_page):
+    """/device is the WiFi recovery page in every mode (one-web-UI design, U2): the join form and a
+    link back to the UI at /."""
+    for mode in ("station", "setup"):
+        stub.mode = mode
+        with error_gated_page(stub.base + "/device") as pg:
+            expect(pg.locator("#app")).to_have_attribute("href", "/")
+            expect(pg.locator("#ssid option").first).to_be_attached()
 
 
-def test_device_page_manage_pairing_opens_device_status(stub, error_gated_page):
-    """Paired: /device's Camper unit box offers "Manage pairing ›" (not "Pair…", owner 2026-10-15),
-    which opens the camper UI's Device status, its Camper-unit card with Unpair…; the hash is consumed."""
+def test_devicestatus_link_opens_device_status_and_stays_in_the_url(stub, error_gated_page):
+    """``/#devicestatus`` opens Device status (its Camper-unit card with Unpair…); the hash stays, so a
+    reload stays there too."""
     _display_only(stub)
-    with error_gated_page(stub.base + "/device", viewport=PHONE) as pg:
-        link = pg.locator("#pair-link")
-        expect(link).to_have_text("Manage pairing ›")
-        expect(link).to_have_attribute("href", "/#devicestatus")
-        link.click()
+    with error_gated_page(stub.base + "/#devicestatus", viewport=PHONE) as pg:
         expect(pg.locator("#title")).to_have_text("Device status")
         expect(_ds_card(pg, "Camper unit").get_by_role("button", name="Unpair…")).to_be_visible()
-        assert pg.evaluate("location.hash") == ""
+        assert pg.evaluate("location.hash") == "#devicestatus"
 
 
-def test_device_page_pair_now_opens_the_wizard_at_the_top(stub, error_gated_page):
-    """Not paired: "Pair now ›" opens the camper UI with the pairing wizard at the top of Home."""
+def test_pair_link_opens_the_wizard_at_the_top(stub, error_gated_page):
+    """Not paired: ``/#pair`` opens the camper UI with the pairing wizard at the top of Home; the
+    action's hash is consumed."""
     _display_only(stub)
     for snap in (
         stub.fixtures["satellite"]["/api/pairing"],
         stub.fixtures["satellite"]["/api/state"]["device"]["pairing"],
     ):
         snap.update(state="idle", address=None)
-    with error_gated_page(stub.base + "/device", viewport=PHONE) as pg:
-        link = pg.locator("#pair-link")
-        expect(link).to_have_text("Pair now ›")
-        expect(link).to_have_attribute("href", "/#pair")
-        link.click()
+    with error_gated_page(stub.base + "/#pair", viewport=PHONE) as pg:
         card = pg.locator("#pairing-card")
         expect(card.get_by_text("Pair the camper unit")).to_be_in_viewport()
         assert pg.evaluate("location.hash") == ""
@@ -830,8 +821,8 @@ def test_wizard_pairs_the_satellite(stub, error_gated_page, locale):
 
 
 def test_wizard_over_the_setup_hotspot_via_app(stub, error_gated_page):
-    """No home WiFi at the van: on the setup hotspot / is the setup page, /app the UI — display only
-    (no control over the hotspot) but with the pairing wizard.
+    """No home WiFi at the van: on the setup hotspot /app (like /) is the UI on WiFi setup — no
+    control over the hotspot (said once there, not as the read-only banner) but with the pairing wizard.
 
     .. test:: The wizard is reachable and pairs over the setup hotspot
        :id: T_SAT_UI_PAIRING_HOTSPOT
@@ -840,7 +831,11 @@ def test_wizard_over_the_setup_hotspot_via_app(stub, error_gated_page):
     stub.mode = "setup"
     _unpaired(stub, "setup")
     with error_gated_page(stub.base + "/app") as pg:
-        expect(pg.get_by_text("Satellite — display only")).to_be_visible()
+        expect(
+            pg.get_by_text("Controls work only on your home WiFi — not over the setup hotspot")
+        ).to_be_visible()
+        expect(pg.get_by_text("Satellite — display only")).to_have_count(0)
+        expect(pg.get_by_text("Not paired yet — no data.")).to_have_count(0)  # the banner below says it
         _pair_in_wizard(pg, stub, WIZARD_TEXT["en-US"])
     assert [b["action"] for b in stub.pairing_posts] == ["start", "passkey"]
 
@@ -859,7 +854,7 @@ def test_wizard_error_hints_are_the_satellites(stub, error_gated_page, error, lo
     stub.fixtures["satellite"]["/api/pairing"].update(state="error", error=error, attempts=3)
     with error_gated_page(stub.base, locale=locale) as pg:
         pg.wait_for_function("() => !!(STATE._meta && STATE._meta.satellite)")
-        pg.evaluate("location.hash = '#pair'")  # /device's Camper-unit link (no menu entry since PR B)
+        pg.evaluate("location.hash = '#pair'")  # the #pair deep link (no menu entry since PR B)
         expect(pg.get_by_text(hint, exact=False)).to_be_visible()
         shown = _card_text(pg)
         assert not [w for w in BUSPI_ONLY if w in shown], shown
@@ -870,7 +865,7 @@ UNPAIR_CONFIRM = "Unpair the camper unit? Data stops until you pair again."
 
 
 def test_pair_link_shows_the_wizard_at_the_top(stub, error_gated_page):
-    """On a paired, online van at phone size, the #pair link (/device) must show the wizard where the user looks:
+    """On a paired, online van at phone size, the #pair link must show the wizard where the user looks:
     above the summary and the tiles, scrolled into view (UX review H2: it used to land below the
     eight tiles, out of sight)."""
     with error_gated_page(stub.base, viewport=PHONE) as pg:

@@ -1,4 +1,4 @@
-/* web.c — the firmware's HTTP endpoints + status/setup page (#154). Contract: include/cali_web.h.
+/* web.c — the firmware's HTTP endpoints, the web UI bundle and the /device recovery page (#154). Contract: include/cali_web.h.
  * Proven by tests/firmware/test_web_handlers.py (test/web_cli.c).
  */
 #include "cali_web.h"
@@ -26,7 +26,7 @@
 #include "cali_wifi_run.h"
 #include "cali_wifi_sm.h"
 #include "pairing_consts.h"
-#include "strings_gen.h"   /* WEB_INDEX_HTML: firmware/web/index_gen.html, generated */
+#include "strings_gen.h"   /* WEB_INDEX_HTML: the /device recovery page (index_gen.html), generated */
 #include "app_bundle_gen.h"   /* WEB_APP_HTML_GZ: the calictl web UI bundle (satellite UI), generated */
 #include "pwa_assets_gen.h"   /* PWA_ASSETS: the manifest + icons the bundle links (home screen), generated */
 
@@ -1132,7 +1132,7 @@ static void api_ux(const cali_http_req_t *req, cali_http_resp_t *resp) {
     } else if (req->body_len > CALI_UX_BODY_MAX) {   /* the core 413s most of these already */
         SET_CONST(resp, 413, ERR_UX_TOO_LARGE);
     } else if (!ux_on()) {
-        set_body(resp, 204, NULL, NULL, 0);   /* switched off on /device: nothing recorded */
+        set_body(resp, 204, NULL, NULL, 0);   /* switched off (Satellite settings): nothing recorded */
     } else if (ux_parse(req->body, req->body_len, &h, 0) != 0) {
         SET_CONST(resp, 400, ERR_UX_BAD);
     } else {
@@ -1141,7 +1141,7 @@ static void api_ux(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
-/* ---- POST /api/ux_setting {"enabled":<bool>}: the /device "Send usage data" switch, station only ---- */
+/* ---- POST /api/ux_setting {"enabled":<bool>}: the Satellite settings "Send usage data" switch, station only ---- */
 static void api_ux_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cursor_t c = {req->body, req->body + req->body_len};
     char key[8];
@@ -1167,7 +1167,7 @@ static void api_ux_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
-/* ---- POST /api/experimental {"sensors":<bool>}: the /device sensor-track switch, station only ---- */
+/* ---- POST /api/experimental {"sensors":<bool>}: the Satellite settings sensor-track switch, station only ---- */
 static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cursor_t c = {req->body, req->body + req->body_len};
     char key[8];
@@ -1189,7 +1189,7 @@ static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp)
     }
 }
 
-/* ---- GET|POST /api/sensors: the /device Sensors box (R_FW_SENSORS), every mode, 404 while the flag is off ---- */
+/* ---- GET|POST /api/sensors: the Satellite settings Sensors box (R_FW_SENSORS), every mode, 404 while the flag is off ---- */
 
 enum { S_ADD = 1, S_REMOVE = 2, S_ID = 4, S_ALIAS = 8, S_KEY = 16 };
 
@@ -1270,16 +1270,9 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     (void)ctx;
     if (strcmp(req->path, "/api/command") == 0) return api_command(req, resp);
     if (strcmp(req->path, "/api/log") == 0) return api_log(req, resp);
-    if (get && strcmp(req->path, "/") == 0) {
-        if (wifi_mode() == CALI_WIFI_MODE_STATION) {   /* the calictl web UI (R_FW_SHARED_UI) */
-            set_static(resp, HTML_TYPE, WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN, NO_CACHE);
-            resp->content_encoding = "gzip";
-        } else {                                       /* setup hotspot / setup-flow join: the setup page */
-            set_static(resp, HTML_TYPE, WEB_INDEX_HTML, WEB_INDEX_HTML_LEN, NO_CACHE);
-        }
-        return 1;
-    }
-    if (get && strcmp(req->path, "/app") == 0) {       /* the calictl web UI in every mode: the wizard over the hotspot */
+    /* the calictl web UI (R_FW_SHARED_UI) in every mode: over the setup hotspot it opens on WiFi setup
+     * by itself; /app = the same (the manifest's start_url, old links) */
+    if (get && (strcmp(req->path, "/") == 0 || strcmp(req->path, "/app") == 0)) {
         set_static(resp, HTML_TYPE, WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN, NO_CACHE);
         resp->content_encoding = "gzip";
         return 1;
@@ -1326,7 +1319,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         api_sensors(req, resp);
         return 1;
     }
-    if (get && strcmp(req->path, "/device") == 0) {    /* the status/setup page, in every mode */
+    if (get && strcmp(req->path, "/device") == 0) {    /* the WiFi recovery page, in every mode */
         set_static(resp, HTML_TYPE, WEB_INDEX_HTML, WEB_INDEX_HTML_LEN, NO_CACHE);
         return 1;
     }
@@ -1349,8 +1342,8 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         return 1;
     }
     if (wifi_mode() == CALI_WIFI_MODE_SETUP) {
-        /* captive portal: an OS probe gets the absolute setup address (its Host is some probe domain);
-         * anything else goes home */
+        /* captive portal: an OS probe gets the absolute setup address (its Host is some probe domain),
+         * so the OS's captive sheet opens the UI (WiFi setup); anything else goes home */
         resp->status = 302;
         resp->location = cali_captive_is_probe(req->path) ? PROBE_TARGET : "/";
         return 1;

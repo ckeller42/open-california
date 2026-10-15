@@ -71,7 +71,7 @@ def test_state_fixture_shape(fixtures, mode):
 
 
 def test_sensors_fixture_shape(fixtures):
-    """The satellite mode has the sensor track on: /api/sensors (the /device box) names the same
+    """The satellite mode has the sensor track on: /api/sensors (Satellite settings › Sensors) names the same
     readings /api/state's ext carries."""
     sens, ext = fixtures["satellite"]["/api/sensors"], fixtures["satellite"]["/api/state"]["ext"]
     assert set(sens) == SENSORS_KEYS and all(set(c) == SENSOR_CFG_KEYS for c in sens["configured"])
@@ -117,6 +117,8 @@ def test_stub_serves_like_the_firmware(fixtures):
         for path in ("/api/state", "/api/wifi"):
             with urllib.request.urlopen(stub.base + path, timeout=5) as r:
                 assert json.load(r) == json.loads(json.dumps(fixtures["station"][path]))
-        stub.mode = "setup"
+        stub.mode = "setup"  # web.c: the UI bundle at / in every mode, the recovery page at /device
         with urllib.request.urlopen(stub.base + "/", timeout=5) as r:
-            assert r.headers["Content-Encoding"] is None and r.read() == page
+            assert r.headers["Content-Encoding"] == "gzip" and r.read() == bundle
+        with urllib.request.urlopen(stub.base + "/device", timeout=5) as r:
+            assert r.read() == page

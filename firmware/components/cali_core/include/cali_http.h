@@ -1,6 +1,6 @@
 /* cali_http.h — a portable single-connection HTTP/1.1 responder over cali_net sockets (#154).
  *
- * Serves the web status/setup page (web.c) on any platform: it reaches the network only through
+ * Serves the web UI, recovery page and API (web.c) on any platform: it reaches the network only through
  * the cali_net_t socket table and takes time only from cali_http_poll(now_ms) — no clock, no
  * malloc, no ESP-IDF/POSIX headers.
  *

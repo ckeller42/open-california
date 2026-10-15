@@ -108,15 +108,15 @@ repos:
         entry: tools/ci.sh codec-fresh
         language: system
         pass_filenames: false
-        files: ^(protocol/dictionary\.yaml|calictl/(overrides|pairing|device|protocol|semantics|anchors|serve|control)\.py|calictl/webui/(index\.html|app\.css|app\.js|strings\.de\.js|semantics(_tables)?\.js)|csrc/(codec_dict|codec_chars|pairing_consts|net_consts|control_consts)\.h|firmware/web/(index\.html|page\.js|strings\.json|strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/(camper_codec|wifi_sm|semantics|control)\.json|tests/vectors/app/.*\.jsonl|tools/(gen_(c_dict|codec_vectors|wifi_vectors|semantics_vectors|control_vectors)|wifi_consts|wifi_sm_ref|mock_unit|capture_diff)\.py)$
-      # The un-built web UIs' only static check (calictl/webui + the ESP32 page script): tsc --checkJs
+        files: ^(protocol/dictionary\.yaml|calictl/(overrides|pairing|device|protocol|semantics|anchors|serve|control)\.py|calictl/webui/(index\.html|app\.css|app\.js|strings\.de\.js|semantics(_tables)?\.js)|csrc/(codec_dict|codec_chars|pairing_consts|net_consts|control_consts)\.h|firmware/web/(index\.html|strings\.json|strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/(camper_codec|wifi_sm|semantics|control)\.json|tests/vectors/app/.*\.jsonl|tools/(gen_(c_dict|codec_vectors|wifi_vectors|semantics_vectors|control_vectors)|wifi_consts|wifi_sm_ref|mock_unit|capture_diff)\.py)$
+      # The un-built web UIs' only static check (calictl/webui + the ESP32 recovery page's script): tsc --checkJs
       # (0 errors) + node --check. Needs node.
       - id: webcheck
         name: web UI typecheck (tsc --checkJs)
         entry: tools/ci.sh webcheck
         language: system
         pass_filenames: false
-        files: ^(calictl/webui/(.*\.js|jsconfig\.json)|firmware/web/(.*\.js|.*\.d\.ts|jsconfig\.json))$
+        files: ^(calictl/webui/(.*\.js|jsconfig\.json)|firmware/web/index\.html)$
 
       # mypy type check on the calictl/ package (blocking: all errors resolved)
       - id: mypy

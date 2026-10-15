@@ -353,7 +353,7 @@ window.STRINGS_DE = {
   "Command failed": "Befehl fehlgeschlagen",
   "Read-only mode — writes are disabled": "Nur-Lesen-Modus — Schreibzugriffe sind deaktiviert",
   // the ESP satellite's own answers (app.js ELSEWHERE / CMD_ERRORS; the app has no such strings —
-  // proposals, see the PR body). "Einrichtungs-Hotspot" = firmware/web/strings.json mode_setup.
+  // proposals, see the PR body).
   "Only via buspi or the app": "Nur über buspi oder die App",
   "Controls work only on your home WiFi — not over the setup hotspot":
     "Steuerung nur im eigenen WLAN — nicht über den Einrichtungs-Hotspot",
@@ -664,7 +664,7 @@ window.STRINGS_DE = {
     + "weitergezählt. Firmware zeigt die Softwarestände der Einheit und ob dieses Projekt darauf "
     + "getestet wurde.",
 
-  // --- Satellite settings + WiFi setup (the words of the satellite's /device page, firmware/web/strings.json)
+  // --- Satellite settings + WiFi setup (the words of the satellite's former /device page)
   "Satellite settings": "Satellit-Einstellungen",
   "WiFi setup": "WLAN einrichten",
   "Connect to your WiFi": "Mit deinem WLAN verbinden",

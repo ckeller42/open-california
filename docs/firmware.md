@@ -20,8 +20,8 @@ against the mock camper unit (the Board tier below) and in the van against the r
 rows in `docs/business-logic/evidence-ledger.md`; `firmware/README.md`'s "On-board verification"
 section is the checklist that run followed). Since the WiFi/web
 slice the firmware also joins a WiFi network (set up through its own hotspot + captive portal) and
-serves a status page + JSON state API and, on the home network, the calictl web UI with its
-controls live — see [Network: WiFi setup and the status page](#network-wifi-setup-and-the-status-page)
+serves the calictl web UI (WiFi setup over the hotspot; on the home network with its controls live),
+a JSON state API and a WiFi recovery page — see [Network: WiFi setup and the web UI](#network-wifi-setup-and-the-web-ui)
 below, and the owner how-to [How to put the ESP32 satellite on your WiFi](howto-esp-wifi-setup.md).
 
 The full build/porting detail (every NimBLE/Bumble adaptation, exact pins, warnings policy) lives
@@ -32,7 +32,7 @@ in the repository; this page is the traceability + orientation view.
 
 ```mermaid
 flowchart LR
-  H["Host tier<br/>NimBLE Linux port + Bumble fake unit + scripted fake WiFi"] --> HP(("pairing, session, SNAP decode,<br/>heartbeat, reconnect, control path + write allow-list,<br/>WiFi setup flow, status page, API and live UI"))
+  H["Host tier<br/>NimBLE Linux port + Bumble fake unit + scripted fake WiFi"] --> HP(("pairing, session, SNAP decode,<br/>heartbeat, reconnect, control path + write allow-list,<br/>WiFi setup flow, recovery page, API and live UI"))
   Q["QEMU tier<br/>real esp32s3 image, no radio"] --> QP(("boot, console protocol,<br/>NVS bond store survives reboot,<br/>no-WiFi-driver path"))
   B["Board tier<br/>CoreS3 on the bench, mock unit"] --> BP(("the real radio stack end to end,<br/>status screen states, control path vs the mock"))
 ```
@@ -59,7 +59,7 @@ Identical on the host build (stdin/stdout) and the device (UART/USB-Serial-JTAG 
 - **In**, one command per line: `pair` (start pairing), `passkey N` (the code the unit displays,
   ignored unless waiting for one), `forget` (drop the bond), `status` (reprint `STATE`), `quit`
   (host only — exits the process; no-op on the device), the WiFi commands `wifi set <ssid>
-  <psk>`, `wifi status`, `wifi forget`, `wifi scan` (see [the network section](#network-wifi-setup-and-the-status-page);
+  <psk>`, `wifi status`, `wifi forget`, `wifi scan` (see [the network section](#network-wifi-setup-and-the-web-ui);
   `LOG wifi: not enabled` while WiFi is off), the sensor probe `sensors [on|off|add …|remove …]`
   ([External sensors](#external-sensors-experimental-r_fw_sensors)), and `set <function> <what> [value]` — a control
   command in calictl's `set` vocabulary (`set cooler power on`, `set lighting kitchen 5`,
@@ -93,10 +93,11 @@ This is a calictl-ism, not the app's: the app has no 1302 re-read timer at all (
 re-reads are screen pollers for 1102/1602/1902/1004 while those screens are open); it gets a fresh
 1302 read on every reconnect instead.
 
-## Network: WiFi setup and the status page
+## Network: WiFi setup and the web UI
 
-The firmware joins a WiFi network and serves a status page, a JSON state API and — in station mode
-— the calictl web UI with `POST /api/command` on port 80 — the same C code on the host tier
+The firmware joins a WiFi network and serves the calictl web UI in every WiFi mode (over the setup
+hotspot it opens on its WiFi-setup screen), a JSON state API, `POST /api/command` (station mode) and
+a minimal WiFi recovery page (`/device`) on port 80 — the same C code on the host tier
 (`cali-host --http`) and the device. Owner-facing steps:
 [How to put the ESP32 satellite on your WiFi](howto-esp-wifi-setup.md).
 
@@ -109,7 +110,7 @@ only through the `cali_net_t` socket/WiFi table in `include/cali_net.h`):
 | `wifi_run.c` | The WiFi runtime: feeds `cali_net` events + ticks into the SM, runs its actions on `cali_net`, the captive DNS and the kv store, and owns the one BLE-coex gate (scans). |
 | `http_core.c` | A single-connection HTTP/1.1 responder (below). |
 | `captive_dns.c` | The setup hotspot's DNS: every A query answered with `192.168.4.1`, plus the table of OS captive-portal probe paths. |
-| `web.c` | The endpoints and the page. |
+| `web.c` | The endpoints, the UI bundle and the recovery page. |
 | `snapshot.c` | The `fn` object shared by the console's `SNAP` and `/api/state`. |
 | `status.c` (`include/cali_status.h`) | `cali_status_get()`: one `cali_status_t` snapshot (pairing state + bonded address, link up, last-`SNAP` age, WiFi mode/SSID/IP/RSSI/last failure, uptime, fw). `/api/state`'s `device` block and the screen both read it, so they cannot disagree. |
 | `display_model.c` (`include/cali_display_model.h`) | The pure status-display model: a `cali_status_t` in, three rows (colour + EN/DE text), the footer mode and the brightness out — no LVGL, no clock (`R_FW_STATUS_DISPLAY`). |
@@ -204,14 +205,13 @@ with them on any build, a dirty local one included. A `GET` whose `If-None-Match
 
 | Method + path | Answer |
 |---|---|
-| `GET /` | Station mode: 200 `text/html; charset=utf-8` — the calictl web UI bundle, `app_bundle_gen.h`'s `WEB_APP_HTML_GZ` with `Content-Encoding: gzip` and `Cache-Control: no-cache` (see [the satellite UI](#the-satellite-ui-r_fw_shared_ui)). Setup/off mode: the setup page (as `GET /device`). Every static answer here and below carries a strong `ETag` (see *HTTP caching* under this table). |
-| `GET /device` | 200 `text/html` in every mode — the **Satellite settings** page (the status rows live in the calictl UI's Device status screen since #267): `strings_gen.h`'s `WEB_INDEX_HTML`, the byte array generated from `firmware/web/index.html` + `page.js` + `strings.json` (EN + DE) by `tools/gen_c_dict.py`. Top to bottom: the back link "‹ Camper UI" (`/` in station mode, `/app` elsewhere); **WiFi** (over the setup hotspot the join form; online "Connected to <ssid> · <ip> · <dBm>" + **Change network…**, which opens the same form with an "Other network…" name field — **Search again** scans online too (`GET /api/wifi`, rate-limited) and an empty list says so — then an in-page confirm with the warning that it returns to the current network by itself on a wrong password, then a static "Switching networks" panel rendered before `POST /api/wifi`; a failed change that came back shows "The new network didn't work (<reason>); back on <ssid>." from `reverted`); **Camper unit** (paired ✓ + "Manage pairing ›" to the UI's Device status, `#devicestatus` / not paired + "Pair now ›" to the UI's wizard, `#pair`; app.js `openFromHash`); Restore camping; Screen; Firmware update; **Advanced** (Send usage data, Experimental, Sensors); the clock/storage/resources/battery lines. Every on/off row is one compact line: its status left, a switch (`role=switch`, `aria-checked`, named by the status) right; over the setup hotspot the station-only rows end in "needs the home WiFi" and hide their control. Until the first `/api/state` answer only a "Loading…" line shows (no join form or empty box flashes). One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
-| `GET /app` | 200 the calictl web UI bundle (as `GET /` in station mode) in **every** WiFi mode — over the setup hotspot `/` is the setup page, and `/app` is where the pairing wizard is reached (`R_FW_PAIRING_WIZARD`). |
+| `GET /`, `GET /app` | 200 `text/html; charset=utf-8` in **every** WiFi mode — the calictl web UI bundle, `app_bundle_gen.h`'s `WEB_APP_HTML_GZ` with `Content-Encoding: gzip` and `Cache-Control: no-cache` (see [the satellite UI](#the-satellite-ui-r_fw_shared_ui)). In setup/off mode the app opens on its **WiFi setup** screen by itself (the captive portal lands here). `/app` is the same (the manifest's `start_url`, old links). Every static answer here and below carries a strong `ETag` (see *HTTP caching* under this table). |
+| `GET /device` | 200 `text/html` in every mode, `Cache-Control: no-cache` — the **WiFi recovery page** (one-web-UI design, U2): a way back onto WiFi if the UI fails. Plain HTML with a few lines of inline JS, EN + DE inline (by `navigator.language`), no external file, ~6 KB (`NET_HTTP_BODY_MAX` 8192 is its budget, `tests/test_web_strings.py`): the WiFi mode/network (`GET /api/wifi`), a join form (the scanned networks + "Other network…" with a name field, password with *Show password*, `POST /api/wifi`), the result with the `http://calictl-esp.local/` link, and *Open the camper UI* (`/`). `strings_gen.h`'s `WEB_INDEX_HTML`, generated from `firmware/web/index.html` by `tools/gen_c_dict.py`. One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
 | `GET /manifest.webmanifest`, `/sw.js`, `/apple-touch-icon.png`, `/icon-192.png`, `/maskable-icon-192.png`, `/favicon.ico`, `/favicon-32x32.png`, `/favicon-16x16.png` | 200 in **every** WiFi mode, the manifest `Cache-Control: no-cache`, the icons `max-age=86400` (never `immutable`: their URLs never change), each with an `ETag` — the home-screen files the UI bundle links (`application/manifest+json`, `image/png`, `image/x-icon`): `firmware/web/pwa_assets_gen.h`, generated by `tools/gen_c_dict.py` (`pwa_assets`) from the same `calictl/webui/` files buspi serves. The icons are byte-for-byte; the manifest is derived — only the icons served here (no 512 px, flash) and `start_url` `/app`, the UI in every mode. 70,230 B of flash, outside the bundle's `WEB_APP_GZ_MAX`. Plus `/sw.js` (`text/javascript`, `no-cache`), the offline shell's service worker, registered only on HTTPS (`R_UI_PWA_OFFLINE`). |
 | `GET /api/pairing` | 200 calictl's `pairing_snapshot()`: `{"state","attempts","error","address","radio_busy":false}` — the console `STATE` members (one emitter, `cali_snapshot_pairing`); `address` = the bonded identity while bonded, or idle/error with a stored bond. |
 | `POST /api/pairing` | calictl's wizard request `{"action":"start"\|"passkey"\|"cancel"\|"reset","value":"<6 digits>","confirm":true}`, in **every** WiFi mode (connection management, not a control write). web.py's checks in its order, calictl's error bodies `{"error":<code>}`: 400 `bad_json` (the fixed-shape parser: unknown keys, a non-string `action`, a non-bool `confirm`), 400 `bad_action`, 400 `confirm_required` (reset without `confirm:true`), 400 `bad_passkey` (not a 6-digit **string**), then 409 `busy` for `start`/`reset` while a control command is pending (the single link is in use). Then the runner — `start` = console `pair` (idempotent: ignored unless idle/error), `passkey` = `passkey N` (ignored unless waiting), `cancel` (only while a flow runs, scanning … verifying; otherwise a no-op, so a stale cancel never drops a bonded link), `reset` = `forget` (drops the bond) — and 200 with the post-action snapshot. Deliberate differences from calictl: Content-Type is not checked (calictl: 415), unknown keys / a non-string `action` / a non-bool `confirm` are `bad_json`, a `cancel` outside a flow changes nothing. |
 | `GET /api/state` | 200 JSON `{"t","fn","device"}` — `fn` = the `SNAP` object (every function the session holds a frame for, `codec_decode`d, `CODEC_CHARS` order); `device` = `pairing {state,address}`, `link {up,last_snap_age_ms}`, `wifi {mode,ssid,ip,rssi}`, `control {writes}` (`POST /api/command` accepted: station mode), `uptime_ms`, `fw`, `ota {state,available_sha,progress_pct,error,channel}` (`R_FW_OTA`; `channel` `stable`/`latest`), `time {source,synced,boot,up}` (`R_FW_TIME`), `sd {state,total_mb,free_mb,last_seq,dropped}` (`R_FW_SD_LOG`), `res {heap_free_kb,heap_min_kb,psram_free_kb,cpu_pct}` (the satellite's own resources; each `null` when unknown), `battery {pct,mv,usb,charging,runtime_min}` (`R_FW_BATTERY`; each `null` when unknown — host, QEMU), `auto_camper {enabled,state}` (`R_FW_AUTO_CAMPER`; `state` `idle`/`armed`/`restoring`), `display {state,lux,prox,motion,brightness_pct,sensor,auto,prox_wake,motion_wake,min,max,offset,dfs,pm}` (`R_FW_DISPLAY_WAKE`; the live members `null` without a screen — host build, QEMU; `motion` = the accel change in mg, `null` without a BMI270 reading; `dfs`/`pm` = the live `esp_pm` config read each time — `true` when min < max, `pm` `"40-240"` MHz — `null` without PM: host, a build without `CONFIG_PM_ENABLE`), `ux {enabled}` (the "Send usage data" switch, [UX telemetry](#ux-telemetry-r_ux_telemetry)), `experimental {sensors}` (the sensor track switch, [Experimental features](#experimental-features-r_fw_experimental)), `water_held` (`fn.water` is the held last-plausible reading), `water_held_age_ms` (only while held and the baseline was measured on this boot — an NVS-restored one has no time; the UI shows "🕒 measured 2 h ago"). Top-level `ext {<alias>:{type,<fields…>,age_s}}` (`type` first: `govee` / `victron_mppt` / `victron_battery`) (`R_FW_SENSORS`, [External sensors](#external-sensors-experimental-r_fw_sensors)) **only while** `exp_sensors` is on — off, the key is absent. Built whole in one handler call into the `NET_JSON_MAX` (8192 B) buffer (a full 14-function snapshot is ~4.5 KB); overflow -> 500 + `LOG http: overflow`. |
-| `GET /api/wifi` | 200 JSON `{"mode","ssid","ip","rssi","last_error","reverted","scan":[{"ssid","rssi","secure"}]}` (the last scan's list, up to 16); `last_error` is why the last join failed (`"not_found"`, `"auth"`, `"other"`) or `null` (none yet, or cleared by new credentials or by joining); `reverted` is `true` after a failed replacement put the previous network back (`ssid` = that network, `last_error` = the replacement's reason, kept across its rejoin) until the next POST or forget — the page turns both into one sentence; in setup mode and while `ONLINE` it also asks for a fresh scan for the next GET (at most one per 30 s, held while BLE pairs). |
+| `GET /api/wifi` | 200 JSON `{"mode","ssid","ip","rssi","last_error","reverted","scan":[{"ssid","rssi","secure"}]}` (the last scan's list, up to 16); `last_error` is why the last join failed (`"not_found"`, `"auth"`, `"other"`) or `null` (none yet, or cleared by new credentials or by joining); `reverted` is `true` after a failed replacement put the previous network back (`ssid` = that network, `last_error` = the replacement's reason, kept across its rejoin) until the next POST or forget — the web UI turns both into one sentence; in setup mode and while `ONLINE` it also asks for a fresh scan for the next GET (at most one per 30 s, held while BLE pairs). |
 | `POST /api/wifi` | Body exactly `{"ssid":"…","psk":"…"}` (fixed-shape parser). SSID 1–32 bytes, PSK 8–63 bytes (open networks unsupported) -> stored in the kv store, handed to the runner -> 200 `{"ok":true}`; else 400 `{"ok":false,"error":"json"|"ssid"|"psk"}`, a kv failure 500 `"store"`. |
 | `DELETE /api/wifi` | Forget the WiFi (-> `SETUP_AP`) -> 200 `{"ok":true}`. |
 | `POST /api/command` | calictl's control request `{"function","what","value","confirm"}` plus the optional `local_now` (the page's clock for `lighting wakeup`, see [Control path](#control-path)) (`value` a string, integer or null — booleans/fractions/nesting 400 `bad_json`). **Station mode only**: anywhere else 403 `setup_mode` (ruling B: never over the setup hotspot). Then web.py's 400 `missing_function_or_what` / `confirm_required` (airheater, roof), then the sequencer (`cali_control.h`): accepted -> the answer waits for the write ACKs (`CALI_HTTP_PENDING`, <= `CALI_CTL_DEADLINE_MS`) -> 200 `{"ok":true,"applied":null,"state":null,"error":null,"function":fn}` (`applied` never true: no readback; plus `"unconfirmed":true` when the link dropped after a frame went out — it may have landed, #264) or 502 `write_failed` / 504 `write_timeout`; a gate or "Only via buspi or the app" -> 200 `{"ok":true,"applied":false,"refused":<text>,…}`; 400 `bad_value` / `unknown_control`, 409 `busy`, 503 `not_connected`. The core caps a pending answer at `CALI_HTTP_PENDING_MAX_MS` (2 x the deadline; 504 text/plain) so a handler that never answers cannot wedge the single connection. Deliberate differences from calictl: Content-Type is not checked (calictl: 415), `-0` passes as the text `"-0"` (refused as not on/off where calictl reads OFF — the safe direction), a >= 64-byte value is `bad_json` before the gates (the console `set` gates first; both refuse). |
@@ -220,8 +220,8 @@ with them on any build, a dirty local one included. A `GET` whose `If-None-Match
 | `POST /api/auto_camper` | `{"enabled":<bool>}` (exactly that object; serve's endpoint, `R_FW_AUTO_CAMPER`): saves the toggle -> 200 `{"ok":true,"auto_camper":<bool>}`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
 | `POST /api/display` | `{"auto"?,"prox_wake"?,"motion_wake"?,"min"?,"max"?,"offset"?,"dfs"?}` (`R_FW_DISPLAY_WAKE`, [Screen wake and brightness](#screen-wake-and-brightness-r_fw_display_wake)): merged into the stored settings -> 200 `{"ok":true}`. `dfs` (bool) is not a setting: it switches the CPU's dynamic frequency scaling at once and is never stored (a boot starts at the sdkconfig default) — the #346 touch-NACK A/B knob ([Touch NACK diagnostics](#touch-nack-diagnostics-346)); `device.display.dfs`/`pm` show the live result. Station mode only (403 `setup_mode`), 400 `bad_json` (another key, a key twice, a non-bool flag, a non-integer percent), 400 `bad_value` (min 1–50, max 20–100, min < max, offset −50…50), 500 `store`; a body with only `dfs` stores nothing, and 500 `pm` when PM exists but the new config did not take. |
 | `POST /api/ux` | The web UI's usage beacon (`R_UX_TELEMETRY`, [UX telemetry](#ux-telemetry-r_ux_telemetry)): calictl's `web.ux_batch` shape and rules. Station mode only (403 `setup_mode`), body > 2048 B 413 (the core's 2 KB request buffer answers most of those first); "Send usage data" off -> 204, nothing recorded; not exactly the shape -> 400 `{"error":"bad_ux"}` (calictl's body); else one SD record per event and 204. Content-Type is not checked (a beacon string is text/plain). |
-| `POST /api/ux_setting` | `{"enabled":<bool>}` (exactly that object): the `/device` "Send usage data" switch -> kv `ux_on` -> 200 `{"ok":true,"ux":<bool>}`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
-| `POST /api/experimental` | `{"sensors":<bool>}` (exactly that object): the `/device` "Sensors (experimental)" switch (`R_FW_EXPERIMENTAL`) -> kv `exp_sensors` -> 200 `{"ok":true,"sensors":<bool>}`; applied at once, no reboot; `LOG exp: sensors on\|off`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
+| `POST /api/ux_setting` | `{"enabled":<bool>}` (exactly that object): Satellite settings' "Send usage data" switch -> kv `ux_on` -> 200 `{"ok":true,"ux":<bool>}`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
+| `POST /api/experimental` | `{"sensors":<bool>}` (exactly that object): Satellite settings' "Sensors (experimental)" switch (`R_FW_EXPERIMENTAL`) -> kv `exp_sensors` -> 200 `{"ok":true,"sensors":<bool>}`; applied at once, no reboot; `LOG exp: sensors on\|off`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
 | `GET /api/sensors` | `R_FW_SENSORS` ([External sensors](#external-sensors-experimental-r_fw_sensors)), every WiFi mode: 200 `{"configured":[{id,type,alias,last_seen_s,value,has_key}],"seen":[{id,type,model,rssi}],"scan":"ok"\|"paused"}` (`value` = the fields object while the last reading is < 10 min old, else `null`; `last_seen_s` `null` before the first reading) and a kick (a window soon). 404 `{"ok":false,"error":"disabled"}` while `exp_sensors` is off. |
 | `POST /api/sensors` | Exactly one of `{"add":<id>,"alias"?:"…","key"?:"<32 hex>"}`, `{"remove":<id>}`, `{"id":<id>,"alias":"…"}` (rename) — keys in any order, each once, ids 0–65535 -> 200 the `GET` body. 400 `bad_json` (not one of those shapes), `bad_alias` (not `[a-z0-9_-]{1,16}`, taken, or omitted for a type already configured), `bad_key` (not 32 hex digits), `key_mismatch`, `unknown_id` (not seen in the last 10 min for `add`; not configured for `remove`/rename), `full` (16); 500 `store`. Every WiFi mode (the setup hotspot too); 404 `disabled` while the flag is off. |
 | other method on `/api/state`, `/api/wifi`, `/api/command`, `/api/ota`, `/api/auto_camper`, `/api/display`, `/api/ux`, `/api/ux_setting`, `/api/experimental`, `/api/sensors` or `/api/pairing` | 405 `{"ok":false,"error":"method"}` |
@@ -241,13 +241,13 @@ poll waits up to the command's deadline (the UI shows "Sending…", never the of
 ### The pairing wizard (`R_FW_PAIRING_WIZARD`)
 
 The satellite pairs from its web page with the **same** wizard calictl serves on buspi (the *No camper unit is paired yet* banner's
-*Pair…*, Device status → *Pair…*, or the `/device` page's *Pair now ›* link, `#pair`):
+*Pair…*, Device status → *Pair…*, or the `#pair` deep link):
 `/api/pairing` answers in calictl's contract, so `calictl/webui/app.js` runs it unchanged. The
 endpoint is a thin mapping onto the runner the console drives — `start` = `pair`, `passkey` =
 `passkey N`, `reset` = `forget`, plus `cancel` — so the console and the page can never disagree
-(both read one emitter). It works over the **setup hotspot** too: there `/` is the setup page, and
-the device page links to `/app` (*Open the camper UI to pair the unit*), the UI in every mode,
-read-only (controls stay station-only). Only the device-specific hints differ from buspi's: no Pi
+(both read one emitter). It works over the **setup hotspot** too: there the UI opens on WiFi setup, which
+shows the unpaired banner's *Pair…* (or the wizard) right there, read-only (controls stay
+station-only). Only the device-specific hints differ from buspi's: no Pi
 scanner, daemon or `CALICTL_ADDR` advice; instead *until the satellite connects*, *stop a
 Raspberry Pi with calictl near the van*, *Saved on the satellite — survives a restart*.
 `radio_busy` is always `false` (no co-resident scanner). When a flow ends without a new bond —
@@ -423,7 +423,7 @@ unit (`test_control_e2e.py`, `test_web_e2e.py` with the UI in Chromium) → the 
 
 ### The satellite UI (`R_FW_SHARED_UI`)
 
-In station mode `GET /` serves calictl's own web UI — the same `calictl/webui` bytes buspi serves,
+`GET /` serves calictl's own web UI in every WiFi mode — the same `calictl/webui` bytes buspi serves,
 inlined into one document by `tools/gen_c_dict.py` (`render_app_bundle`), gzipped with `mtime=0`
 (reproducible bytes) into `firmware/web/app_bundle_gen.h`; `--check` compares the decompressed
 document, so a stale bundle fails CI. The browser does the interpretation: the firmware's raw
@@ -459,7 +459,15 @@ verbunden — in ein paar Sekunden noch einmal versuchen*. The two wake-up refus
 either) are owner-confirmed (2026-10-08): *Das Wecklicht braucht die Uhrzeit der Webseite — dort einstellen* (the clock reason) and
 *Wecklicht-Einstellungen noch nicht bekannt (die Einheit hat sie nicht gemeldet): Ein/Aus mit
 angeben* (`WAKEUP_UNKNOWN`, which calictl answers too). Device and WiFi details are the calictl UI's
-⋮ menu "Device status" (#267); its "Satellite settings" button goes to `/device`, the satellite's own page.
+⋮ menu "Device status" (#267); its Satellite card's *Satellite settings ›* opens the **Satellite settings**
+screen (satellite only, `#satsettings`): WiFi (current network, *Change network…*), Camper unit, Restore
+camping, Screen, Firmware update, Advanced (Send usage data, Experimental, Sensors). Over the setup
+hotspot the app lands on the **WiFi setup** screen (`#wifisetup`: the join form, the pairing entry, the
+hotspot explained once); once the satellite runs in station mode it shows Home, unless the join was
+made there (it keeps the result and the `http://calictl-esp.local` link). Every screen is in the URL
+hash (`#devicestatus`, `#satsettings`, `#wifisetup`, `#<function>`), so a reload stays on it; `#pair`
+opens the wizard. The `/device` recovery page (Endpoints, above) is the
+fallback if the UI ever fails.
 
 Known gaps (accepted):
 
@@ -580,7 +588,7 @@ The channel is one NVS byte, `ota_channel` (0 `stable`, 1 `latest`; absent = `st
 and shown as `device.ota.channel`. `POST /api/ota {"channel":"stable"|"latest"}` (station mode only)
 stores it at once; the next check reads that release's manifest and an install downloads from the
 same release (the channel is read once per request, so a change mid-download cannot mix releases).
-The `/device` page's *Firmware update* box has a *Channel* select.
+Satellite settings' *Firmware update* box has a *Channel* select.
 
 | Partition | Offset | Size |
 |---|---|---|
@@ -604,8 +612,8 @@ here, `error: checksum`), and only then sets the boot partition and restarts. Pr
 `device.ota` in `/api/state`: `{"state": idle|checking|up_to_date|available|downloading|verifying|rebooting|error,
 "available_sha", "progress_pct", "error": manifest|download|checksum|commit|null}`. `/api/ota` is
 **station mode only** (`403 setup_mode` over the hotspot, like `/api/command`); `409 busy` while one
-runs; `503 ota_unavailable` on the host build and the QEMU image (no OTA I/O). The `/device` page
-has a *Firmware update* row: the running sha, *Check for update*, and *Install `<sha7>`* once one is
+runs; `503 ota_unavailable` on the host build and the QEMU image (no OTA I/O). Satellite settings
+has a *Firmware update* box: the running sha, *Check for update*, and *Install `<sha7>`* once one is
 available.
 After a merge, `tools/esplab/ota_deploy.sh [stable|main|sha] [esp-url]` sets the channel (`stable`
 for the tag's build, `latest` for `main` or a sha) and runs check → install → rollback window from a
@@ -667,8 +675,8 @@ held, else `sntp` with `synced: false` while SNTP runs but has not synced yet, e
 only from this boot's SNTP callback (a RAM flag; never a "clock looks plausible" check, so a clock
 that survived a reset is not synced); `boot` + `up` let buspi anchor the running boot from its own
 clock; `none` on the host build and the QEMU image (no SNTP, no unit frames; the host build never
-counts boots, `boot` 0 there). The `/device` page shows it as one line (*Clock synced (SNTP) · boot
-17*, *Clock from the camper unit · boot 17*).
+counts boots, `boot` 0 there). Device status' Satellite card shows it as its *Clock* row (*synced (SNTP) · boot
+17*, …).
 
 ## SD log (`R_FW_SD_LOG`)
 
@@ -726,8 +734,8 @@ buspi can later fill the gaps of its own history (`calictl esp-ingest`, `R_ESP_I
 `device.sd` in `/api/state`: `{"state": "absent"|"error"|"ok", "total_mb", "free_mb", "last_seq", "dropped"}` —
 `total_mb`/`free_mb` (FAT, MiB) only while `ok`, else `null`; `last_seq` = the last record fsynced to the card
 (`null`: none yet; it trails the queue by up to 10 s); `error` = a card answered but holds no usable FAT (`ESP_FAIL`) or the log directory
-cannot be opened. The `/device` page and the shared UI's *Device status* card (menu → Device status)
-show one **Storage** row: *SD 28.1 of 29.7 GB free · log #1042*, *No SD card* or *SD card error*, plus
+cannot be opened. The shared UI's *Device status* card (menu → Device status)
+shows one **Storage** row: *SD 28.1 of 29.7 GB free · log #1042*, *No SD card* or *SD card error*, plus
 *N records dropped* when `dropped > 0`, EN + DE.
 
 ### Diagnostics on the SD log (`R_FW_DIAG_LOG`)
@@ -800,8 +808,8 @@ general.
 
 ### Device resources (`device.res`)
 
-`{"heap_free_kb", "heap_min_kb", "psram_free_kb", "cpu_pct"}`, shown as a **Resources** row on
-`/device` and in the *Device status* card (*RAM 61 KB free (lowest 38) · PSRAM 7302 KB free · CPU 4
+`{"heap_free_kb", "heap_min_kb", "psram_free_kb", "cpu_pct"}`, shown as a **Resources** row
+in the *Device status* card (*RAM 61 KB free (lowest 38) · PSRAM 7302 KB free · CPU 4
 %*): internal heap free now and the lowest since boot (`heap_caps_*` of `MALLOC_CAP_INTERNAL`), PSRAM
 free (`null` without PSRAM: the QEMU image), and the busy % of both cores since the previous
 `/api/state` (the first: since boot) from the idle tasks' run time
@@ -845,8 +853,8 @@ firmware remembers what was on and turns it back on once you park.
 - **Log** lines as serve's: `auto-camper[armed_engine_shed|restoring|restored|stood_down|gave_up]: …
   (ignition=… camping=… soc=… warn=… fails=… owe=…)`, `auto-camper: ENABLED|disabled`, and at boot
   `auto-camper: on|off[ (restore owed)]`.
-- **The `/device` page** shows it (*Auto camper on — …*, *⟳ will restore on park*) with a Turn
-  off / Turn on button (station mode only, EN + DE); `/api/state` `device.auto_camper`
+- **Satellite settings** shows it (*Auto camper on — …*, *⟳ will restore on park*) with a switch
+  (station mode only, EN + DE); `/api/state` `device.auto_camper`
   `{enabled, state}`.
 - **buspi and the ESP both on:** both may restore after the same park. Harmless: the decision skips
   once camping reads on (the second sees it on and reports `restored`), and the camping frame is
@@ -922,7 +930,7 @@ The CoreS3 screen is dark when nobody uses it (spec `docs/superpowers/specs/2026
 - **Settings** (kv namespace `cali`, one byte each): `disp_auto` (default on), `disp_prox` (on),
   `disp_motion` (on; missing on an older store = on), `disp_min` (8), `disp_max` (100), `disp_off`
   (0, a signed byte); `POST /api/display` (station mode)
-  changes any of them, the next display tick applies them. The `/device` page's **Screen** row shows
+  changes any of them, the next display tick applies them. Satellite settings' **Screen** box shows
   the state, brightness with its range and the room light, plus the three switches (room light, hand,
   motion) and a −/+ offset
   stepper in 5-point steps (EN + DE); min/max only through the API (the page budget).
@@ -976,8 +984,7 @@ is touched. No chip, a failed read or no screen (host, QEMU): every member `null
   (EN `Batt …`), on USB `… · USB 87 % lädt` (EN `charging`) / `… · USB 100 %`; plain text (the
   Latin-1 fonts have no ⚡). It never wakes the screen (only a status row turning red/amber does);
   the setup-mode footer is unchanged.
-- **GUI:** a Battery line on `/device` and a *Battery* row in the *Satellite* card of the shared UI's
-  Device status (EN + DE).
+- **GUI:** a *Battery* row in the *Satellite* card of the shared UI's Device status (EN + DE).
 
 ## Experimental features (`R_FW_EXPERIMENTAL`)
 
@@ -1078,7 +1085,7 @@ to the sensors and never to the pairing SM or the session.
   `POST /api/experimental` does; `sensors add <id> [alias|-] [key|-]` / `sensors remove <id>` answer
   `LOG sensors ok` / `LOG sensors err <code>` (`CALI_SENS_E_*`). The host build prints every
   diagnostics record as `REC <body>`.
-- **Setup (`/device` Sensors box, EN + DE):** shown while the flag is on, it polls
+- **Setup (Satellite settings' Sensors box, EN + DE):** shown while the flag is on, it polls
   `GET /api/sensors` every 10 s (each GET kicks a window). Configured rows show the type, the alias,
   up to three readings with their units (°C, %, V, W, kWh, A — fields without a clear unit, and a
   Govee's own battery, are left to the shared UI) and the age, then **Rename** (an inline name field prefilled with the alias +
@@ -1126,7 +1133,7 @@ whichever runtime served the page.
   `{"seq":…,"boot":…,"up":…,"ts":…,"tsrc":…,"ev":"ux","sid":…,"ua_class":…,"standalone":…,"origin":…,"type":"control","fn":"cooler","control":"level","value":"3"}`,
   through `cali_sdlog_text` (the diagnostics' text records, `R_FW_DIAG_LOG`; a record body stays under
   `CALI_SDLOG_DATA_MAX`, so an escape-heavy error message is cut on the card to fit). No
-  card: none (a full queue counts in `device.sd.dropped`). The `/device` page row **Send usage data:
+  card: none (a full queue counts in `device.sd.dropped`). Satellite settings' row **Send usage data:
   on/off** (EN + DE) with a switch (station mode only) sets kv `ux_on` (1 byte, missing =
   on) through `POST /api/ux_setting`; `device.ux {enabled}` -> `_meta.ux` (`semantics.js`
   `adaptSatellite`).
@@ -1136,15 +1143,16 @@ whichever runtime served the page.
   beacon (e2e `T_UX_NO_SECRETS`, `T_UX_NO_SECRETS_SENSOR`). No free text but an error message and a
   control's value, no client IPs (neither runtime records the peer address; the SD record and the Influx
   point have no address field), no user identity (the per-tab id is random, never stored, and
-  differs per tab and load), and an off switch on each runtime (`/device` "Send usage data",
+  differs per tab and load), and an off switch on each runtime (Satellite settings' "Send usage data",
   `CALICTL_UX=0`).
 - **Influx + Grafana** — buspi's `calictl esp-ingest` writes each SD `ux` record as the `ui_ux` point
   calictl writes for its own beacons (same tags and field types), tagged `source=esp` (calictl's own
   have no `source`; `R_ESP_INGEST_DIAG`). The dashboard's **🧭 UI usage** row reads both: views per
   screen, controls used, page-load p50/p95, script errors.
 
-The `/device` page budget `NET_HTTP_BODY_MAX` grew 24 -> 28 KB for the usage-data row (flash only), and
-32 -> 40 KB for the WiFi box + Satellite settings layout (still flash only: no C code sizes a buffer from it).
+The `/device` page budget `NET_HTTP_BODY_MAX` grew 24 -> 28 -> 40 KB while it was the whole settings page; since
+the one-web-UI change (U2) it is a ~6 KB recovery page and the budget is 8 KB (flash only: no C code sizes a
+buffer from it).
 
 ## CI jobs (`.github/workflows/ci.yml`)
 
@@ -1274,7 +1282,7 @@ The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait
    room under real traffic.
 9. **Pairing start during a WiFi scan.** The coexistence gate is one-way: a WiFi scan never starts
    while a pairing flow runs, but `POST /api/pairing {"action":"start"}` is accepted while a scan
-   (the hotspot's own at `AP_START`, or one the setup page asked for) is still running. Over the
+   (the hotspot's own at `AP_START`, or one WiFi setup asked for) is still running. Over the
    hotspot this is now the main pairing path: press *Pair now* right after the hotspot comes up
    and check the flow still reaches `waiting_passkey` (no scan-refused or connect-timeout retries).
 10. **Pairing start during the session's pending reconnect (FOUND on the board 2026-10-08; FIXED,
@@ -1447,8 +1455,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 
    A satellite with no saved WiFi opens a WPA2 setup hotspot (``calictl-esp-setup``, fixed
    passphrase, address ``192.168.4.1``) whose DNS answers every A query with its own address and whose
-   HTTP server redirects the OS captive-portal probe paths to the setup page, so a phone that joins
-   is led to it. Credentials entered there (or with the console's ``wifi set``) are validated (SSID
+   HTTP server redirects the OS captive-portal probe paths to the web UI (``http://192.168.4.1/``),
+   which opens on its WiFi-setup screen, so a phone that joins is led to it. Credentials entered there (or with the console's ``wifi set``) are validated (SSID
    1-32 bytes, PSK 8-63 bytes — open networks unsupported), stored in the kv store (``wifi_ssid`` /
    ``wifi_psk``) and joined as a station; on success mDNS announces ``calictl-esp.local`` and the
    hotspot closes ``NET_AP_CLOSE_MS`` later. A failed join of credentials typed in the current setup
@@ -1475,11 +1483,11 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    replacement that joins drops the fallback. Without a joined network (first setup) a failed join
    clears the typed credentials and stays in setup, as in ``R_FW_WIFI_PROVISION``.
 
-.. req:: Status page and JSON state over a bounded, non-blocking, single-connection HTTP server
+.. req:: Web pages and JSON state over a bounded, non-blocking, single-connection HTTP server
    :id: R_FW_HTTP_STATUS
 
-   The firmware serves, on both tiers from the same C code, a WiFi setup page (one generated byte
-   array from ``firmware/web/index.html`` + ``page.js`` + ``strings.json``, EN + DE) and ``GET /api/state``: the
+   The firmware serves, on both tiers from the same C code, a WiFi recovery page at ``GET /device`` (one
+   generated byte array from ``firmware/web/index.html``, EN + DE) and ``GET /api/state``: the
    ``fn`` object of the console's ``SNAP`` line plus the device's pairing, link, WiFi, uptime and
    firmware version, built as one consistent snapshot into a fixed ``NET_JSON_MAX`` (8192 B) buffer
    — an overflow answers 500, never a truncated body. The HTTP core serves one connection at a
@@ -1501,7 +1509,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    ``forget`` (plus cancel), in every WiFi mode including the setup hotspot. ``start`` is
    idempotent; ``passkey`` takes only a 6-digit string; ``reset`` needs ``confirm:true`` and drops
    the bond; ``start`` and ``reset`` answer ``409 busy`` while a control command is pending. The
-   calictl web UI, served at ``GET /app`` in every mode (and at ``/`` in station mode), runs its
+   calictl web UI, served at ``GET /`` and ``/app`` in every mode, runs its
    pairing wizard unchanged on the satellite; only the device-specific hints differ. Pairing writes
    no control characteristic.
 
@@ -1529,7 +1537,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    between a minimum and a maximum, smoothed (EMA, ~3 s) and changed only beyond a 15 % deadband,
    falling back to fixed levels after 5 s without a valid reading. The settings (auto brightness,
    wake on hand, wake on motion, min, max, a −50…+50 brightness offset clamped to min..max) persist in NVS, ``/api/state`` reports ``device.display`` and
-   ``POST /api/display`` changes them (station mode only); the ``/device`` page shows it, EN + DE.
+   ``POST /api/display`` changes them (station mode only); Satellite settings shows it, EN + DE.
    Diagnostic (#346, to drop): ``POST /api/display {"dfs"}`` switches dynamic frequency scaling at
    once without storing it; ``device.display.dfs``/``pm`` report the live PM config.
 
@@ -1554,8 +1562,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    and estimate the runtime from the measured percent slope while discharging (a 10-min window; an
    estimate only after ≥ 5 min and ≥ 2 points dropped; reset on USB or charging). ``/api/state``
    reports ``device.battery`` ``{pct, mv, usb, charging, runtime_min}`` (each ``null`` when unknown);
-   the screen shows it in the station footer only (never a wake trigger), the ``/device`` page and the
-   shared UI's Device status show it, EN + DE.
+   the screen shows it in the station footer only (never a wake trigger), the shared UI's Device status
+   shows it, EN + DE.
 
 .. req:: WiFi never disturbs the BLE session; scans wait for an active pairing flow
    :id: R_FW_WIFI_BLE_COEX
@@ -1596,7 +1604,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    ``CET-1CEST,M3.5.0,M10.5.0/3``, advanced by uptime; a day-0 frame or one in the DST-ambiguous
    hour is skipped); else none. ``/api/state`` reports ``device.time``
    ``{source: sntp|unit|none, synced, boot, up}`` (``synced`` only from this boot's SNTP sync, never a
-   plausible-clock check) and the ``/device`` page shows it.
+   plausible-clock check) and the shared UI's Device status shows it.
 
 .. req:: The satellite logs every unit frame to its SD card, stamped, in 1 MB segments
    :id: R_FW_SD_LOG
@@ -1611,8 +1619,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    above 90 % full, ``fsync`` at least every 10 s, and never block the owner task (a bounded queue;
    overflow drops and counts). A missing or unreadable card never aborts or reboots the firmware: it
    retries the mount every 5 min. ``/api/state`` reports ``device.sd``
-   ``{state: absent|error|ok, total_mb, free_mb, last_seq, dropped}``, shown as a Storage row on the
-   ``/device`` page and in the shared UI's Device status card, EN + DE.
+   ``{state: absent|error|ok, total_mb, free_mb, last_seq, dropped}``, shown as a Storage row in the
+   shared UI's Device status card, EN + DE.
 
 .. req:: The satellite records its own health, events, timings and warnings on the SD log
    :id: R_FW_DIAG_LOG
@@ -1652,7 +1660,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    edge within a bounded window and tries, respect a manual off and stand down on low battery or a
    warning. The toggle (default on) and the restore debt persist in NVS; ``/api/state`` reports
    ``device.auto_camper`` ``{enabled, state}``, ``POST /api/auto_camper`` switches it (station mode
-   only) and the ``/device`` page shows and switches it (EN + DE).
+   only) and Satellite settings shows and switches it (EN + DE).
 
 .. req:: The satellite serves its SD log page by page over HTTP
    :id: R_FW_LOG_API
@@ -1670,15 +1678,15 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    :status: implemented
    :tags: esp32, web
 
-   In station mode the firmware shall serve at ``GET /`` the calictl web UI — the same
+   In every WiFi mode the firmware shall serve at ``GET /`` (and ``/app``) the calictl web UI — the same
    ``calictl/webui`` sources inlined and gzipped into one generated byte array — which interprets
    the firmware's raw ``/api/state`` in the browser with ``calictl/webui/semantics.js``, a twin of
    ``calictl/semantics.py`` held equal by golden vectors. The UI shows its controls live when the
    firmware reports ``device.control.writes`` (station mode), posting calictl's ``/api/command``
    body (with the page's clock ``local_now`` on every wake-up edit), except the pop-top roof, which
    stays greyed with the firmware's own refusal text ("Only via buspi or the app"); without the
-   flag every control is greyed. The
-   firmware's WiFi setup page stays at ``GET /device``, and at ``GET /`` outside station mode.
+   flag every control is greyed; over the setup hotspot the UI opens on its WiFi-setup screen. A
+   minimal WiFi recovery page stays at ``GET /device``.
    Every static page and asset carries a strong ``ETag`` derived from its exact bytes, and a
    matching ``If-None-Match`` is answered ``304 Not Modified`` without a body; the pages and the
    manifest stay ``Cache-Control: no-cache`` (always revalidated, so a new firmware's UI shows on
@@ -1841,14 +1849,14 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   `/api/ota`'s codes, station mode only, `device.ota` in `/api/state`), `T_FW_OTA_CHANNEL` (the
   channel's release for check and install, `device.ota.channel`), `T_FW_OTA_CHANNEL_UI`
   (`tests/firmware/test_web_e2e.py`: the *Channel* select stores the choice) and `T_FW_OTA_PAGE`
-  (`tests/e2e/test_esp_page.py`: the `/device` row posts check/install, EN + DE). The HTTPS download,
+  (retired with the old `/device` page; `T_UI_SAT_SETTINGS`, `tests/e2e/test_satsettings.py`, posts check/install, EN + DE). The HTTPS download,
   the flash read-back and the rollback are board-only (owed: an install, then `ota invalid` →
   rollback).
 - **`R_FW_TIME`** — verified by `T_FW_TIME` (`tests/firmware/test_time.py`: the counter +1 per run
   over the real host kv store, a corrupt record restarts at 1, `ts` none until the first sync, a
   new boot starts unsynced, `device.time`'s shape), `T_FW_TIME_QEMU` (`tests/firmware/test_qemu_boot.py`:
-  boot 1 then 2 in real NVS) and `T_FW_TIME_PAGE` (`tests/e2e/test_esp_page.py`: the `/device` clock
-  line, EN + DE), and the unit clock by `T_FW_TIME_UNIT` (`tests/firmware/test_time.py`: every
+  boot 1 then 2 in real NVS) and `T_UI_SAT_SETTINGS` (`tests/e2e/test_satsettings.py`: Device status' clock
+  row, EN + DE), and the unit clock by `T_FW_TIME_UNIT` (`tests/firmware/test_time.py`: every
   quarter hour across both DST switches of 2026 and 2027 against `zoneinfo` Europe/Berlin, the
   October hour that happens twice = none, day 0 = none, a skipped frame keeps the anchor, `ts`
   advances with uptime, `ntp` wins over `unit`). SNTP and the unit clock over the air are
@@ -1864,8 +1872,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   empty newest segment, delete-oldest never the open one, a full queue drops + counts, no card
   queues nothing, the 5-min snapshot only while linked, `device.sd`'s shape), `T_FW_SD_LOG_TAP`
   (`tests/firmware/test_session_fake.py`: the session hands every READ/NOTIFY as sent and every link
-  change to the hook) and `T_FW_SD_LOG_PAGE` (`tests/e2e/test_esp_page.py`: the `/device` Storage and
-  Resources lines, EN + DE; `tests/e2e/test_satellite.py` checks the same rows in the Device status
+  change to the hook) and `tests/e2e/test_satellite.py` (the Storage and Resources rows in the Device status
   card). Mount, card power, `fsync` on FAT and the SD task are board-only (owed: a power cut while
   logging → the log continues, `seq` without a gap; the card pulled → `device.sd.state` `absent`, no
   reboot; `cpu_pct`/heap plausible on the board).
@@ -1886,8 +1893,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 - **`R_FW_AUTO_CAMPER`** — verified by `T_FW_AUTO_CAMPER_PARITY` (`tests/firmware/test_auto_camper_parity.py`:
   every vector of `tests/vectors/auto_camper.json` through the C twin, the vectors fresh and reaching
   every outcome), `T_FW_AUTO_CAMPER_API` (`tests/firmware/test_web_handlers.py`: default on, persisted,
-  station mode only, `device.auto_camper`), `T_FW_AUTO_CAMPER_PAGE` (`tests/e2e/test_esp_page.py`: the
-  `/device` row, EN + DE) and `T_FW_AUTO_CAMPER_E2E` (`tests/firmware/test_auto_camper_e2e.py`, host
+  station mode only, `device.auto_camper`), `T_UI_SAT_SETTINGS` (`tests/e2e/test_satsettings.py`: the
+  Satellite settings row, EN + DE) and `T_FW_AUTO_CAMPER_E2E` (`tests/firmware/test_auto_camper_e2e.py`, host
   tier over real NimBLE and the fake unit's ignition coupling: drive -> shed -> park -> master + USB +
   lights restored; manual off before the drive and the feature switched off mid-drive -> no write;
   10 % SoC -> stood down; the unit ignoring the master -> exactly 3 tries, then gave up; a debt
@@ -1897,8 +1904,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   EMA + deadband, the sensor fallback, the offset shifting and clamping), `T_FW_DISPLAY_MOTION_WAKE`
   (same file: a pick-up wakes it on two reads in a row; a still sensor and van rocking do not; 10 min
   of shaking wakes it once, then dim and off; the switch off and failed reads never wake), `T_FW_DISPLAY_WAKE_API` (`tests/firmware/test_web_handlers.py`:
-  `device.display`, `POST /api/display` merge/persist/ranges/station-only incl. `motion_wake`, the offset read back after a reboot), `T_FW_DISPLAY_DFS_KNOB` (same file: `dfs` a bool, applied at once, never stored, `device.display.dfs`/`pm` null without PM) and `T_FW_DISPLAY_WAKE_PAGE`
-  (`tests/e2e/test_esp_page.py`: the `/device` Screen row and its three switches, EN + DE). The sensor drivers (LTR-553,
+  `device.display`, `POST /api/display` merge/persist/ranges/station-only incl. `motion_wake`, the offset read back after a reboot), `T_FW_DISPLAY_DFS_KNOB` (same file: `dfs` a bool, applied at once, never stored, `device.display.dfs`/`pm` null without PM) and `T_UI_SAT_SETTINGS`
+  (`tests/e2e/test_satsettings.py`: the Screen box and its three switches, EN + DE). The sensor drivers (LTR-553,
   BMI270 init + config upload), the touch wrapper and the thresholds are board-only (hardware watch item 8).
 - **`R_FW_TOUCH_NO_ABORT`** — verified by `T_FW_TOUCH_NO_ABORT` (`tests/test_display_touch.py`: no
   `ESP_ERROR_CHECK`/`abort` in `display.c`, the touch read is its own, the error evt, the port pinned to
@@ -1910,13 +1917,12 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   the reset on USB / charging / unknown, the 10 s cadence in the sample ring), `T_FW_BATTERY_FOOTER`
   (`tests/firmware/test_display_model.py`: the station footer EN + DE, the setup footer unchanged, a
   battery change never wakes the screen; `tests/test_display_font.py` checks the glyphs + two-line
-  fit) and `T_FW_BATTERY_PAGE` (`tests/e2e/test_esp_page.py`: the `/device` line, EN + DE;
-  `tests/e2e/test_satellite.py` checks the Device status row). The AXP2101 read is board-only (owed:
+  fit) and `tests/e2e/test_satellite.py` (the Device status row). The AXP2101 read is board-only (owed:
   `device.battery` plausible on battery and on USB, the estimate after ~10 min unplugged).
 - **`R_FW_EXPERIMENTAL`** — verified by `T_FW_EXPERIMENTAL` (`tests/firmware/test_web_handlers.py`:
   `device.experimental` off by default, `POST /api/experimental` stores `exp_sensors` and logs
   `exp: sensors on|off`, its 403/400/500/405 codes) and `T_FW_EXPERIMENTAL_UI`
-  (`tests/firmware/test_web_e2e.py`: the `/device` Experimental box switches it, EN + DE). The boot
+  (`tests/firmware/test_web_e2e.py`: Satellite settings' Experimental switch, EN + DE). The boot
   line `LOG exp: sensors off` is checked on QEMU (`tests/firmware/test_qemu_boot.py`).
 - **`R_FW_SENSORS`** — verified by `T_FW_SENSORS_CORE` (`tests/firmware/test_sensors.py`: both Govee
   layouts, the seen table (16 rows, unknown manufacturer ids ignored, boot-local ids), add / rename /
@@ -1928,9 +1934,9 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   = nothing seen), `T_FW_SENSORS_API` (`tests/firmware/test_web_handlers.py`: `/api/sensors` 404 while
   off and no `ext` in `/api/state`; seen -> add -> `ext.<alias>` -> remove; every 400 code, 500 `store`,
   405; a second sensor of a type needs a name; the list survives the flag off/on; the setup hotspot),
-  `T_FW_SENSORS_UI` (`tests/firmware/test_web_e2e.py`: the `/device` Sensors box finds the Bumble
-  Govee, Add, Rename and the in-page Remove confirmation, EN + DE) and `T_FW_SENSORS_UI_E2E`
-  (`tests/e2e/test_device_sensors.py`: the box against `EspStub`'s stateful `/api/sensors` — default
+  `T_FW_SENSORS_UI` (`tests/firmware/test_web_e2e.py`: Satellite settings' Sensors box finds the Bumble
+  Govee, Add, Rename and the in-page Remove confirmation, EN + DE) and `T_UI_SAT_SENSORS`
+  (`tests/e2e/test_satsettings_sensors.py`: the box against `EspStub`'s stateful `/api/sensors` — default
   and own names, a second of a type, invalid and taken names, a Victron's key, Cancel, the
   confirmation, rename, the poll leaving an open step alone). QEMU boots with the flag on (`tests/firmware/test_qemu_boot.py`).
 - **`R_FW_STATUS_DISPLAY`** — verified by `T_FW_DISPLAY_MODEL` (`tests/firmware/test_display_model.py`,

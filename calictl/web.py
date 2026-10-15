@@ -124,7 +124,7 @@ def ux_batch(obj):
        ``_meta.ux`` is true; a missing endpoint shall never break the page. calictl shall validate
        a beacon (``ux_batch``), log it at INFO and write measurement ``ui_ux`` to Influx; the ESP32
        satellite shall accept it in station mode only (body <= 2 KB), write one ``{"ev":"ux"}`` SD
-       record per event, and answer 204 without a record while its ``ux_on`` setting (``/device``
+       record per event, and answer 204 without a record while its ``ux_on`` setting (Satellite settings
        "Send usage data") is off. No client IPs, no user identity are recorded.
 
     :param obj: the decoded JSON body.

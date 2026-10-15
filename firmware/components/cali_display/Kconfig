@@ -10,7 +10,7 @@ menu "calictl status display"
         depends on CALI_DISPLAY
         default n
         help
-            Texts come from firmware/web/strings.json (EN + DE), as on the web page.
+            Texts come from firmware/web/strings.json (EN + DE).
 
     config CALI_DISPLAY_FORCE_FAIL
         bool "Test only: make display init fail"

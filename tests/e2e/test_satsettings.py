@@ -2,7 +2,7 @@
 ``satsettings`` ("Satellite settings", from Device status' Satellite card or ``#satsettings``) and
 ``wifisetup`` (the landing screen while the satellite runs its setup hotspot), over
 ``tools.ux_gallery.EspStub`` — no firmware, BLE or radio. They port the boxes of the firmware's own
-/device page (tests/e2e/test_esp_page.py, which U2 deletes with that page). Every test fails on an
+/device page (deleted in U2; /device is now a WiFi-only recovery page). Every test fails on an
 uncaught JS / console error (``error_gated_page``) unless it says otherwise.
 
 .. test:: Satellite settings and WiFi setup are screens of the shared UI (EN + DE, 390 px)
@@ -148,11 +148,18 @@ def test_satellite_card_opens_the_settings_screen_and_back_returns(station, loca
         expect(pg.locator("#title")).to_have_text("Open California")  # Home
 
 
-def test_deep_link_opens_the_settings_and_the_hash_is_consumed(station):
+def test_deep_link_opens_the_settings_and_a_reload_stays_there(station):
+    """``#satsettings`` is the screen's URL: it opens the screen, stays in the address (a reload reopens
+    the screen, not Home), and ‹ on such a fresh page goes to the parent, Device status."""
     with _settings(station) as pg:
         _title(pg, "en")
-        assert pg.evaluate("location.hash") == ""
+        assert pg.evaluate("location.hash") == "#satsettings"
+        pg.reload()
+        _title(pg, "en")
         expect(pg.locator("#back")).to_be_visible()
+        pg.click("#back")
+        _title(pg, "en", "Device status")
+        assert pg.evaluate("location.hash") == "#devicestatus"
 
 
 def test_setup_mode_lands_on_wifi_setup_and_station_mode_shows_home(setup):
@@ -166,6 +173,10 @@ def test_setup_mode_lands_on_wifi_setup_and_station_mode_shows_home(setup):
         expect(pg.locator("#pair")).to_contain_text(
             "Controls work only on your home WiFi — not over the setup hotspot"
         )
+        # the hotspot is explained once (no read-only banner) and "not paired" is said once (the banner)
+        expect(pg.locator(".readonly")).to_have_count(0)
+        expect(pg.locator("#pair-status")).to_be_hidden()
+        assert pg.evaluate("location.hash") == "#wifisetup"
         expect(pg.locator("#ac")).to_have_count(0)  # the settings stay on Satellite settings
         setup.fixtures["setup"]["/api/state"]["device"]["wifi"] = {
             "mode": "station",
@@ -624,6 +635,24 @@ def test_hotspot_join_posts_at_once_and_retries_once(setup, locale, lang):
         assert len(posts) == 2 and posts[0] == posts[1]
         assert json.loads(posts[0]) == {"ssid": "HomeNet", "psk": "test-psk-1234"}
         expect(pg.locator("#psk")).to_have_value("")
+
+
+def test_a_hotspot_join_that_works_stays_on_wifi_setup_with_the_link(setup):
+    """A join made on WiFi setup that comes online keeps the screen (the "Connected as …" link the owner
+    opens next), instead of the switch to Home a station-mode answer otherwise makes."""
+    online = {"mode": "station", "ssid": "HomeNet", "ip": "192.168.1.57", "rssi": -58}
+    with _open(setup, "/app", locale="en-US") as pg:
+        pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
+        pg.fill("#psk", "test-psk-1234")
+        pg.click("#connect")
+        _wait(pg, lambda: setup.wifi_posts, "the join POST")
+        setup.fixtures["setup"]["/api/wifi"].update(online)
+        setup.fixtures["setup"]["/api/state"]["device"]["wifi"] = dict(online)
+        link = "http://%s.local" % CONSTS["NET_HOSTNAME"]
+        expect(pg.locator('#setup-msg a[href="%s"]' % link)).to_be_visible(timeout=15000)
+        pg.wait_for_timeout(2 * CONSTS["NET_PAGE_POLL_MS"] + 500)
+        _title(pg, "en", "WiFi setup")
+        expect(pg.locator('#setup-msg a[href="%s"]' % link)).to_be_visible()
 
 
 @pytest.mark.parametrize("locale,lang", LOCALES)

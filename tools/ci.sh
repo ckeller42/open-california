@@ -134,16 +134,16 @@ typecheck() { "$PY" -m mypy calictl; }   # blocking: all mypy errors resolved 20
 webcheck() {   # hard gate: the web UIs are un-built JS, so this is their only static check. Each
                # jsconfig.json has checkJs on; `tsc` catches undeclared identifiers ("Cannot find
                # name") that `node --check` (parse only) cannot — one of those once shipped to buspi.
-               # Covers the calictl web UI and the ESP32 firmware page script. Needs node.
+               # Covers the calictl web UI and the ESP32 /device recovery page's inline script. Needs node.
   command -v node >/dev/null || { echo "webcheck: node not found (install Node 22+)"; exit 1; }
   # typescript is pinned (bump deliberately; the 0-error baseline is per compiler version).
   npx --yes -p typescript@7.0.2 tsc --noEmit -p calictl/webui/jsconfig.json
-  npx --yes -p typescript@7.0.2 tsc --noEmit -p firmware/web/jsconfig.json
   node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js && node --check calictl/webui/semantics_tables.js && node --check calictl/webui/semantics.js
-  node --check firmware/web/page.js
-  _d="$(mktemp -d)"   # the script as the page inlines it (gen_c_dict.page_script: comment lines stripped)
-  "$PY" -c 'from tools import gen_c_dict; import sys; sys.stdout.write(gen_c_dict.page_script())' > "$_d/page.js"
-  node --check "$_d/page.js"; rm -rf "$_d"
+  _d="$(mktemp -d)"   # the recovery page's script as served (constants substituted, comment lines stripped)
+  "$PY" -c 'import re, sys; from tools import gen_c_dict; sys.stdout.write(re.search(r"<script>(.*?)</script>", gen_c_dict.render_web_page(), re.S).group(1))' > "$_d/recovery.js"
+  node --check "$_d/recovery.js"
+  npx --yes -p typescript@7.0.2 tsc --noEmit --allowJs --checkJs --lib dom,es2021 --target es2021 "$_d/recovery.js"
+  rm -rf "$_d"
   echo "web UI typecheck: OK"
 }
 dev() {

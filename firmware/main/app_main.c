@@ -16,8 +16,8 @@
  * notification instead of the NimBLE event), so it still prints the idle STATE and answers lines.
  *
  * WiFi (#154): after the BLE side, esp_netif + the default event loop + cali_net_esp_init()
- * (platform/esp/net_esp.c); on success the WiFi runner (wifi_run.c), the web endpoints (web.c, the
- * page = strings_gen.h's WEB_INDEX_HTML, the same bytes the host serves) and the runner's boot. The
+ * (platform/esp/net_esp.c); on success the WiFi runner (wifi_run.c), the web endpoints (web.c: the
+ * generated UI bundle + recovery page, the same bytes the host serves) and the runner's boot. The
  * tick then also runs cali_net_esp_poll (the only place WiFi/IP events, queued by the ESP event
  * task, reach the runner) -> cali_wifi_run_tick -> cali_captive_dns_poll -> cali_web_poll, in
  * host_main.c's order, on the owner task. No WiFi driver (esp_wifi_init fails, or the QEMU image,

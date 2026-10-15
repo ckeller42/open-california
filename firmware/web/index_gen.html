@@ -3,611 +3,103 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Satellite settings</title>
-<!-- The ESP32 firmware's "Satellite settings" page (/device; #154 setup page, #267 status rows in the
-     shared UI's Device status): WiFi (first setup + change network), camper unit, the satellite's switches. SOURCE: tools/gen_c_dict.py renders it into
-     index_gen.html (the double-brace placeholders: generated constants, the strings.json table and
-     the page script from page.js) and strings_gen.h; never edit those. Self-contained: no external
-     assets. -->
+<title>Satellite WiFi</title>
 <style>
-:root{--bg:#f6f6f3;--fg:#1d1d1b;--muted:#6b6b66;--card:#fff;--line:#deded8;--accent:#1f6f5c;--bad:#a8322d}
-@media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ececea;--muted:#9a9a94;--card:#21211f;--line:#34342f;--accent:#5bbf9f;--bad:#e0716b}}
+:root{--bg:#eef1f5;--fg:#1a1d24;--muted:#6b7280;--card:#fff;--border:#e2e6ee;--accent:#2f6fed;--error:#d0453b}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1116;--fg:#eef0f4;--muted:#9aa1b0;--card:#1a1d25;--border:#262a34;--error:#ef6b62}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:720px;margin:0 auto;padding:16px}
-h1{font-size:20px;margin:0 0 12px}
-h2{font-size:16px;margin:0 0 8px}
-.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 12px}
-.muted{color:var(--muted)}.bad{color:var(--bad)}
-#banner{display:none;background:var(--bad);color:#fff;border-radius:8px;padding:8px 12px;margin:0 0 12px}
-[hidden]{display:none!important}
-label{display:block;margin:10px 0 4px;color:var(--muted)}
-select,input,button{font:inherit;width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
-button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px;cursor:pointer}
-button.secondary{background:transparent;color:var(--accent)}
-button.danger{background:var(--bad);border-color:var(--bad)}
-button:disabled{opacity:.45;cursor:default}
-.acts{display:flex;flex-wrap:wrap;gap:0 8px;align-items:center}.acts>*{flex:1 1 8em}.acts>span,.acts>input{flex-basis:100%;margin-top:8px}
-a{color:var(--accent)}
-input[type=checkbox]{width:auto;margin-right:6px}
-.tgl{display:flex;align-items:center;gap:12px;min-height:44px;margin:4px 0}.tgl>span:first-child{flex:1}
-button.sw{flex:none;width:56px;height:44px;margin:0;padding:0;border:0;background:none;position:relative}
-button.sw::before,button.sw::after{content:"";position:absolute;transition:.15s}
-button.sw::before{left:2px;top:7px;width:52px;height:30px;border-radius:15px;background:var(--muted)}
-button.sw::after{left:5px;top:10px;width:24px;height:24px;border-radius:50%;background:#fff}
-button.sw[aria-checked=true]::before{background:var(--accent)}button.sw[aria-checked=true]::after{left:27px}
-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.step{display:flex;gap:8px}.step button{width:48px;height:44px;margin:0;padding:0}
-.sec{margin:20px 0 8px}p:empty{margin:0}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:480px;margin:auto;padding:16px}
+h1{font-size:20px;margin:0}
+form{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:12px 0}
+.muted{color:var(--muted)}.bad{color:var(--error)}
+label{display:block;margin:10px 0 4px}
+select,input,button{font:inherit;width:100%;min-height:44px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg)}
+button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px}
+#rescan{background:none;color:var(--accent)}
+input[type=checkbox]{width:auto;min-height:0;margin-right:6px}
+a{color:var(--accent)}[hidden]{display:none}
 </style>
 </head>
 <body>
 <main>
-<p id="device"></p>
-<h1 id="title"></h1>
-<div id="banner"></div>
-<p id="loading" class="muted"></p>
-<section id="setup" class="box" hidden>
-  <h2 id="setup-title"></h2>
-  <p id="wifi-now"></p>
-  <button id="wifi-change" class="secondary" type="button" hidden></button>
-  <div id="wifi-form">
-    <p id="setup-hint" class="muted"></p>
-    <label for="ssid" id="ssid-label"></label>
-    <select id="ssid"></select>
-    <p id="scan-empty" class="muted" hidden></p>
-    <input id="ssid-name" autocomplete="off" autocapitalize="none" spellcheck="false" hidden>
-    <label for="psk" id="psk-label"></label>
-    <input id="psk" type="password" autocomplete="off">
-    <label><input id="psk-show" type="checkbox"><span id="psk-show-l"></span></label>
-    <span id="wifi-acts" class="acts"><button id="connect" type="button"></button></span>
-    <button id="rescan" class="secondary" type="button"></button>
-  </div>
-  <div id="wifi-switch" hidden></div>
-  <p id="setup-msg" aria-live="polite"></p>
-</section>
-<section id="pair" class="box" hidden>
-  <h2 id="pair-title"></h2>
-  <p id="pair-status"></p>
-  <a id="pair-link"></a>
-</section>
-<section id="ac" class="box" hidden>
-  <h2 id="ac-title"></h2>
-  <div class="tgl"><span id="ac-status"></span><button id="ac-toggle" class="sw" type="button" role="switch" aria-labelledby="ac-status" hidden></button></div>
-  <p id="ac-msg" class="bad"></p>
-</section>
-<section id="scr" class="box" hidden>
-  <h2 id="scr-title"></h2>
-  <p id="scr-status"></p>
-  <div class="tgl"><span id="scr-auto-status"></span><button id="scr-auto-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-auto-status" hidden></button></div>
-  <div class="tgl"><span id="scr-prox-status"></span><button id="scr-prox-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-prox-status" hidden></button></div>
-  <div class="tgl"><span id="scr-motion-status"></span><button id="scr-motion-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-motion-status" hidden></button></div>
-  <div class="tgl"><span id="scr-off"></span><span class="step"><button id="scr-dn" class="secondary" type="button">−</button><button id="scr-up" class="secondary" type="button">+</button></span></div>
-  <p id="scr-msg" class="bad"></p>
-</section>
-<section id="fw" class="box" hidden>
-  <h2 id="fw-title"></h2>
-  <p id="fw-status"></p>
-  <button id="fw-install" type="button" hidden></button>
-  <button id="fw-check" class="secondary" type="button" hidden></button>
-  <label for="fw-channel" id="fw-channel-l" hidden></label><select id="fw-channel" hidden><option value="stable"></option><option value="latest"></option></select>
-  <p id="fw-msg" class="bad"></p>
-</section>
-<h2 id="adv-title" class="sec" hidden></h2>
-<section id="ux" class="box" hidden>
-  <div class="tgl"><span id="ux-status"></span><button id="ux-toggle" class="sw" type="button" role="switch" aria-labelledby="ux-status" hidden></button></div>
-  <p id="ux-msg" class="bad"></p>
-</section>
-<section id="exp" class="box" hidden>
-  <h2 id="exp-title"></h2>
-  <p id="exp-hint" class="muted"></p>
-  <div class="tgl"><span id="exp-status"></span><button id="exp-toggle" class="sw" type="button" role="switch" aria-labelledby="exp-status" hidden></button></div>
-  <p id="exp-msg" class="bad"></p>
-</section>
-<section id="sens" class="box" hidden>
-  <h2 id="sens-title"></h2>
-  <p id="sens-hint" class="muted"></p>
-  <div id="sens-cfg"></div>
-  <div id="sens-seen"></div>
-  <p id="sens-msg" class="bad" aria-live="polite"></p>
-</section>
-<p id="time" class="muted"></p>
-<p id="sd" class="muted"></p>
-<p id="res" class="muted"></p>
-<p id="battery" class="muted"></p>
+<h1 id="h"></h1>
+<p id="why" class="muted"></p>
+<p id="now" aria-live="polite"></p>
+<form id="f">
+<label for="ssid" id="l-ssid"></label><select id="ssid"></select>
+<input id="name" autocomplete="off" autocapitalize="none" spellcheck="false" hidden>
+<label for="psk" id="l-psk"></label><input id="psk" type="password" autocomplete="off">
+<label><input id="show" type="checkbox"><span id="l-show"></span></label>
+<button id="go"></button><button id="rescan" type="button"></button>
+</form>
+<p id="msg" aria-live="polite"></p>
+<p><a href="/" id="app"></a></p>
 </main>
 <script>
-const CFG = {pollMs: 2000, connectTimeoutMs: 8000, connectRetryMs: 3000, host: "calictl-esp", ap: "calictl-esp-setup", apPsk: "calictl-setup", apAddr: "192.168.4.1", ssidMax: 32, pskMin: 8, pskMax: 63};
-const STR = {"ac_armed":{"de":"⟳ wird beim Parken wiederhergestellt","en":"⟳ will restore on park"},"ac_error":{"de":"Auto-Campingmodus konnte nicht geändert werden","en":"Couldn't change auto camper"},"ac_off":{"de":"Auto-Campingmodus aus","en":"Auto camper off"},"ac_on":{"de":"Auto-Campingmodus an","en":"Auto camper on"},"ac_restoring":{"de":"⟳ wird wiederhergestellt …","en":"⟳ restoring …"},"ac_title":{"de":"Campingmodus nach dem Parken wiederherstellen","en":"Restore camping after you park"},"adv_title":{"de":"Erweitert","en":"Advanced"},"app_link":{"de":"‹ Camper-Oberfläche","en":"‹ Camper UI"},"batt_charging":{"de":"an USB, lädt","en":"on USB, charging"},"batt_left":{"de":"noch ~{time}","en":"~{time} left"},"batt_on":{"de":"im Akkubetrieb","en":"on battery"},"batt_title":{"de":"Akku","en":"Battery"},"batt_usb":{"de":"an USB","en":"on USB"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Der Satellit hat die Anfrage abgelehnt.","en":"The satellite rejected the request."},"err_net":{"de":"Keine Antwort vom Satelliten.","en":"No answer from the satellite."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"exp_error":{"de":"Schalter konnte nicht geändert werden","en":"Couldn't change the switch"},"exp_hint":{"de":"Schaltet Sensorsuche und -einrichtung frei. Stabile Funktionen hängen nicht davon ab.","en":"Enables the sensor scan and setup. Stable features do not depend on it."},"exp_off":{"de":"Sensoren (experimentell): aus","en":"Sensors (experimental): off"},"exp_on":{"de":"Sensoren (experimentell): an","en":"Sensors (experimental): on"},"exp_title":{"de":"Experimentell","en":"Experimental"},"fw_ch_error":{"de":"Kanal konnte nicht geändert werden","en":"Couldn't change the channel"},"fw_ch_latest":{"de":"neueste (jeder Merge)","en":"latest (every merge)"},"fw_ch_stable":{"de":"stabil (getestet)","en":"stable (tested)"},"fw_channel":{"de":"Kanal","en":"Channel"},"fw_check":{"de":"Nach Update suchen","en":"Check for update"},"fw_install":{"de":"{sha} installieren","en":"Install {sha}"},"fw_running":{"de":"Läuft: {sha}","en":"Running {sha}"},"fw_title":{"de":"Firmware-Update","en":"Firmware update"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Handy mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this phone too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"loading":{"de":"Lädt…","en":"Loading…"},"network":{"de":"Netzwerk","en":"Network"},"no_networks":{"de":"Keine Netzwerke in der Liste — gib den Namen des Netzwerks ein.","en":"No networks listed — type the network's name."},"offline":{"de":"Satellit nicht erreichbar","en":"Satellite not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"ota_available":{"de":"{sha} ist verfügbar","en":"{sha} is available"},"ota_checking":{"de":"suche …","en":"checking …"},"ota_downloading":{"de":"lade {pct} %","en":"downloading {pct} %"},"ota_error":{"de":"Update fehlgeschlagen ({error})","en":"update failed ({error})"},"ota_rebooting":{"de":"installiert, startet neu …","en":"installed, restarting …"},"ota_up_to_date":{"de":"aktuell","en":"up to date"},"ota_verifying":{"de":"prüfe …","en":"verifying …"},"other_network":{"de":"Anderes Netzwerk…","en":"Other network…"},"pair_manage":{"de":"Kopplung verwalten ›","en":"Manage pairing ›"},"pair_now":{"de":"Jetzt koppeln ›","en":"Pair now ›"},"pair_off":{"de":"Nicht gekoppelt","en":"Not paired"},"pair_on":{"de":"Gekoppelt ✓","en":"Paired ✓"},"pair_title":{"de":"Camper-Einheit","en":"Camper unit"},"password":{"de":"Passwort","en":"Password"},"res_cpu":{"de":"CPU {pct} %","en":"CPU {pct} %"},"res_psram":{"de":"PSRAM {free} KB frei","en":"PSRAM {free} KB free"},"res_ram":{"de":"RAM {free} KB frei (Minimum {min})","en":"RAM {free} KB free (lowest {min})"},"res_title":{"de":"Ressourcen","en":"Resources"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"scr_auto":{"de":"Helligkeit nach Raumlicht","en":"Brightness from room light"},"scr_dim":{"de":"gedimmt","en":"dimmed"},"scr_error":{"de":"Bildschirmeinstellung konnte nicht geändert werden","en":"Couldn't change the screen setting"},"scr_less":{"de":"Dunkler","en":"Darker"},"scr_more":{"de":"Heller","en":"Brighter"},"scr_motion":{"de":"Bei Bewegung einschalten","en":"Wake on motion"},"scr_nolux":{"de":"kein Lichtsensor-Wert","en":"no light sensor reading"},"scr_off":{"de":"aus","en":"off"},"scr_offset":{"de":"Helligkeit {n}","en":"Brightness {n}"},"scr_on":{"de":"an","en":"on"},"scr_prox":{"de":"Bei Annäherung einschalten","en":"Wake when a hand is near"},"scr_title":{"de":"Bildschirm","en":"Screen"},"sd_absent":{"de":"Keine SD-Karte","en":"No SD card"},"sd_dropped":{"de":"{n} Einträge verworfen","en":"{n} records dropped"},"sd_error":{"de":"SD-Kartenfehler","en":"SD card error"},"sd_log":{"de":"Log Nr. {seq}","en":"log #{seq}"},"sd_ok":{"de":"SD {free} von {total} GB frei","en":"SD {free} of {total} GB free"},"sd_title":{"de":"Speicher","en":"Storage"},"sens_add":{"de":"Hinzufügen","en":"Add"},"sens_alias":{"de":"Name (a–z, 0–9, -, _)","en":"Name (a–z, 0–9, -, _)"},"sens_cancel":{"de":"Abbrechen","en":"Cancel"},"sens_confirm_remove":{"de":"{alias} entfernen?","en":"Remove {alias}?"},"sens_err_bad_alias":{"de":"Name schon vergeben","en":"Name already used"},"sens_err_bad_key":{"de":"Schlüssel muss 32 Hex-Zeichen haben","en":"Key must be 32 hex digits"},"sens_err_full":{"de":"Sensorliste ist voll (16)","en":"Sensor list is full (16)"},"sens_err_key_mismatch":{"de":"Schlüssel passt nicht zu diesem Gerät","en":"Key does not match this device"},"sens_err_name":{"de":"Nur a–z, 0–9, - oder _ (max. 16)","en":"Use a–z, 0–9, - or _ (max. 16)"},"sens_error":{"de":"Sensoren konnten nicht geändert werden","en":"Couldn't change the sensors"},"sens_hint":{"de":"Sensoren in der Nähe erscheinen unten; füge deine hinzu.","en":"Nearby sensors appear below; add the ones that are yours."},"sens_key":{"de":"Verschlüsselungsschlüssel (32 Hex-Zeichen)","en":"Encryption key (32 hex digits)"},"sens_none":{"de":"Noch keine Sensoren gefunden (die Suche läuft jede Minute).","en":"No sensors found yet (the scan runs every minute)."},"sens_none_more":{"de":"Keine weiteren Sensoren in der Nähe (Suche jede Minute).","en":"No other sensors nearby (the scan runs every minute)."},"sens_paused":{"de":"Suche pausiert während der Kopplung","en":"Scan paused while pairing"},"sens_remove":{"de":"Entfernen","en":"Remove"},"sens_rename":{"de":"Umbenennen","en":"Rename"},"sens_save":{"de":"Speichern","en":"Save"},"sens_t_govee":{"de":"Thermo-Hygrometer (Govee)","en":"Thermo-hygrometer (Govee)"},"sens_t_victron_battery":{"de":"Batteriesensor (Victron)","en":"Battery sense (Victron)"},"sens_t_victron_mppt":{"de":"Solarladeregler (Victron)","en":"Solar charger (Victron)"},"sens_title":{"de":"Sensoren","en":"Sensors"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"show_psk":{"de":"Passwort anzeigen","en":"Show password"},"ssid_name":{"de":"Netzwerkname","en":"Network name"},"station_only":{"de":"braucht das Heim-WLAN","en":"needs the home WiFi"},"switch_lost":{"de":"Bei falschem Passwort ist er binnen einer Minute zurück in {old}; sonst verbinde dich mit dem Einrichtungs-Hotspot {ap} (Passwort {appsk}) und öffne:","en":"Back on {old} within a minute if the new password was wrong; otherwise join the setup hotspot {ap} (password {appsk}) and open:"},"switch_other":{"de":"Verbinde dieses Handy mit {ssid} und öffne dann:","en":"Join {ssid} with this phone, then open:"},"switch_same":{"de":"Lade die Seite in ~30 s neu oder öffne:","en":"Reload this page in ~30 s, or open:"},"switch_title":{"de":"Netzwerkwechsel","en":"Switching networks"},"time_none":{"de":"Keine Zeitquelle · Start Nr. {boot}","en":"No clock source · boot {boot}"},"time_synced":{"de":"Uhr synchronisiert (SNTP) · Start Nr. {boot}","en":"Clock synced (SNTP) · boot {boot}"},"time_unit":{"de":"Uhr der Camper-Einheit · Start Nr. {boot}","en":"Clock from the camper unit · boot {boot}"},"time_waiting":{"de":"Uhr noch nicht synchronisiert · Start Nr. {boot}","en":"Clock not synced yet · boot {boot}"},"title":{"de":"Satellit-Einstellungen","en":"Satellite settings"},"ux_error":{"de":"Nutzungsdaten konnten nicht geändert werden","en":"Couldn't change usage data"},"ux_off":{"de":"Nutzungsdaten senden: aus","en":"Send usage data: off"},"ux_on":{"de":"Nutzungsdaten senden: an","en":"Send usage data: on"},"why_auth":{"de":"falsches Passwort","en":"wrong password"},"why_not_found":{"de":"Netzwerk nicht gefunden","en":"network not found"},"why_other":{"de":"Verbindung nicht möglich","en":"could not join"},"wifi_change":{"de":"Netzwerk wechseln…","en":"Change network…"},"wifi_now":{"de":"Verbunden mit {ssid}","en":"Connected to {ssid}"},"wifi_reverted":{"de":"Das neue Netzwerk hat nicht funktioniert ({why}); wieder mit {ssid} verbunden.","en":"The new network didn't work ({why}); back on {ssid}."},"wifi_switch":{"de":"Netzwerk wechseln","en":"Switch network"},"wifi_title":{"de":"WLAN","en":"WiFi"},"wifi_warn":{"de":"Der Satellit verlässt {ssid} jetzt. Ist das neue Passwort falsch, kehrt er von selbst zu {ssid} zurück.","en":"The satellite leaves {ssid} now. If the new password is wrong, it returns to {ssid} by itself."}};
-</script>
-<script>
 "use strict";
-
-
-const LANG = /^de\b/i.test(navigator.language || "") ? "de" : "en";
-function t(key, vars) {
-  let s = STR[key] ? STR[key][LANG] : key;
-  for (const k in vars || {}) s = s.split("{" + k + "}").join(String((vars || {})[k]));
-  return s;
-}
-const JOIN_FAILED = {not_found: "join_failed_not_found", auth: "join_failed_auth", other: "join_failed_other"};
-const WHY = {not_found: "why_not_found", auth: "why_auth", other: "why_other"};
-const POST_ERROR = {ssid: "err_ssid", psk: "err_psk", store: "err_store"};
-const OTA_TEXT = {checking: "ota_checking", up_to_date: "ota_up_to_date", available: "ota_available",
-  downloading: "ota_downloading", verifying: "ota_verifying", rebooting: "ota_rebooting", error: "ota_error"};
-
-function $(id) {
-  const e = document.getElementById(id);
-  if (!e) throw new Error("missing #" + id);
-  return e;
-}
-const input = (id) => /** @type {HTMLInputElement} */ ($(id));
-const select = (id) => /** @type {HTMLSelectElement} */ ($(id));
-function el(tag, text, cls) {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  if (cls) e.className = cls;
-  return e;
-}
-async function fetchJson(url, opts) {
-  const r = await fetch(url, Object.assign({cache: "no-store"}, opts));
-  return {status: r.status, body: await r.json()};
-}
-async function getWifi() {
-  return (/** @type {{body: WifiGet}} */ (await fetchJson("/api/wifi"))).body;
-}
-
-document.title = $("title").textContent = t("title");
-$("setup-hint").textContent = t("setup_hint");
-$("ssid-label").textContent = t("network");
-$("scan-empty").textContent = t("no_networks");
-input("ssid-name").placeholder = t("ssid_name");
-$("ssid-name").setAttribute("aria-label", t("ssid_name"));
-$("psk-label").textContent = t("password");
-$("psk-show-l").textContent = t("show_psk");
-$("connect").textContent = t("connect");
-$("rescan").textContent = t("rescan");
-$("wifi-change").textContent = t("wifi_change");
-$("pair-title").textContent = t("pair_title");
-$("adv-title").textContent = t("adv_title");
-$("fw-title").textContent = t("fw_title");
-$("ac-title").textContent = t("ac_title");
-$("fw-check").textContent = t("fw_check");
-$("fw-channel-l").textContent = t("fw_channel");
-select("fw-channel").options[0].textContent = t("fw_ch_stable");
-select("fw-channel").options[1].textContent = t("fw_ch_latest");
-$("scr-title").textContent = t("scr_title");
-$("exp-title").textContent = t("exp_title");
-$("exp-hint").textContent = t("exp_hint");
-$("sens-title").textContent = t("sens_title");
-$("sens-hint").textContent = t("sens_hint");
-$("loading").textContent = t("loading");
-$("scr-dn").setAttribute("aria-label", t("scr_less"));
-$("scr-up").setAttribute("aria-label", t("scr_more"));
-document.documentElement.lang = LANG;
-
-let joining = null;
-let wifi = null;
-
-function link(text, href) {
-  const a = el("a", text);
-  a.href = href;
-  return a;
-}
-
-function renderLink(d) {
-  const href = d.wifi.mode === "station" ? "/" : "/app";
-  $("device").replaceChildren(link(t("app_link"), href));
-  const paired = !!d.pairing.address;
-  $("pair-status").textContent = t(paired ? "pair_on" : "pair_off");
-  $("pair-link").textContent = t(paired ? "pair_manage" : "pair_now");
-  /** @type {HTMLAnchorElement} */ ($("pair-link")).href = href + (paired ? "#devicestatus" : "#pair");
-}
-
-let wifiOpen = false, formShown = false;
-function renderWifi(w) {
-  const st = w.mode === "station", form = !st || wifiOpen;
-  $("setup-title").textContent = t(st ? "wifi_title" : "setup_title");
-  $("wifi-now").textContent = st && $("wifi-switch").hidden ? [t("wifi_now", {ssid: w.ssid || ""}), w.ip, w.rssi + " dBm"].join(" · ") : "";
-  $("wifi-change").hidden = form || joining !== null || !$("wifi-switch").hidden;
-  $("wifi-form").hidden = !form || !$("wifi-switch").hidden;
-  if (form && !formShown && !joining) scan();
-  formShown = form;
-}
-
-function renderTime(c) {
-  const key = c.source === "none" ? "time_none" : c.source === "unit" ? "time_unit" : c.synced ? "time_synced" : "time_waiting";
-  $("time").textContent = t(key, {boot: c.boot});
-}
-
-function renderSd(sd) {
-  const gb = (mb) => ((mb || 0) / 1024).toFixed(1);
-  const parts = [sd.state === "ok" ? t("sd_ok", {free: gb(sd.free_mb), total: gb(sd.total_mb)})
-    : t(sd.state === "error" ? "sd_error" : "sd_absent")];
-  if (sd.state === "ok" && sd.last_seq !== null) parts.push(t("sd_log", {seq: sd.last_seq}));
-  if (sd.dropped > 0) parts.push(t("sd_dropped", {n: sd.dropped}));
-  $("sd").textContent = t("sd_title") + ": " + parts.join(" · ");
-}
-
-function renderRes(r) {
-  const parts = [];
-  if (r.heap_free_kb !== null) parts.push(t("res_ram", {free: r.heap_free_kb, min: r.heap_min_kb ?? "?"}));
-  if (r.psram_free_kb !== null) parts.push(t("res_psram", {free: r.psram_free_kb}));
-  if (r.cpu_pct !== null) parts.push(t("res_cpu", {pct: r.cpu_pct}));
-  $("res").textContent = parts.length ? t("res_title") + ": " + parts.join(" · ") : "";
-}
-
-function renderBattery(b) {
-  if (b.pct === null) { $("battery").textContent = ""; return; }
-  const parts = [b.pct + " %"];
-  if (b.mv !== null) parts.push((b.mv / 1000).toFixed(2) + " V");
-  if (b.usb !== null) parts.push(t(b.usb ? (b.charging ? "batt_charging" : "batt_usb") : "batt_on"));
-  if (!b.usb && b.runtime_min !== null) {
-    const h = Math.floor(b.runtime_min / 60), m = b.runtime_min % 60;
-    parts.push(t("batt_left", {time: h ? h + " h " + m + " min" : m + " min"}));
-  }
-  $("battery").textContent = t("batt_title") + ": " + parts.join(" · ");
-}
-
-function renderFw(d) {
-  const o = d.ota, sha = (o.available_sha || "").slice(0, 7), key = OTA_TEXT[o.state];
-  const station = d.wifi.mode === "station", busy = ["checking", "downloading", "verifying", "rebooting"].includes(o.state);
-  let text = t("fw_running", {sha: d.fw}) + " · " + t(o.channel === "latest" ? "fw_ch_latest" : "fw_ch_stable");
-  if (key) text += " · " + t(key, {sha: sha, pct: o.progress_pct, error: o.error || ""});
-  if (!station) text += " · " + t("station_only");
-  $("fw-status").textContent = text;
-  $("fw-check").hidden = !station || busy;
-  const install = $("fw-install");
-  install.hidden = !station || busy || !sha;
-  install.textContent = t("fw_install", {sha: sha});
-  const sel = select("fw-channel");
-  sel.hidden = $("fw-channel-l").hidden = !station || busy;
-  sel.dataset.v = o.channel;
-  if (document.activeElement !== sel) sel.value = o.channel;
-}
-
-function row(id, parts, on, st) {
-  const b = /** @type {HTMLButtonElement} */ ($(id + "-toggle"));
-  $(id + "-status").textContent = [...parts, st ? "" : t("station_only")].filter(Boolean).join(" · ");
-  b.hidden = !st;
-  b.disabled = false;
-  b.setAttribute("aria-checked", String(on));
-}
-
-function renderRows(d) {
-  const a = d.auto_camper, st = d.wifi.mode === "station", ux = !!(d.ux && d.ux.enabled);
-  const exp = !!(d.experimental && d.experimental.sensors);
-  row("ac", [t(a.enabled ? "ac_on" : "ac_off"), a.state === "armed" ? t("ac_armed") : "",
-    a.state === "restoring" ? t("ac_restoring") : ""], a.enabled, st);
-  row("ux", [t(ux ? "ux_on" : "ux_off")], ux, st);
-  row("exp", [t(exp ? "exp_on" : "exp_off")], exp, st);
-}
-
-async function toggle(path, id, err, key, msgId) {
-  const b = /** @type {HTMLButtonElement} */ ($(id + "-toggle")), msg = $(msgId || id + "-msg");
-  msg.textContent = "";
-  b.disabled = true;   /* one POST per tap: the next poll enables it again */
-  let ok = false;
+const L = {
+  en: {h: "Satellite WiFi", why: "A way back onto WiFi if the camper UI does not load.", ssid: "Network", other: "Other network…",
+    name: "Network name", psk: "Password", show: "Show password", go: "Connect", rescan: "Search again", app: "Open the camper UI",
+    station: "Connected to {s} · {ip}", setup: "Setup hotspot calictl-esp-setup: not on a WiFi network", off: "WiFi off", fail: "last join failed",
+    bad_ssid: "Choose a network (1–32 characters).", bad_psk: "The password needs 8–63 characters.",
+    store: "Could not save the WiFi settings.", rejected: "The satellite rejected the request.", none: "No answer from the satellite.",
+    ok: "Saved — the satellite joins {s} now. Join it with this phone too, then open"},
+  de: {h: "Satellit-WLAN", why: "Ein Weg zurück ins WLAN, falls die Camper-Oberfläche nicht lädt.", ssid: "Netzwerk", other: "Anderes Netzwerk…",
+    name: "Netzwerkname", psk: "Passwort", show: "Passwort anzeigen", go: "Verbinden", rescan: "Erneut suchen", app: "Camper-Oberfläche öffnen",
+    station: "Verbunden mit {s} · {ip}", setup: "Einrichtungs-Hotspot calictl-esp-setup: in keinem WLAN", off: "WLAN aus", fail: "letzte Verbindung fehlgeschlagen",
+    bad_ssid: "Wähle ein Netzwerk (1–32 Zeichen).", bad_psk: "Das Passwort braucht 8–63 Zeichen.",
+    store: "Die WLAN-Einstellungen konnten nicht gespeichert werden.", rejected: "Der Satellit hat die Anfrage abgelehnt.", none: "Keine Antwort vom Satelliten.",
+    ok: "Gespeichert — der Satellit verbindet sich jetzt mit {s}. Verbinde auch dieses Telefon damit und öffne"}};
+const lang = navigator.language.slice(0, 2) === "de" ? "de" : "en", S = /** @type {Record<string, string>} */ (L[lang]);
+const $ = (/** @type {string} */ id) => /** @type {HTMLInputElement} */ (document.getElementById(id));
+document.documentElement.lang = lang;
+document.title = S.h;
+for (const k of ["h", "why", "go", "rescan", "app"]) $(k).textContent = S[k];
+for (const k of ["ssid", "psk", "show"]) $("l-" + k).textContent = S[k];
+$("name").placeholder = S.name;
+$("show").onchange = () => { $("psk").type = $("show").checked ? "text" : "password"; };
+const other = () => { $("name").hidden = $("ssid").value !== ""; };
+$("ssid").onchange = other;
+async function read(scan = false) {
   try {
-    ok = (/** @type {{body: PostResult}} */ (await fetchJson(path, {method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify({[key || "enabled"]: b.getAttribute("aria-checked") !== "true"})}))).body.ok;
-  } catch (e) { /* ok stays false */ }
-  if (!ok) msg.textContent = t(err);
+    const w = await (await fetch("/api/wifi", {cache: "no-store"})).json();
+    $("now").textContent = S[w.mode].replace("{s}", w.ssid).replace("{ip}", w.ip)
+      + (w.mode !== "station" && w.last_error ? " · " + S.fail + " (" + w.last_error + ")" : "");
+    if (!scan) return w;
+    const sel = $("ssid"), keep = sel.value;
+    sel.replaceChildren(...w.scan.filter((/** @type {any} */ a) => a.secure)
+      .map((/** @type {any} */ a) => new Option(a.ssid + " (" + a.rssi + " dBm)", a.ssid)), new Option(S.other, ""));
+    if (keep) sel.value = keep;
+    other();
+    return w;
+  } catch (e) { $("now").textContent = S.none; return null; }
 }
-
-const SENS_T = {govee: "sens_t_govee", victron_mppt: "sens_t_victron_mppt", victron_battery: "sens_t_victron_battery"};
-const SENS_ERR = {bad_alias: "sens_err_bad_alias", bad_key: "sens_err_bad_key", key_mismatch: "sens_err_key_mismatch", full: "sens_err_full"};
-const SENS_U = [[/_c$/, "°C"], [/humidity/, "%"], [/voltage/, "V"], [/power/, "W"], [/kwh/, "kWh"], [/current/, "A"]];
-let sensOn = false, sensBusy = false;
-function renderSensors(d) {
-  $("sens").hidden = !(d.experimental && d.experimental.sensors);
-  if (!$("sens").hidden && !sensOn) { sensOn = true; pollSensors(); }
-}
-async function pollSensors() {
-  if (sensOn = !$("sens").hidden) {
-    try { renderSens((/** @type {{body: Sensors}} */ (await fetchJson("/api/sensors"))).body); } catch (e) { /* next poll */ }
-    setTimeout(pollSensors, 10000);
-  }
-}
-function sensVals(v) {
-  const out = [];
-  for (const [k, x] of Object.entries(v || {})) {
-    const i = SENS_U.findIndex(([re]) => /** @type {RegExp} */ (re).test(k));
-    if (i >= 0 && x !== null) out.push([i, x + "\u00a0" + SENS_U[i][1]]);
-  }
-  return out.sort((a, b) => a[0] - b[0]).slice(0, 3).map((e) => e[1]);
-}
-function sensName(value, ph) {
-  const n = el("input");
-  n.value = value;
-  n.placeholder = ph;
-  n.autocapitalize = "none";
-  n.spellcheck = false;
-  n.setAttribute("aria-label", t("sens_alias"));
-  return n;
-}
-function sensAlias(n, need) {
-  const a = n.value = n.value.trim().toLowerCase();
-  if ((a || need) && !/^[a-z0-9_-]{1,16}$/.test(a)) { sensErr("sens_err_name"); return null; }
-  return a;
-}
-function sensErr(key) {
-  const m = $("sens-msg");
-  m.textContent = t(key);
-  m.scrollIntoView({block: "nearest"});
-}
-function ask(acts, nodes, okKey, okCls, ok, msgId) {
-  const old = Array.from(acts.childNodes);
-  acts.className = "acts open";
-  acts.replaceChildren(...nodes);
-  const b = acts.appendChild(el("button", t(okKey), okCls)), c = acts.appendChild(el("button", t("sens_cancel"), "secondary"));
-  const close = () => {
-    acts.className = "acts";
-    acts.replaceChildren(...old);
-    $(msgId || "sens-msg").textContent = "";
-  };
-  b.onclick = async () => { b.disabled = true; await ok(close); b.disabled = false; };
-  c.onclick = close;
-  (nodes[0] instanceof HTMLInputElement ? nodes[0] : c).focus();
-}
-function renderSens(s) {
-  const cfg = $("sens-cfg"), seen = $("sens-seen");
-  if ($("sens").querySelector(".open")) return;   /* a confirmation or a name/key being typed */
-  cfg.textContent = seen.textContent = "";
-  for (const c of s.configured) {
-    const vals = c.value ? sensVals(c.value) : ["—"];
-    const p = cfg.appendChild(el("p", [t(SENS_T[c.type] || c.type), c.alias, ...vals,
-      c.last_seen_s === null ? "—" : c.last_seen_s + " s"].join(" · "), "row"));
-    const acts = p.appendChild(el("span", undefined, "acts"));
-    acts.appendChild(el("button", t("sens_rename"), "secondary")).onclick = () => {
-      const n = sensName(c.alias, "");
-      ask(acts, [n], "sens_save", "", () => { const a = sensAlias(n, true); if (a) return sensPost({id: c.id, alias: a}); });
-    };
-    acts.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
-      ask(acts, [el("span", t("sens_confirm_remove", {alias: c.alias}))], "sens_remove", "danger", () => sensPost({remove: c.id}));
-  }
-  if (s.scan === "paused" || !s.seen.length)
-    seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : s.configured.length ? "sens_none_more" : "sens_none"), "muted"));
-  for (const r of s.seen) {
-    const p = seen.appendChild(el("p", [t(SENS_T[r.type] || r.type), r.model, r.rssi + " dBm"].join(" · "), "row"));
-    const acts = p.appendChild(el("span", undefined, "acts"));
-    acts.appendChild(el("button", t("sens_add"))).onclick = () => {
-      const need = s.configured.some((c) => c.type === r.type);
-      const n = sensName("", need ? t("sens_alias") : r.type), nodes = [n];
-      const k = r.type.startsWith("victron") ? el("input") : null;
-      if (k) { k.autocomplete = "off"; k.spellcheck = false; k.placeholder = t("sens_key"); k.setAttribute("aria-label", t("sens_key")); nodes.push(k); }
-      ask(acts, nodes, "sens_add", "", () => {
-        const a = sensAlias(n, need);
-        if (a === null) return;
-        const o = {add: r.id};
-        if (a) o.alias = a;
-        if (k) o.key = k.value.trim();
-        return sensPost(o);
-      });
-    };
-  }
-}
-async function sensPost(o) {
-  if (sensBusy) return;   /* one POST at a time */
-  sensBusy = true;
-  $("sens-msg").textContent = "";
-  try {
-    const r = /** @type {{status: number, body: Sensors}} */ (await fetchJson("/api/sensors", {method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify(o)}));
-    if (r.status !== 200) return sensErr(SENS_ERR[r.body.error || ""] || "sens_error");
-    $("sens-cfg").textContent = $("sens-seen").textContent = "";   /* closes the open step */
-    renderSens(r.body);
-  } catch (e) { sensErr("sens_error"); } finally { sensBusy = false; }
-}
-
-const SCR = {on: "scr_on", dim: "scr_dim", off: "scr_off"};
-const SCR_ROWS = [["auto", "auto", "scr_auto"], ["prox", "prox_wake", "scr_prox"], ["motion", "motion_wake", "scr_motion"]];
-function renderScreen(d) {
-  const p = d.display, st = d.wifi.mode === "station";
-  $("scr").hidden = p.state === null;
-  if (p.state === null) return;
-  $("scr-status").textContent = [t(SCR[p.state]), p.brightness_pct + " % (" + p.min + "–" + p.max + ")",
-    p.lux === null ? "" : p.lux + " lx", p.sensor === "ok" ? "" : t("scr_nolux"), st ? "" : t("station_only")].filter(Boolean).join(" · ");
-  for (const [id, k, l] of SCR_ROWS) {
-    const on = !!(/** @type {Record<string, unknown>} */ (p))[k];
-    row("scr-" + id, [t(l) + ": " + t(on ? "scr_on" : "scr_off")], on, st);
-  }
-  scrOff = p.offset;
-  $("scr-off").textContent = t("scr_offset", {n: (p.offset > 0 ? "+" : "") + p.offset});
-  $("scr-dn").hidden = $("scr-up").hidden = !st;
-}
-
-let scrOff = 0;
-const scrPost = (o) => fetchJson("/api/display", {method: "POST", headers: {"Content-Type": "application/json"},
-  body: JSON.stringify(o)}).catch(() => null);
-const scrStep = (step) => scrPost({offset: scrOff = Math.max(-50, Math.min(50, scrOff + step))});
-
-async function ota(action) {
-  const msg = $("fw-msg");
-  msg.textContent = "";
-  $("fw-check").hidden = $("fw-install").hidden = true;
-  try {
-    const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/ota", {method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify({action: action})}));
-    if (!r.body.ok) msg.textContent = t("ota_error", {error: r.body.error || ""});
-  } catch (e) { msg.textContent = t("err_net"); }
-}
-
-async function otaChannel(ch) {
-  const msg = $("fw-msg");
-  msg.textContent = "";
-  try {
-    const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/ota", {method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify({channel: ch})}));
-    if (r.body.ok) return;
-    msg.textContent = t("fw_ch_error");
-  } catch (e) { msg.textContent = t("err_net"); }
-  select("fw-channel").value = $("fw-channel").dataset.v || "";
-}
-
-function renderNetworks(scan) {
-  const sel = select("ssid"), keep = sel.value, had = sel.options.length;
-  sel.textContent = "";
-  for (const ap of scan) {
-    const o = el("option", ap.ssid + "  (" + ap.rssi + " dBm" + (ap.secure ? "" : ", " + t("open_unsupported")) + ")");
-    o.value = ap.ssid;
-    o.disabled = !ap.secure;  /* the device requires a NET_PSK_MIN..NET_PSK_MAX passphrase */
-    sel.appendChild(o);
-  }
-  sel.appendChild(el("option", t("other_network"))).value = "";
-  if (scan.some((ap) => ap.ssid === keep) || (had && !keep)) sel.value = keep;   /* else the first network */
-  $("scan-empty").hidden = scan.length > 0;
-  other();
-}
-const other = () => { $("ssid-name").hidden = select("ssid").value !== ""; };
-
-let scanTimer = null;
-
-async function scan() {
-  const msg = $("setup-msg");
-  if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
-  msg.className = "";
-  msg.textContent = t("scanning");
-  const still = () => msg.textContent === t("scanning");  /* nothing newer (join result, error) landed */
-  try {
-    renderNetworks((await getWifi()).scan);
-    scanTimer = setTimeout(async () => {
-      scanTimer = null;
-      try { renderNetworks((await getWifi()).scan); if (still()) msg.textContent = ""; }
-      catch (e) { if (still()) msg.textContent = t("err_net"); }
-    }, 2 * CFG.pollMs);
-  } catch (e) { if (still()) msg.textContent = t("err_net"); }
-}
-
-function connect() {
-  const ssid = select("ssid").value || input("ssid-name").value.trim(), psk = input("psk").value, msg = $("setup-msg");
-  if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
+const scan = () => { read(true); setTimeout(read, 4000, true); };
+$("rescan").onclick = scan;
+$("f").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const ssid = $("ssid").value || $("name").value.trim(), psk = $("psk").value, msg = $("msg");
   msg.className = "bad";
-  if (!ssid || ssid.length > CFG.ssidMax) { msg.textContent = t("err_ssid", {max: CFG.ssidMax}); return; }
-  if (psk.length < CFG.pskMin || psk.length > CFG.pskMax) {
-    msg.textContent = t("err_psk", {min: CFG.pskMin, max: CFG.pskMax}); return;
-  }
-  msg.textContent = "";
-  const w = wifi;
-  if (!w || w.mode !== "station") return join(ssid, psk, true);
-  const vars = {ssid: w.ssid || "", old: w.ssid || "", ap: CFG.ap, appsk: CFG.apPsk};
-  ask($("wifi-acts"), [el("span", t("wifi_warn", vars))], "wifi_switch", "danger", (close) => {
-    close();
-    const p = $("wifi-switch"), url = "http://" + CFG.host + ".local", ap = "http://" + CFG.apAddr;
-    const line = (key, href) => { const e = el("p", t(key, Object.assign({}, vars, {ssid: ssid})) + " "); e.appendChild(link(href, href)); return e; };
-    p.replaceChildren(el("h2", t("switch_title")), line(ssid === w.ssid ? "switch_same" : "switch_other", url), line("switch_lost", ap));
-    p.hidden = false;
-    $("wifi-now").textContent = "";   /* it is leaving that network */
-    $("wifi-form").hidden = true;
-    wifiOpen = false;
-    return join(ssid, psk, false);
-  }, "setup-msg");
-}
-
-async function join(ssid, psk, hotspot) {
-  const msg = $("setup-msg");
-  const send = () => {
-    const ac = new AbortController(), timer = setTimeout(() => ac.abort(), CFG.connectTimeoutMs);
-    return fetch("/api/wifi", {cache: "no-store", method: "POST", signal: ac.signal,
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify({ssid: ssid, psk: psk})})
-      .finally(() => clearTimeout(timer));
-  };
+  if (!ssid || ssid.length > 32) { msg.textContent = S.bad_ssid; return; }
+  if (psk.length < 8 || psk.length > 63) { msg.textContent = S.bad_psk; return; }
   try {
-    let res = null;
-    try { res = await send(); }
-    catch (e) {
-      if (hotspot) {
-        msg.className = "";
-        msg.textContent = t("retrying");
-        await new Promise((done) => setTimeout(done, CFG.connectRetryMs));
-        msg.className = "bad";
-        res = await send();
-      }
-    }
-    const r = {body: /** @type {PostResult} */ (res ? await res.json() : {ok: true})};
-    if (!r.body.ok) {
-      const e = POST_ERROR[r.body.error || ""] || "err_json";
-      msg.textContent = t(e, {max: e === "err_ssid" ? CFG.ssidMax : CFG.pskMax, min: CFG.pskMin});
-      $("wifi-switch").hidden = true;
-      return;
-    }
-    input("psk").value = "";
+    const r = await (await fetch("/api/wifi", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ssid: ssid, psk: psk})})).json();
+    if (!r.ok) { msg.textContent = r.error === "ssid" ? S.bad_ssid : r.error === "psk" ? S.bad_psk : r.error === "store" ? S.store : S.rejected; return; }
+    $("psk").value = "";
     msg.className = "";
-    msg.textContent = t("joining", {ssid: ssid});
-    joining = {ssid: ssid, polls: 0, left: false, away: hotspot};
-  } catch (e) { msg.textContent = t("err_net"); $("wifi-switch").hidden = true; }
-}
-
-async function watchJoin(j) {
-  const msg = $("setup-msg");
-  const w = await getWifi();
-  j.polls++;
-  if (w.mode !== "setup") j.left = true;
-  if (w.mode !== "station") j.away = true;
-  if (w.mode === "station" && w.ip && j.away && w.reverted) {   /* the new network failed: back on the old one */
-    msg.className = "bad";
-    msg.textContent = t("wifi_reverted", {why: t(WHY[w.last_error || ""] || "why_other"), ssid: w.ssid || ""});
-    $("wifi-switch").hidden = true;
-    joining = null;
-  } else if (w.mode === "station" && w.ip && j.away) {   /* online: only once it left and came back */
-    msg.className = "";
-    msg.textContent = t("joined", {ip: w.ip, ssid: j.ssid}) + " ";
-    const url = "http://" + CFG.host + ".local";
-    msg.appendChild(link(url, url));
-    $("wifi-switch").hidden = true;
-    joining = null;
-  } else if (w.mode === "setup" && (j.left || j.polls > 3)) {
-    msg.className = "bad";
-    msg.textContent = t(JOIN_FAILED[w.last_error || ""] || "join_failed_other");
-    joining = null;
-  }
-}
-
-const BOXES = ["setup", "pair", "ac", "fw", "adv-title", "ux", "exp"];
-async function poll() {
-  try {
-    if (joining) await watchJoin(joining);
-    const s = (/** @type {{body: State}} */ (await fetchJson("/api/state"))).body;
-    $("banner").style.display = "none";
-    if (!$("loading").hidden) { $("loading").hidden = true; for (const id of BOXES) $(id).hidden = false; }
-    wifi = s.device.wifi;
-    renderLink(s.device);
-    renderWifi(wifi);
-    renderFw(s.device);
-    renderRows(s.device);
-    renderSensors(s.device);
-    renderScreen(s.device);
-    renderTime(s.device.time);
-    renderSd(s.device.sd);
-    renderRes(s.device.res);
-    renderBattery(s.device.battery);
-  } catch (e) {
-    if (joining) joining.away = true;
-    $("banner").textContent = t("offline");
-    $("banner").style.display = "block";
-  }
-  setTimeout(poll, CFG.pollMs);
-}
-
-$("connect").addEventListener("click", connect);
-$("rescan").addEventListener("click", scan);
-$("ssid").addEventListener("change", other);
-$("psk-show").addEventListener("change", () => { input("psk").type = input("psk-show").checked ? "text" : "password"; });
-$("wifi-change").addEventListener("click", () => {
-  wifiOpen = true;
-  if (wifi) renderWifi(wifi);
-  select("ssid").focus();
-});
-$("ac-toggle").addEventListener("click", () => toggle("/api/auto_camper", "ac", "ac_error"));
-$("ux-toggle").addEventListener("click", () => toggle("/api/ux_setting", "ux", "ux_error"));
-$("exp-toggle").addEventListener("click", () => toggle("/api/experimental", "exp", "exp_error", "sensors"));
-for (const [id, k] of SCR_ROWS) $("scr-" + id + "-toggle").addEventListener("click", () => toggle("/api/display", "scr-" + id, "scr_error", k, "scr-msg"));
-$("scr-dn").addEventListener("click", () => scrStep(-5));
-$("scr-up").addEventListener("click", () => scrStep(5));
-$("fw-check").addEventListener("click", () => ota("check"));
-$("fw-install").addEventListener("click", () => ota("install"));
-$("fw-channel").addEventListener("change", () => otaChannel(select("fw-channel").value));
-poll();
+    const a = document.createElement("a");
+    a.href = a.textContent = "http://calictl-esp.local/";
+    msg.replaceChildren(S.ok.replace("{s}", ssid) + " ", a);
+    for (let i = 0; i < 30; i++) {   // watch the join for a minute: the mode line shows how it ends
+      await new Promise((done) => setTimeout(done, 2000));
+      const w = await read();
+      if (w && w.mode === "station" && w.ssid === ssid) break;
+    }
+  } catch (e) { msg.textContent = S.none; }
+};
+scan();
 </script>
 </body>
 </html>

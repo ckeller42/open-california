@@ -88,7 +88,7 @@ CI's `firmware-release` job (push to `main` only) puts the merge commit's `cali_
 
 **Two channels** (PR #365): `esp-latest` = every `main` merge; `esp-stable` = the build the moving
 git tag `esp-stable` points at (published by the `workflow_dispatch` workflow `esp-stable.yml`).
-The ESP picks its channel (NVS `ota_channel`, default stable; `/device` → Firmware → Channel, or
+The ESP picks its channel (NVS `ota_channel`, default stable; Satellite settings → Firmware update → Channel, or
 `POST /api/ota {"channel":"stable"|"latest"}`; `device.ota.channel`).
 
 | Want | Do |
@@ -104,7 +104,7 @@ By hand (latest channel):
 SHA=$(gh pr view N --json mergeCommit --jq .mergeCommit.oid)
 RUN=$(gh run list -R ckeller42/open-california --workflow ci.yml --commit "$SHA" --json databaseId --jq '.[0].databaseId')
 gh run watch "$RUN" --exit-status          # firmware-release must pass; cancelled? gh run rerun "$RUN"
-curl -s -X POST http://<esp-ip>/api/ota -d '{"action":"install"}'   # or /device → Install <sha7>
+curl -s -X POST http://<esp-ip>/api/ota -d '{"action":"install"}'   # or Satellite settings → Install <sha7>
 curl -s http://<esp-ip>/api/state          # device.ota: downloading → rebooting; then device.fw == merge sha, device.link.up
 ```
 

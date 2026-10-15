@@ -158,14 +158,6 @@ Tests
 .. autofunction:: tests.e2e.test_link_state.test_asleep_van_shows_the_amber_banner
 .. autofunction:: tests.e2e.test_link_state.test_backend_down_turns_red_at_15_s_and_recovers
 .. autofunction:: tests.e2e.test_link_state.test_unpaired_never_says_not_paired_not_asleep
-.. autofunction:: tests.e2e.test_esp_page.test_firmware_row_checks_and_installs
-.. autofunction:: tests.e2e.test_esp_page.test_clock_line_shows_sync_and_boot
-.. autofunction:: tests.e2e.test_esp_page.test_storage_and_resources_lines
-.. autofunction:: tests.e2e.test_esp_page.test_battery_line
-.. autofunction:: tests.e2e.test_esp_page.test_auto_camper_row_shows_and_switches
-.. autofunction:: tests.e2e.test_esp_page.test_screen_row_shows_state_and_switches
-.. autofunction:: tests.e2e.test_esp_page.test_usage_data_row_shows_and_switches
-.. automodule:: tests.e2e.test_device_sensors
 .. autofunction:: tests.e2e.test_satellite.test_beacons_carry_views_controls_values_errors
 .. autofunction:: tests.e2e.test_satellite.test_a_control_without_a_value_omits_the_key_and_a_number_is_a_string
 .. autofunction:: tests.e2e.test_satellite.test_secrets_never_reach_a_beacon

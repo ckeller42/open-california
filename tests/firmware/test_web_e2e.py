@@ -1,4 +1,4 @@
-"""Host firmware: WiFi setup flow + status page/API over the real HTTP core, fake WiFi, fake unit.
+"""Host firmware: WiFi setup flow, web UI, recovery page + API over the real HTTP core, fake WiFi, fake unit.
 
 ``cali-host --http PORT --fake-wifi SCRIPT`` runs the WiFi runner (``wifi_run.c``: the WiFi SM over
 ``cali_net``), the captive DNS and the web endpoints (``web.c`` on ``http_core.c``) on the same
@@ -21,6 +21,7 @@ and the Bumble fake unit for the camper. Requests go to ``127.0.0.1:PORT`` with 
 import gzip
 import json
 import os
+import re
 import subprocess
 import time
 import urllib.error
@@ -47,9 +48,16 @@ pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-bui
 PSK = "test-psk-1234"
 PAGE = Path(__file__).resolve().parents[2] / "firmware" / "web" / "index_gen.html"
 AP_UP = "wifi: setup hotspot up (%s)" % CONSTS["NET_AP_SSID"]
-STRINGS = json.loads(
-    (Path(__file__).resolve().parents[2] / "firmware" / "web" / "strings.json").read_text(encoding="utf-8")
-)
+_DE_SRC = (Path(__file__).resolve().parents[2] / "calictl/webui/strings.de.js").read_text(encoding="utf-8")
+_DE = {
+    json.loads('"%s"' % k): json.loads('"%s"' % v)
+    for k, v in re.findall(r'^\s*"((?:[^"\\]|\\.)*)":\s*"((?:[^"\\]|\\.)*)",?\s*(?://.*)?$', _DE_SRC, re.M)
+}
+
+
+def tr(en, lang):
+    """The web UI's text for ``en`` in ``lang`` (calictl/webui/strings.de.js)."""
+    return _DE[en] if lang == "de" else en
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -316,7 +324,7 @@ def _require_chromium():
 
 
 def test_station_root_is_the_calictl_ui_equal_to_python_semantics(host_fw, hci_unit, tmp_path):
-    """Station mode: GET / is the gzipped calictl UI (no-cache), /device the setup page; in Chromium
+    """Station mode: GET / is the gzipped calictl UI (no-cache), /device the recovery page; in Chromium
     the bundle's semantics.js turns the firmware's real /api/state into exactly what Python semantics
     makes of the same fn; the UI is live (``device.control.writes`` -> ``_meta.read_only`` false);
     no JS error; nothing requested but / and /api/state."""
@@ -629,13 +637,13 @@ def test_firmware_channel_select(host_fw, hci_unit, tmp_path):
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
-        page.goto("http://127.0.0.1:%d/device" % fw.http_port)
-        page.wait_for_selector("#fw-channel:not([hidden])", timeout=5000)
+        page.goto("http://127.0.0.1:%d/#satsettings" % fw.http_port)
+        page.wait_for_selector("#fw-channel", state="visible", timeout=15000)
         assert page.input_value("#fw-channel") == "stable"
         page.select_option("#fw-channel", "latest")
         page.wait_for_function(
             "(s) => document.getElementById('fw-status').textContent.includes(s)",
-            arg=STRINGS["fw_ch_latest"]["en"],
+            arg="latest (every merge)",
             timeout=5000,
         )
         browser.close()
@@ -646,7 +654,7 @@ def test_firmware_channel_select(host_fw, hci_unit, tmp_path):
 def test_experimental_box_toggles(host_fw, hci_unit, tmp_path, locale, lang):
     """Station mode (the toggle is hidden over the setup hotspot, like the channel select).
 
-    .. test:: The /device Experimental box switches exp_sensors
+    .. test:: Satellite settings' Experimental switch sets exp_sensors
        :id: T_FW_EXPERIMENTAL_UI
        :links: R_FW_EXPERIMENTAL
     """
@@ -662,14 +670,14 @@ def test_experimental_box_toggles(host_fw, hci_unit, tmp_path, locale, lang):
         browser = p.chromium.launch()
         page = browser.new_context(locale=locale).new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto("http://127.0.0.1:%d/device" % fw.http_port)
-        page.wait_for_selector("#exp-toggle:not([hidden])", timeout=5000)
-        assert page.inner_text("#exp-title") == STRINGS["exp_title"][lang]
-        assert page.inner_text("#exp-status") == STRINGS["exp_off"][lang]
+        page.goto("http://127.0.0.1:%d/#satsettings" % fw.http_port)
+        page.wait_for_selector("#exp-toggle", state="visible", timeout=15000)
+        assert page.inner_text("#exp h2") == tr("Experimental", lang)
+        assert page.inner_text("#exp-status") == tr("Sensors (experimental): off", lang)
         page.click("#exp-toggle")
         page.wait_for_function(
             "t => document.getElementById('exp-status').textContent === t",
-            arg=STRINGS["exp_on"][lang],
+            arg=tr("Sensors (experimental): on", lang),
             timeout=5000,
         )
         browser.close()
@@ -681,7 +689,7 @@ def test_experimental_box_toggles(host_fw, hci_unit, tmp_path, locale, lang):
 def test_sensors_box_add_and_remove(host_fw, hci_unit, tmp_path, locale, lang):
     """Station mode (the flag's switch is station only); the box's own poll kicks a window.
 
-    .. test:: The /device Sensors box (EN + DE)
+    .. test:: Satellite settings' Sensors box (EN + DE)
        :id: T_FW_SENSORS_UI
        :links: R_FW_SENSORS
     """
@@ -700,64 +708,116 @@ def test_sensors_box_add_and_remove(host_fw, hci_unit, tmp_path, locale, lang):
         page = browser.new_context(locale=locale).new_page()
         page.on("dialog", lambda d: errors.append("native dialog: " + d.message))  # the page asks itself
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto("http://127.0.0.1:%d/device" % fw.http_port)
+        page.goto("http://127.0.0.1:%d/#satsettings" % fw.http_port)
         page.wait_for_selector("#sens-seen .row", timeout=90_000)  # the first window finds it
-        assert page.inner_text("#sens-title") == STRINGS["sens_title"][lang]
+        assert page.inner_text("#sens h2") == tr("Sensors", lang)
         assert "GVH5074" in page.inner_text("#sens-seen .row")
         page.click("#sens-seen .row button")  # Add: opens the (optional) name field
-        page.click("#sens-seen .row button:text-is('%s')" % STRINGS["sens_add"][lang])  # no name: "govee"
+        page.click("#sens-seen .row button:text-is('%s')" % tr("Add", lang))  # no name: "govee"
         page.wait_for_selector("#sens-cfg .row", timeout=10_000)
         assert " · govee · " in page.inner_text("#sens-cfg .row")
-        page.click("#sens-cfg .row button:text-is('%s')" % STRINGS["sens_rename"][lang])
+        page.click("#sens-cfg .row button:text-is('%s')" % tr("Rename", lang))
         page.fill("#sens-cfg .row input", "innen")
-        page.click("#sens-cfg .row button:text-is('%s')" % STRINGS["sens_save"][lang])
+        page.click("#sens-cfg .row button:text-is('%s')" % tr("Save", lang))
         page.wait_for_function("() => !!document.querySelector('#sens-cfg .row')?.textContent.includes(' · innen · ')",
                                timeout=10_000)  # fmt: skip
-        page.click("#sens-cfg .row button:text-is('%s')" % STRINGS["sens_remove"][lang])  # asks in the page
+        page.click("#sens-cfg .row button:text-is('%s')" % tr("Remove", lang))  # asks in the page
         page.wait_for_selector("#sens-cfg .row button.danger")
-        assert STRINGS["sens_confirm_remove"][lang].replace("{alias}", "innen") in page.inner_text(
-            "#sens-cfg .row"
-        )
+        assert tr("Remove {alias}?", lang).replace("{alias}", "innen") in page.inner_text("#sens-cfg .row")
         page.click("#sens-cfg .row button.danger")  # the confirm
         page.wait_for_function("() => !document.querySelector('#sens-cfg .row')", timeout=10_000)
         browser.close()
     assert not errors, errors
 
 
+RECOVERY = {
+    "en": ("Satellite WiFi", "Open the camper UI"),
+    "de": ("Satellit-WLAN", "Camper-Oberfläche öffnen"),
+}
+
+
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
-def test_page_renders(host_fw, hci_unit, tmp_path, locale, lang):
-    """GET / renders the title and the link to the calictl UI within 3 s, in the browser's language;
-    any uncaught page error fails the test."""
+def test_recovery_page_joins_over_the_hotspot(host_fw, hci_unit, tmp_path, locale, lang):
+    """GET /device, the WiFi recovery page (one-web-UI design, U2), over the setup hotspot in the
+    browser's language: the mode line, the scanned networks, a join that reaches the runner, the
+    ``http://<NET_HOSTNAME>.local/`` link, the mode line once online, and the link back to the UI at /.
+    The password field is emptied; any uncaught page error fails the test.
+
+    .. test:: The /device recovery page joins a network (host tier, EN + DE)
+       :id: T_FW_RECOVERY_PAGE
+       :links: R_FW_WIFI_PROVISION
+    """
     sync_playwright = _require_chromium()
-    fw = host_fw(hci_unit, http=True)
-    _pair(fw, hci_unit)
-    fw.expect("SNAP", timeout=40)
+    wifi = _wifi_script(tmp_path, "ap minsel -55 1\nap other -80 1\njoin minsel ok 192.168.1.42\n")
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    fw.expect("LOG", lambda l: l == AP_UP)
+    wait_ms = 10 * CONSTS["NET_PAGE_POLL_MS"]
+    title, app = RECOVERY[lang]
     errors = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_context(locale=locale).new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto("http://127.0.0.1:%d/device" % fw.http_port)
+        assert page.inner_text("h1") == title and page.title() == title
+        assert page.inner_text("#app") == app and page.get_attribute("#app", "href") == "/"
+        page.wait_for_selector("#ssid option[value=minsel]", state="attached", timeout=wait_ms)
+        assert CONSTS["NET_AP_SSID"] in page.inner_text("#now")
+        page.select_option("#ssid", "minsel")
+        page.fill("#psk", PSK)
+        page.click("#go")
+        fw.expect("LOG", lambda l: l == "wifi: joining minsel", timeout=20)
+        link = "http://%s.local/" % CONSTS["NET_HOSTNAME"]
+        page.wait_for_selector('#msg a[href="%s"]' % link, timeout=wait_ms)
+        assert page.input_value("#psk") == ""
+        page.wait_for_function(
+            "() => document.getElementById('now').textContent.includes('192.168.1.42')", timeout=wait_ms
+        )
+        browser.close()
+    assert not errors, errors
+    assert not any(PSK in line for line in fw.log)
+
+
+def test_captive_probe_opens_the_ui_on_wifi_setup(host_fw, hci_unit, tmp_path):
+    """Over the setup hotspot an OS captive-portal probe gets a 302 to ``http://<NET_AP_ADDR>/``, and /
+    (where the captive sheet lands) is the UI bundle, which opens on its WiFi-setup screen."""
+    sync_playwright = _require_chromium()
+    wifi = _wifi_script(tmp_path, "ap minsel -55 1\n")
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    fw.expect("LOG", lambda l: l == AP_UP)
+    for probe in ("/generate_204", "/hotspot-detect.html"):
+        r = get(fw, probe)
+        assert r.status == 302 and r.headers["Location"] == "http://%s/" % CONSTS["NET_AP_ADDR"], probe
+    r = get(fw, "/")
+    assert r.status == 200 and r.headers["Content-Encoding"] == "gzip"
+    assert gzip.decompress(r.body) == gen_c_dict.render_app_bundle().encode("utf-8")
+    errors = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto("http://127.0.0.1:%d/" % fw.http_port)
-        page.wait_for_selector("#device a", timeout=3000)
-        assert page.inner_text("#title") == STRINGS["title"][lang]
-        assert page.inner_text("#device a") == STRINGS["app_link"][lang]  # paired
+        page.wait_for_function(
+            "() => document.getElementById('title').textContent === 'WiFi setup'", timeout=15000
+        )
+        assert page.evaluate("location.hash") == "#wifisetup"
         browser.close()
     assert not errors, errors
 
 
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
 def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
-    """The owner's first-flash path, clicked in Chromium (final review I2): pick a network, type a
-    wrong password -> the page says why (R23: the auth text); pick the right one -> the
-    ``http://<NET_HOSTNAME>.local`` link. The password field is emptied after each submit; any
-    uncaught page error fails the test. Texts come from ``strings.json``, in the browser's language."""
+    """The owner's first-flash path, clicked in Chromium (final review I2) on the web UI's WiFi setup
+    screen at /: pick a network, type a wrong password -> the screen says why (R23: the auth text); pick
+    the right one -> the ``http://<NET_HOSTNAME>.local`` link. The password field is emptied after each
+    submit; any uncaught page error fails the test. Texts in the browser's language (strings.de.js)."""
     sync_playwright = _require_chromium()
     wifi = _wifi_script(
         tmp_path, "ap minsel -55 1\nap typo -60 1\njoin minsel ok 192.168.1.42\njoin typo fail auth\n"
     )
     fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
     fw.expect("LOG", lambda l: l == AP_UP)
-    wrong = STRINGS["join_failed_auth"][lang]
+    wrong = tr("Wrong password — try again.", lang)
     link = "http://%s.local" % CONSTS["NET_HOSTNAME"]
     wait_ms = 10 * CONSTS["NET_PAGE_POLL_MS"]  # a few page polls
     errors = []
@@ -767,8 +827,9 @@ def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto("http://127.0.0.1:%d/" % fw.http_port)
         page.wait_for_selector("#setup", state="visible", timeout=wait_ms)
+        assert page.inner_text("#title") == tr("WiFi setup", lang)
         page.wait_for_selector("#ssid option[value=typo]", state="attached", timeout=wait_ms)
-        assert page.inner_text("#connect") == STRINGS["connect"][lang]
+        assert page.inner_text("#connect") == tr("Connect", lang)
 
         page.select_option("#ssid", "typo")
         page.fill("#psk", "wrong-psk-99")
@@ -792,12 +853,11 @@ def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
 
 
 def test_rescan_then_connect_keeps_the_join_result_in_browser(host_fw, hci_unit, tmp_path):
-    """Regression for the CodeRabbit review on #220: ``scan()``'s delayed re-read (``2 *
-    CFG.pollMs`` after the click) must not blindly overwrite ``#setup-msg``. Click "Search again",
-    then "Connect" right after (before that delayed read lands) — the join's success link must
-    still be there once the delayed read fires. The old code cleared the text unconditionally,
-    which also hides ``#setup`` (its visibility check looks for that link once WiFi mode is no
-    longer "setup")."""
+    """Regression for the CodeRabbit review on #220, on the web UI's WiFi setup screen: the scan's
+    delayed re-read (``2 * NET_PAGE_POLL_MS`` after the click, app.js satScan) must not overwrite
+    ``#setup-msg``. Click "Search again", then "Connect" right after (before that delayed read lands)
+    — the join's success link must still be there once the delayed read fires, and the screen stays
+    (a join made there shows its result, no switch to Home)."""
     sync_playwright = _require_chromium()
     wifi = _wifi_script(tmp_path, "ap minsel -55 1\njoin minsel ok 192.168.1.42\n")
     fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
@@ -813,14 +873,14 @@ def test_rescan_then_connect_keeps_the_join_result_in_browser(host_fw, hci_unit,
         page.wait_for_selector("#setup", state="visible", timeout=wait_ms)
         page.wait_for_selector("#ssid option[value=minsel]", state="attached", timeout=wait_ms)
 
-        page.click("#rescan")  # starts scan()'s pending delayed re-read, 2 * CFG.pollMs out
+        page.click("#rescan")  # starts satScan()'s pending delayed re-read, 2 * NET_PAGE_POLL_MS out
         page.select_option("#ssid", "minsel")
         page.fill("#psk", PSK)
         page.click("#connect")  # quickly, before that delayed read lands
         a = page.wait_for_selector('#setup-msg a[href="%s"]' % link, timeout=wait_ms)
         assert a.inner_text() == link
 
-        # outlive the rescan's pending timer (2 * CFG.pollMs after the click above)
+        # outlive the rescan's pending timer (2 * NET_PAGE_POLL_MS after the click above)
         page.wait_for_timeout(2 * CONSTS["NET_PAGE_POLL_MS"] + 500)
         assert page.query_selector('#setup-msg a[href="%s"]' % link) is not None
         assert page.is_visible("#setup")

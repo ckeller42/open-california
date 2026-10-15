@@ -42,7 +42,7 @@ self.addEventListener("fetch", (ev) => {
   ev.respondWith((async () => {
     const cache = await caches.open(CACHE);
     const hit = await cache.match(key);
-    if (!hit) return fetch(req);   // not shell (e.g. the satellite's /device): straight through
+    if (!hit) return fetch(req);   // not shell (e.g. the satellite's /device recovery page): straight through
     chain = chain.then(async () => {
       const res = await fetch(req, { cache: "no-cache" });
       if (!res.ok || res.headers.get("ETag") === hit.headers.get("ETag")) return;
