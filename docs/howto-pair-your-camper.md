@@ -50,8 +50,9 @@ can make that window run out. Before you open the wizard:
    unit's menus were only seen in German for this project — the English-UI wording is unknown;
    look for the equivalent "Bluetooth" / "connect device" screen if your unit is set to English).
    It shows **"Passcode: ---"** until buspi connects to it.
-2. **In the web UI**, open the **⋮** menu (top right) → **Pair…**. The wizard opens at the top of
-   the start page. Tick **"I'm on that screen"**, then press **Pair now**.
+2. **In the web UI**, tap **Pair…** on the *No camper unit is paired yet* banner, or
+   open **⋮ → Device status** and tap **Pair…** in the *Camper unit* card (already paired: **Unpair…**
+   there first). The wizard opens at the top of the start page. Tick **"I'm on that screen"**, then press **Pair now**.
 3. The unit's `---` changes to a **6-digit passcode**. Type that number into the web UI's
    passcode field and press **Send**. (A fresh passcode is shown for every attempt — always
    read the number currently on the unit's screen, not one you remember from a previous try.)
@@ -74,7 +75,7 @@ next:
 | **Banner: "Another app on this Pi keeps Bluetooth scanning — pairing will likely fail until it stops (for example the Home Assistant Bluetooth integration)."** | Something else on the Pi is holding the radio in discovery. | Stop that other Bluetooth software (see *Before you start*), then press **Try again**. |
 
 Each error step has a **Try again** button that restarts the flow from scanning, and (once a
-pairing exists to lose) an **Unpair…** button — the same action as **⋮ → Unpair…**, with the same
+pairing exists to lose) an **Unpair…** button — the same action as **⋮ → Device status → Unpair…**, with the same
 confirm, *"Unpair the camper unit? Data stops until you pair again."* It clears calictl's half of
 a broken pairing and drops you back at the checklist to pair again.
 

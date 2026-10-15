@@ -303,3 +303,17 @@ def test_an_error_is_announced_and_scrolled_into_view(stub, error_gated_page):
         _add(pg, "en", "GVH5074_0001", name="mein sensor")  # the click scrolled its row into view
         expect(msg).to_have_text(STR["sens_err_name"]["en"])
         expect(msg).to_be_in_viewport()
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_an_empty_scan_under_configured_sensors_says_no_other_ones(stub, error_gated_page, locale, lang):
+    """Live check 2026-10-15: "No sensors found yet" under a configured sensor read as a contradiction.
+    With one configured the empty scan says no OTHER sensors are nearby; with none, the original text."""
+    _configured(stub, (GOVEE_A, "innen", GOVEE_VALUE))
+    stub.fixtures["satellite"]["/api/sensors"]["seen"] = []
+    with _open(error_gated_page, stub, lang) as pg:
+        expect(_cfg_row(pg, "innen")).to_be_visible()
+        expect(pg.locator("#sens-seen")).to_have_text(_s("sens_none_more", lang))
+        stub.fixtures["satellite"]["/api/sensors"]["configured"] = []
+        pg.evaluate(POLL)
+        expect(pg.locator("#sens-seen")).to_have_text(_s("sens_none", lang))

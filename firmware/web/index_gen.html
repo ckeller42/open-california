@@ -29,8 +29,16 @@ button.danger{background:var(--bad);border-color:var(--bad)}
 button:disabled{opacity:.45;cursor:default}
 .acts{display:flex;flex-wrap:wrap;gap:0 8px;align-items:center}.acts>*{flex:1 1 8em}.acts>span,.acts>input{flex-basis:100%;margin-top:8px}
 a{color:var(--accent)}
-input[type=checkbox]{width:auto;margin-right:6px}#scr-step button{width:3em;margin:0 8px}
-.sec{margin:20px 0 8px}
+input[type=checkbox]{width:auto;margin-right:6px}
+.tgl{display:flex;align-items:center;gap:12px;min-height:44px;margin:4px 0}.tgl>span:first-child{flex:1}
+button.sw{flex:none;width:56px;height:44px;margin:0;padding:0;border:0;background:none;position:relative}
+button.sw::before,button.sw::after{content:"";position:absolute;transition:.15s}
+button.sw::before{left:2px;top:7px;width:52px;height:30px;border-radius:15px;background:var(--muted)}
+button.sw::after{left:5px;top:10px;width:24px;height:24px;border-radius:50%;background:#fff}
+button.sw[aria-checked=true]::before{background:var(--accent)}button.sw[aria-checked=true]::after{left:27px}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.step{display:flex;gap:8px}.step button{width:48px;height:44px;margin:0;padding:0}
+.sec{margin:20px 0 8px}p:empty{margin:0}
 </style>
 </head>
 <body>
@@ -38,7 +46,8 @@ input[type=checkbox]{width:auto;margin-right:6px}#scr-step button{width:3em;marg
 <p id="device"></p>
 <h1 id="title"></h1>
 <div id="banner"></div>
-<section id="setup" class="box">
+<p id="loading" class="muted"></p>
+<section id="setup" class="box" hidden>
   <h2 id="setup-title"></h2>
   <p id="wifi-now"></p>
   <button id="wifi-change" class="secondary" type="button" hidden></button>
@@ -57,27 +66,26 @@ input[type=checkbox]{width:auto;margin-right:6px}#scr-step button{width:3em;marg
   <div id="wifi-switch" hidden></div>
   <p id="setup-msg" aria-live="polite"></p>
 </section>
-<section id="pair" class="box">
+<section id="pair" class="box" hidden>
   <h2 id="pair-title"></h2>
   <p id="pair-status"></p>
   <a id="pair-link"></a>
 </section>
-<section id="ac" class="box">
+<section id="ac" class="box" hidden>
   <h2 id="ac-title"></h2>
-  <p id="ac-status"></p>
-  <button id="ac-toggle" class="secondary" type="button" hidden></button>
+  <div class="tgl"><span id="ac-status"></span><button id="ac-toggle" class="sw" type="button" role="switch" aria-labelledby="ac-status" hidden></button></div>
   <p id="ac-msg" class="bad"></p>
 </section>
 <section id="scr" class="box" hidden>
   <h2 id="scr-title"></h2>
   <p id="scr-status"></p>
-  <p id="scr-auto-status"></p><button id="scr-auto-toggle" class="secondary" type="button" hidden></button>
-  <p id="scr-prox-status"></p><button id="scr-prox-toggle" class="secondary" type="button" hidden></button>
-  <p id="scr-motion-status"></p><button id="scr-motion-toggle" class="secondary" type="button" hidden></button>
-  <p id="scr-step"><button id="scr-dn" class="secondary" type="button">−</button><span id="scr-off"></span><button id="scr-up" class="secondary" type="button">+</button></p>
+  <div class="tgl"><span id="scr-auto-status"></span><button id="scr-auto-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-auto-status" hidden></button></div>
+  <div class="tgl"><span id="scr-prox-status"></span><button id="scr-prox-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-prox-status" hidden></button></div>
+  <div class="tgl"><span id="scr-motion-status"></span><button id="scr-motion-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-motion-status" hidden></button></div>
+  <div class="tgl"><span id="scr-off"></span><span class="step"><button id="scr-dn" class="secondary" type="button">−</button><button id="scr-up" class="secondary" type="button">+</button></span></div>
   <p id="scr-msg" class="bad"></p>
 </section>
-<section id="fw" class="box">
+<section id="fw" class="box" hidden>
   <h2 id="fw-title"></h2>
   <p id="fw-status"></p>
   <button id="fw-install" type="button" hidden></button>
@@ -85,17 +93,15 @@ input[type=checkbox]{width:auto;margin-right:6px}#scr-step button{width:3em;marg
   <label for="fw-channel" id="fw-channel-l" hidden></label><select id="fw-channel" hidden><option value="stable"></option><option value="latest"></option></select>
   <p id="fw-msg" class="bad"></p>
 </section>
-<h2 id="adv-title" class="sec"></h2>
-<section id="ux" class="box">
-  <p id="ux-status"></p>
-  <button id="ux-toggle" class="secondary" type="button" hidden></button>
+<h2 id="adv-title" class="sec" hidden></h2>
+<section id="ux" class="box" hidden>
+  <div class="tgl"><span id="ux-status"></span><button id="ux-toggle" class="sw" type="button" role="switch" aria-labelledby="ux-status" hidden></button></div>
   <p id="ux-msg" class="bad"></p>
 </section>
-<section id="exp" class="box">
+<section id="exp" class="box" hidden>
   <h2 id="exp-title"></h2>
   <p id="exp-hint" class="muted"></p>
-  <p id="exp-status"></p>
-  <button id="exp-toggle" class="secondary" type="button" hidden></button>
+  <div class="tgl"><span id="exp-status"></span><button id="exp-toggle" class="sw" type="button" role="switch" aria-labelledby="exp-status" hidden></button></div>
   <p id="exp-msg" class="bad"></p>
 </section>
 <section id="sens" class="box" hidden>
@@ -112,7 +118,7 @@ input[type=checkbox]{width:auto;margin-right:6px}#scr-step button{width:3em;marg
 </main>
 <script>
 const CFG = {pollMs: 2000, connectTimeoutMs: 8000, connectRetryMs: 3000, host: "calictl-esp", ap: "calictl-esp-setup", apPsk: "calictl-setup", apAddr: "192.168.4.1", ssidMax: 32, pskMin: 8, pskMax: 63};
-const STR = {"ac_armed":{"de":"⟳ wird beim Parken wiederhergestellt","en":"⟳ will restore on park"},"ac_error":{"de":"Auto-Campingmodus konnte nicht geändert werden","en":"Couldn't change auto camper"},"ac_off":{"de":"Auto-Campingmodus aus","en":"Auto camper off"},"ac_on":{"de":"Auto-Campingmodus an","en":"Auto camper on"},"ac_restoring":{"de":"⟳ wird wiederhergestellt …","en":"⟳ restoring …"},"ac_title":{"de":"Campingmodus nach dem Parken wiederherstellen","en":"Restore camping after you park"},"ac_turn_off":{"de":"Ausschalten","en":"Turn off"},"ac_turn_on":{"de":"Einschalten","en":"Turn on"},"adv_title":{"de":"Erweitert","en":"Advanced"},"app_link":{"de":"‹ Camper-Oberfläche","en":"‹ Camper UI"},"batt_charging":{"de":"an USB, lädt","en":"on USB, charging"},"batt_left":{"de":"noch ~{time}","en":"~{time} left"},"batt_on":{"de":"im Akkubetrieb","en":"on battery"},"batt_title":{"de":"Akku","en":"Battery"},"batt_usb":{"de":"an USB","en":"on USB"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Der Satellit hat die Anfrage abgelehnt.","en":"The satellite rejected the request."},"err_net":{"de":"Keine Antwort vom Satelliten.","en":"No answer from the satellite."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"exp_error":{"de":"Schalter konnte nicht geändert werden","en":"Couldn't change the switch"},"exp_hint":{"de":"Schaltet Sensorsuche und -einrichtung frei. Stabile Funktionen hängen nicht davon ab.","en":"Enables the sensor scan and setup. Stable features do not depend on it."},"exp_off":{"de":"Sensoren (experimentell): aus","en":"Sensors (experimental): off"},"exp_on":{"de":"Sensoren (experimentell): an","en":"Sensors (experimental): on"},"exp_title":{"de":"Experimentell","en":"Experimental"},"fw_ch_error":{"de":"Kanal konnte nicht geändert werden","en":"Couldn't change the channel"},"fw_ch_latest":{"de":"neueste (jeder Merge)","en":"latest (every merge)"},"fw_ch_stable":{"de":"stabil (getestet)","en":"stable (tested)"},"fw_channel":{"de":"Kanal","en":"Channel"},"fw_check":{"de":"Nach Update suchen","en":"Check for update"},"fw_install":{"de":"{sha} installieren","en":"Install {sha}"},"fw_running":{"de":"Läuft: {sha}","en":"Running {sha}"},"fw_title":{"de":"Firmware-Update","en":"Firmware update"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Handy mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this phone too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"network":{"de":"Netzwerk","en":"Network"},"no_networks":{"de":"Keine Netzwerke in der Liste — gib den Namen des Netzwerks ein.","en":"No networks listed — type the network's name."},"offline":{"de":"Satellit nicht erreichbar","en":"Satellite not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"ota_available":{"de":"{sha} ist verfügbar","en":"{sha} is available"},"ota_checking":{"de":"suche …","en":"checking …"},"ota_downloading":{"de":"lade {pct} %","en":"downloading {pct} %"},"ota_error":{"de":"Update fehlgeschlagen ({error})","en":"update failed ({error})"},"ota_rebooting":{"de":"installiert, startet neu …","en":"installed, restarting …"},"ota_up_to_date":{"de":"aktuell","en":"up to date"},"ota_verifying":{"de":"prüfe …","en":"verifying …"},"other_network":{"de":"Anderes Netzwerk…","en":"Other network…"},"pair_link":{"de":"In der Camper-Oberfläche koppeln ›","en":"Pair in the camper UI ›"},"pair_off":{"de":"Nicht gekoppelt","en":"Not paired"},"pair_on":{"de":"Gekoppelt ✓","en":"Paired ✓"},"pair_title":{"de":"Camper-Einheit","en":"Camper unit"},"password":{"de":"Passwort","en":"Password"},"res_cpu":{"de":"CPU {pct} %","en":"CPU {pct} %"},"res_psram":{"de":"PSRAM {free} KB frei","en":"PSRAM {free} KB free"},"res_ram":{"de":"RAM {free} KB frei (Minimum {min})","en":"RAM {free} KB free (lowest {min})"},"res_title":{"de":"Ressourcen","en":"Resources"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"scr_auto":{"de":"Helligkeit nach Raumlicht","en":"Brightness from room light"},"scr_dim":{"de":"gedimmt","en":"dimmed"},"scr_error":{"de":"Bildschirmeinstellung konnte nicht geändert werden","en":"Couldn't change the screen setting"},"scr_motion":{"de":"Bei Bewegung einschalten","en":"Wake on motion"},"scr_nolux":{"de":"kein Lichtsensor-Wert","en":"no light sensor reading"},"scr_off":{"de":"aus","en":"off"},"scr_offset":{"de":"Helligkeit {n}","en":"Brightness {n}"},"scr_on":{"de":"an","en":"on"},"scr_prox":{"de":"Bei Annäherung einschalten","en":"Wake when a hand is near"},"scr_title":{"de":"Bildschirm","en":"Screen"},"sd_absent":{"de":"Keine SD-Karte","en":"No SD card"},"sd_dropped":{"de":"{n} Einträge verworfen","en":"{n} records dropped"},"sd_error":{"de":"SD-Kartenfehler","en":"SD card error"},"sd_log":{"de":"Log Nr. {seq}","en":"log #{seq}"},"sd_ok":{"de":"SD {free} von {total} GB frei","en":"SD {free} of {total} GB free"},"sd_title":{"de":"Speicher","en":"Storage"},"sens_add":{"de":"Hinzufügen","en":"Add"},"sens_alias":{"de":"Name (a–z, 0–9, -, _)","en":"Name (a–z, 0–9, -, _)"},"sens_cancel":{"de":"Abbrechen","en":"Cancel"},"sens_confirm_remove":{"de":"{alias} entfernen?","en":"Remove {alias}?"},"sens_err_bad_alias":{"de":"Name schon vergeben","en":"Name already used"},"sens_err_bad_key":{"de":"Schlüssel muss 32 Hex-Zeichen haben","en":"Key must be 32 hex digits"},"sens_err_full":{"de":"Sensorliste ist voll (16)","en":"Sensor list is full (16)"},"sens_err_key_mismatch":{"de":"Schlüssel passt nicht zu diesem Gerät","en":"Key does not match this device"},"sens_err_name":{"de":"Nur a–z, 0–9, - oder _ (max. 16)","en":"Use a–z, 0–9, - or _ (max. 16)"},"sens_error":{"de":"Sensoren konnten nicht geändert werden","en":"Couldn't change the sensors"},"sens_hint":{"de":"Sensoren in der Nähe erscheinen unten; füge deine hinzu.","en":"Nearby sensors appear below; add the ones that are yours."},"sens_key":{"de":"Verschlüsselungsschlüssel (32 Hex-Zeichen)","en":"Encryption key (32 hex digits)"},"sens_none":{"de":"Noch keine Sensoren gefunden (die Suche läuft jede Minute).","en":"No sensors found yet (the scan runs every minute)."},"sens_paused":{"de":"Suche pausiert während der Kopplung","en":"Scan paused while pairing"},"sens_remove":{"de":"Entfernen","en":"Remove"},"sens_rename":{"de":"Umbenennen","en":"Rename"},"sens_save":{"de":"Speichern","en":"Save"},"sens_t_govee":{"de":"Thermo-Hygrometer (Govee)","en":"Thermo-hygrometer (Govee)"},"sens_t_victron_battery":{"de":"Batteriesensor (Victron)","en":"Battery sense (Victron)"},"sens_t_victron_mppt":{"de":"Solarladeregler (Victron)","en":"Solar charger (Victron)"},"sens_title":{"de":"Sensoren","en":"Sensors"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"show_psk":{"de":"Passwort anzeigen","en":"Show password"},"ssid_name":{"de":"Netzwerkname","en":"Network name"},"station_only":{"de":"braucht das Heim-WLAN","en":"needs the home WiFi"},"switch_lost":{"de":"Nicht zurückgekommen? Verbinde dich mit {ap} (Passwort {appsk}) und öffne:","en":"Didn't come back? Join {ap} (password {appsk}) and open:"},"switch_other":{"de":"Verbinde dieses Handy mit {ssid} und öffne dann:","en":"Join {ssid} with this phone, then open:"},"switch_same":{"de":"Lade die Seite in ~30 s neu oder öffne:","en":"Reload this page in ~30 s, or open:"},"switch_title":{"de":"Netzwerkwechsel","en":"Switching networks"},"time_none":{"de":"Keine Zeitquelle · Start Nr. {boot}","en":"No clock source · boot {boot}"},"time_synced":{"de":"Uhr synchronisiert (SNTP) · Start Nr. {boot}","en":"Clock synced (SNTP) · boot {boot}"},"time_unit":{"de":"Uhr der Camper-Einheit · Start Nr. {boot}","en":"Clock from the camper unit · boot {boot}"},"time_waiting":{"de":"Uhr noch nicht synchronisiert · Start Nr. {boot}","en":"Clock not synced yet · boot {boot}"},"title":{"de":"Satellit-Einstellungen","en":"Satellite settings"},"ux_error":{"de":"Nutzungsdaten konnten nicht geändert werden","en":"Couldn't change usage data"},"ux_off":{"de":"Nutzungsdaten senden: aus","en":"Send usage data: off"},"ux_on":{"de":"Nutzungsdaten senden: an","en":"Send usage data: on"},"wifi_change":{"de":"Netzwerk wechseln…","en":"Change network…"},"wifi_now":{"de":"Verbunden mit {ssid}","en":"Connected to {ssid}"},"wifi_switch":{"de":"Netzwerk wechseln","en":"Switch network"},"wifi_title":{"de":"WLAN","en":"WiFi"},"wifi_warn":{"de":"Der Satellit verlässt {ssid} jetzt. Ist das neue Passwort falsch, öffnet er den Einrichtungs-Hotspot {ap} (Passwort {appsk}) und vergisst {ssid}; verbinde dich mit diesem Hotspot, um es erneut zu versuchen.","en":"The satellite leaves {ssid} now. If the new password is wrong it opens its setup hotspot {ap} (password {appsk}) and forgets {ssid}; join that hotspot to try again."}};
+const STR = {"ac_armed":{"de":"⟳ wird beim Parken wiederhergestellt","en":"⟳ will restore on park"},"ac_error":{"de":"Auto-Campingmodus konnte nicht geändert werden","en":"Couldn't change auto camper"},"ac_off":{"de":"Auto-Campingmodus aus","en":"Auto camper off"},"ac_on":{"de":"Auto-Campingmodus an","en":"Auto camper on"},"ac_restoring":{"de":"⟳ wird wiederhergestellt …","en":"⟳ restoring …"},"ac_title":{"de":"Campingmodus nach dem Parken wiederherstellen","en":"Restore camping after you park"},"adv_title":{"de":"Erweitert","en":"Advanced"},"app_link":{"de":"‹ Camper-Oberfläche","en":"‹ Camper UI"},"batt_charging":{"de":"an USB, lädt","en":"on USB, charging"},"batt_left":{"de":"noch ~{time}","en":"~{time} left"},"batt_on":{"de":"im Akkubetrieb","en":"on battery"},"batt_title":{"de":"Akku","en":"Battery"},"batt_usb":{"de":"an USB","en":"on USB"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Der Satellit hat die Anfrage abgelehnt.","en":"The satellite rejected the request."},"err_net":{"de":"Keine Antwort vom Satelliten.","en":"No answer from the satellite."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"exp_error":{"de":"Schalter konnte nicht geändert werden","en":"Couldn't change the switch"},"exp_hint":{"de":"Schaltet Sensorsuche und -einrichtung frei. Stabile Funktionen hängen nicht davon ab.","en":"Enables the sensor scan and setup. Stable features do not depend on it."},"exp_off":{"de":"Sensoren (experimentell): aus","en":"Sensors (experimental): off"},"exp_on":{"de":"Sensoren (experimentell): an","en":"Sensors (experimental): on"},"exp_title":{"de":"Experimentell","en":"Experimental"},"fw_ch_error":{"de":"Kanal konnte nicht geändert werden","en":"Couldn't change the channel"},"fw_ch_latest":{"de":"neueste (jeder Merge)","en":"latest (every merge)"},"fw_ch_stable":{"de":"stabil (getestet)","en":"stable (tested)"},"fw_channel":{"de":"Kanal","en":"Channel"},"fw_check":{"de":"Nach Update suchen","en":"Check for update"},"fw_install":{"de":"{sha} installieren","en":"Install {sha}"},"fw_running":{"de":"Läuft: {sha}","en":"Running {sha}"},"fw_title":{"de":"Firmware-Update","en":"Firmware update"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Handy mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this phone too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"loading":{"de":"Lädt…","en":"Loading…"},"network":{"de":"Netzwerk","en":"Network"},"no_networks":{"de":"Keine Netzwerke in der Liste — gib den Namen des Netzwerks ein.","en":"No networks listed — type the network's name."},"offline":{"de":"Satellit nicht erreichbar","en":"Satellite not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"ota_available":{"de":"{sha} ist verfügbar","en":"{sha} is available"},"ota_checking":{"de":"suche …","en":"checking …"},"ota_downloading":{"de":"lade {pct} %","en":"downloading {pct} %"},"ota_error":{"de":"Update fehlgeschlagen ({error})","en":"update failed ({error})"},"ota_rebooting":{"de":"installiert, startet neu …","en":"installed, restarting …"},"ota_up_to_date":{"de":"aktuell","en":"up to date"},"ota_verifying":{"de":"prüfe …","en":"verifying …"},"other_network":{"de":"Anderes Netzwerk…","en":"Other network…"},"pair_manage":{"de":"Kopplung verwalten ›","en":"Manage pairing ›"},"pair_now":{"de":"Jetzt koppeln ›","en":"Pair now ›"},"pair_off":{"de":"Nicht gekoppelt","en":"Not paired"},"pair_on":{"de":"Gekoppelt ✓","en":"Paired ✓"},"pair_title":{"de":"Camper-Einheit","en":"Camper unit"},"password":{"de":"Passwort","en":"Password"},"res_cpu":{"de":"CPU {pct} %","en":"CPU {pct} %"},"res_psram":{"de":"PSRAM {free} KB frei","en":"PSRAM {free} KB free"},"res_ram":{"de":"RAM {free} KB frei (Minimum {min})","en":"RAM {free} KB free (lowest {min})"},"res_title":{"de":"Ressourcen","en":"Resources"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"scr_auto":{"de":"Helligkeit nach Raumlicht","en":"Brightness from room light"},"scr_dim":{"de":"gedimmt","en":"dimmed"},"scr_error":{"de":"Bildschirmeinstellung konnte nicht geändert werden","en":"Couldn't change the screen setting"},"scr_less":{"de":"Dunkler","en":"Darker"},"scr_more":{"de":"Heller","en":"Brighter"},"scr_motion":{"de":"Bei Bewegung einschalten","en":"Wake on motion"},"scr_nolux":{"de":"kein Lichtsensor-Wert","en":"no light sensor reading"},"scr_off":{"de":"aus","en":"off"},"scr_offset":{"de":"Helligkeit {n}","en":"Brightness {n}"},"scr_on":{"de":"an","en":"on"},"scr_prox":{"de":"Bei Annäherung einschalten","en":"Wake when a hand is near"},"scr_title":{"de":"Bildschirm","en":"Screen"},"sd_absent":{"de":"Keine SD-Karte","en":"No SD card"},"sd_dropped":{"de":"{n} Einträge verworfen","en":"{n} records dropped"},"sd_error":{"de":"SD-Kartenfehler","en":"SD card error"},"sd_log":{"de":"Log Nr. {seq}","en":"log #{seq}"},"sd_ok":{"de":"SD {free} von {total} GB frei","en":"SD {free} of {total} GB free"},"sd_title":{"de":"Speicher","en":"Storage"},"sens_add":{"de":"Hinzufügen","en":"Add"},"sens_alias":{"de":"Name (a–z, 0–9, -, _)","en":"Name (a–z, 0–9, -, _)"},"sens_cancel":{"de":"Abbrechen","en":"Cancel"},"sens_confirm_remove":{"de":"{alias} entfernen?","en":"Remove {alias}?"},"sens_err_bad_alias":{"de":"Name schon vergeben","en":"Name already used"},"sens_err_bad_key":{"de":"Schlüssel muss 32 Hex-Zeichen haben","en":"Key must be 32 hex digits"},"sens_err_full":{"de":"Sensorliste ist voll (16)","en":"Sensor list is full (16)"},"sens_err_key_mismatch":{"de":"Schlüssel passt nicht zu diesem Gerät","en":"Key does not match this device"},"sens_err_name":{"de":"Nur a–z, 0–9, - oder _ (max. 16)","en":"Use a–z, 0–9, - or _ (max. 16)"},"sens_error":{"de":"Sensoren konnten nicht geändert werden","en":"Couldn't change the sensors"},"sens_hint":{"de":"Sensoren in der Nähe erscheinen unten; füge deine hinzu.","en":"Nearby sensors appear below; add the ones that are yours."},"sens_key":{"de":"Verschlüsselungsschlüssel (32 Hex-Zeichen)","en":"Encryption key (32 hex digits)"},"sens_none":{"de":"Noch keine Sensoren gefunden (die Suche läuft jede Minute).","en":"No sensors found yet (the scan runs every minute)."},"sens_none_more":{"de":"Keine weiteren Sensoren in der Nähe (Suche jede Minute).","en":"No other sensors nearby (the scan runs every minute)."},"sens_paused":{"de":"Suche pausiert während der Kopplung","en":"Scan paused while pairing"},"sens_remove":{"de":"Entfernen","en":"Remove"},"sens_rename":{"de":"Umbenennen","en":"Rename"},"sens_save":{"de":"Speichern","en":"Save"},"sens_t_govee":{"de":"Thermo-Hygrometer (Govee)","en":"Thermo-hygrometer (Govee)"},"sens_t_victron_battery":{"de":"Batteriesensor (Victron)","en":"Battery sense (Victron)"},"sens_t_victron_mppt":{"de":"Solarladeregler (Victron)","en":"Solar charger (Victron)"},"sens_title":{"de":"Sensoren","en":"Sensors"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"show_psk":{"de":"Passwort anzeigen","en":"Show password"},"ssid_name":{"de":"Netzwerkname","en":"Network name"},"station_only":{"de":"braucht das Heim-WLAN","en":"needs the home WiFi"},"switch_lost":{"de":"Nicht zurückgekommen? Verbinde dich mit {ap} (Passwort {appsk}) und öffne:","en":"Didn't come back? Join {ap} (password {appsk}) and open:"},"switch_other":{"de":"Verbinde dieses Handy mit {ssid} und öffne dann:","en":"Join {ssid} with this phone, then open:"},"switch_same":{"de":"Lade die Seite in ~30 s neu oder öffne:","en":"Reload this page in ~30 s, or open:"},"switch_title":{"de":"Netzwerkwechsel","en":"Switching networks"},"time_none":{"de":"Keine Zeitquelle · Start Nr. {boot}","en":"No clock source · boot {boot}"},"time_synced":{"de":"Uhr synchronisiert (SNTP) · Start Nr. {boot}","en":"Clock synced (SNTP) · boot {boot}"},"time_unit":{"de":"Uhr der Camper-Einheit · Start Nr. {boot}","en":"Clock from the camper unit · boot {boot}"},"time_waiting":{"de":"Uhr noch nicht synchronisiert · Start Nr. {boot}","en":"Clock not synced yet · boot {boot}"},"title":{"de":"Satellit-Einstellungen","en":"Satellite settings"},"ux_error":{"de":"Nutzungsdaten konnten nicht geändert werden","en":"Couldn't change usage data"},"ux_off":{"de":"Nutzungsdaten senden: aus","en":"Send usage data: off"},"ux_on":{"de":"Nutzungsdaten senden: an","en":"Send usage data: on"},"wifi_change":{"de":"Netzwerk wechseln…","en":"Change network…"},"wifi_now":{"de":"Verbunden mit {ssid}","en":"Connected to {ssid}"},"wifi_switch":{"de":"Netzwerk wechseln","en":"Switch network"},"wifi_title":{"de":"WLAN","en":"WiFi"},"wifi_warn":{"de":"Der Satellit verlässt {ssid} jetzt. Ist das neue Passwort falsch, öffnet er den Einrichtungs-Hotspot {ap} (Passwort {appsk}) und vergisst {ssid}; verbinde dich mit diesem Hotspot, um es erneut zu versuchen.","en":"The satellite leaves {ssid} now. If the new password is wrong it opens its setup hotspot {ap} (password {appsk}) and forgets {ssid}; join that hotspot to try again."}};
 </script>
 <script>
 "use strict";
@@ -174,6 +180,9 @@ $("exp-title").textContent = t("exp_title");
 $("exp-hint").textContent = t("exp_hint");
 $("sens-title").textContent = t("sens_title");
 $("sens-hint").textContent = t("sens_hint");
+$("loading").textContent = t("loading");
+$("scr-dn").setAttribute("aria-label", t("scr_less"));
+$("scr-up").setAttribute("aria-label", t("scr_more"));
 document.documentElement.lang = LANG;
 
 let joining = null;
@@ -188,9 +197,10 @@ function link(text, href) {
 function renderLink(d) {
   const href = d.wifi.mode === "station" ? "/" : "/app";
   $("device").replaceChildren(link(t("app_link"), href));
-  $("pair-status").textContent = t(d.pairing.address ? "pair_on" : "pair_off");
-  $("pair-link").textContent = t("pair_link");
-  /** @type {HTMLAnchorElement} */ ($("pair-link")).href = href;
+  const paired = !!d.pairing.address;
+  $("pair-status").textContent = t(paired ? "pair_on" : "pair_off");
+  $("pair-link").textContent = t(paired ? "pair_manage" : "pair_now");
+  /** @type {HTMLAnchorElement} */ ($("pair-link")).href = href + (paired ? "#devicestatus" : "#pair");
 }
 
 let wifiOpen = false, formShown = false;
@@ -257,11 +267,11 @@ function renderFw(d) {
 }
 
 function row(id, parts, on, st) {
-  const b = $(id + "-toggle");
+  const b = /** @type {HTMLButtonElement} */ ($(id + "-toggle"));
   $(id + "-status").textContent = [...parts, st ? "" : t("station_only")].filter(Boolean).join(" · ");
   b.hidden = !st;
-  b.textContent = t(on ? "ac_turn_off" : "ac_turn_on");
-  b.dataset.on = on ? "1" : "";
+  b.disabled = false;
+  b.setAttribute("aria-checked", String(on));
 }
 
 function renderRows(d) {
@@ -274,13 +284,13 @@ function renderRows(d) {
 }
 
 async function toggle(path, id, err, key, msgId) {
-  const b = $(id + "-toggle"), msg = $(msgId || id + "-msg");
+  const b = /** @type {HTMLButtonElement} */ ($(id + "-toggle")), msg = $(msgId || id + "-msg");
   msg.textContent = "";
-  b.hidden = true;   /* the next poll shows it again */
+  b.disabled = true;   /* one POST per tap: the next poll enables it again */
   let ok = false;
   try {
     ok = (/** @type {{body: PostResult}} */ (await fetchJson(path, {method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify({[key || "enabled"]: !b.dataset.on})}))).body.ok;
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({[key || "enabled"]: b.getAttribute("aria-checked") !== "true"})}))).body.ok;
   } catch (e) { /* ok stays false */ }
   if (!ok) msg.textContent = t(err);
 }
@@ -357,7 +367,8 @@ function renderSens(s) {
     acts.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
       ask(acts, [el("span", t("sens_confirm_remove", {alias: c.alias}))], "sens_remove", "danger", () => sensPost({remove: c.id}));
   }
-  if (s.scan === "paused" || !s.seen.length) seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : "sens_none"), "muted"));
+  if (s.scan === "paused" || !s.seen.length)
+    seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : s.configured.length ? "sens_none_more" : "sens_none"), "muted"));
   for (const r of s.seen) {
     const p = seen.appendChild(el("p", [t((SENS_T[r.type] || [r.type])[0]), r.model, r.rssi + " dBm"].join(" · "), "row"));
     const acts = p.appendChild(el("span", undefined, "acts"));
@@ -548,11 +559,13 @@ async function watchJoin(j) {
   }
 }
 
+const BOXES = ["setup", "pair", "ac", "fw", "adv-title", "ux", "exp"];
 async function poll() {
   try {
     if (joining) await watchJoin(joining);
     const s = (/** @type {{body: State}} */ (await fetchJson("/api/state"))).body;
     $("banner").style.display = "none";
+    if (!$("loading").hidden) { $("loading").hidden = true; for (const id of BOXES) $(id).hidden = false; }
     wifi = s.device.wifi;
     renderLink(s.device);
     renderWifi(wifi);

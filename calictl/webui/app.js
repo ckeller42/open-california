@@ -267,6 +267,16 @@ function closeMenu() {
   window.removeEventListener("resize", closeMenu);
 }
 
+/** Deep links from the satellite's /device Camper-unit box: `#devicestatus` (paired: Manage pairing ›)
+ * and `#pair` (not paired: Pair now ›, the wizard at the top of Home). Taken once the runtime is
+ * known (the first `_meta`) and consumed, so a reload does not reopen it. */
+function openFromHash() {
+  const h = location.hash;
+  if (!STATE._meta || (h !== "#devicestatus" && h !== "#pair")) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  if (h === "#pair") openPairingWizard(); else openDeviceStatus();
+}
+
 /** The in-app Device-status screen (from the ⋮ menu or the status pill). */
 function openDeviceStatus() {
   closeMenu();
@@ -276,15 +286,15 @@ function openDeviceStatus() {
   if (!PAIRING) pairingFetch().then(() => { if (view === "devicestatus") render(); });
 }
 statusEl.onclick = openDeviceStatus;
+window.addEventListener("hashchange", openFromHash);   // the same link followed on an open page
 
-/** A menu row. @param {string} label @param {() => any} onclick @param {string} [cls] */
-function menuItem(label, onclick, cls) {
+/** A menu row. @param {string} label @param {() => any} onclick */
+function menuItem(label, onclick) {
   const b = document.createElement("button");
   b.type = "button";
   b.setAttribute("role", "menuitem");
   b.textContent = label;
   b.onclick = onclick;
-  if (cls) b.className = cls;
   return b;
 }
 
@@ -295,24 +305,16 @@ menuEl.onclick = (ev) => {
   menuPop.className = "menupop";
   menuPop.setAttribute("role", "menu");
   menuPop.setAttribute("aria-labelledby", "menu");
-  // Groups, separated by dividers: [Device status] | [pairing…, Unpair…] | [Help, language].
+  // Groups, separated by dividers: [Device status] | [Help, language]. No pairing here (owner
+  // 2026-10-15): it lives in the unpaired banner, Device status's Camper-unit card and /device.
   /** @type {HTMLElement[][]} */
-  const groups = [[], [], []];
-  if (STATE._meta) {
-    // The in-app Device-status screen, on both flavors (the satellite's raw /device setup page
-    // stays reachable from inside that screen).
-    groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));
-    // calictl and the satellite both serve /api/pairing (R_FW_PAIRING_WIZARD)
-    groups[1].push(menuItem(/** @type {string} */ (t("Pair…")), () => { closeMenu(); openPairingWizard(); }));
-    // Unpair only makes sense once a bond exists (PAIRING is fetched at load + while the wizard polls).
-    // Destructive: last in its group, behind the divider, in --danger.
-    if (PAIRING && PAIRING.address) {
-      groups[1].push(menuItem(/** @type {string} */ (t("Unpair…")), () => { closeMenu(); unpair(); }, "danger"));
-    }
-  }
-  if (HELP[view]) groups[2].push(menuItem(/** @type {string} */ (t("Help")), openHelp));   // per-screen help (#314)
+  const groups = [[], []];
+  // The in-app Device-status screen, on both flavors (the satellite's /device page is reachable
+  // from inside that screen).
+  if (STATE._meta) groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));
+  if (HELP[view]) groups[1].push(menuItem(/** @type {string} */ (t("Help")), openHelp));   // per-screen help (#314)
   // Language toggle: label names the language you'd switch TO.
-  groups[2].push(menuItem(LANG === "de" ? "English" : "Deutsch", () => { setLang(LANG === "de" ? "en" : "de"); }));
+  groups[1].push(menuItem(LANG === "de" ? "English" : "Deutsch", () => { setLang(LANG === "de" ? "en" : "de"); }));
   for (const g of groups.filter((g) => g.length)) {
     if (menuPop.childElementCount) {
       const sep = document.createElement("div");
@@ -572,20 +574,24 @@ const HELP = {
     + "Govee thermometer on Vehicle (its tile then shows the temperature). They are not part of the unit "
     + "and keep updating while it sleeps.\n\n"
     + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
-    + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live.\n\n"
-    + "Not paired: no camper unit is paired yet, so there is no data; pair it from the ⋮ menu.\n\n"
+    + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live. "
+    + "Still offline while the van is in use? Check the pairing in Device status.\n\n"
+    + "Not paired: no camper unit is paired yet, so there is no data; tap Pair… on the "
+    + "banner, or in Device status.\n\n"
     + "Not reachable: this page cannot reach calictl or the satellite (WiFi, Tailscale, power). The van "
     + "itself may be fine.\n\n"
     + "Read-only: control writes are switched off on calictl or the satellite; values still update. An untested-firmware "
     + "warning means the unit runs software this project was not validated on, so decoded values may be off."],
   devicestatus: ["firmware.html",
-    "Camper unit: online while the Bluetooth link to the unit works; offline usually means the parked unit "
-    + "is asleep. Last update is the age of the newest data. Paired unit is the camper unit that calictl or "
-    + "the satellite is paired with; pair or unpair it from the ⋮ menu (Pair…, Unpair…).\n\n"
-    + "On the ESP satellite this screen also shows its firmware, Bluetooth link, WiFi, uptime, microSD log "
-    + "and free memory. Satellite settings opens the satellite's own page: restore camping after you park, "
-    + "screen, usage data, experimental sensors and the firmware update (needs the home WiFi). Its WiFi is "
-    + "set over its setup hotspot."],
+    "Camper unit: Connection is online while the Bluetooth link to the unit works; asleep usually means the "
+    + "parked unit sleeps; not paired means no unit is paired yet. Last update is the age of the newest data. "
+    + "Pairing says whether calictl or the satellite is paired with a unit (Details shows its Bluetooth "
+    + "address). Pair… and Unpair… are here. Still offline while the van is in use? Check the pairing "
+    + "here: a reset of the unit's Bluetooth ends it; unpair, then pair again.\n\n"
+    + "Satellite (on the ESP satellite): its firmware, WiFi network, uptime, microSD log, battery and free "
+    + "memory. Satellite settings › opens its own page: WiFi (change the network there), restore camping "
+    + "after you park, screen, firmware update, usage data and experimental sensors.\n\n"
+    + "buspi (on the Pi): the calictl backend that serves this page, and whether control writes are on."],
   cooler: ["business-logic/cooler-airheater.html#cooler",
     "Switch the refrigerator box on or off and set its cooling level.\n\n"
     + "Quiet mode: Off, Manual or Automatic. Manual runs quiet mode for up to 23 hours; Automatic runs it "
@@ -1130,9 +1136,9 @@ async function refreshState(force) {
   STATE = isSatelliteBody(next) ? /** @type {State} */ (adaptSatellite(next, Date.now())) : next;
   if (PWA) try { localStorage.setItem(LAST_STATE_KEY, JSON.stringify({ at: Date.now(), state: STATE })); } catch (e) { /* storage blocked/full */ }
   // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the
-  // menu's "Unpair…". Taken the first time a `_meta` answers (calictl or the satellite) -- also when
+  // Device status's "Unpair…". Taken the first time a `_meta` answers (calictl or the satellite) -- also when
   // the first poll failed (daemon restarting) -- and never on an unknown runtime.
-  if (STATE._meta && !pairingFetched) { pairingFetched = true; await pairingFetch(); }
+  if (STATE._meta && !pairingFetched) { pairingFetched = true; await pairingFetch(); openFromHash(); }
   // Auto-camper give-up/stand-down notice: the daemon stamps a one-time {ts,msg} when it stands
   // down (low battery) or gives up (keeps dropping). Show it as a toast once.
   const acn = STATE._meta && STATE._meta.auto_camper && STATE._meta.auto_camper.notice;
@@ -1625,23 +1631,23 @@ function showPairingCard() {
   if (c) c.scrollIntoView({ block: "start" });
 }
 
-// The one unpair action (⋮ menu and the wizard's button): one confirm, then the wizard guides
+// The one unpair action (Device status and the wizard's button): one confirm, then the wizard guides
 // straight into pairing again (idle step) while the reset runs.
 async function unpair() {
   if (!confirm(/** @type {string} */ (t("Unpair the camper unit? Data stops until you pair again.")))) return;
-  if (!pairingOpen) await openPairingWizard();
+  if (!pairingOpen || view !== "home") await openPairingWizard();   // from Device status: Home, at the top
   pairingAction("reset", undefined, true);
 }
 
 // The guided-pairing card. UX: invisible in the normal paired+online flow — it renders ONLY
-// while open (the ⋮ menu, Device status, the unpaired banner), always at the top of Home, so a
+// while open (Device status, the unpaired banner, /device's #pair link), always at the top of Home, so a
 // working installation never shows pairing chrome.
 function pairingCard() {
   if (!pairingOpen) return null;
   const card = document.createElement("div");
   card.className = "card"; card.id = "pairing-card";
   const head = document.createElement("div"); head.className = "row";
-  const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = /** @type {string} */ (t("Set up remote control"));
+  const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = /** @type {string} */ (t("Pair the camper unit"));
   head.appendChild(hlbl);
   const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
   closeBtn.textContent = /** @type {string} */ (t("Close"));
@@ -1826,9 +1832,9 @@ function render() {
 }
 
 // --- the in-app Device-status screen (menu, both flavors) -------------------------------------
-// Shared rows from `_meta` + the load-time /api/pairing snapshot; the satellite adds its own
-// transport rows (`_meta.sat`, adaptSatellite passthrough) and the link to its raw /device
-// setup/wizard page. calictl has no /device page, so no link there.
+// One card per device (UX review 3.2): the Camper unit (from `_meta` + the load-time /api/pairing
+// snapshot, with Pair…/Unpair…), then the satellite (`_meta.sat`, adaptSatellite passthrough, and the
+// link to its Satellite settings page /device) or, on calictl, the buspi backend (no settings page).
 /** @param {number} ms @returns {string} */
 function uptimeText(ms) {
   const m = Math.floor(ms / 60000);
@@ -1872,49 +1878,78 @@ function batteryText(b) {
   return parts.join(" · ");
 }
 
+// The camper unit's connection, in linkState()'s words (the pill + banner): online / asleep / not paired
+/** @type {Record<string, string>} */
+const LINK_WORD = { live: "online", asleep: "asleep", never: "asleep", unpaired: "not paired",
+  connecting: "connecting…", unreachable: "unreachable" };
+
+/** A Device-status card: its heading names the device (UX review 3.2: one card per device).
+ * @param {string} title @returns {HTMLElement} */
+function dsCard(title) {
+  const card = document.createElement("section");
+  card.className = "card dcard";
+  const h = document.createElement("h2"); h.textContent = title;
+  card.appendChild(h);
+  app.appendChild(card);
+  return card;
+}
+
+/** A button row for a Device-status card. @param {HTMLElement} card @param {[string, () => any, string?][]} btns */
+function dsButtons(card, btns) {
+  const row = document.createElement("div"); row.className = "btnrow";
+  for (const [label, onclick, cls] of btns) {
+    const b = document.createElement("button"); b.type = "button";
+    b.className = "btn" + (cls ? " " + cls : "");
+    b.textContent = label; b.onclick = onclick;
+    row.appendChild(b);
+  }
+  card.appendChild(row);
+}
+
 function renderDeviceStatus() {
   titleEl.textContent = /** @type {string} */ (t("Device status"));
   const m = STATE._meta || /** @type {Meta} */ ({});
-  const card = document.createElement("div");
-  card.className = "card";
-  card.appendChild(sumRow(/** @type {string} */ (t("Camper unit")),
-    /** @type {string} */ (m.online ? t("online") : t("offline"))));
-  card.appendChild(sumRow(/** @type {string} */ (t("Last update")), agoText(m.age_s)));
-  // "not paired" only from a fetched snapshot that says so; a failed/absent fetch is unknown.
-  card.appendChild(sumRow(/** @type {string} */ (t("Paired unit")),
-    PAIRING ? (PAIRING.address || /** @type {string} */ (t("not paired"))) : "—"));
+  const unit = dsCard(/** @type {string} */ (t("Camper unit")));
+  unit.appendChild(sumRow(/** @type {string} */ (t("Connection")), /** @type {string} */ (t(LINK_WORD[linkState()]))));
+  unit.appendChild(sumRow(/** @type {string} */ (t("Last update")), agoText(m.age_s)));
+  // "Not paired" only from a fetched snapshot that says so; a failed/absent fetch is unknown ("—").
+  const addr = PAIRING && PAIRING.address;
+  unit.appendChild(sumRow(/** @type {string} */ (t("Pairing")),
+    PAIRING ? /** @type {string} */ (t(addr ? "Paired ✓" : "Not paired")) : "—"));
+  if (addr) {   // the bonded MAC: jargon, behind a disclosure, never shown by default
+    const det = document.createElement("details"); det.className = "note";
+    const sum = document.createElement("summary"); sum.textContent = /** @type {string} */ (t("Details"));
+    const code = document.createElement("code"); code.textContent = addr;
+    det.append(sum, code);
+    unit.appendChild(det);
+  }
   const fw = m.firmware;
   if (fw && (fw.amb_sw_version != null || fw.comm_version != null))
-    card.appendChild(sumRow(/** @type {string} */ (t("Unit firmware")),
+    unit.appendChild(sumRow(/** @type {string} */ (t("Unit firmware")),
       tf("amb {amb} · comm {comm}", { amb: fw.amb_sw_version ?? "?", comm: fw.comm_version ?? "?" })));
+  // the same handlers + confirm as the wizard; only the one that applies
+  dsButtons(unit, addr ? [[/** @type {string} */ (t("Unpair…")), () => unpair(), "danger"]]
+    : [[/** @type {string} */ (t("Pair…")), () => openPairingWizard()]]);
+
   const sat = m.sat;
-  if (sat) {
-    if (sat.fw) card.appendChild(sumRow(/** @type {string} */ (t("Satellite firmware")), sat.fw));
-    card.appendChild(sumRow(/** @type {string} */ (t("BLE link")),
-      /** @type {string} */ (sat.link_up ? t("up") : t("reconnecting…"))));
+  if (sat) {   // the ESP satellite (its link to the unit is the Camper unit's Connection above)
+    const card = dsCard(/** @type {string} */ (t("Satellite")));
+    if (sat.fw) card.appendChild(sumRow(/** @type {string} */ (t("Firmware")), sat.fw));
     const w = sat.wifi;
-    if (w && w.ssid) card.appendChild(sumRow("WiFi", w.ssid + (w.ip ? " · " + w.ip : "")));
-    if (w && typeof w.rssi === "number")
-      card.appendChild(sumRow(/** @type {string} */ (t("Signal")), w.rssi + " dBm"));
+    if (w && w.ssid) card.appendChild(sumRow(/** @type {string} */ (t("WiFi")),
+      [w.ssid, w.ip, typeof w.rssi === "number" ? w.rssi + " dBm" : ""].filter(Boolean).join(" · ")));
     if (sat.uptime_ms != null)
       card.appendChild(sumRow(/** @type {string} */ (t("Uptime")), uptimeText(sat.uptime_ms)));
     if (sat.sd) card.appendChild(sumRow(/** @type {string} */ (t("Storage")), sdText(sat.sd)));
+    const batt = sat.battery && batteryText(sat.battery);
+    if (batt) card.appendChild(sumRow(/** @type {string} */ (t("Battery")), batt));
     const res = sat.res && resText(sat.res);
     if (res) card.appendChild(sumRow(/** @type {string} */ (t("Resources")), res));
-    const batt = sat.battery && batteryText(sat.battery);
-    if (batt) card.appendChild(sumRow(/** @type {string} */ (t("Satellite battery")), batt));
-  }
-  app.appendChild(card);
-  if (sat) {
-    const row = document.createElement("div");
-    row.className = "btnrow";
-    const open = document.createElement("button");
-    open.type = "button";
-    open.className = "btn";
-    open.textContent = /** @type {string} */ (t("Satellite settings"));
-    open.onclick = () => location.assign("/device");
-    row.appendChild(open);
-    app.appendChild(row);
+    dsButtons(card, [[/** @type {string} */ (t("Satellite settings ›")), () => location.assign("/device")]]);
+  } else {   // calictl on the Pi: which backend serves this page, and whether it may write
+    const card = dsCard("buspi");
+    card.appendChild(sumRow(/** @type {string} */ (t("Backend")), backendName()));
+    card.appendChild(sumRow(/** @type {string} */ (t("Control writes")), /** @type {string} */ (t(m.read_only ? "off" : "on"))));
   }
 }
 
@@ -2002,22 +2037,34 @@ function extEntries(type) {
   return Object.entries(STATE.ext || {}).filter(([, e]) => e.type === type).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
+// The firmware's default alias per type (sensors.c TYPES default_alias; tests/test_web_strings.py
+// keeps the two in step): an entry still named that is labelled by its rows alone.
+/** @type {Record<string, string>} */
+const EXT_DEFAULT_ALIAS = { govee: "govee", victron_mppt: "mppt-75-15", victron_battery: "battery-sense" };
+
 /**
  * A screen's readouts with each `{ ext: type }` marker expanded into its type's rows per entry; the
  * label leads with the entry's alias, the name the owner gave the device in /device Sensors ("Innen
  * Temperature", "Dach Solar power"; owner decision 2026-10-15: the sensors broadcast no usable name);
- * an old reading keeps its value and adds "🕒 <ago>" (never colour alone).
+ * an old reading keeps its value and adds "🕒 <ago>" (never colour alone). The one entry of its type
+ * still on the firmware's default alias drops it ("Battery sensor", not "Battery-sense Battery
+ * sensor"), unless a row would then read like one of the unit's own shown rows ("Solar power").
  * @param {(Readout|ExtReadouts)[]} readouts
+ * @param {FnState} s the screen's state (which of the unit's own rows show)
  * @returns {Readout[]}
  */
-function expandReadouts(readouts) {
+function expandReadouts(readouts, s) {
+  const own = new Set(readouts.flatMap((r) => ("ext" in r || (r.show && !r.show(s)) ? [] : [r.label])));
   return readouts.flatMap((r) => {
     if (!("ext" in r)) return [r];
-    const entries = extEntries(r.ext);
-    return entries.flatMap(([alias, e]) => EXT_TYPES[r.ext].rows.map(([label, get]) => ({
-      label: `${cap(alias)} ${t(label)}`,
-      get: () => get(e) + (extStale(e) ? ` 🕒 ${agoText(/** @type {number|null} */ (e.age_s))}` : ""),
-    })));
+    const entries = extEntries(r.ext), rows = EXT_TYPES[r.ext].rows;
+    return entries.flatMap(([alias, e]) => {
+      const bare = entries.length === 1 && alias === EXT_DEFAULT_ALIAS[r.ext] && !rows.some(([l]) => own.has(l));
+      return rows.map(([label, get]) => ({
+        label: (bare ? "" : cap(alias) + " ") + t(label),
+        get: () => get(e) + (extStale(e) ? ` 🕒 ${agoText(/** @type {number|null} */ (e.age_s))}` : ""),
+      }));
+    });
   });
 }
 
@@ -2074,7 +2121,7 @@ function renderSensors() {
 
 function renderDashboard() {
   titleEl.textContent = /** @type {string} */ (t("Vehicle"));
-  // The wizard, when open (⋮ menu, Device status, the unpaired banner below), always leads the
+  // The wizard, when open (Device status, the unpaired banner below, /device's #pair link), always leads the
   // page: a card after the tiles was out of sight on a phone (UX review H2).
   const pc = pairingCard();   // null unless open
   if (pc) app.appendChild(pc);
@@ -2084,7 +2131,7 @@ function renderDashboard() {
     msg.textContent = /** @type {string} */ (t("No camper unit is paired yet."));
     b.append(msg);
     const go = document.createElement("button"); go.type = "button"; go.className = "btn";
-    go.textContent = /** @type {string} */ (t("Set up remote control"));
+    go.textContent = /** @type {string} */ (t("Pair…"));
     go.onclick = () => openPairingWizard();   // calictl and the satellite both run the wizard
     b.append(go);
     app.appendChild(b);
@@ -2433,7 +2480,7 @@ function renderFeature(fn) {
   if (f.readouts && f.readouts.length) {
     const card = document.createElement("div");
     card.className = "card";
-    for (const r of expandReadouts(f.readouts)) if (!r.show || r.show(s)) card.appendChild(renderReadout(r, s));
+    for (const r of expandReadouts(f.readouts, s)) if (!r.show || r.show(s)) card.appendChild(renderReadout(r, s));
     app.appendChild(card);
   }
 }

@@ -70,7 +70,7 @@ When the satellite starts, its screen shows the setup hotspot. Carry on with:
 
 ## Updates afterwards
 
-You don't need the cable again. On the satellite's page open ⋮ → **Device status** → **Open
-setup**, and in the *Firmware update* row tap **Check for update**, then **Install `<version>`** when
+You don't need the cable again. On the satellite's page open ⋮ → **Device status** → **Satellite
+settings ›**, and in the *Firmware update* row tap **Check for update**, then **Install `<version>`** when
 one is available (updates need your home WiFi, not the setup hotspot). The update keeps your pairing and WiFi (details:
 [Firmware update from GitHub](firmware.md#firmware-update-from-github-r_fw_ota)).

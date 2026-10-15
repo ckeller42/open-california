@@ -132,3 +132,20 @@ def test_rendered_page_script_parses(tmp_path):
     f.write_text(gen_c_dict.page_script(), encoding="utf-8")
     r = subprocess.run(["node", "--check", str(f)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_default_sensor_aliases_match_the_firmware():
+    """Both UIs mirror sensors.c TYPES' ``default_alias`` per type: the /device page offers it as the
+    Add placeholder (page.js SENS_T), the shared UI drops it from row labels (app.js EXT_DEFAULT_ALIAS:
+    "Battery sensor", not "Battery-sense Battery sensor"). A firmware rename must fail here."""
+    src = (ROOT / "firmware/components/cali_core/sensors.c").read_text(encoding="utf-8")
+    fw = dict(re.findall(r'\{"(\w+)", 0x[0-9A-Fa-f]+, \d, "([^"]+)",', src))
+    assert set(fw) == {"govee", "victron_mppt", "victron_battery"}, fw
+    page = dict(
+        re.findall(r'(\w+): \["sens_t_\w+", "([^"]+)"\]', (WEB / "page.js").read_text(encoding="utf-8"))
+    )
+    app_js = (ROOT / "calictl/webui/app.js").read_text(encoding="utf-8")
+    table = re.search(r"const EXT_DEFAULT_ALIAS = \{([^}]*)\}", app_js)
+    assert table, "app.js EXT_DEFAULT_ALIAS missing"
+    app = dict(re.findall(r'(\w+): "([^"]+)"', table.group(1)))
+    assert page == fw and app == fw, (fw, page, app)

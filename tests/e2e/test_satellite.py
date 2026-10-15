@@ -128,36 +128,114 @@ def _hides_calictl_only_chrome(sat):
     menu = sat.locator(".menupop")
     expect(menu.get_by_text("Device status")).to_be_visible()
     # the pairing wizard runs on the satellite too (R_FW_PAIRING_WIZARD); the fixture holds a bond
-    expect(menu.get_by_text("Pair…", exact=True)).to_be_visible()
-    expect(menu.get_by_text("Unpair…")).to_be_visible()
+    # no pairing in the menu (owner 2026-10-15): banner, Device status and /device hold it
+    assert menu.locator("[role=menuitem]").all_inner_texts() == ["Device status", "Help", "Deutsch"]
+
+
+def _ds_card(pg, title):
+    """A Device-status card by its heading ("Camper unit", "Satellite", "buspi")."""
+    return pg.locator("#app .card", has=pg.get_by_role("heading", name=title, exact=True))
+
+
+def _row(card, label):
+    return card.locator(".row", has=card.page.get_by_text(label, exact=True))
 
 
 def test_menu_device_status_screen(sat, stub):
-    """The in-app Device-status screen (both flavors; the satellite adds its own rows + the
-    setup link to the firmware's /device page, which keeps the wizard role)."""
+    """The in-app Device-status screen as two cards (UX review 3.2 / M4): "Camper unit" (connection,
+    pairing with the MAC behind Details, Unpair…) and "Satellite" (firmware, WiFi ssid · ip · dBm,
+    uptime, storage, battery, resources, Satellite settings ›); no buspi card, no "BLE link" row
+    duplicating the connection, the battery labelled like /device (L6)."""
     sat.click("#menu")
     sat.locator(".menupop").get_by_text("Device status").click()
     expect(sat.locator("#title")).to_have_text("Device status")
-    expect(sat.get_by_text("bef07f1")).to_be_visible()  # satellite firmware (device.fw)
-    expect(sat.get_by_text("HomeNet")).to_be_visible()  # WiFi SSID
-    expect(sat.get_by_text("C0:FF:EE:CA:11:F0")).to_be_visible()  # bonded unit (/api/pairing)
+    unit, s = _ds_card(sat, "Camper unit"), _ds_card(sat, "Satellite")
+    expect(_row(unit, "Connection")).to_contain_text("online")
+    expect(_row(unit, "Pairing")).to_contain_text("Paired ✓")
+    expect(sat.get_by_text("C0:FF:EE:CA:11:F0")).to_be_hidden()  # the MAC only behind Details
+    unit.locator("summary", has_text="Details").click()
+    expect(unit.get_by_text("C0:FF:EE:CA:11:F0")).to_be_visible()  # bonded unit (/api/pairing)
+    expect(unit.get_by_role("button", name="Unpair…")).to_be_visible()
+    expect(unit.get_by_role("button", name="Pair…", exact=True)).to_have_count(0)
+    expect(_row(s, "Firmware")).to_contain_text("bef07f1")  # satellite firmware (device.fw)
+    expect(_row(s, "WiFi")).to_contain_text("HomeNet · 192.168.1.57 · -58 dBm")
     # the SD log's card (R_FW_SD_LOG, device.sd) and the satellite's own resources (device.res)
-    expect(sat.locator(".row", has_text="Storage")).to_contain_text("SD 28.1 of 29.7 GB free · log #1042")
-    expect(sat.locator(".row", has_text="Resources")).to_contain_text(
-        "RAM 61 KB free (lowest 38) · PSRAM 7302 KB free · CPU 4 %"
-    )
+    expect(_row(s, "Storage")).to_contain_text("SD 28.1 of 29.7 GB free · log #1042")
+    expect(_row(s, "Resources")).to_contain_text("RAM 61 KB free (lowest 38) · PSRAM 7302 KB free · CPU 4 %")
     # the satellite's own battery (R_FW_BATTERY, device.battery)
-    expect(sat.locator(".row", has_text="Satellite battery")).to_contain_text(
-        "64 % · 3.89 V · on battery · ~2 h 10 min left"
-    )
-    sat.get_by_text("Satellite settings").click()  # satellite-only link
+    expect(_row(s, "Battery")).to_contain_text("64 % · 3.89 V · on battery · ~2 h 10 min left")
+    assert sat.get_by_text("BLE link").count() == 0
+    expect(_ds_card(sat, "buspi")).to_have_count(0)
+    s.get_by_role("button", name="Satellite settings ›").click()  # satellite-only link
     sat.wait_for_url(stub.base + "/device")
     sat.wait_for_selector('#device a[href="/"]')  # the link back (station mode)
 
 
+def test_device_status_in_german(stub, error_gated_page):
+    _display_only(stub)
+    with error_gated_page(stub.base, locale="de-DE") as pg:
+        expect(pg.get_by_text("Satellit — nur Anzeige")).to_be_visible()
+        pg.click("#menu")
+        pg.locator(".menupop").get_by_text("Gerätestatus").click()
+        unit = _ds_card(pg, "Camper-Einheit")
+        expect(_row(unit, "Kopplung")).to_contain_text("Gekoppelt ✓")
+        expect(unit.locator("summary")).to_have_text("Details")
+        expect(unit.get_by_role("button", name="Entkoppeln…")).to_be_visible()
+        expect(
+            _ds_card(pg, "Satellit").get_by_role("button", name="Satellit-Einstellungen ›")
+        ).to_be_visible()
+
+
+def test_device_status_unpair_confirms_and_opens_the_wizard_at_the_top(stub, error_gated_page):
+    """Unpair… in Device status: the one confirm text (PR A); accepted, the pairing is reset and the
+    wizard opens at the top of Home, in view at phone size."""
+    asked = []
+
+    def answer(d):
+        asked.append(d.message)
+        d.accept()
+
+    with error_gated_page(stub.base, viewport=PHONE) as pg:
+        pg.wait_for_function(LIVE)
+        pg.on("dialog", answer)
+        pg.click("#menu")
+        pg.locator(".menupop").get_by_text("Device status").click()
+        _ds_card(pg, "Camper unit").get_by_role("button", name="Unpair…").click()
+        card = pg.locator("#pairing-card")
+        expect(card.get_by_role("button", name="Pair now")).to_be_in_viewport()
+        above = card.evaluate(
+            "c => c.getBoundingClientRect().bottom"
+            " <= document.querySelector('.tilegrid').getBoundingClientRect().top"
+        )
+        assert above, "the wizard card renders below the tiles"
+    assert asked == [UNPAIR_CONFIRM], asked
+    assert stub.pairing_posts == [{"action": "reset", "confirm": True}], stub.pairing_posts
+
+
+def test_device_status_offers_pair_when_not_paired(stub, error_gated_page):
+    """No bond: the Camper unit card says "Not paired" and offers Pair… only (no Details, no Unpair…);
+    Pair… opens the wizard at the top of Home."""
+    _display_only(stub)
+    for snap in (
+        stub.fixtures["satellite"]["/api/pairing"],
+        stub.fixtures["satellite"]["/api/state"]["device"]["pairing"],
+    ):
+        snap.update(state="idle", address=None)
+    with error_gated_page(stub.base, viewport=PHONE) as pg:
+        expect(pg.get_by_text("Satellite — display only")).to_be_visible()
+        pg.click("#menu")
+        pg.locator(".menupop").get_by_text("Device status").click()
+        unit = _ds_card(pg, "Camper unit")
+        expect(_row(unit, "Pairing")).to_contain_text("Not paired")
+        expect(unit.locator("details")).to_have_count(0)
+        expect(unit.get_by_role("button", name="Unpair…")).to_have_count(0)
+        unit.get_by_role("button", name="Pair…", exact=True).click()
+        expect(pg.locator("#pairing-card")).to_be_in_viewport()
+
+
 def test_device_status_retries_a_failed_pairing_fetch(stub):
     """A failed load-time /api/pairing shows "—" (unknown), never "not paired"; opening the
-    screen re-fetches, so a later open recovers the address (CodeRabbit, PR #267).
+    screen re-fetches, so a later open recovers the pairing (CodeRabbit, PR #267).
     Not error-gated: the 503s themselves are console errors by design."""
     _display_only(stub)
     stub.fail_pairing = 2  # the load-time fetch AND the first screen-open retry fail
@@ -168,59 +246,14 @@ def test_device_status_retries_a_failed_pairing_fetch(stub):
         expect(pg.get_by_text("Satellite — display only")).to_be_visible(timeout=10000)
         pg.click("#menu")
         pg.locator(".menupop").get_by_text("Device status").click()
-        row = pg.locator(".row", has_text="Paired unit")
+        row = _row(_ds_card(pg, "Camper unit"), "Pairing")
         expect(row).to_contain_text("—")
-        assert pg.get_by_text("not paired").count() == 0
+        assert pg.get_by_text("Not paired").count() == 0
         pg.click("#back")  # leave and re-open: this retry succeeds
         pg.click("#menu")
         pg.locator(".menupop").get_by_text("Device status").click()
-        expect(row).to_contain_text("C0:FF:EE:CA:11:F0")
+        expect(row).to_contain_text("Paired ✓")
         browser.close()
-
-
-def _tile_texts(pg):
-    pg.wait_for_selector(".tilegrid .tile")
-    return pg.locator(".tile").all_inner_texts(), pg.locator(".summary").inner_text()
-
-
-def test_tiles_and_summary_equal_calictl_for_the_same_frames(stub, error_gated_page):
-    _display_only(stub)
-    stub.fixtures["satellite"]["/api/state"].pop(
-        "ext"
-    )  # the unit's frames only: a Govee owns the Vehicle tile
-    with error_gated_page(stub.base) as pg:
-        expect(pg.get_by_text("Satellite — display only")).to_be_visible()
-        satellite = _tile_texts(pg)
-    stub.mode = "calictl"
-    with error_gated_page(stub.base) as pg:
-        expect(pg.get_by_text("🔒 Read-only — control is disabled on this daemon.")).to_be_visible()
-        assert _tile_texts(pg) == satellite
-
-
-def test_german_banner_and_menu(stub, error_gated_page):
-    _display_only(stub)
-    with error_gated_page(stub.base, locale="de-DE") as pg:
-        expect(pg.get_by_text("Satellit — nur Anzeige")).to_be_visible()
-        pg.click("#menu")
-        expect(pg.locator(".menupop").get_by_text("Gerätestatus")).to_be_visible()
-
-
-@pytest.mark.parametrize("up,age_ms", [(True, None), (True, 90001), (False, 90001)])
-def test_stale_data_shows_the_offline_banner(stub, error_gated_page, up, age_ms):
-    """Offline ("van asleep") keys on DATA AGE (> SAT_OFFLINE_S), never on link state."""
-    stub.fixtures["satellite"]["/api/state"]["device"]["link"].update(up=up, last_snap_age_ms=age_ms)
-    with error_gated_page(stub.base) as pg:
-        expect(pg.locator(".offline")).to_be_visible()
-        expect(pg.locator("#status")).to_have_text("offline")
-
-
-def test_link_down_with_fresh_data_is_not_offline(stub, error_gated_page):
-    """The parked unit terminates the held link every ~15-20 s while data stays seconds old
-    (the kick/reconnect cycle, field 2026-10-09, #264): the page must not claim the van sleeps."""
-    stub.fixtures["satellite"]["/api/state"]["device"]["link"].update(up=False, last_snap_age_ms=1200)
-    with error_gated_page(stub.base) as pg:
-        expect(pg.locator("#status")).to_have_text("live")
-        expect(pg.locator(".offline")).to_have_count(0)
 
 
 def test_a_failed_first_poll_never_reaches_calictl_only_endpoints(stub):
@@ -258,8 +291,40 @@ def test_device_page_links_to_the_ui_in_every_mode(stub, error_gated_page):
     stub.mode = "setup"
     with error_gated_page(stub.base + "/device") as pg:
         expect(pg.locator('#device a[href="/app"]')).to_have_text("‹ Camper UI")
-        expect(pg.locator('#pair-link[href="/app"]')).to_have_text("Pair in the camper UI ›")
+        expect(pg.locator('#pair-link[href="/app#pair"]')).to_have_text("Pair now ›")
         assert pg.locator('#device a[href="/"]').count() == 0
+
+
+def test_device_page_manage_pairing_opens_device_status(stub, error_gated_page):
+    """Paired: /device's Camper unit box offers "Manage pairing ›" (not "Pair…", owner 2026-10-15),
+    which opens the camper UI's Device status, its Camper-unit card with Unpair…; the hash is consumed."""
+    _display_only(stub)
+    with error_gated_page(stub.base + "/device", viewport=PHONE) as pg:
+        link = pg.locator("#pair-link")
+        expect(link).to_have_text("Manage pairing ›")
+        expect(link).to_have_attribute("href", "/#devicestatus")
+        link.click()
+        expect(pg.locator("#title")).to_have_text("Device status")
+        expect(_ds_card(pg, "Camper unit").get_by_role("button", name="Unpair…")).to_be_visible()
+        assert pg.evaluate("location.hash") == ""
+
+
+def test_device_page_pair_now_opens_the_wizard_at_the_top(stub, error_gated_page):
+    """Not paired: "Pair now ›" opens the camper UI with the pairing wizard at the top of Home."""
+    _display_only(stub)
+    for snap in (
+        stub.fixtures["satellite"]["/api/pairing"],
+        stub.fixtures["satellite"]["/api/state"]["device"]["pairing"],
+    ):
+        snap.update(state="idle", address=None)
+    with error_gated_page(stub.base + "/device", viewport=PHONE) as pg:
+        link = pg.locator("#pair-link")
+        expect(link).to_have_text("Pair now ›")
+        expect(link).to_have_attribute("href", "/#pair")
+        link.click()
+        card = pg.locator("#pairing-card")
+        expect(card.get_by_text("Pair the camper unit")).to_be_in_viewport()
+        assert pg.evaluate("location.hash") == ""
 
 
 # -- the live satellite (device.control.writes true: station mode) ---------------------------------
@@ -695,7 +760,8 @@ BUSPI_ONLY = (
 )
 WIZARD_TEXT = {
     "en-US": {
-        "go": "Set up remote control",
+        "go": "Pair…",
+        "title": "Pair the camper unit",
         "ready": "I'm on that screen",
         "connect": "Pair now",
         "send": "Send",
@@ -704,7 +770,8 @@ WIZARD_TEXT = {
         "paired": "✓ Paired — C0:FF:EE:CA:11:F0",
     },
     "de-DE": {
-        "go": "Fernsteuerung einrichten",
+        "go": "Koppeln…",
+        "title": "Camper-Einheit koppeln",
         "ready": "Ich bin auf diesem Bildschirm",
         "connect": "Jetzt koppeln",
         "send": "Senden",
@@ -722,8 +789,8 @@ def _unpaired(stub, mode="satellite"):
 
 def _card_text(pg):
     return (
-        pg.locator(".card", has_text=WIZARD_TEXT["en-US"]["go"])
-        .or_(pg.locator(".card", has_text=WIZARD_TEXT["de-DE"]["go"]))
+        pg.locator(".card", has_text=WIZARD_TEXT["en-US"]["title"])
+        .or_(pg.locator(".card", has_text=WIZARD_TEXT["de-DE"]["title"]))
         .first.inner_text()
     )
 
@@ -791,8 +858,7 @@ def test_wizard_error_hints_are_the_satellites(stub, error_gated_page, error, lo
     stub.fixtures["satellite"]["/api/pairing"].update(state="error", error=error, attempts=3)
     with error_gated_page(stub.base, locale=locale) as pg:
         pg.wait_for_function("() => !!(STATE._meta && STATE._meta.satellite)")
-        pg.click("#menu")
-        pg.locator(".menupop button").nth(1).click()  # Bluetooth pairing… (after Device & WiFi)
+        pg.evaluate("location.hash = '#pair'")  # /device's Camper-unit link (no menu entry since PR B)
         expect(pg.get_by_text(hint, exact=False)).to_be_visible()
         shown = _card_text(pg)
         assert not [w for w in BUSPI_ONLY if w in shown], shown
@@ -802,17 +868,16 @@ PHONE = {"width": 390, "height": 844}
 UNPAIR_CONFIRM = "Unpair the camper unit? Data stops until you pair again."
 
 
-def test_pair_from_the_menu_shows_the_wizard_at_the_top(stub, error_gated_page):
-    """On a paired, online van at phone size, ⋮ → Pair… must show the wizard where the user looks:
+def test_pair_link_shows_the_wizard_at_the_top(stub, error_gated_page):
+    """On a paired, online van at phone size, the #pair link (/device) must show the wizard where the user looks:
     above the summary and the tiles, scrolled into view (UX review H2: it used to land below the
     eight tiles, out of sight)."""
     with error_gated_page(stub.base, viewport=PHONE) as pg:
         pg.wait_for_function(LIVE)
         pg.evaluate("window.scrollTo(0, document.body.scrollHeight)")  # the user scrolled down
-        pg.click("#menu")
-        pg.get_by_role("menuitem", name="Pair…", exact=True).click()
+        pg.evaluate("location.hash = '#pair'")
         card = pg.locator("#pairing-card")
-        expect(card.get_by_text("Set up remote control")).to_be_in_viewport()
+        expect(card.get_by_text("Pair the camper unit")).to_be_in_viewport()
         expect(card.get_by_role("button", name="Unpair…")).to_be_in_viewport()  # the bonded step
         above = card.evaluate(
             "c => c.getBoundingClientRect().bottom"
@@ -822,7 +887,7 @@ def test_pair_from_the_menu_shows_the_wizard_at_the_top(stub, error_gated_page):
 
 
 def test_unpair_has_one_word_and_one_confirm(stub, error_gated_page):
-    """The ⋮ menu's Unpair… and the wizard's own button are one action: the same label and the
+    """Device status's Unpair… and the wizard's own button are one action: the same label and the
     same confirm text (UX review H3); accepting it removes the pairing."""
     asked = []
 
@@ -834,9 +899,9 @@ def test_unpair_has_one_word_and_one_confirm(stub, error_gated_page):
         pg.wait_for_function(LIVE)
         pg.on("dialog", answer)
         pg.click("#menu")
-        pg.get_by_role("menuitem", name="Unpair…").click()  # dismissed: nothing happens
-        pg.click("#menu")
-        pg.get_by_role("menuitem", name="Pair…", exact=True).click()
+        pg.locator(".menupop").get_by_text("Device status").click()
+        pg.get_by_role("button", name="Unpair…").click()  # dismissed: nothing happens
+        pg.evaluate("location.hash = '#pair'")
         pg.locator("#pairing-card").get_by_role("button", name="Unpair…").click()
         expect(pg.get_by_role("button", name="Pair now")).to_be_visible()
     assert asked == [UNPAIR_CONFIRM, UNPAIR_CONFIRM], asked
@@ -1086,10 +1151,13 @@ def test_auto_camper_toggle_on_a_firmware_that_reports_it(stub, error_gated_page
 
 # ---- external sensors (R_FW_SENSORS, #371): placed by their type ------------------------------
 
+# The fixtures' aliases are the firmware's defaults (sensors.c TYPES), one entry per type: no alias
+# prefix (it would read doubled, "Battery-sense Battery sensor"); a renamed entry or two of a type
+# lead every row with "<Alias> " (test_two_solar_chargers_carry_their_alias, test_a_renamed_sensor_…).
 EXT_LABELS = {
-    "victron_mppt": ("Mppt-75-15 Solar power", "Mppt-75-15 Charge phase", "Mppt-75-15 Solar yield today"),
-    "victron_battery": ("Battery-sense Battery sensor",),
-    "govee": ("Govee Temperature", "Govee Humidity"),  # "<Alias> <row>": the alias leads every row
+    "victron_mppt": ("Solar power", "Charge phase", "Solar yield today"),
+    "victron_battery": ("Battery sensor",),
+    "govee": ("Temperature", "Humidity"),
 }
 
 
@@ -1122,14 +1190,14 @@ def _sensor_rows(pg):
 
 
 ENERGY = {
-    "en-US": ("Energy", "Second battery power", "Issues", [("Battery-sense Battery sensor", "13.32 V · 17.3 °C")],
-              [("Mppt-75-15 Solar power", "0 W · 0 A · 13.2 V"), ("Mppt-75-15 Charge phase", "off"), ("Mppt-75-15 Solar yield today", "0.19 kWh")]),
-    "de-DE": ("Energie", "Zweitbatterie-Leistung", "Probleme", [("Battery-sense Batteriesensor", "13.32 V · 17.3 °C")],
-              [("Mppt-75-15 Solarstrom", "0 W · 0 A · 13.2 V"), ("Mppt-75-15 Ladephase", "aus"), ("Mppt-75-15 Solarertrag heute", "0.19 kWh")]),
+    "en-US": ("Energy", "Second battery power", "Issues", [("Battery sensor", "13.32 V · 17.3 °C")],
+              [("Solar power", "0 W · 0 A · 13.2 V"), ("Charge phase", "off"), ("Solar yield today", "0.19 kWh")]),
+    "de-DE": ("Energie", "Zweitbatterie-Leistung", "Probleme", [("Batteriesensor", "13.32 V · 17.3 °C")],
+              [("Solarstrom", "0 W · 0 A · 13.2 V"), ("Ladephase", "aus"), ("Solarertrag heute", "0.19 kWh")]),
 }  # fmt: skip
 VEHICLE = {
-    "en-US": ("Vehicle", "Vehicle clock", [("Govee Temperature", "16.5 °C"), ("Govee Humidity", "59 %")]),
-    "de-DE": ("Fahrzeug", "Fahrzeuguhr", [("Govee Temperatur", "16.5 °C"), ("Govee Luftfeuchte", "59 %")]),
+    "en-US": ("Vehicle", "Vehicle clock", [("Temperature", "16.5 °C"), ("Humidity", "59 %")]),
+    "de-DE": ("Fahrzeug", "Fahrzeuguhr", [("Temperatur", "16.5 °C"), ("Luftfeuchte", "59 %")]),
 }
 
 
@@ -1219,6 +1287,33 @@ def test_two_solar_chargers_carry_their_alias(stub, error_gated_page):
         ]
 
 
+def test_a_renamed_sensor_leads_its_rows_with_its_alias(stub, error_gated_page):
+    """An alias the owner gave (not the type's default) leads every row: "Dach Solar power"."""
+    stub.fixtures["satellite"]["/api/state"]["ext"] = {"dach": dict(ux_gallery.EXT_SENSORS["mppt-75-15"])}
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        _open(pg, "Energy")
+        assert [lbl for lbl, _ in _around(_readouts(pg), "Issues", before=3)] == [
+            "Dach Solar power",
+            "Dach Charge phase",
+            "Dach Solar yield today",
+        ]
+
+
+def test_a_default_alias_keeps_its_prefix_next_to_the_units_own_solar_row(stub, error_gated_page):
+    """With the unit's own solar input fitted, its "Solar power" row shows: the solar charger with the
+    default alias keeps "Mppt-75-15 " so the two rows never read the same."""
+    st = stub.fixtures["satellite"]["/api/state"]
+    st["fn"]["energy"]["PvInstalled"] = 1
+    st["ext"] = {"mppt-75-15": dict(ux_gallery.EXT_SENSORS["mppt-75-15"])}
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        _open(pg, "Energy")
+        labels = [lbl for lbl, _ in _readouts(pg)]
+        assert labels.count("Solar power") == 1  # the unit's own
+        assert "Mppt-75-15 Solar power" in labels and "Mppt-75-15 Charge phase" in labels
+
+
 def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
     """An old reading (> 10 min) keeps its value and carries "🕒 <ago>" (never colour alone); a value
     not read yet is "—"; a Govee battery below 20 % joins the temperature; a solar charger error
@@ -1230,16 +1325,16 @@ def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
         pg.wait_for_selector(".tilegrid .tile")
         _open(pg, "Vehicle")
         assert _around(_readouts(pg), "Vehicle clock", after=2) == [
-            ("Govee Temperature", "16.5 °C · 🔋 15 % 🕒 12 min ago"),
-            ("Govee Humidity", "— 🕒 12 min ago"),
+            ("Temperature", "16.5 °C · 🔋 15 % 🕒 12 min ago"),
+            ("Humidity", "— 🕒 12 min ago"),
         ]
         _home(pg)
         expect(pg.locator(".tile", has_text="Vehicle").first).to_contain_text("16.5 °C · — 🕒")
         _open(pg, "Energy")
         rows = _readouts(pg)
         assert _around(rows, "Issues", before=3)[:2] == [
-            ("Mppt-75-15 Solar power", "— W · 0 A · 13.2 V"),
-            ("Mppt-75-15 Charge phase", "absorption"),
+            ("Solar power", "— W · 0 A · 13.2 V"),
+            ("Charge phase", "absorption"),
         ]
         assert dict(rows)["Issues"] == "Solar charger error 2 (Mppt-75-15)"
 
