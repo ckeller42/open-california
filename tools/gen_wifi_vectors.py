@@ -37,6 +37,15 @@ STRAY = (
     ("stray-retrying-creds-set", (W.WIFI_RETRYING, 0, 1, 4000, 10000, 17000), W.WEV_CREDS_SET),
     ("stray-retrying-failed", (W.WIFI_RETRYING, 0, 1, _MIN, 5, 1005), F),
     ("stray-setup-ap-retrying-failed", (W.WIFI_SETUP_AP_RETRYING, 1, 1, _MAX, 10000, 370000), F),
+    # G2: CREDS_REPLACE needs a joined network to fall back to; elsewhere the runner uses CREDS_SET
+    ("stray-unprovisioned-creds-replace", _ZERO, W.WEV_CREDS_REPLACE),
+    ("stray-setup-ap-creds-replace", (W.WIFI_SETUP_AP, 1, 0, 0, 0, 0), W.WEV_CREDS_REPLACE),
+    ("stray-connecting-unjoined-creds-replace", (W.WIFI_CONNECTING, 1, 0, 0, 0, 0), W.WEV_CREDS_REPLACE),
+    (
+        "stray-setup-ap-retrying-creds-replace",
+        (W.WIFI_SETUP_AP_RETRYING, 1, 1, _MAX, 10000, 370000),
+        W.WEV_CREDS_REPLACE,
+    ),
 )
 
 
@@ -146,6 +155,30 @@ def _cases():
                 (W.WEV_BOOT_NO_CREDS, 0),
                 (99, 7),
             ],
+        ),
+        # G2: a failed replacement restores the previous, joined creds and retries them (never clears)
+        (
+            "replace-fails-restores-previous",
+            (W.WIFI_ONLINE, 0, 1, 0, 5000, 0),
+            [
+                (W.WEV_CREDS_REPLACE, 0),
+                (F, 15),
+                (T, 40000),
+                (T, 40000 + _MIN),
+                (W.WEV_GOT_IP, 0),
+                (T, 42000),
+                (T, 42000 + _CLOSE),
+            ],
+        ),
+        (
+            "replace-succeeds",
+            (W.WIFI_ONLINE, 0, 1, 0, 5000, 0),
+            [(W.WEV_CREDS_REPLACE, 0), (W.WEV_GOT_IP, 0)],
+        ),
+        (
+            "replace-while-retrying-then-replace-again-fails",
+            (W.WIFI_RETRYING, 0, 1, 4000, 10000, 17000),
+            [(W.WEV_CREDS_REPLACE, 0), (W.WEV_CREDS_REPLACE, 0), (F, 201), (T, 50000)],
         ),
         (
             "large-now-crosses-32-bits",

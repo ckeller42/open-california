@@ -9,6 +9,10 @@ and the Bumble fake unit for the camper. Requests go to ``127.0.0.1:PORT`` with 
    :id: T_FW_WEB_E2E
    :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX
 
+.. test:: A failed WiFi replacement returns to the old network; a good one moves (host tier)
+   :id: T_FW_WIFI_ROLLBACK
+   :links: R_FW_WIFI_ROLLBACK
+
 .. test:: The satellite UI over the real firmware HTTP core equals Python semantics (host tier)
    :id: T_FW_SHARED_UI_HOST
    :links: R_FW_SHARED_UI
@@ -165,6 +169,87 @@ def test_boot_with_saved_creds_reconnects_and_forget(host_fw, hci_unit, tmp_path
     fw = host_fw(hci_unit, http=True, fake_wifi=wifi)  # the forget reached the store
     fw.expect("LOG", lambda l: l.startswith("wifi: setup hotspot up"))
     assert not any(line == "LOG wifi: joining minsel" for line in fw.log)
+
+
+def _online_on_minsel(host_fw, hci_unit, wifi):
+    """Setup flow onto minsel, then a reboot: online from the saved creds with no scan yet (the
+    hotspot's own scan was the first boot's), so each test counts its own ``net: fake scan``s."""
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    fw.expect("LOG", lambda l: l == AP_UP)
+    post_json(fw, "/api/wifi", {"ssid": "minsel", "psk": PSK})
+    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
+    fw.stop()
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
+    return fw
+
+
+def test_failed_replacement_goes_back_to_the_old_network(host_fw, hci_unit, tmp_path):
+    """G2: online on minsel, a replacement with a wrong password (typo, auth) puts minsel back by
+    itself: station again, ``reverted`` true, ``last_error`` the replacement's reason; the old creds
+    are back in the store too (a reboot rejoins minsel); the passphrases are never printed."""
+    wifi = _wifi_script(
+        tmp_path, "ap minsel -55 1\nap typo -60 1\njoin minsel ok 192.168.1.42\njoin typo fail auth\n"
+    )
+    fw = _online_on_minsel(host_fw, hci_unit, wifi)
+    assert post_json(fw, "/api/wifi", {"ssid": "typo", "psk": "wrong-psk-99"}) == {"ok": True}
+    fw.expect("LOG", lambda l: l == "wifi: failed auth")
+    fw.expect("LOG", lambda l: l == "wifi: replacement failed, back to minsel")
+    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
+    w = get_json(fw, "/api/wifi")
+    assert (w["mode"], w["ssid"], w["ip"], w["reverted"], w["last_error"]) == (
+        "station",
+        "minsel",
+        "192.168.1.42",
+        True,
+        "auth",
+    )
+    assert not any(line == "LOG wifi: credentials cleared" for line in fw.log)
+    assert not any(PSK in line or "wrong-psk-99" in line for line in fw.log)
+    fw.stop()
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)  # the store holds minsel again
+    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
+    assert get_json(fw, "/api/wifi")["reverted"] is False
+
+
+def test_good_replacement_moves_to_the_new_network(host_fw, hci_unit, tmp_path):
+    wifi = _wifi_script(
+        tmp_path, "ap minsel -55 1\nap other -60 1\njoin minsel ok 192.168.1.42\njoin other ok 192.168.1.43\n"
+    )
+    fw = _online_on_minsel(host_fw, hci_unit, wifi)
+    assert post_json(fw, "/api/wifi", {"ssid": "other", "psk": "new-psk-5678"}) == {"ok": True}
+    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.43")
+    w = get_json(fw, "/api/wifi")
+    assert (w["mode"], w["ssid"], w["reverted"], w["last_error"]) == ("station", "other", False, None)
+    assert not any("replacement failed" in line for line in fw.log)
+
+
+def test_station_get_scans_at_most_once_per_interval(host_fw, hci_unit, tmp_path):
+    """G1: online, GET /api/wifi starts a scan (Change network… lists networks): the first GET's
+    scan lands in a later GET's list, and repeated GETs inside NET_SCAN_MIN_INTERVAL_MS start no more."""
+    wifi = _wifi_script(tmp_path, "ap minsel -55 1\nap other -80 1\njoin minsel ok 192.168.1.42\n")
+    fw = _online_on_minsel(host_fw, hci_unit, wifi)
+    assert not any(line == "LOG net: fake scan" for line in fw.log)
+    for _ in range(5):
+        get_json(fw, "/api/wifi")
+        time.sleep(0.3)  # the scan's SCAN_DONE lands on a later tick
+    assert [a["ssid"] for a in get_json(fw, "/api/wifi")["scan"]] == ["minsel", "other"]
+    assert [line for line in fw.log if line == "LOG net: fake scan"] == ["LOG net: fake scan"], fw.log
+
+
+def test_station_scan_waits_while_ble_pairs(host_fw, hci_unit, tmp_path):
+    """G1 under R15: a station-mode GET /api/wifi during a BLE pairing flow starts no scan; the held
+    request runs once the flow ends."""
+    wifi = _wifi_script(tmp_path, "ap minsel -55 1\njoin minsel ok 192.168.1.42\n")
+    fw = _online_on_minsel(host_fw, hci_unit, wifi)
+    fw.send("pair")
+    fw.expect("STATE", lambda s: s["state"] == "waiting_passkey")
+    get_json(fw, "/api/wifi")
+    time.sleep(0.5)
+    assert not any(line == "LOG net: fake scan" for line in fw.log), fw.log
+    fw.send("passkey %06d" % hci_unit.call(hci_unit.unit.next_passkey))
+    fw.expect("STATE", lambda s: s["state"] == "bonded", timeout=40)
+    fw.expect("LOG", lambda l: l == "net: fake scan")
 
 
 def test_api_state_matches_snap_after_pairing(host_fw, hci_unit, tmp_path):

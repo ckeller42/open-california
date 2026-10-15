@@ -519,7 +519,7 @@ def test_station_rows_say_they_need_the_home_wifi_over_the_hotspot(page, locale,
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
 def test_station_wifi_box_shows_the_network_and_opens_the_form(page, locale, lang):
     """Online, the WiFi box names the network (ssid · ip · dBm) and offers Change network…, which opens
-    the one join form; the station scan list can be empty (no scan while online): the form says so
+    the one join form with Search again (the firmware scans online too, G1); an empty list says so
     and takes a typed name; "Other network…" reveals that field; the eye shows the password."""
     with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
         expect(pg.locator("#wifi-now")).to_have_text(
@@ -528,9 +528,13 @@ def test_station_wifi_box_shows_the_network_and_opens_the_form(page, locale, lan
         expect(pg.locator("#wifi-form")).to_be_hidden()
         pg.click("#wifi-change")
         expect(pg.locator("#wifi-form")).to_be_visible()
-        expect(pg.locator("#rescan")).to_be_hidden()  # no scan over HTTP while online (yet)
+        expect(pg.locator("#rescan")).to_be_visible()  # G1: GET /api/wifi scans online too
         expect(pg.locator("#scan-empty")).to_have_text(STRINGS["no_networks"][lang])
         expect(pg.locator("#ssid-name")).to_be_visible()
+        stub.fixtures["station"]["/api/wifi"]["scan"] = [{"ssid": "minsel", "rssi": -60, "secure": True}]
+        pg.click("#rescan")  # the new list replaces the empty one: the hint goes
+        pg.wait_for_selector("#ssid option[value=minsel]", state="attached")
+        expect(pg.locator("#scan-empty")).to_be_hidden()
     with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
         stub.fixtures["station"]["/api/wifi"]["scan"] = [{"ssid": "minsel", "rssi": -60, "secure": True}]
         pg.click("#wifi-change")
@@ -548,9 +552,10 @@ def test_station_wifi_box_shows_the_network_and_opens_the_form(page, locale, lan
 
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
 def test_change_network_asks_first_and_cancel_posts_nothing(page, locale, lang):
-    """Connect online asks in the page first, with the honest warning naming the current network and
-    the setup hotspot; Cancel puts the buttons back and posts nothing."""
-    warn = _t("wifi_warn", lang, ssid="HomeNet", ap=CONSTS["NET_AP_SSID"], appsk=CONSTS["NET_AP_PSK"])
+    """Connect online asks in the page first, with the honest warning naming the current network it
+    returns to on a wrong password (G2); Cancel puts the buttons back and posts nothing."""
+    warn = _t("wifi_warn", lang, ssid="HomeNet")
+    assert "HomeNet" in warn and CONSTS["NET_AP_SSID"] not in warn
     with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
         pg.click("#wifi-change")
         pg.fill("#ssid-name", "minsel")
@@ -588,7 +593,7 @@ def test_change_network_switches_and_comes_back(page, locale, lang):
         assert len(held) == 1 and stub.wifi_posts == []
         expect(panel).to_contain_text(_t("switch_other", lang, ssid="minsel"))
         expect(panel).to_contain_text(
-            _t("switch_lost", lang, ap=CONSTS["NET_AP_SSID"], appsk=CONSTS["NET_AP_PSK"])
+            _t("switch_lost", lang, old="HomeNet", ap=CONSTS["NET_AP_SSID"], appsk=CONSTS["NET_AP_PSK"])
         )
         expect(panel.locator('a[href="%s"]' % host).first).to_be_visible()
         expect(panel.locator('a[href="http://%s"]' % CONSTS["NET_AP_ADDR"])).to_be_visible()
@@ -701,3 +706,26 @@ def test_screen_box_is_compact_one_row_per_setting(page, width):
         assert posts == [{"prox_wake": False}]
         box = pg.locator("#scr").bounding_box()
         assert box["height"] < 330, box  # was ~560 px: three full-width buttons + their status lines
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_failed_change_says_it_is_back_on_the_old_network(page, locale, lang):
+    """G2: the satellite answers again on the old network with ``reverted`` true — the WiFi box says
+    the new network didn't work (the reason in words) and that it is back on the old one; no
+    "Connected as…" success line."""
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        pg.click("#wifi-change")
+        pg.fill("#ssid-name", "typo")
+        pg.fill("#psk", "wrong-psk-99")
+        pg.click("#connect")
+        with pg.expect_response("**/api/wifi"):
+            pg.locator("#wifi-acts button.danger").click()
+        stub.down = True  # gone while it tries "typo"
+        pg.wait_for_timeout(2 * CONSTS["NET_PAGE_POLL_MS"])
+        stub.fixtures["station"]["/api/wifi"].update(reverted=True, last_error="auth")
+        stub.down = False
+        msg = pg.locator("#setup-msg")
+        want = _t("wifi_reverted", lang, why=STRINGS["why_auth"][lang], ssid="HomeNet")
+        expect(msg).to_have_text(want, timeout=10000)
+        expect(msg.locator("a")).to_have_count(0)
+        expect(pg.locator("#wifi-switch")).to_be_hidden()

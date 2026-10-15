@@ -1426,7 +1426,7 @@ link holds (:need:`S_SEQ_SLEEP`). See :doc:`firmware`
 .. spec:: Satellite WiFi setup through the hotspot and captive portal
    :id: S_SEQ_ESP_WIFI
    :status: mock-only
-   :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX, R_NET_CONSTS_SINGLE_SOURCE
+   :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX, R_NET_CONSTS_SINGLE_SOURCE, R_FW_WIFI_ROLLBACK
 
    **Contract.** A satellite with no saved WiFi network opens its own setup hotspot at boot. The
    state machine (``wifi_sm.c``, a C twin of ``tools/wifi_sm_ref.py``) and the runner
@@ -1454,7 +1454,11 @@ link holds (:need:`S_SEQ_SLEEP`). See :doc:`firmware`
      the page turns it into a sentence.
    * **Saved credentials that stop working** (router off, van moved) are never wiped: RETRYING with
      a 1 s doubling to 60 s backoff, and after 5 minutes the hotspot reopens alongside while the
-     retries go on (SETUP_AP_RETRYING). ``wifi forget`` on the console or ``DELETE /api/wifi``
+     retries go on (SETUP_AP_RETRYING).
+   * **Replaced credentials that fail** (``POST /api/wifi`` while online, ``R_FW_WIFI_ROLLBACK``):
+     the joined network's credentials are the fallback; the new join fails, they come back and are
+     retried, the hotspot closes 30 s after the satellite is back, and ``GET /api/wifi`` says
+     ``reverted`` with the replacement's ``last_error``. ``wifi forget`` on the console or ``DELETE /api/wifi``
      erases the credentials from any state and reopens the hotspot. The WiFi never calls into the
      BLE session, which keeps its link and heartbeat through a WiFi loss.
 
@@ -1487,6 +1491,7 @@ link holds (:need:`S_SEQ_SLEEP`). See :doc:`firmware`
             E-->>P: the page says why, the hotspot is still open
         end
         Note over E,R: saved credentials later unreachable, RETRYING 1 s doubling to 60 s, never wiped, after 5 min the hotspot reopens alongside
+        Note over E,R: online, new credentials that fail, the previous ones are restored and rejoined, reverted true
 
 **Evidence.** The state machine is held to golden vectors against the Python reference
 (``tests/firmware/test_wifi_sm_parity.py``). The captive DNS, the HTTP core, the endpoints and a

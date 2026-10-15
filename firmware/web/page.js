@@ -12,7 +12,7 @@
 /**
  * @typedef {{ mode: string, ssid: string|null, ip: string|null, rssi: number|null }} Wifi
  * @typedef {{ ssid: string, rssi: number, secure: boolean }} Ap
- * @typedef {Wifi & { last_error: string|null, scan: Ap[] }} WifiGet
+ * @typedef {Wifi & { last_error: string|null, reverted: boolean, scan: Ap[] }} WifiGet
  * @typedef {{ state: string, available_sha: string|null, progress_pct: number, error: string|null, channel: string }} Ota
  * @typedef {{ source: string, synced: boolean, boot: number }} Time
  * @typedef {{ state: string, total_mb: number|null, free_mb: number|null, last_seq: number|null, dropped: number }} Sd
@@ -43,6 +43,9 @@ function t(key, vars) {
 /* /api/wifi last_error -> the text that says why a join failed */
 /** @type {Record<string, string>} */
 const JOIN_FAILED = {not_found: "join_failed_not_found", auth: "join_failed_auth", other: "join_failed_other"};
+/* ... and the same reason as a phrase, for "The new network didn't work (<why>); back on <ssid>." */
+/** @type {Record<string, string>} */
+const WHY = {not_found: "why_not_found", auth: "why_auth", other: "why_other"};
 /** @type {Record<string, string>} */
 const POST_ERROR = {ssid: "err_ssid", psk: "err_psk", store: "err_store"};
 /* device.ota.state -> its text (idle: none) */
@@ -157,7 +160,6 @@ function renderWifi(w) {
   $("wifi-now").textContent = st && $("wifi-switch").hidden ? [t("wifi_now", {ssid: w.ssid || ""}), w.ip, w.rssi + " dBm"].join(" · ") : "";
   $("wifi-change").hidden = form || joining !== null || !$("wifi-switch").hidden;
   $("wifi-form").hidden = !form || !$("wifi-switch").hidden;
-  $("rescan").hidden = st;   /* GET /api/wifi scans only over the setup hotspot */
   if (form && !formShown && !joining) scan();
   formShown = form;
 }
@@ -446,7 +448,7 @@ async function otaChannel(ch) {
 }
 
 /** The scan list + "Other network…" (value "": the typed name; the only choice while the list is empty,
- * e.g. online, where the firmware does not scan over HTTP). @param {Ap[]} scan */
+ * e.g. before the first scan landed). @param {Ap[]} scan */
 function renderNetworks(scan) {
   const sel = select("ssid"), keep = sel.value, had = sel.options.length;
   sel.textContent = "";
@@ -485,7 +487,7 @@ async function scan() {
 }
 
 /* Connect: over the hotspot it posts at once; online it asks first (the satellite leaves its network,
- * and a wrong password loses it: the honest warning), then shows the Switching panel BEFORE posting —
+ * and on a wrong password it comes back by itself: the honest warning), then shows the Switching panel BEFORE posting —
  * the phone loses the page once the satellite leaves, so the panel needs no server. */
 function connect() {
   const ssid = select("ssid").value || input("ssid-name").value.trim(), psk = input("psk").value, msg = $("setup-msg");
@@ -498,7 +500,7 @@ function connect() {
   msg.textContent = "";
   const w = wifi;
   if (!w || w.mode !== "station") return join(ssid, psk, true);
-  const vars = {ssid: w.ssid || "", ap: CFG.ap, appsk: CFG.apPsk};
+  const vars = {ssid: w.ssid || "", old: w.ssid || "", ap: CFG.ap, appsk: CFG.apPsk};
   ask($("wifi-acts"), [el("span", t("wifi_warn", vars))], "wifi_switch", "danger", (close) => {
     close();
     const p = $("wifi-switch"), url = "http://" + CFG.host + ".local", ap = "http://" + CFG.apAddr;
@@ -559,7 +561,12 @@ async function watchJoin(j) {
   j.polls++;
   if (w.mode !== "setup") j.left = true;
   if (w.mode !== "station") j.away = true;
-  if (w.mode === "station" && w.ip && j.away) {   /* online: only once it left and came back */
+  if (w.mode === "station" && w.ip && j.away && w.reverted) {   /* the new network failed: back on the old one */
+    msg.className = "bad";
+    msg.textContent = t("wifi_reverted", {why: t(WHY[w.last_error || ""] || "why_other"), ssid: w.ssid || ""});
+    $("wifi-switch").hidden = true;
+    joining = null;
+  } else if (w.mode === "station" && w.ip && j.away) {   /* online: only once it left and came back */
     msg.className = "";
     msg.textContent = t("joined", {ip: w.ip, ssid: j.ssid}) + " ";
     const url = "http://" + CFG.host + ".local";

@@ -277,9 +277,7 @@ EXPECTED_DEVICE_TAIL = (
     '"experimental":{"sensors":false},'
     '"water_held":false}}'
 )
-EXPECTED_WIFI_BODY = (
-    '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","scan":[]}'
-)
+EXPECTED_WIFI_BODY = '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","reverted":false,"scan":[]}'
 
 
 def test_api_state_device_block_bytes_are_pinned(web_cli):
@@ -499,6 +497,7 @@ def test_get_wifi_in_setup_lists_last_scan_and_rescans(web_cli):
         "ip": None,
         "rssi": None,
         "last_error": None,
+        "reverted": False,
         "scan": [
             {"ssid": "minsel", "rssi": -48, "secure": True},
             {"ssid": "cafe", "rssi": -80, "secure": False},
@@ -532,16 +531,40 @@ def test_get_wifi_leaves_the_ble_pairing_gate_to_the_runner(web_cli, pair):
     assert r.status == 200 and other == ["CALL scan_auto"]
 
 
-def test_get_wifi_in_station_mode_does_not_scan(web_cli):
+def test_get_wifi_online_asks_for_a_scan(web_cli):
+    """G1: online, GET /api/wifi asks for a fresh scan too (Change network… lists networks); the
+    runner rate-limits it (NET_SCAN_MIN_INTERVAL_MS) and holds it while BLE pairs (R15)."""
     r, other = one(web_cli, "GET", "/api/wifi", setup=["wifi online minsel 10.0.0.7 -55", "joined 1"])
-    assert other == [] and r.json() == {
+    assert other == ["CALL scan_auto"] and r.json() == {
         "mode": "station",
         "ssid": "minsel",
         "ip": "10.0.0.7",
         "rssi": -55,
         "last_error": None,
+        "reverted": False,
         "scan": [],
     }
+
+
+@pytest.mark.parametrize("state,joined", [("retrying", 1), ("connecting", 1), ("connecting", 0)])
+def test_get_wifi_never_scans_while_a_join_runs(web_cli, state, joined):
+    """A scan would disturb a (re)join in progress: only ONLINE and the setup hotspot scan."""
+    r, other = one(web_cli, "GET", "/api/wifi", setup=["wifi " + state, "joined %d" % joined])
+    assert r.status == 200 and other == []
+
+
+def test_get_wifi_reports_a_reverted_replacement(web_cli):
+    """G2: a failed replacement put the previous network back — ``reverted`` true with the
+    replacement's reason in ``last_error``, the old network as ``ssid``; /api/state has no such key."""
+    w = json.loads(
+        get(
+            web_cli,
+            "/api/wifi",
+            setup=["wifi online minsel 10.0.0.7 -55", "joined 1", "lastfail auth", "reverted 1"],
+        )
+    )
+    assert (w["mode"], w["ssid"], w["last_error"], w["reverted"]) == ("station", "minsel", "auth", True)
+    assert "reverted" not in json.loads(get(web_cli, "/api/state", setup=["reverted 1"]))["device"]["wifi"]
 
 
 @pytest.mark.parametrize(

@@ -324,6 +324,7 @@ def esp_fixtures():
             "/api/wifi": dict(
                 setup_wifi,
                 last_error=None,
+                reverted=False,
                 scan=[
                     {"ssid": "HomeNet", "rssi": -52, "secure": True},
                     {"ssid": "Campsite-Guest", "rssi": -71, "secure": True},
@@ -333,7 +334,7 @@ def esp_fixtures():
         },
         "station": {
             "/api/state": station_state,
-            "/api/wifi": dict(station_wifi, last_error=None, scan=[]),
+            "/api/wifi": dict(station_wifi, last_error=None, reverted=False, scan=[]),
         },
         "satellite": {  # + the experimental sensor track on: top-level ext (R_FW_SENSORS)
             "/api/state": dict(
@@ -342,7 +343,7 @@ def esp_fixtures():
                 device=dict(station_state["device"], experimental={"sensors": True}),
                 ext=EXT_SENSORS,
             ),
-            "/api/wifi": dict(station_wifi, last_error=None, scan=[]),
+            "/api/wifi": dict(station_wifi, last_error=None, reverted=False, scan=[]),
         },
         "calictl": {
             "/api/state": calictl_state(_esp_fn(DEFAULT_SEED)),
