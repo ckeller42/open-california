@@ -1041,9 +1041,9 @@ def test_auto_camper_toggle_on_a_firmware_that_reports_it(stub, error_gated_page
 # ---- external sensors (R_FW_SENSORS, #371): placed by their type ------------------------------
 
 EXT_LABELS = {
-    "victron_mppt": ("Solar power (Victron)", "Solar yield today"),
-    "victron_battery": ("Battery sensor (Victron)",),
-    "govee": ("Govee Temperature", "Govee Humidity"),  # "<Alias> <row>": the alias leads
+    "victron_mppt": ("Mppt-75-15 Solar power", "Mppt-75-15 Solar yield today"),
+    "victron_battery": ("Battery-sense Battery sensor",),
+    "govee": ("Govee Temperature", "Govee Humidity"),  # "<Alias> <row>": the alias leads every row
 }
 
 
@@ -1076,10 +1076,10 @@ def _sensor_rows(pg):
 
 
 ENERGY = {
-    "en-US": ("Energy", "Second battery current", "Issues", [("Battery sensor (Victron)", "13.32 V · 17.3 °C")],
-              [("Solar power (Victron)", "off (0 W · 0 A)"), ("Solar yield today", "0.19 kWh")]),
-    "de-DE": ("Energie", "Zweitbatterie-Strom", "Probleme", [("Batteriesensor (Victron)", "13.32 V · 17.3 °C")],
-              [("Solarstrom (Victron)", "aus (0 W · 0 A)"), ("Solarertrag heute", "0.19 kWh")]),
+    "en-US": ("Energy", "Second battery current", "Issues", [("Battery-sense Battery sensor", "13.32 V · 17.3 °C")],
+              [("Mppt-75-15 Solar power", "off (0 W · 0 A)"), ("Mppt-75-15 Solar yield today", "0.19 kWh")]),
+    "de-DE": ("Energie", "Zweitbatterie-Strom", "Probleme", [("Battery-sense Batteriesensor", "13.32 V · 17.3 °C")],
+              [("Mppt-75-15 Solarstrom", "aus (0 W · 0 A)"), ("Mppt-75-15 Solarertrag heute", "0.19 kWh")]),
 }  # fmt: skip
 VEHICLE = {
     "en-US": ("Vehicle", "Vehicle clock", [("Govee Temperature", "16.5 °C"), ("Govee Humidity", "59 %")]),
@@ -1164,10 +1164,10 @@ def test_two_solar_chargers_carry_their_alias(stub, error_gated_page):
         pg.wait_for_selector(".tilegrid .tile")
         _open(pg, "Energy")
         assert _around(_readouts(pg), "Issues", before=4) == [
-            ("Solar power (Victron) · mppt-100-20", "bulk (87 W · 2.3 A)"),
-            ("Solar yield today · mppt-100-20", "0.42 kWh"),
-            ("Solar power (Victron) · mppt-75-15", "off (0 W · 0 A)"),
-            ("Solar yield today · mppt-75-15", "0.19 kWh"),
+            ("Mppt-100-20 Solar power", "bulk (87 W · 2.3 A)"),
+            ("Mppt-100-20 Solar yield today", "0.42 kWh"),
+            ("Mppt-75-15 Solar power", "off (0 W · 0 A)"),
+            ("Mppt-75-15 Solar yield today", "0.19 kWh"),
         ]
 
 
@@ -1189,8 +1189,8 @@ def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
         expect(pg.locator(".tile", has_text="Vehicle").first).to_contain_text("16.5 °C · — 🕒")
         _open(pg, "Energy")
         rows = _readouts(pg)
-        assert _around(rows, "Issues", before=2)[0] == ("Solar power (Victron)", "absorption (— W · 0 A)")
-        assert dict(rows)["Issues"] == "Solar charger error 2"
+        assert _around(rows, "Issues", before=2)[0] == ("Mppt-75-15 Solar power", "absorption (— W · 0 A)")
+        assert dict(rows)["Issues"] == "Solar charger error 2 (Mppt-75-15)"
 
 
 @pytest.mark.parametrize("locale", ["en-US", "de-DE"])

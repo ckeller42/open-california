@@ -864,7 +864,7 @@ const FEATURES = {
         const all = (s.faults || []).map((/** @type {string} */ f) => t(ENERGY_FAULT_MSG[f] || f));
         const mppt = extEntries("victron_mppt");
         for (const [alias, e] of mppt) {
-          if (e.error_code) all.push(tf("Solar charger error {n}", { n: e.error_code }) + (mppt.length > 1 ? ` (${alias})` : ""));
+          if (e.error_code) all.push(tf("Solar charger error {n}", { n: e.error_code }) + ` (${cap(alias)})`);
         }
         return all.length ? all.join(" · ") : t("none");
       } },
@@ -1949,21 +1949,20 @@ const raw = (v) => (typeof v === "number" ? String(v) : "—");
 const extStale = (e) => typeof e.age_s !== "number" || e.age_s > SENSOR_STALE_S;
 
 /** Rows per external sensor type: [label, value of one entry]. Labels go through t() on render.
- * @type {Record<string, { rows: [string, (e: SensorReading) => string][], aliasLabel?: boolean }>} */
+ * @type {Record<string, { rows: [string, (e: SensorReading) => string][] }>} */
 const EXT_TYPES = {
   // The unit's own "Solar power" format: charge state word (W · A)
   victron_mppt: { rows: [
-    ["Solar power (Victron)", (e) => `${typeof e.charge_state === "number" ? t(CHARGE_STATES[e.charge_state] || String(e.charge_state)) : "—"}`
+    ["Solar power", (e) => `${typeof e.charge_state === "number" ? t(CHARGE_STATES[e.charge_state] || String(e.charge_state)) : "—"}`
       + ` (${raw(e.pv_power)} W · ${raw(e.battery_current)} A)`],
     ["Solar yield today", (e) => fix(e.yield_today_kwh, 2, " kWh")],
   ] },
   victron_battery: { rows: [
-    ["Battery sensor (Victron)", (e) => `${fix(e.battery_voltage, 2, " V")} · ${fix(e.temperature_c, 1, " °C")}`],
+    ["Battery sensor", (e) => `${fix(e.battery_voltage, 2, " V")} · ${fix(e.temperature_c, 1, " °C")}`],
   ] },
   // A comfort reading: whole percent. The sensor's own battery is no row — only a low one shows,
-  // like the unit's own low-battery alerts. The alias (what the owner named the place: "innen")
-  // leads every row: "Innen Temperature", "Innen Humidity" (owner decision 2026-10-15).
-  govee: { aliasLabel: true, rows: [
+  // like the unit's own low-battery alerts.
+  govee: { rows: [
     ["Temperature", (e) => fix(e.temp_c, 1, " °C")
       + (typeof e.battery === "number" && e.battery < LOW_SENSOR_BATTERY ? ` · 🔋 ${e.battery} %` : "")],
     ["Humidity", (e) => fix(e.humidity, 0, " %")],
@@ -1977,8 +1976,9 @@ function extEntries(type) {
 
 /**
  * A screen's readouts with each `{ ext: type }` marker expanded into its type's rows per entry; the
- * label leads with the alias for an `aliasLabel` type, else names it only when two or more entries
- * share the type; an old reading keeps its value and adds "🕒 <ago>" (never colour alone).
+ * label leads with the entry's alias, the name the owner gave the device in /device Sensors ("Innen
+ * Temperature", "Dach Solar power"; owner decision 2026-10-15: the sensors broadcast no usable name);
+ * an old reading keeps its value and adds "🕒 <ago>" (never colour alone).
  * @param {(Readout|ExtReadouts)[]} readouts
  * @returns {Readout[]}
  */
@@ -1986,9 +1986,8 @@ function expandReadouts(readouts) {
   return readouts.flatMap((r) => {
     if (!("ext" in r)) return [r];
     const entries = extEntries(r.ext);
-    const { rows, aliasLabel } = EXT_TYPES[r.ext];
-    return entries.flatMap(([alias, e]) => rows.map(([label, get]) => ({
-      label: aliasLabel ? `${cap(alias)} ${t(label)}` : entries.length > 1 ? `${t(label)} · ${alias}` : label,
+    return entries.flatMap(([alias, e]) => EXT_TYPES[r.ext].rows.map(([label, get]) => ({
+      label: `${cap(alias)} ${t(label)}`,
       get: () => get(e) + (extStale(e) ? ` 🕒 ${agoText(/** @type {number|null} */ (e.age_s))}` : ""),
     })));
   });
