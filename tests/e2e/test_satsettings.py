@@ -179,7 +179,10 @@ def test_setup_mode_lands_on_wifi_setup_and_station_mode_shows_home(setup):
 
 def test_wifi_setup_pairs_in_place(setup):
     """The pairing entry on WiFi setup: the unpaired banner's Pair… opens the existing wizard right there
-    (over the hotspot, no home WiFi needed), and a code pairs the unit."""
+    (over the hotspot, no home WiFi needed), and a code pairs the unit. The stub walks like the firmware
+    (start -> scanning -> waiting_passkey a few polls later): the wizard's 1 s poll must repaint the card
+    on WiFi setup too (firmware-host e2e regression, PR #397)."""
+    setup.pairing_scan_polls = 2
     with _open(setup, "/app", locale="en-US") as pg:
         _title(pg, "en", "WiFi setup")
         pg.locator("#unpaired-banner").get_by_role("button", name="Pair…").click()
@@ -192,6 +195,19 @@ def test_wifi_setup_pairs_in_place(setup):
         card.get_by_role("button", name="Send").click()
         expect(card).to_contain_text("✓ Paired")
         assert [b["action"] for b in setup.pairing_posts] == ["start", "passkey"]
+
+
+def test_back_from_a_screen_opened_on_wifi_setup_returns_to_it(setup):
+    """The landing is the entry's screen (history.replaceState): browser back from Device status opened on
+    WiFi setup returns to WiFi setup, not Home (CodeRabbit, PR #397); ‹ there still stays in the app."""
+    with _open(setup, "/app", locale="en-US") as pg:
+        _title(pg, "en", "WiFi setup")
+        _device_status(pg)
+        pg.go_back()
+        _title(pg, "en", "WiFi setup")
+        pg.click("#back")
+        _title(pg, "en", "Open California")
+        assert pg.evaluate("location.pathname") == "/app"
 
 
 def test_setup_landing_lets_the_owner_go_home(setup):

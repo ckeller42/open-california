@@ -1175,6 +1175,8 @@ async function refreshState(force) {
     landChecked = true;
     if ((wm === "setup" || wm === "off") && view === "home") { view = "wifisetup"; satDom = null; landed = true; }
   } else if (view === "wifisetup" && wm === "station") { view = "home"; landed = true; }
+  // the entry shows the new screen: back from a screen opened here returns to it (not pushed: ‹ stays in the app)
+  if (landed) try { history.replaceState(Object.assign({}, history.state, { v: view }), ""); } catch (e) { /* no history API */ }
   // Auto-camper give-up/stand-down notice: the daemon stamps a one-time {ts,msg} when it stands
   // down (low battery) or gives up (keeps dropping). Show it as a toast once.
   const acn = STATE._meta && STATE._meta.auto_camper && STATE._meta.auto_camper.notice;
@@ -1342,7 +1344,7 @@ function goto(v) {
   if (fwd) {
     try {
       history.replaceState(Object.assign({}, history.state, { y: scrollY }), "");
-      history.pushState({ v: v }, "");
+      history.pushState({ v: v, pushed: true }, "");
     } catch (e) { /* no history API (a sandboxed frame): ‹ still works */ }
     if (SAT_VIEWS.includes(v)) satDom = null;   // a fresh visit, a fresh form
   }
@@ -1369,9 +1371,9 @@ window.addEventListener("popstate", (ev) => {
   show(v, s.y || 0);
 });
 
-/** ‹: the screen before when this app put it in the history, else the screen's parent. */
+/** ‹: the screen before when this app pushed this entry, else the screen's parent. */
 function back() {
-  if (history.state && history.state.v) history.back();
+  if (history.state && history.state.pushed) history.back();
   else goto(view === "satsettings" ? "devicestatus" : "home");
 }
 
@@ -1612,7 +1614,7 @@ function startPairingPoll() {
     try { await pairingFetch(); } finally { pairingPolling = false; }
     const ae = document.activeElement;
     if (!(ae && ae.id === "pairing-passkey")) {      // don't clobber the user mid-type
-      if (view === "home") render();                 // the card only shows on the dashboard
+      if (wizardView()) render();                    // the card only shows on Home and WiFi setup
     }
     if (PAIRING && PAIRING_TERMINAL_STATES.has(PAIRING.state)) stopPairingPoll();
   }, 1000);
@@ -1681,6 +1683,9 @@ async function pairingAction(action, value, confirmFlag) {
   render();
 }
 
+/** The screens that show the pairing wizard's card (the hotspot pairs from WiFi setup, no home WiFi). */
+const wizardView = () => view === "home" || view === "wifisetup";
+
 // Open the wizard on demand (from the topbar context menu, or auto on true first-run).
 async function openPairingWizard() {
   pairingOpen = true;
@@ -1691,7 +1696,7 @@ async function openPairingWizard() {
   // daemon restarted while this tab stayed open -- so show a neutral loading step instead of
   // flashing it, until the fetch below lands a fresh snapshot.
   pairingLoading = !!(PAIRING && PAIRING.state !== "idle");
-  if (view !== "home" && view !== "wifisetup") goto("home");   // the card renders on Home (and WiFi setup) only
+  if (!wizardView()) goto("home");   // the card renders on Home (and WiFi setup) only
   else render();                       // already home: show the card now (idle checklist, or the
                                         // loading step) instead of leaving the click waiting on
                                         // the network round-trip below
@@ -1713,7 +1718,7 @@ function showPairingCard() {
 // straight into pairing again (idle step) while the reset runs.
 async function unpair() {
   if (!confirm(/** @type {string} */ (t("Unpair the camper unit? Data stops until you pair again.")))) return;
-  if (!pairingOpen || view !== "home") await openPairingWizard();   // from Device status: Home, at the top
+  if (!pairingOpen || !wizardView()) await openPairingWizard();   // from Device status: Home, at the top
   pairingAction("reset", undefined, true);
 }
 

@@ -405,7 +405,8 @@ class EspStub:
         ``POST /api/pairing`` records the body in ``pairing_posts`` and walks the fixture's snapshot like
         the firmware's runner would, compressed: start -> ``waiting_passkey`` (from idle/error), the
         passkey ``pairing_passkey`` -> ``bonded`` (any other -> ``error`` / ``pairing_failed``), cancel ->
-        ``idle``, reset (``confirm: true``) -> ``idle`` without a bond; ``pairing_status`` other than 200
+        ``idle``, ``pairing_scan_polls = N``: start -> ``scanning`` first, ``waiting_passkey`` from the
+        N-th GET /api/pairing on (the firmware's walk), reset (``confirm: true``) -> ``idle`` without a bond; ``pairing_status`` other than 200
         answers ``{"error": pairing_error}`` instead. ``POST /api/ux`` (the UI's usage beacons,
         R_UX_TELEMETRY) appends the parsed body to ``ux_beacons`` and answers ``ux_status`` (204; 404 =
         a firmware without the endpoint). ``POST /api/sensors`` applies the firmware's add/remove/rename
@@ -443,6 +444,10 @@ class EspStub:
         self._sens_back = []  # removed sensors, seen again on the next GET /api/sensors
         self._sens_model = {}  # id -> the advert's model, kept while configured
         self.pairing_passkey = "123456"  # the code the stub "unit" shows
+        self.pairing_scan_polls = (
+            0  # start -> "scanning" for this many GET /api/pairing (the firmware's walk)
+        )
+        self._scan_left = 0
         self.pairing_status, self.pairing_error = 200, None  # e.g. 409, "busy"
         self.pairing_get_delay_s = 0.0  # GET /api/pairing answers this late (a stalled core)
         self.pairing_gets_max = 0  # the most GET /api/pairing ever in flight at once
@@ -532,6 +537,11 @@ class EspStub:
                     time.sleep(stub.pairing_get_delay_s)
                     with stub._count:
                         stub._pairing_gets -= 1
+                snap = fx.get("/api/pairing")
+                if path == "/api/pairing" and snap and snap["state"] == "scanning":  # the unit found later
+                    stub._scan_left -= 1
+                    if stub._scan_left <= 0:
+                        snap["state"] = fx["/api/state"]["device"]["pairing"]["state"] = "waiting_passkey"
                 if path == "/api/state" and stub.fail_state > 0:
                     stub.fail_state -= 1
                     self.send_error(503)
@@ -582,7 +592,8 @@ class EspStub:
         snap, dev = fx["/api/pairing"], fx["/api/state"]["device"]["pairing"]
         action = body.get("action")
         if action == "start" and snap["state"] in ("idle", "error"):
-            snap.update(state="waiting_passkey", attempts=0, error=None)
+            self._scan_left = self.pairing_scan_polls
+            snap.update(state="scanning" if self._scan_left else "waiting_passkey", attempts=0, error=None)
         elif action == "passkey" and snap["state"] == "waiting_passkey":
             if body.get("value") == self.pairing_passkey:
                 snap.update(state="bonded", address="C0:FF:EE:CA:11:F0")
