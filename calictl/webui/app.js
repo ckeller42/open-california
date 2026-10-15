@@ -570,6 +570,10 @@ const HELP = {
   home: ["index.html",
     "Each tile is one function of the camper unit; tap it for details. Only functions fitted to this van "
     + "are shown. A ⚠ on a tile means the unit reports a fault there.\n\n"
+    + "Sensors: on the ESP satellite, add-on Bluetooth sensors you added on its setup page join the "
+    + "screens, named by the alias you gave them: Victron solar charger and battery sensor on Energy, a "
+    + "Govee thermometer on Vehicle (its tile then shows the temperature). They are not part of the unit "
+    + "and keep updating while it sleeps.\n\n"
     + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
     + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live.\n\n"
     + "Not reachable: this page cannot reach calictl or the satellite (WiFi, Tailscale, power). The van "
