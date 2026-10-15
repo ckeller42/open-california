@@ -443,6 +443,8 @@ const onoff = (b) => /** @type {string} */ (t(b ? "On" : "Off"));
 // reading (e.g. starter battery when engine-off) renders as an em-dash instead.
 /** @type {(v: number|null|undefined, u: string) => string} */
 const withUnit = (v, u) => (v == null ? "—" : `${v} ${u}`);
+/** "<W> W · <A> A · <V> V", W = V × A rounded; "—" for a missing part. @param {number|null|undefined} v @param {number|null|undefined} a */
+const wav = (v, a) => `${v != null && a != null ? Math.round(v * a) : "—"} W · ${a ?? "—"} A · ${v ?? "—"} V`;
 /** @type {(t: Tank|null|undefined) => string} */
 const tank = (t) => (t && t.percent != null ? `${t.percent}%  (${t.liters}/${t.capacity_l} L)` : "—");
 // dg/i brightness enum -> display: 0-10 are real levels, 11=device default, >=13 is no-reading
@@ -847,13 +849,13 @@ const FEATURES = {
     ],
     readouts: [
       { label: "Second battery", get: (s) => (s.soc2_pct != null ? `${s.soc2_pct}%` : "—"), bar: (s) => s.soc2_pct },
-      { label: "Second battery voltage", get: (s) => withUnit(s.batt2_v, "V") },
-      { label: "Second battery current", get: (s) => withUnit(s.batt2_current, "A") },
+      // One row per battery in the solar row's order, W · A · V (owner 2026-10-15); W = V × A, derived
+      // here from the two verified values (the unit reports no battery power).
+      { label: "Second battery power", get: (s) => wav(s.batt2_v, s.batt2_current) },
       { ext: "victron_battery" },
       { label: "Time remaining", get: (s) => (s.batt2_remaining_h != null ? `${s.batt2_remaining_h} h` : "—") },
       { label: "Starter battery", get: (s) => (s.soc1_pct != null ? `${s.soc1_pct}%` : "—"), bar: (s) => s.soc1_pct },
-      { label: "Starter voltage", get: (s) => withUnit(s.batt1_v, "V") },
-      { label: "Starter current", get: (s) => withUnit(s.batt1_current, "A") },
+      { label: "Starter power", get: (s) => wav(s.batt1_v, s.batt1_current) },
       // "Vehicle power" = the DC-DC charger fed from the alternator while the engine runs.
       { label: "Vehicle power", show: (s) => !!s.dcdc_installed, get: (s) => `${t(s.dcdc_state)} (${s.dcdc_power} W · ${s.dcdc_current} A)` },
       { label: "Shore power", show: (s) => !!s.shore_installed, get: (s) => `${t(s.shore_state)} (${s.shore_power} W · ${s.shore_current} A)` },
@@ -1960,7 +1962,8 @@ function renderSummary() {
 // satellite reports `ext`, so buspi's page shows neither.
 // Victron's charger states the solar charger reports most (VictronConnect's words)
 /** @type {Record<number, string>} */
-const CHARGE_STATES = { 0: "off", 2: "fault", 3: "bulk", 4: "absorption", 5: "float", 6: "storage", 7: "equalize" };
+const CHARGE_STATES = { 0: "off", 2: "fault", 3: "bulk", 4: "absorption", 5: "float", 6: "storage", 7: "equalize",
+  245: "starting up", 247: "recondition", 252: "external control" };
 const SENSOR_STALE_S = 600;   // the firmware's /api/sensors drops a reading this old too
 const LOW_SENSOR_BATTERY = 20;   // % — below it the Govee's battery joins its temperature row
 
@@ -1977,8 +1980,9 @@ const EXT_TYPES = {
   // The unit's own "Solar power" format, charge state word (W · A), plus the battery voltage the
   // charger measures (owner decision 2026-10-15)
   victron_mppt: { rows: [
-    ["Solar power", (e) => `${typeof e.charge_state === "number" ? t(CHARGE_STATES[e.charge_state] || String(e.charge_state)) : "—"}`
-      + ` (${raw(e.pv_power)} W · ${raw(e.battery_current)} A · ${fix(e.battery_voltage, 1, " V")})`],
+    // W · A · V like the battery rows; the charge phase on its own row (owner 2026-10-15)
+    ["Solar power", (e) => `${raw(e.pv_power)} W · ${raw(e.battery_current)} A · ${fix(e.battery_voltage, 1, " V")}`],
+    ["Charge phase", (e) => (typeof e.charge_state === "number" ? /** @type {string} */ (t(CHARGE_STATES[e.charge_state] || String(e.charge_state))) : "—")],
     ["Solar yield today", (e) => fix(e.yield_today_kwh, 2, " kWh")],
   ] },
   victron_battery: { rows: [
