@@ -13,14 +13,14 @@ See `ARCHITECTURE.md`.
 
 1. **Confirm the field exists** in `protocol/dictionary.yaml` (name/offset/width). If it's
    `MERGED_AMBIGUOUS`, resolve its offset in `calictl/overrides.py` from the app's `f()`
-   builder — do NOT guess; the `sg.a(value, type)` 2nd arg is the TYPE (type 4=2-bit,
+   builder — do NOT guess; the field-box ctor's (`sg.a` in 5.0.8, `lh.a` in 5.4.0: R8 renames per build) 2nd arg is the TYPE (type 4=2-bit,
    6=4-bit, 3=16-bit, 7=8-bit, 5=32-bit, 1=16-bit), not the width.
 2. **Catalog it** in `protocol/signals.yaml` (hand-edited; `python3 -m tools.audit_signals --seed` stubs
    new fields): `decision:
    surface` needs a `name:`; `decision: omit` needs a `reason:`. Keys must exactly match the
    dictionary fields (both directions — no stale entries).
 3. **Emit it** from the function's interpreter in `calictl/semantics.py` under the catalog
-   `name`. Verify polarity against `ui/screens/*.yaml` / the decompiled getter when the app
+   `name`. If the UI reads it, mirror it in `calictl/webui/semantics.js` and run `python3 -m tools.gen_semantics_vectors` (the ESP bundle: `tools.gen_c_dict`). Verify polarity against `ui/screens/*.yaml` / the decompiled getter when the app
    setter is inverted or combined (this is how the camping-lights inversion was missed).
 4. **Run the guardrail**: `python3 -m pytest tests/ -q` and `python3 -m tools.audit_signals
    --report` (must be `clean`). The three invariants: every field has a decision; every

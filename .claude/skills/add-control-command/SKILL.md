@@ -14,7 +14,7 @@ because skipping it shipped a bug once (A2, 2026-10, PR #241: 8 tasks, 5 review 
 | # | Step | Where | Done when |
 |---|---|---|---|
 | 1 | **Decompile the write site** — the setter AND its UI caller | `decompile-app` skill ("Why passes miss logic") | every argument classified: unit-reported state / UI-local / constant / user input; what the app does after the write (ack wait, follow-up pull, toast) is written down |
-| 2 | **Builder** | `calictl/control.py` (`BUILDERS`, lighting in `control/_lighting`) | full-packet frame; every untargeted field at its **leave-unchanged** value (2-bit = 3, wider = the dictionary default — e.g. cooler TimerHour/Min 30/62) |
+| 2 | **Builder** | `calictl/control.py` (`BUILDERS`, lighting in `control._lighting`) | full-packet frame; every untargeted field at its **leave-unchanged** value (2-bit = 3, wider = the dictionary default — e.g. cooler TimerHour/Min 30/62) |
 | 3 | **Gate** | `command_precondition` in `control.py` | mirrors the app's UI gate with the unit's own wording; raises `control.CommandError` → `/api/command` 400 |
 | 4 | **Daemon** | `calictl/serve.py` | one connection, one arm (a preface + write goes through `actuate(..., preface=...)`, never two sessions); under the `_ble` lock |
 | 5 | **Mock** | `tools/mock_unit.py` | reacts like the unit: acks/echoes as **one-off** 1502-style events (`push(..., event=True)`), refusals as ACK-and-ignore |
