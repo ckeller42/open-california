@@ -115,6 +115,9 @@ $("exp-title").textContent = t("exp_title");
 $("exp-hint").textContent = t("exp_hint");
 $("sens-title").textContent = t("sens_title");
 $("sens-hint").textContent = t("sens_hint");
+$("loading").textContent = t("loading");
+$("scr-dn").setAttribute("aria-label", t("scr_less"));
+$("scr-up").setAttribute("aria-label", t("scr_more"));
 document.documentElement.lang = LANG;
 
 /** @type {Join|null} a submitted join being watched */
@@ -135,9 +138,12 @@ function renderLink(d) {
    * pairing wizard pairs the unit without home WiFi */
   const href = d.wifi.mode === "station" ? "/" : "/app";
   $("device").replaceChildren(link(t("app_link"), href));
-  $("pair-status").textContent = t(d.pairing.address ? "pair_on" : "pair_off");
-  $("pair-link").textContent = t("pair_link");
-  /** @type {HTMLAnchorElement} */ ($("pair-link")).href = href;
+  /* state-dependent (owner 2026-10-15): paired -> the camper UI's Device status (Unpair… lives there);
+   * not paired -> the camper UI with the pairing wizard open (app.js openFromHash) */
+  const paired = !!d.pairing.address;
+  $("pair-status").textContent = t(paired ? "pair_on" : "pair_off");
+  $("pair-link").textContent = t(paired ? "pair_manage" : "pair_now");
+  /** @type {HTMLAnchorElement} */ ($("pair-link")).href = href + (paired ? "#devicestatus" : "#pair");
 }
 
 /** @type {boolean} Change network… was tapped (online, the form shows only then) */
@@ -220,16 +226,17 @@ function renderFw(d) {
   if (document.activeElement !== sel) sel.value = o.channel;
 }
 
-/** The one on/off row pattern: "<id>-status" + one "<id>-toggle" naming the target state. Every switch
- * is station only (the firmware's 403 setup_mode): over the hotspot the status ends in "needs the
- * home WiFi" and the button is hidden.
+/** The one on/off row pattern (owner 2026-10-15): one compact line, "<id>-status" left and the
+ * "<id>-toggle" switch right (role=switch + aria-checked, named by the status: index.html). Every
+ * switch is station only (the firmware's 403 setup_mode): over the hotspot the status ends in "needs
+ * the home WiFi" and the switch is hidden.
  * @param {string} id @param {string[]} parts the status (empty parts dropped) @param {boolean} on @param {boolean} st station mode */
 function row(id, parts, on, st) {
-  const b = $(id + "-toggle");
+  const b = /** @type {HTMLButtonElement} */ ($(id + "-toggle"));
   $(id + "-status").textContent = [...parts, st ? "" : t("station_only")].filter(Boolean).join(" · ");
   b.hidden = !st;
-  b.textContent = t(on ? "ac_turn_off" : "ac_turn_on");
-  b.dataset.on = on ? "1" : "";
+  b.disabled = false;
+  b.setAttribute("aria-checked", String(on));
 }
 
 /** Auto camper (R_FW_AUTO_CAMPER), "Send usage data" (R_UX_TELEMETRY), Experimental (R_FW_EXPERIMENTAL). @param {Device} d */
@@ -245,13 +252,13 @@ function renderRows(d) {
 /** POST {<key, default "enabled">: <the opposite>} to a toggle endpoint.
  * @param {string} path @param {string} id the row's id prefix @param {string} err @param {string} [key] @param {string} [msgId] default id + "-msg" */
 async function toggle(path, id, err, key, msgId) {
-  const b = $(id + "-toggle"), msg = $(msgId || id + "-msg");
+  const b = /** @type {HTMLButtonElement} */ ($(id + "-toggle")), msg = $(msgId || id + "-msg");
   msg.textContent = "";
-  b.hidden = true;   /* the next poll shows it again */
+  b.disabled = true;   /* one POST per tap: the next poll enables it again */
   let ok = false;
   try {
     ok = (/** @type {{body: PostResult}} */ (await fetchJson(path, {method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify({[key || "enabled"]: !b.dataset.on})}))).body.ok;
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({[key || "enabled"]: b.getAttribute("aria-checked") !== "true"})}))).body.ok;
   } catch (e) { /* ok stays false */ }
   if (!ok) msg.textContent = t(err);
 }
@@ -346,7 +353,9 @@ function renderSens(s) {
     acts.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
       ask(acts, [el("span", t("sens_confirm_remove", {alias: c.alias}))], "sens_remove", "danger", () => sensPost({remove: c.id}));
   }
-  if (s.scan === "paused" || !s.seen.length) seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : "sens_none"), "muted"));
+  /* an empty scan under configured sensors means no OTHER ones nearby (live check 2026-10-15) */
+  if (s.scan === "paused" || !s.seen.length)
+    seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : s.configured.length ? "sens_none_more" : "sens_none"), "muted"));
   for (const r of s.seen) {
     const p = seen.appendChild(el("p", [t((SENS_T[r.type] || [r.type])[0]), r.model, r.rssi + " dBm"].join(" · "), "row"));
     const acts = p.appendChild(el("span", undefined, "acts"));
@@ -565,11 +574,14 @@ async function watchJoin(j) {
   }
 }
 
+/* the boxes stay hidden until the first answer (no empty join form or headers flash on load) */
+const BOXES = ["setup", "pair", "ac", "fw", "adv-title", "ux", "exp"];
 async function poll() {
   try {
     if (joining) await watchJoin(joining);
     const s = (/** @type {{body: State}} */ (await fetchJson("/api/state"))).body;
     $("banner").style.display = "none";
+    if (!$("loading").hidden) { $("loading").hidden = true; for (const id of BOXES) $(id).hidden = false; }
     wifi = s.device.wifi;
     renderLink(s.device);
     renderWifi(wifi);

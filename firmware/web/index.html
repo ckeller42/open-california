@@ -29,8 +29,16 @@ button.danger{background:var(--bad);border-color:var(--bad)}
 button:disabled{opacity:.45;cursor:default}
 .acts{display:flex;flex-wrap:wrap;gap:0 8px;align-items:center}.acts>*{flex:1 1 8em}.acts>span,.acts>input{flex-basis:100%;margin-top:8px}
 a{color:var(--accent)}
-input[type=checkbox]{width:auto;margin-right:6px}#scr-step button{width:3em;margin:0 8px}
-.sec{margin:20px 0 8px}
+input[type=checkbox]{width:auto;margin-right:6px}
+.tgl{display:flex;align-items:center;gap:12px;min-height:44px;margin:4px 0}.tgl>span:first-child{flex:1}
+button.sw{flex:none;width:56px;height:44px;margin:0;padding:0;border:0;background:none;position:relative}
+button.sw::before,button.sw::after{content:"";position:absolute;transition:.15s}
+button.sw::before{left:2px;top:7px;width:52px;height:30px;border-radius:15px;background:var(--muted)}
+button.sw::after{left:5px;top:10px;width:24px;height:24px;border-radius:50%;background:#fff}
+button.sw[aria-checked=true]::before{background:var(--accent)}button.sw[aria-checked=true]::after{left:27px}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.step{display:flex;gap:8px}.step button{width:48px;height:44px;margin:0;padding:0}
+.sec{margin:20px 0 8px}p:empty{margin:0}
 </style>
 </head>
 <body>
@@ -38,7 +46,8 @@ input[type=checkbox]{width:auto;margin-right:6px}#scr-step button{width:3em;marg
 <p id="device"></p>
 <h1 id="title"></h1>
 <div id="banner"></div>
-<section id="setup" class="box">
+<p id="loading" class="muted"></p>
+<section id="setup" class="box" hidden>
   <h2 id="setup-title"></h2>
   <p id="wifi-now"></p>
   <button id="wifi-change" class="secondary" type="button" hidden></button>
@@ -57,27 +66,26 @@ input[type=checkbox]{width:auto;margin-right:6px}#scr-step button{width:3em;marg
   <div id="wifi-switch" hidden></div>
   <p id="setup-msg" aria-live="polite"></p>
 </section>
-<section id="pair" class="box">
+<section id="pair" class="box" hidden>
   <h2 id="pair-title"></h2>
   <p id="pair-status"></p>
   <a id="pair-link"></a>
 </section>
-<section id="ac" class="box">
+<section id="ac" class="box" hidden>
   <h2 id="ac-title"></h2>
-  <p id="ac-status"></p>
-  <button id="ac-toggle" class="secondary" type="button" hidden></button>
+  <div class="tgl"><span id="ac-status"></span><button id="ac-toggle" class="sw" type="button" role="switch" aria-labelledby="ac-status" hidden></button></div>
   <p id="ac-msg" class="bad"></p>
 </section>
 <section id="scr" class="box" hidden>
   <h2 id="scr-title"></h2>
   <p id="scr-status"></p>
-  <p id="scr-auto-status"></p><button id="scr-auto-toggle" class="secondary" type="button" hidden></button>
-  <p id="scr-prox-status"></p><button id="scr-prox-toggle" class="secondary" type="button" hidden></button>
-  <p id="scr-motion-status"></p><button id="scr-motion-toggle" class="secondary" type="button" hidden></button>
-  <p id="scr-step"><button id="scr-dn" class="secondary" type="button">−</button><span id="scr-off"></span><button id="scr-up" class="secondary" type="button">+</button></p>
+  <div class="tgl"><span id="scr-auto-status"></span><button id="scr-auto-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-auto-status" hidden></button></div>
+  <div class="tgl"><span id="scr-prox-status"></span><button id="scr-prox-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-prox-status" hidden></button></div>
+  <div class="tgl"><span id="scr-motion-status"></span><button id="scr-motion-toggle" class="sw" type="button" role="switch" aria-labelledby="scr-motion-status" hidden></button></div>
+  <div class="tgl"><span id="scr-off"></span><span class="step"><button id="scr-dn" class="secondary" type="button">−</button><button id="scr-up" class="secondary" type="button">+</button></span></div>
   <p id="scr-msg" class="bad"></p>
 </section>
-<section id="fw" class="box">
+<section id="fw" class="box" hidden>
   <h2 id="fw-title"></h2>
   <p id="fw-status"></p>
   <button id="fw-install" type="button" hidden></button>
@@ -85,17 +93,15 @@ input[type=checkbox]{width:auto;margin-right:6px}#scr-step button{width:3em;marg
   <label for="fw-channel" id="fw-channel-l" hidden></label><select id="fw-channel" hidden><option value="stable"></option><option value="latest"></option></select>
   <p id="fw-msg" class="bad"></p>
 </section>
-<h2 id="adv-title" class="sec"></h2>
-<section id="ux" class="box">
-  <p id="ux-status"></p>
-  <button id="ux-toggle" class="secondary" type="button" hidden></button>
+<h2 id="adv-title" class="sec" hidden></h2>
+<section id="ux" class="box" hidden>
+  <div class="tgl"><span id="ux-status"></span><button id="ux-toggle" class="sw" type="button" role="switch" aria-labelledby="ux-status" hidden></button></div>
   <p id="ux-msg" class="bad"></p>
 </section>
-<section id="exp" class="box">
+<section id="exp" class="box" hidden>
   <h2 id="exp-title"></h2>
   <p id="exp-hint" class="muted"></p>
-  <p id="exp-status"></p>
-  <button id="exp-toggle" class="secondary" type="button" hidden></button>
+  <div class="tgl"><span id="exp-status"></span><button id="exp-toggle" class="sw" type="button" role="switch" aria-labelledby="exp-status" hidden></button></div>
   <p id="exp-msg" class="bad"></p>
 </section>
 <section id="sens" class="box" hidden>

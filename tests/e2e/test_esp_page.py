@@ -29,6 +29,16 @@ STRINGS = json.loads(
 )
 
 
+def _expect_switch(pg, row, on):
+    """The one on/off pattern (UX review M2, owner 2026-10-15): one compact row per setting, its label
+    left, a real switch right (``role=switch`` + ``aria-checked``) named by that label."""
+    sw = pg.locator("#%s-toggle" % row)
+    expect(sw).to_have_attribute("role", "switch")
+    expect(sw).to_have_attribute("aria-checked", "true" if on else "false")
+    expect(sw).to_have_attribute("aria-labelledby", "%s-status" % row)
+    expect(pg.get_by_role("switch", name=pg.locator("#%s-status" % row).inner_text())).to_have_count(1)
+
+
 @pytest.fixture
 def stub():
     with ux_gallery.EspStub("setup") as s:
@@ -332,12 +342,12 @@ def test_auto_camper_row_shows_and_switches(page, locale, lang):
         status, toggle = pg.locator("#ac-status"), pg.locator("#ac-toggle")
         expect(pg.locator("#ac-title")).to_have_text(STRINGS["ac_title"][lang])
         expect(status).to_have_text(STRINGS["ac_on"][lang])
-        expect(toggle).to_have_text(STRINGS["ac_turn_off"][lang])
+        _expect_switch(pg, "ac", True)
         ac.update(state="armed")
         expect(status).to_have_text(STRINGS["ac_on"][lang] + " · " + STRINGS["ac_armed"][lang])
         toggle.click()
         expect(status).to_have_text(STRINGS["ac_off"][lang] + " · " + STRINGS["ac_armed"][lang])
-        expect(toggle).to_have_text(STRINGS["ac_turn_on"][lang])
+        _expect_switch(pg, "ac", False)
         assert posts == [{"enabled": False}]
         toggle.click()
         expect(pg.locator("#ac-msg")).to_have_text(STRINGS["ac_error"][lang])
@@ -376,10 +386,10 @@ def test_usage_data_row_shows_and_switches(page, locale, lang):
         pg.route("**/api/ux_setting", on_post)
         status, toggle = pg.locator("#ux-status"), pg.locator("#ux-toggle")
         expect(status).to_have_text(STRINGS["ux_on"][lang])
-        expect(toggle).to_have_text(STRINGS["ac_turn_off"][lang])
+        _expect_switch(pg, "ux", True)
         toggle.click()
         expect(status).to_have_text(STRINGS["ux_off"][lang])
-        expect(toggle).to_have_text(STRINGS["ac_turn_on"][lang])
+        _expect_switch(pg, "ux", False)
         assert posts == [{"enabled": False}]
         toggle.click()
         expect(pg.locator("#ux-msg")).to_have_text(STRINGS["ux_error"][lang])
@@ -421,13 +431,13 @@ def test_screen_row_shows_state_and_switches(page, locale, lang):
         expect(pg.locator("#scr-title")).to_have_text(STRINGS["scr_title"][lang])
         expect(status).to_have_text(STRINGS["scr_on"][lang] + " · 68 % (8–100) · 42 lx")
         expect(pg.locator("#scr-auto-status")).to_have_text(row("scr_auto", True))
-        expect(auto).to_have_text(STRINGS["ac_turn_off"][lang])
+        _expect_switch(pg, "scr-auto", True)
         expect(pg.locator("#scr-prox-status")).to_have_text(row("scr_prox", True))
         expect(pg.locator("#scr-motion-status")).to_have_text(row("scr_motion", True))
         expect(pg.locator("#scr-off")).to_have_text(STRINGS["scr_offset"][lang].replace("{n}", "0"))
         auto.click()
         expect(pg.locator("#scr-auto-status")).to_have_text(row("scr_auto", False))
-        expect(auto).to_have_text(STRINGS["ac_turn_on"][lang])
+        _expect_switch(pg, "scr-auto", False)
         pg.locator("#scr-up").click()
         expect(pg.locator("#scr-off")).to_have_text(STRINGS["scr_offset"][lang].replace("{n}", "+5"))
         pg.locator("#scr-dn").click()
@@ -478,12 +488,13 @@ def test_title_back_link_and_pairing_box(page, locale, lang):
         expect(back).to_have_text(STRINGS["app_link"][lang])
         expect(back).to_have_attribute("href", "/")
         expect(pg.locator("#pair-status")).to_have_text(STRINGS["pair_on"][lang])
-        expect(pg.locator("#pair-link")).to_have_text(STRINGS["pair_link"][lang])
-        expect(pg.locator("#pair-link")).to_have_attribute("href", "/")
+        expect(pg.locator("#pair-link")).to_have_text(STRINGS["pair_manage"][lang])  # paired
+        expect(pg.locator("#pair-link")).to_have_attribute("href", "/#devicestatus")
     with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
         expect(pg.locator("#device a")).to_have_attribute("href", "/app")
         expect(pg.locator("#pair-status")).to_have_text(STRINGS["pair_off"][lang])
-        expect(pg.locator("#pair-link")).to_have_attribute("href", "/app")
+        expect(pg.locator("#pair-link")).to_have_text(STRINGS["pair_now"][lang])  # not paired
+        expect(pg.locator("#pair-link")).to_have_attribute("href", "/app#pair")
 
 
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
@@ -612,3 +623,81 @@ def test_change_to_the_same_network_posts_ssid_and_psk(page, locale, lang):
         expect(pg.locator("#wifi-switch")).to_contain_text(STRINGS["switch_same"][lang])
         assert stub.wifi_posts == [{"ssid": "HomeNet", "psk": "new-psk-5678"}]
         expect(pg.locator("#setup-msg")).to_have_text(_t("joining", lang, ssid="HomeNet"))
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_nothing_renders_empty_before_the_first_answer(locale, lang):
+    """Live check 2026-10-15: before the first /api/state (and /api/wifi) answer the page flashed the
+    hotspot join form and empty box headers. Until the first answer only a neutral "Loading…" line
+    shows; then the boxes for the satellite's mode."""
+    held = []
+    with ux_gallery.EspStub("station") as stub, sync_api.sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page(locale=locale)
+        released = []
+        pg.route("**/api/*", lambda r: r.continue_() if released else held.append(r))
+        pg.goto(stub.base + "/device")
+        expect(pg.locator("#loading")).to_have_text(STRINGS["loading"][lang])
+        pg.wait_for_timeout(2 * CONSTS["NET_PAGE_POLL_MS"])
+        for box in (
+            "#setup",
+            "#wifi-form",
+            "#pair",
+            "#ac",
+            "#scr",
+            "#fw",
+            "#adv-title",
+            "#ux",
+            "#exp",
+            "#sens",
+        ):
+            expect(pg.locator(box)).to_be_hidden()
+        assert not pg.get_by_role("button", name=STRINGS["connect"][lang]).is_visible()
+        released.append(True)
+        for r in held:
+            r.continue_()
+        expect(pg.locator("#wifi-now")).to_contain_text("HomeNet")
+        expect(pg.locator("#loading")).to_be_hidden()
+        for box in ("#setup", "#pair", "#ac", "#fw", "#ux", "#exp"):
+            expect(pg.locator(box)).to_be_visible()
+        expect(pg.locator("#wifi-form")).to_be_hidden()  # online: the form only after Change network…
+        browser.close()
+
+
+@pytest.mark.parametrize("width", [390])
+def test_screen_box_is_compact_one_row_per_setting(page, width):
+    """The Screen box (owner 2026-10-15): one row per setting, label left and the switch right on the
+    same line, the brightness -/+ stepper on one row; every target at least 44 px; the switch posts
+    its one member; keyboard: Space toggles a focused switch."""
+    posts = []
+    with (
+        ux_gallery.EspStub("station") as stub,
+        page(stub.base + "/device", viewport={"width": width, "height": 844}) as pg,
+    ):
+        disp = stub.fixtures["station"]["/api/state"]["device"]["display"]
+
+        def on_post(route):
+            posts.append(json.loads(route.request.post_data))
+            disp.update(posts[-1])
+            route.fulfill(status=200, content_type="application/json", body='{"ok":true}')
+
+        pg.route("**/api/display", on_post)
+        expect(pg.locator("#scr-prox-toggle")).to_be_visible()
+        for row in ("scr-auto", "scr-prox", "scr-motion", "ac", "ux", "exp"):
+            lbl, sw = (
+                pg.locator("#%s-status" % row).bounding_box(),
+                pg.locator("#%s-toggle" % row).bounding_box(),
+            )
+            assert sw["x"] > lbl["x"] + lbl["width"] - 1, row  # the switch right of its label
+            assert sw["y"] < lbl["y"] + lbl["height"] and lbl["y"] < sw["y"] + sw["height"], row  # same line
+            assert sw["width"] >= 44 and sw["height"] >= 44, (row, sw)
+            assert sw["x"] + sw["width"] <= width, row
+        dn, off, up = (pg.locator(i).bounding_box() for i in ("#scr-dn", "#scr-off", "#scr-up"))
+        assert abs(dn["y"] - up["y"]) < 2 and dn["height"] >= 44 and up["width"] >= 44
+        assert off["y"] < dn["y"] + dn["height"]
+        pg.locator("#scr-prox-toggle").focus()
+        pg.keyboard.press("Space")
+        expect(pg.locator("#scr-prox-toggle")).to_have_attribute("aria-checked", "false")
+        assert posts == [{"prox_wake": False}]
+        box = pg.locator("#scr").bounding_box()
+        assert box["height"] < 330, box  # was ~560 px: three full-width buttons + their status lines
