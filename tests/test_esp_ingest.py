@@ -598,12 +598,13 @@ UX_HEAD = {"ev": "ux", "sid": "3f9a1c0b7d2e4a65", "ua_class": "ios", "standalone
 UX_EVENTS = [
     {"type": "view", "screen": "cooler"},
     {"type": "control", "fn": "cooler", "control": "power"},
+    {"type": "control", "fn": "cooler", "control": "level", "value": "3"},
     {"type": "timing", "ttfb": 120, "dcl": 340, "tiles": 560},
     {"type": "error", "msg": "boom @ app.js:1"},
 ]
 
 
-@pytest.mark.parametrize("event", UX_EVENTS, ids=[e["type"] for e in UX_EVENTS])
+@pytest.mark.parametrize("event", UX_EVENTS, ids=["view", "control", "control_value", "timing", "error"])
 def test_ux_record_is_calictls_own_ui_ux_point_tagged_esp(event):
     """A ``ux`` SD record -> exactly the ``ui_ux`` point calictl writes for the same beacon event
     from its own ``POST /api/ux`` (same tags, int fields — one series, no field-type clash), plus
@@ -626,6 +627,7 @@ def test_ux_record_is_calictls_own_ui_ux_point_tagged_esp(event):
     )
     assert all(type(v) is not float for v in p.fields.values())  # n=1 + timings stay ints
     assert set(p.tags) - {"source"} <= set(esp_ingest.DIAG["ux"][1])
+    assert p.fields.get("value") == event.get("value") and "value" not in p.tags  # a field, never a tag
 
 
 def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frames):

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from calictl import web
+from calictl import influx, web
 
 WEBUI = str(Path(__file__).resolve().parent.parent / "calictl" / "webui")
 
@@ -415,6 +415,22 @@ def test_ux_backend_without_ux_is_off(server):
     assert _beacon(base + "/api/ux", UX_BATCH) == (204, b"")
 
 
+def test_ux_control_value_is_optional_printable_ascii_up_to_32(ux_server):
+    """A control event may carry ``value`` (string, printable ASCII, 1-32 chars); without it, as before.
+
+    .. test:: calictl accepts a control's value (printable ASCII <= 32), rejects the rest of the beacon
+       :id: T_UX_VALUE_CALICTL
+       :links: R_UX_TELEMETRY
+    """
+    be, url = ux_server
+    for v in ("3", "on", "21:30", "x" * 32, "a b~!"):
+        b = _ev(type="control", fn="cooler", control="level", value=v)
+        assert _beacon(url, b) == (204, b"")
+        assert be.beacons[-1] == b
+    assert influx.ux_label(be.beacons[-1]["events"][0]) == "control:cooler.level=a b~!"
+    assert influx.ux_label({"type": "control", "fn": "cooler", "control": "power"}) == "control:cooler.power"
+
+
 def _with(**kw):
     return {**UX_BATCH, **kw}
 
@@ -439,7 +455,15 @@ def _ev(**e):
         {k: v for k, v in UX_BATCH.items() if k != "origin"},
         _ev(type="view"),  # missing screen
         _ev(type="view", screen="home", value=3),  # never a value
-        _ev(type="control", fn="cooler", control="level", value="7"),
+        _ev(type="control", fn="cooler", control="level", value=7),  # a string, not a number
+        _ev(type="control", fn="cooler", control="level", value=None),  # omit the key instead
+        _ev(type="control", fn="cooler", control="level", value=""),
+        _ev(type="control", fn="cooler", control="level", value="7" * 33),
+        _ev(type="control", fn="cooler", control="level", value="caf\u00e9"),
+        _ev(type="control", fn="cooler", control="level", value="a\nb"),
+        _ev(type="control", fn="cooler", control="level", value=["7"]),
+        _ev(type="timing", ttfb=1, dcl=1, tiles=1, value="7"),  # only controls carry a value
+        _ev(type="error", msg="x", value="7"),
         _ev(type="view", screen="Cooler"),  # ids are lower-case
         _ev(type="view", screen="x" * 33),
         _ev(type="timing", ttfb=-1, dcl=0, tiles=0),

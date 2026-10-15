@@ -1021,11 +1021,11 @@ def _beacons(pg, stub, n=1):
     raise AssertionError("no beacon reached the stub")
 
 
-def test_beacons_carry_views_controls_errors_never_values(stub):
-    """View, control (ids only: the cooler toggle's "on" never leaves the page), timing and a script
-    error, batched into one sendBeacon on pagehide, with the per-tab session fields.
+def test_beacons_carry_views_controls_values_errors(stub):
+    """View, control (ids and the value the control was set to: the cooler toggle's "on"), timing and a
+    script error, batched into one sendBeacon on pagehide, with the per-tab session fields.
 
-    .. test:: The web UI's usage beacons carry ids, timings and errors, never values
+    .. test:: The web UI's usage beacons carry ids, control values, timings and errors
        :id: T_UX_BEACONS
        :links: R_UX_TELEMETRY
     """
@@ -1049,13 +1049,49 @@ def test_beacons_carry_views_controls_errors_never_values(stub):
     evs = b["events"]
     assert evs[:3] == [{"type": "view", "screen": "home"}, evs[1], {"type": "view", "screen": "cooler"}]
     assert evs[1]["type"] == "timing" and set(evs[1]) == {"type", "ttfb", "dcl", "tiles"}
-    assert {"type": "control", "fn": "cooler", "control": "power"} in evs
+    assert {"type": "control", "fn": "cooler", "control": "power", "value": "on"} in evs
     err = [e for e in evs if e["type"] == "error"]
     assert (
         len(err) == 1 and err[0]["msg"].startswith("Uncaught Error: boom xxx") and len(err[0]["msg"]) == 200
     )
-    assert "on" not in [v for e in evs for v in e.values()]  # the value never travels
     assert set(stub.requests) <= ALLOWED_LIVE, stub.requests
+
+
+def test_a_control_without_a_value_omits_the_key_and_a_number_is_a_string(live):
+    """``command()`` -> the control event: ``value`` is ``String(value)`` (printable ASCII, <= 32),
+    absent for null/undefined.
+
+    .. test:: The UI's control events carry the value as a short string, omitted when there is none
+       :id: T_UX_VALUE_UI
+       :links: R_UX_TELEMETRY
+    """
+    evs = live.evaluate(
+        """() => { uxQueue = [];
+          command("cooler", "level", 3); command("cooler", "power", null);
+          command("cooler", "x", "a\u00e9" + "b".repeat(40));
+          return uxQueue; }"""
+    )
+    assert evs[0] == {"type": "control", "fn": "cooler", "control": "level", "value": "3"}
+    assert evs[1] == {"type": "control", "fn": "cooler", "control": "power"}
+    assert evs[2]["value"] == "a?" + "b" * 30
+
+
+def test_secrets_never_reach_a_beacon(stub, error_gated_page):
+    """The pairing passkey (/api/pairing) goes through no ``command()``: run the wizard with the
+    usage switch on and flush; the passkey string is in no beacon.
+
+    .. test:: A pairing passkey never appears in a usage beacon
+       :id: T_UX_NO_SECRETS
+       :links: R_UX_TELEMETRY
+    """
+    _unpaired(stub)
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_function("() => !!(STATE._meta && STATE._meta.ux)")
+        _pair_in_wizard(pg, stub, WIZARD_TEXT["en-US"])
+        pg.evaluate(PAGEHIDE)
+        _beacons(pg, stub)
+    assert stub.pairing_posts[-1] == {"action": "passkey", "value": "123456"}
+    assert "123456" not in json.dumps(stub.ux_beacons)
 
 
 @pytest.mark.parametrize(

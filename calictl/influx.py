@@ -108,7 +108,11 @@ def ux_label(event: dict) -> str:
     if k == "view":
         return "view:" + event["screen"]
     if k == "control":
-        return "control:%s.%s" % (event["fn"], event["control"])
+        return "control:%s.%s%s" % (
+            event["fn"],
+            event["control"],
+            "=" + event["value"] if "value" in event else "",
+        )
     if k == "timing":
         return "timing:ttfb=%d,dcl=%d,tiles=%d" % (event["ttfb"], event["dcl"], event["tiles"])
     return "error:%r" % event["msg"]
@@ -117,7 +121,8 @@ def ux_label(event: dict) -> str:
 def ux_points(batch: dict, time_ns: int | None = None) -> list:
     """InfluxDB points (measurement ``ui_ux``) for one validated ``/api/ux`` beacon: one per event,
     tagged ``type``/``ua_class``/``origin``/``standalone`` (+ the low-cardinality ``screen``/``fn``/
-    ``control`` ids); fields ``n=1``, the session id, timings in ms and an error's ``msg``.
+    ``control`` ids); fields ``n=1``, the session id, timings in ms, an error's ``msg`` and a
+    control's ``value`` (a field, never a tag: unbounded cardinality).
 
     Stamped at ``time_ns`` (default: now, the beacon's receive time) + the event's index in ns:
     InfluxDB keeps one point per series + time, so two identical events of one beacon stay two."""

@@ -1101,12 +1101,13 @@ shared `calictl/webui/app.js` batches usage events and sends them with
 `navigator.sendBeacon('/api/ux', …)` — at most one beacon per 10 s, plus one on `pagehide` — to
 whichever runtime served the page.
 
-- **Events** — `view {screen}` (every screen change, and the first screen), `control {fn, control}`
-  (the control id, e.g. `cooler`/`power` — **never the value**), `timing {ttfb, dcl, tiles}` (once per
+- **Events** — `view {screen}` (every screen change, and the first screen), `control {fn, control, value?}`
+  (the control id, e.g. `cooler`/`power`, and the value it was set to as `String(value)` — printable
+  ASCII, at most 32 chars, key omitted for a null/undefined value; owner decision 2026-10-15), `timing {ttfb, dcl, tiles}` (once per
   load: time to first byte, DOMContentLoaded, first render of the tiles; ms since navigation start),
   `error {msg}` (`window.onerror` / `unhandledrejection`: message + `file:line` with the file reduced
   to its name, printable ASCII, cut at 200 chars). Each beacon:
-  `{"sid":"3f9a1c0b7d2e4a65","ua_class":"ios","standalone":true,"origin":"lan","events":[{"type":"view","screen":"cooler"},{"type":"control","fn":"cooler","control":"power"}]}`
+  `{"sid":"3f9a1c0b7d2e4a65","ua_class":"ios","standalone":true,"origin":"lan","events":[{"type":"view","screen":"cooler"},{"type":"control","fn":"cooler","control":"level","value":"3"}]}`
   — `sid` a random per-tab id (memory only), `ua_class` `ios|android|mac|other`, `standalone` (home
   screen app vs browser), `origin` from the page's host name (`busnet…` -> `busnet`, the van router's
   tailnet HTTPS proxy; `buspi…` -> `buspi`; else `lan`, the van LAN's `192.168.8.x` included). At most 16 events and 1 KB per beacon (oldest dropped),
@@ -1115,22 +1116,25 @@ whichever runtime served the page.
   false they are dropped. An old firmware without `device.ux` reads as false (nothing sent), and a
   beacon that 404s is ignored (a beacon has no answer to read) — telemetry never breaks the page.
 - **calictl** (`POST /api/ux`, any Content-Type): `web.ux_batch` validates; one INFO journal line
-  (`ux sid=… ua=ios standalone=1 origin=lan view:cooler control:cooler.power …`) and, with Influx
+  (`ux sid=… ua=ios standalone=1 origin=lan view:cooler control:cooler.level=3 …`) and, with Influx
   configured, one point per event in measurement **`ui_ux`** (tags `type`, `ua_class`, `origin`,
-  `standalone`, `screen`/`fn`/`control`; fields `n`=1, `sid`, `ttfb`/`dcl`/`tiles`, `msg`; stamped at
+  `standalone`, `screen`/`fn`/`control`; fields `n`=1, `sid`, `ttfb`/`dcl`/`tiles`, `msg`, `value` — a field, never a tag: unbounded cardinality; stamped at
   the beacon's receive time + the event's index in ns, so identical events of one beacon stay two). 204;
   `CALICTL_UX=0` switches it off (`_meta.ux` false, 204 without a record).
 - **ESP** — the same rules in C (`web.c` `api_ux`, parsed twice: validate all, then record, so a bad
   beacon leaves nothing on the card). One SD text record per event,
-  `{"seq":…,"boot":…,"up":…,"ts":…,"tsrc":…,"ev":"ux","sid":…,"ua_class":…,"standalone":…,"origin":…,"type":"control","fn":"cooler","control":"power"}`,
+  `{"seq":…,"boot":…,"up":…,"ts":…,"tsrc":…,"ev":"ux","sid":…,"ua_class":…,"standalone":…,"origin":…,"type":"control","fn":"cooler","control":"level","value":"3"}`,
   through `cali_sdlog_text` (the diagnostics' text records, `R_FW_DIAG_LOG`; a record body stays under
   `CALI_SDLOG_DATA_MAX`, so an escape-heavy error message is cut on the card to fit). No
   card: none (a full queue counts in `device.sd.dropped`). The `/device` page row **Send usage data:
   on/off** (EN + DE) with a switch (station mode only) sets kv `ux_on` (1 byte, missing =
   on) through `POST /api/ux_setting`; `device.ux {enabled}` -> `_meta.ux` (`semantics.js`
   `adaptSatellite`).
-- **Privacy** — no values (a control's id, never what it was set to), no free text but an error
-  message, no client IPs (neither runtime records the peer address; the SD record and the Influx
+- **Privacy** — a control's value is recorded (the owner allows values "as long as they are not a
+  password or pin"); secrets never pass through a control: the pairing passkey (`/api/pairing`), the
+  WiFi password (`/api/wifi`) and sensor keys (`/api/sensors`) use their own endpoints and are in no
+  beacon (e2e `T_UX_NO_SECRETS`, `T_UX_NO_SECRETS_SENSOR`). No free text but an error message and a
+  control's value, no client IPs (neither runtime records the peer address; the SD record and the Influx
   point have no address field), no user identity (the per-tab id is random, never stored, and
   differs per tab and load), and an off switch on each runtime (`/device` "Send usage data",
   `CALICTL_UX=0`).

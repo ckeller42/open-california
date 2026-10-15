@@ -242,7 +242,7 @@ paths:
       summary: Web UI usage beacon (R_UX_TELEMETRY)
       description: |
         `navigator.sendBeacon` from the web UI (any Content-Type — a beacon string is text/plain):
-        screen views, control ids (never their values), load timings and script errors, under a
+        screen views, control ids and values (never a password or PIN), load timings and script errors, under a
         random per-tab id. Logged at INFO and written to Influx measurement `ui_ux`. Sent only while
         `_meta.ux` is true; `CALICTL_UX=0` turns it off (then 204, nothing recorded). The ESP32
         satellite serves the same endpoint (station mode only), recording to its SD log.
@@ -422,8 +422,8 @@ components:
             type: object
             required: [type]
             description: |
-              view {screen} | control {fn, control} | timing {ttfb, dcl, tiles} (ms) | error {msg}
-              (1-200 printable ASCII). Ids are [a-z0-9_.-]{1,32}; exactly these keys, no values.
+              view {screen} | control {fn, control, value?} | timing {ttfb, dcl, tiles} (ms) | error {msg}
+              (1-200 printable ASCII). Ids are [a-z0-9_.-]{1,32}; exactly these keys; `value` (control events only, optional) is a string of 1-32 printable ASCII chars, never a password or PIN.
             properties:
               type: { type: string, enum: [view, control, timing, error] }
     AutoCamperMeta:

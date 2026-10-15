@@ -936,14 +936,16 @@ static int api_log(const cali_http_req_t *req, cali_http_resp_t *resp) {
 /* ---- POST /api/ux: the web UI's usage beacon (R_UX_TELEMETRY), calictl's web.ux_batch rules ----
  * {"sid":<8-32 hex>,"ua_class":ios|android|mac|other,"standalone":<bool>,"origin":lan|busnet|buspi,
  *  "events":[1..16 of {"type":view|control|timing|error, + exactly that type's keys}]} (any member
- * order): ids [a-z0-9_.-]{1,32}, timings integers 0..600000, msg 1..200 printable ASCII. Parsed
+ * order): ids [a-z0-9_.-]{1,32}, timings integers 0..600000, msg 1..200 printable ASCII, a control's optional value 1..32 printable ASCII. Parsed
  * twice: a first pass validates the whole body (and fills the header), the second writes one SD
  * record per event — a bad beacon never leaves half its events on the card. */
 #define UX_EVENTS_MAX 16
 #define UX_MSG_MAX 200
 #define UX_INT_MAX 600000L
-enum { UX_SCREEN = 1, UX_FN = 2, UX_CONTROL = 4, UX_TTFB = 8, UX_DCL = 16, UX_TILES = 32, UX_MSG = 64, UX_TYPE = 128 };
-static const char *const UX_KEYS[] = {"screen", "fn", "control", "ttfb", "dcl", "tiles", "msg", "type"};
+#define UX_VALUE_MAX 32
+enum { UX_SCREEN = 1, UX_FN = 2, UX_CONTROL = 4, UX_TTFB = 8, UX_DCL = 16, UX_TILES = 32, UX_MSG = 64, UX_TYPE = 128,
+       UX_VALUE = 256 };   /* UX_VALUE: optional, a control event's value (printable ASCII 1..UX_VALUE_MAX) */
+static const char *const UX_KEYS[] = {"screen", "fn", "control", "ttfb", "dcl", "tiles", "msg", "type", "value"};
 static const char *const UX_TYPES[] = {"view", "control", "timing", "error"};
 static const unsigned UX_NEEDS[] = {UX_SCREEN, UX_FN | UX_CONTROL, UX_TTFB | UX_DCL | UX_TILES, UX_MSG};
 static const char *const UX_UA[] = {"ios", "android", "mac", "other"};
@@ -996,7 +998,7 @@ static int parse_ux_int(cursor_t *c, long *out) {
 
 /* One event object. emit: write its SD record (h complete). 0 ok, -1 not the shape. */
 static int ux_event(cursor_t *c, const ux_hdr_t *h, int emit) {
-    char id[3][33], msg[UX_MSG_MAX + 1], key[8];
+    char id[3][33], msg[UX_MSG_MAX + 1], value[UX_VALUE_MAX + 1], key[8];
     long num[3] = {0, 0, 0};
     unsigned seen = 0;
     int type = -1;
@@ -1014,7 +1016,9 @@ static int ux_event(cursor_t *c, const ux_hdr_t *h, int emit) {
             if (parse_ux_int(c, &num[k - 3]) != 0) return -1;
         } else if (k == 6) {
             if (parse_str(c, msg, sizeof msg, &len) != 0 || ux_chars(msg, len, UX_MSG_MAX, 0) != 0) return -1;
-        } else if ((type = parse_enum(c, UX_TYPES, N_OF(UX_TYPES))) < 0) {
+        } else if (k == 7) {
+            if ((type = parse_enum(c, UX_TYPES, N_OF(UX_TYPES))) < 0) return -1;
+        } else if (parse_str(c, value, sizeof value, &len) != 0 || ux_chars(value, len, UX_VALUE_MAX, 0) != 0) {
             return -1;
         }
         skip_ws(c);
@@ -1025,7 +1029,8 @@ static int ux_event(cursor_t *c, const ux_hdr_t *h, int emit) {
         if (expect(c, '}') != 0) return -1;
         break;
     }
-    if (type < 0 || seen != (UX_TYPE | UX_NEEDS[type])) return -1;
+    if (type < 0 || ((seen & UX_VALUE) && type != 1)) return -1;   /* a value is only a control's, and optional */
+    if ((seen & ~UX_VALUE) != (UX_TYPE | UX_NEEDS[type])) return -1;
     if (emit) {
         /* the members without braces, < CALI_SDLOG_DATA_MAX (cali_sdlog_text): an error's msg is cut
          * (8 bytes a try) until the record fits — the SD record keeps ~150 of its 200 chars at worst */
@@ -1054,6 +1059,10 @@ static int ux_event(cursor_t *c, const ux_hdr_t *h, int emit) {
                 if (k <= 2) cali_json_str(&j, id[k]);
                 else if (k <= 5) cali_json_int(&j, num[k - 3]);
                 else cali_json_str(&j, msg);
+            }
+            if (seen & UX_VALUE) {
+                cali_json_key(&j, "value");
+                cali_json_str(&j, value);
             }
             n = cali_json_end(&j);   /* "{…}": the body is buf+1 up to the '}' */
             if ((n > 0 && (size_t)n - 2 < CALI_SDLOG_DATA_MAX) || cut == 0) break;

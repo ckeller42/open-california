@@ -162,6 +162,22 @@ def test_a_victron_needs_its_key(stub, locale, lang):
         expect(pg.locator("#sens-msg")).to_have_text("")
 
 
+def test_a_sensor_key_never_reaches_a_beacon(stub, error_gated_page):
+    """The Victron key goes to /api/sensors only: the /device page sends no usage beacon, and no
+    beacon of the stub carries the key.
+
+    .. test:: A sensor key never appears in a usage beacon
+       :id: T_UX_NO_SECRETS_SENSOR
+       :links: R_UX_TELEMETRY
+    """
+    with _open(error_gated_page, stub, "en") as pg:
+        _add(pg, "en", "SmartSolar", name="solar", key=_key())
+        pg.evaluate("dispatchEvent(new PageTransitionEvent('pagehide'))")
+        pg.wait_for_timeout(300)
+    assert stub.sensor_posts[-1]["key"] == _key()
+    assert _key() not in json.dumps(stub.ux_beacons)
+
+
 def test_cancel_closes_the_add_form(stub, error_gated_page):
     with _open(error_gated_page, stub, "en") as pg:
         row = _seen_row(pg, "GVH5074_0001")
