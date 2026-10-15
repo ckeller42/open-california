@@ -531,9 +531,9 @@ window.STRINGS_DE = {
     + "Pairing says whether calictl or the satellite is paired with a unit (Details shows its Bluetooth "
     + "address). Pair… and Unpair… are here. Still offline while the van is in use? Check the pairing "
     + "here: a reset of the unit's Bluetooth ends it; unpair, then pair again.\n\n"
-    + "Satellite (on the ESP satellite): its firmware, WiFi network, uptime, microSD log, battery and free "
-    + "memory. Satellite settings › opens its own page: WiFi (change the network there), restore camping "
-    + "after you park, screen, firmware update, usage data and experimental sensors.\n\n"
+    + "Satellite (on the ESP satellite): its firmware, WiFi network, uptime, clock, microSD log, battery "
+    + "and free memory. Satellite settings › opens its settings: WiFi (change the network there), restore "
+    + "camping after you park, screen, firmware update, usage data and experimental sensors.\n\n"
     + "buspi (on the Pi): the calictl backend that serves this page, and whether control writes are on."]:
     "Camper-Einheit: Die Verbindung ist online, solange die Bluetooth-Verbindung zur Einheit steht; "
     + "im Ruhezustand heißt meist, dass die geparkte Einheit schläft; nicht gekoppelt heißt, dass noch "
@@ -541,8 +541,8 @@ window.STRINGS_DE = {
     + "zeigt, ob calictl oder der Satellit mit einer Einheit gekoppelt ist (Details zeigt ihre "
     + "Bluetooth-Adresse). Koppeln… und Entkoppeln… findest du hier. Trotz benutztem Fahrzeug offline? "
     + "Prüfe hier die Kopplung: ein Bluetooth-Reset der Einheit beendet sie; entkoppeln, dann neu koppeln.\n\n"
-    + "Satellit (auf dem ESP-Satelliten): seine Firmware, sein WLAN, Laufzeit, das microSD-Log, Akku und "
-    + "freier Speicher. Satellit-Einstellungen › öffnet seine eigene Seite: WLAN (dort wechselst du das "
+    + "Satellit (auf dem ESP-Satelliten): seine Firmware, sein WLAN, Laufzeit, Uhr, das microSD-Log, Akku "
+    + "und freier Speicher. Satellit-Einstellungen › öffnet seine Einstellungen: WLAN (dort wechselst du das "
     + "Netzwerk), Campingmodus nach dem Parken wiederherstellen, Bildschirm, Firmware-Update, "
     + "Nutzungsdaten und experimentelle Sensoren.\n\n"
     + "buspi (auf dem Pi): der calictl-Dienst, der diese Seite liefert, und ob Steuerbefehle an sind.",
@@ -663,6 +663,146 @@ window.STRINGS_DE = {
     + "bestätigt.\n\nFahrzeuguhr ist die eigene Uhr der Einheit, zwischen den Abfragen live "
     + "weitergezählt. Firmware zeigt die Softwarestände der Einheit und ob dieses Projekt darauf "
     + "getestet wurde.",
+
+  // --- Satellite settings + WiFi setup (the words of the satellite's /device page, firmware/web/strings.json)
+  "Satellite settings": "Satellit-Einstellungen",
+  "WiFi setup": "WLAN einrichten",
+  "Connect to your WiFi": "Mit deinem WLAN verbinden",
+  "Device status ›": "Gerätestatus ›",
+  "Clock": "Uhr",
+  "synced (SNTP) · boot {boot}": "synchronisiert (SNTP) · Start Nr. {boot}",
+  "not synced yet · boot {boot}": "noch nicht synchronisiert · Start Nr. {boot}",
+  "no source · boot {boot}": "keine Zeitquelle · Start Nr. {boot}",
+  "from the camper unit · boot {boot}": "von der Camper-Einheit · Start Nr. {boot}",
+  "Send usage data: on": "Nutzungsdaten senden: an",
+  "Send usage data: off": "Nutzungsdaten senden: aus",
+  "Sensors (experimental): on": "Sensoren (experimentell): an",
+  "Sensors (experimental): off": "Sensoren (experimentell): aus",
+  "Scan paused while pairing": "Suche pausiert während der Kopplung",
+  "No other sensors nearby (the scan runs every minute).": "Keine weiteren Sensoren in der Nähe (Suche jede Minute).",
+  "No sensors found yet (the scan runs every minute).": "Noch keine Sensoren gefunden (die Suche läuft jede Minute).",
+  "Could not save the WiFi settings.": "Die WLAN-Einstellungen konnten nicht gespeichert werden.",
+  "The satellite rejected the request.": "Der Satellit hat die Anfrage abgelehnt.",
+  "Add": "Hinzufügen",
+  "Back on {old} within a minute if the new password was wrong; otherwise join the setup hotspot {ap} (password {appsk}) and open:": "Bei falschem Passwort ist er binnen einer Minute zurück in {old}; sonst verbinde dich mit dem Einrichtungs-Hotspot {ap} (Passwort {appsk}) und öffne:",
+  "Battery sense (Victron)": "Batteriesensor (Victron)",
+  "Brighter": "Heller",
+  "Brightness from room light": "Helligkeit nach Raumlicht",
+  "Brightness {n}": "Helligkeit {n}",
+  "Change network…": "Netzwerk wechseln…",
+  "Channel": "Kanal",
+  "Check for update": "Nach Update suchen",
+  "Choose a network (1–{max} characters).": "Wähle ein Netzwerk (1–{max} Zeichen).",
+  "Choose a network and enter its password.": "Wähle ein Netzwerk und gib sein Passwort ein.",
+  "Connect": "Verbinden",
+  "Connected as {ip}. Join {ssid} with this phone too, then open:": "Verbunden als {ip}. Verbinde auch dieses Handy mit {ssid} und öffne dann:",
+  "Connected to {ssid}": "Verbunden mit {ssid}",
+  "Connecting to {ssid}…": "Verbinde mit {ssid}…",
+  "Could not join the network — try again.": "Verbindung nicht möglich — versuche es erneut.",
+  "Couldn't change the channel": "Kanal konnte nicht geändert werden",
+  "Couldn't change the screen setting": "Bildschirmeinstellung konnte nicht geändert werden",
+  "Couldn't change the sensors": "Sensoren konnten nicht geändert werden",
+  "Couldn't change the switch": "Schalter konnte nicht geändert werden",
+  "Couldn't change usage data": "Nutzungsdaten konnten nicht geändert werden",
+  "Darker": "Dunkler",
+  "Enables the sensor scan and setup. Stable features do not depend on it.": "Schaltet Sensorsuche und -einrichtung frei. Stabile Funktionen hängen nicht davon ab.",
+  "Encryption key (32 hex digits)": "Verschlüsselungsschlüssel (32 Hex-Zeichen)",
+  "Experimental": "Experimentell",
+  "Firmware update": "Firmware-Update",
+  "Install {sha}": "{sha} installieren",
+  "Join {ssid} with this phone, then open:": "Verbinde dieses Handy mit {ssid} und öffne dann:",
+  "Key does not match this device": "Schlüssel passt nicht zu diesem Gerät",
+  "Key must be 32 hex digits": "Schlüssel muss 32 Hex-Zeichen haben",
+  "Name (a–z, 0–9, -, _)": "Name (a–z, 0–9, -, _)",
+  "Name already used": "Name schon vergeben",
+  "Nearby sensors appear below; add the ones that are yours.": "Sensoren in der Nähe erscheinen unten; füge deine hinzu.",
+  "Network": "Netzwerk",
+  "Network name": "Netzwerkname",
+  "Network not found — check that it is in range, then try again.": "Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.",
+  "No answer from the satellite.": "Keine Antwort vom Satelliten.",
+  "No networks listed — type the network's name.": "Keine Netzwerke in der Liste — gib den Namen des Netzwerks ein.",
+  "Other network…": "Anderes Netzwerk…",
+  "Password": "Passwort",
+  "Reload this page in ~30 s, or open:": "Lade die Seite in ~30 s neu oder öffne:",
+  "Remove": "Entfernen",
+  "Remove {alias}?": "{alias} entfernen?",
+  "Rename": "Umbenennen",
+  "Retrying the connection…": "Verbindung wird erneut versucht…",
+  "Running {sha}": "Läuft: {sha}",
+  "Save": "Speichern",
+  "Screen": "Bildschirm",
+  "Search again": "Erneut suchen",
+  "Searching for networks…": "Suche Netzwerke…",
+  "Sensor list is full (16)": "Sensorliste ist voll (16)",
+  "Show password": "Passwort anzeigen",
+  "Solar charger (Victron)": "Solarladeregler (Victron)",
+  "Switch network": "Netzwerk wechseln",
+  "Switching networks": "Netzwerkwechsel",
+  "The new network didn't work ({why}); back on {ssid}.": "Das neue Netzwerk hat nicht funktioniert ({why}); wieder mit {ssid} verbunden.",
+  "The password needs {min}–{max} characters.": "Das Passwort braucht {min}–{max} Zeichen.",
+  "The satellite leaves {ssid} now. If the new password is wrong, it returns to {ssid} by itself.": "Der Satellit verlässt {ssid} jetzt. Ist das neue Passwort falsch, kehrt er von selbst zu {ssid} zurück.",
+  "Thermo-hygrometer (Govee)": "Thermo-Hygrometer (Govee)",
+  "Use a–z, 0–9, - or _ (max. 16)": "Nur a–z, 0–9, - oder _ (max. 16)",
+  "Wake on motion": "Bei Bewegung einschalten",
+  "Wake when a hand is near": "Bei Annäherung einschalten",
+  "Wrong password — try again.": "Falsches Passwort — versuche es erneut.",
+  "checking …": "suche …",
+  "could not join": "Verbindung nicht möglich",
+  "dimmed": "gedimmt",
+  "downloading {pct} %": "lade {pct} %",
+  "installed, restarting …": "installiert, startet neu …",
+  "latest (every merge)": "neueste (jeder Merge)",
+  "needs the home WiFi": "braucht das Heim-WLAN",
+  "network not found": "Netzwerk nicht gefunden",
+  "no light sensor reading": "kein Lichtsensor-Wert",
+  "open network, not supported": "offenes Netz, nicht unterstützt",
+  "stable (tested)": "stabil (getestet)",
+  "up to date": "aktuell",
+  "update failed ({error})": "Update fehlgeschlagen ({error})",
+  "verifying …": "prüfe …",
+  "wrong password": "falsches Passwort",
+  "{sha} is available": "{sha} ist verfügbar",
+  "⟳ restoring …": "⟳ wird wiederhergestellt …",
+
+  ["WiFi: the network the satellite is on. Change network… lists the networks it finds (Search again "
+    + "looks once more); Other network… takes a name. Before it switches it asks: it then leaves the "
+    + "current network, and if the new password is wrong it comes back to the old one by itself and "
+    + "says so here.\n\nCamper unit: whether a unit is paired; Pair… and Unpair… are in Device "
+    + "status.\n\nRestore camping after you park: turns camping mode and the rear USB ports back on once "
+    + "you park, if the engine had switched them off.\n\nScreen: the satellite's display. Brightness from "
+    + "room light, wake when a hand is near or on motion, and a brightness offset (− / +).\n\nFirmware "
+    + "update: the running build and its channel; stable is tested, latest gets every change. Check "
+    + "looks for an update, Install loads it and restarts the satellite.\n\nAdvanced: Send usage data "
+    + "sends which screens and controls are used (never values). Experimental turns on the scan for "
+    + "add-on Bluetooth sensors; under Sensors add the ones that are yours (a Victron needs its "
+    + "encryption key), rename or remove them.\n\nOver the setup hotspot these switches need the home "
+    + "WiFi."]:
+    "WLAN: das Netzwerk, in dem der Satellit ist. Netzwerk wechseln… listet die Netzwerke, die er "
+    + "findet (Erneut suchen sucht noch einmal); Anderes Netzwerk… nimmt einen Namen. Vor dem Wechsel "
+    + "fragt er nach: er verlässt dann das aktuelle Netzwerk, und ist das neue Passwort falsch, kehrt "
+    + "er von selbst zum alten zurück und sagt es hier.\n\nCamper-Einheit: ob eine Einheit gekoppelt ist; "
+    + "Koppeln… und Entkoppeln… findest du im Gerätestatus.\n\nCampingmodus nach dem Parken "
+    + "wiederherstellen: schaltet Campingmodus und die hinteren USB-Anschlüsse nach dem Parken wieder "
+    + "ein, wenn der Motor sie abgeschaltet hatte.\n\nBildschirm: die Anzeige des Satelliten. Helligkeit "
+    + "nach Raumlicht, Einschalten bei Annäherung oder Bewegung und eine Helligkeitskorrektur (− / "
+    + "+).\n\nFirmware-Update: der laufende Stand und sein Kanal; stabil ist getestet, neueste bekommt "
+    + "jede Änderung. Nach Update suchen prüft, ob es ein Update gibt; installieren lädt es und startet "
+    + "den Satelliten neu.\n\nErweitert: Nutzungsdaten senden schickt, welche Seiten und Bedienelemente "
+    + "genutzt werden (nie Werte). Experimentell schaltet die Suche nach Bluetooth-Zusatzsensoren ein; "
+    + "unter Sensoren fügst du deine hinzu (ein Victron braucht seinen Verschlüsselungsschlüssel), "
+    + "benennst sie um oder entfernst sie.\n\nÜber den Einrichtungs-Hotspot brauchen diese Schalter das "
+    + "Heim-WLAN.",
+  ["The satellite runs its setup hotspot: it has no home WiFi yet, or cannot reach it. Choose the "
+    + "network, enter its password and tap Connect; the satellite then joins it and the hotspot closes. "
+    + "Join that network with this phone too and open the address shown.\n\nPairing with the camper unit "
+    + "works over the hotspot: tap Pair… and follow the steps. Controls of the unit work only once the "
+    + "satellite is on the home WiFi."]:
+    "Der Satellit betreibt seinen Einrichtungs-Hotspot: er hat noch kein Heim-WLAN oder erreicht es "
+    + "nicht. Wähle das Netzwerk, gib sein Passwort ein und tippe Verbinden; der Satellit verbindet "
+    + "sich dann damit und der Hotspot schließt. Verbinde auch dieses Handy mit dem Netzwerk und öffne "
+    + "die angezeigte Adresse.\n\nDas Koppeln mit der Camper-Einheit klappt über den Hotspot: tippe "
+    + "Koppeln… und folge den Schritten. Die Einheit steuern kannst du erst, wenn der Satellit im "
+    + "Heim-WLAN ist.",
 
   // --- language toggle -----------------------------------------------------------------------
   "Deutsch": "Deutsch",

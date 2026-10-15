@@ -1608,3 +1608,65 @@ def test_battery_rows_read_w_a_v_like_the_solar_row(page, base_url):
     assert re.fullmatch(r"(—|-?\d+) W · (—|-?[\d.]+) A · (—|[\d.]+) V", rows["Starter power"]), rows[
         "Starter power"
     ]
+
+
+# --- navigation on a phone (UX review "navigation" 2026-10-15: C1, H1, H3, M1, M3) ---------------
+
+
+def test_back_chevron_has_a_44px_hit_area(page):
+    """C1: ‹ is the way out of every screen; it was 15×26 px."""
+    page.get_by_text("Cooler", exact=True).first.click()
+    box = page.locator("#back").bounding_box()
+    assert box and box["width"] >= 44 and box["height"] >= 44, box
+
+
+@pytest.mark.parametrize("locale,title", [("en-US", "Open California"), ("de-DE", "Open California")])
+def test_home_is_titled_with_the_app_name_not_vehicle(base_url, error_gated_page, locale, title):
+    """H3: Home's title is the app's name (manifest short_name), so Home and the Vehicle screen read
+    differently at a glance."""
+    with error_gated_page(base_url, locale=locale) as pg:
+        expect(pg.locator(".tilegrid")).to_be_visible()
+        expect(pg.locator("#title")).to_have_text(title)
+        pg.locator(".tile").last.click()  # Vehicle / Fahrzeug
+        expect(pg.locator("#title")).to_have_text("Vehicle" if locale == "en-US" else "Fahrzeug")
+
+
+def test_browser_back_walks_the_screens_and_restores_the_scroll(base_url, error_gated_page):
+    """H1 + M3: every screen is a history entry (the URL stays /): browser back (the iOS edge swipe)
+    returns to the screen before, with its scroll position; ‹ does the same; a forward screen
+    starts at the top."""
+    with error_gated_page(base_url, viewport={"width": 390, "height": 500}) as pg:
+        expect(pg.locator(".tilegrid")).to_be_visible()
+        pg.evaluate("window.scrollTo(0, 300)")
+        pg.wait_for_function("() => window.scrollY > 100")
+        y = pg.evaluate("window.scrollY")
+        pg.locator(".tile", has_text="Energy").click()
+        expect(pg.locator("#title")).to_have_text("Energy")
+        assert pg.evaluate("window.scrollY") == 0
+        assert pg.evaluate("location.pathname + location.hash") == "/"
+        pg.go_back()
+        expect(pg.locator("#title")).to_have_text("Open California")
+        pg.wait_for_function("y => Math.abs(window.scrollY - y) < 2", arg=y)
+        pg.go_forward()
+        expect(pg.locator("#title")).to_have_text("Energy")
+        pg.click("#back")
+        expect(pg.locator("#title")).to_have_text("Open California")
+        pg.click("#status")  # the pill -> Device status, then back
+        expect(pg.locator("#title")).to_have_text("Device status")
+        pg.go_back()
+        expect(pg.locator("#title")).to_have_text("Open California")
+
+
+def test_menu_lists_device_status_before_the_first_answer(base_url):
+    """M1: opened before the first /api/state answer, ⋮ already offers Device status."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page()
+        held = []
+        pg.route("**/api/state", lambda r: held.append(r))
+        pg.goto(base_url)
+        pg.click("#menu")
+        expect(pg.get_by_role("menuitem", name="Device status")).to_be_visible()
+        for r in held:
+            r.abort()
+        browser.close()

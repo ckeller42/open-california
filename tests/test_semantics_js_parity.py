@@ -172,6 +172,11 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
                 "sd": None,  # an older firmware without device.sd / device.res / device.battery
                 "res": None,
                 "battery": None,
+                "time": None,  # ... nor device.time / ota / display / auto_camper / experimental
+                "ota": None,
+                "display": None,
+                "auto_camper": None,
+                "experimental": False,
             },
         },
     )

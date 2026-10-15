@@ -372,6 +372,27 @@ def esp_fixtures():
     return json.loads(json.dumps(fx))  # independent copies: a test mutating one mode never touches another
 
 
+def _set(member, key):
+    """``device[member][key] = body[key]`` when the POST carries it (the firmware's settings rule)."""
+
+    def apply(dev, body):
+        if key in body:
+            dev.setdefault(member, {})[key] = body[key]
+
+    return apply
+
+
+# The satellite's settings endpoints (web.c) as the Satellite-settings screen posts them: what each
+# POST changes in device (/api/ota only starts work, the state moves on by itself).
+_SETTINGS = {
+    "/api/auto_camper": _set("auto_camper", "enabled"),
+    "/api/ux_setting": _set("ux", "enabled"),
+    "/api/experimental": _set("experimental", "sensors"),
+    "/api/display": lambda dev, body: dev["display"].update(body),
+    "/api/ota": lambda dev, body: dev["ota"].update({k: v for k, v in body.items() if k == "channel"}),
+}
+
+
 class EspStub:
     """A stdlib HTTP stub of the firmware's web endpoints: ``GET /`` = the generated page bytes,
         ``GET /api/state`` / ``/api/wifi`` = ``esp_fixtures()[mode]``. Switch pages with ``mode``.
@@ -384,13 +405,17 @@ class EspStub:
         ``POST /api/pairing`` records the body in ``pairing_posts`` and walks the fixture's snapshot like
         the firmware's runner would, compressed: start -> ``waiting_passkey`` (from idle/error), the
         passkey ``pairing_passkey`` -> ``bonded`` (any other -> ``error`` / ``pairing_failed``), cancel ->
-        ``idle``, reset (``confirm: true``) -> ``idle`` without a bond; ``pairing_status`` other than 200
+        ``idle``, ``pairing_scan_polls = N``: start -> ``scanning`` first, ``waiting_passkey`` from the
+        N-th GET /api/pairing on (the firmware's walk), reset (``confirm: true``) -> ``idle`` without a bond; ``pairing_status`` other than 200
         answers ``{"error": pairing_error}`` instead. ``POST /api/ux`` (the UI's usage beacons,
         R_UX_TELEMETRY) appends the parsed body to ``ux_beacons`` and answers ``ux_status`` (204; 404 =
         a firmware without the endpoint). ``POST /api/sensors`` applies the firmware's add/remove/rename
     rules (``_sensors``; bodies in ``sensor_posts``), a removed sensor is seen again on the next
     ``GET /api/sensors``. ``POST /api/wifi`` appends the body to ``wifi_posts`` and answers
-    ``{"ok": true}``; ``down = True`` makes the stub answer nothing at all (the satellite left the
+    ``{"ok": true}``; a POST to a settings endpoint (``_SETTINGS``: auto camper, usage data,
+    experimental, display, OTA) is recorded in ``posts`` as ``(path, body)``, applied to the fixture's
+    ``device`` and answered ``{"ok": true}`` (``post_reply[path] = (status, body)`` answers that
+    instead, changing nothing); ``down = True`` makes the stub answer nothing at all (the satellite left the
     network to join another one) until it is set back. ``GET /app`` is the UI bundle in every mode, and the
         manifest + icons (``gen_c_dict.pwa_assets``) are served in every mode too."""
 
@@ -414,9 +439,15 @@ class EspStub:
         self.sensor_posts = []  # POST /api/sensors bodies, in order
         self.wifi_posts = []  # POST /api/wifi bodies, in order
         self.down = False  # True: every request gets no answer (the connection just closes)
+        self.posts = []  # (path, body) of every POST to a _SETTINGS endpoint, in order
+        self.post_reply = {}  # path -> (status, body) instead of applying the POST and {"ok": true}
         self._sens_back = []  # removed sensors, seen again on the next GET /api/sensors
         self._sens_model = {}  # id -> the advert's model, kept while configured
         self.pairing_passkey = "123456"  # the code the stub "unit" shows
+        self.pairing_scan_polls = (
+            0  # start -> "scanning" for this many GET /api/pairing (the firmware's walk)
+        )
+        self._scan_left = 0
         self.pairing_status, self.pairing_error = 200, None  # e.g. 409, "busy"
         self.pairing_get_delay_s = 0.0  # GET /api/pairing answers this late (a stalled core)
         self.pairing_gets_max = 0  # the most GET /api/pairing ever in flight at once
@@ -448,6 +479,14 @@ class EspStub:
                     return  # no answer: the server closes the connection
                 if path == "/api/wifi":
                     stub.wifi_posts.append(body)
+                    self._json(200, {"ok": True})
+                    return
+                if path in _SETTINGS:
+                    stub.posts.append((path, body))
+                    if path in stub.post_reply:
+                        self._json(*stub.post_reply[path])
+                        return
+                    _SETTINGS[path](stub.fixtures[stub.mode]["/api/state"]["device"], body)
                     self._json(200, {"ok": True})
                     return
                 if path == "/api/pairing":
@@ -498,6 +537,11 @@ class EspStub:
                     time.sleep(stub.pairing_get_delay_s)
                     with stub._count:
                         stub._pairing_gets -= 1
+                snap = fx.get("/api/pairing")
+                if path == "/api/pairing" and snap and snap["state"] == "scanning":  # the unit found later
+                    stub._scan_left -= 1
+                    if stub._scan_left <= 0:
+                        snap["state"] = fx["/api/state"]["device"]["pairing"]["state"] = "waiting_passkey"
                 if path == "/api/state" and stub.fail_state > 0:
                     stub.fail_state -= 1
                     self.send_error(503)
@@ -548,7 +592,8 @@ class EspStub:
         snap, dev = fx["/api/pairing"], fx["/api/state"]["device"]["pairing"]
         action = body.get("action")
         if action == "start" and snap["state"] in ("idle", "error"):
-            snap.update(state="waiting_passkey", attempts=0, error=None)
+            self._scan_left = self.pairing_scan_polls
+            snap.update(state="scanning" if self._scan_left else "waiting_passkey", attempts=0, error=None)
         elif action == "passkey" and snap["state"] == "waiting_passkey":
             if body.get("value") == self.pairing_passkey:
                 snap.update(state="bonded", address="C0:FF:EE:CA:11:F0")

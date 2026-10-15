@@ -464,6 +464,12 @@ function adaptSatellite(body, nowMs) {
       sd: dev.sd || null,     // the SD log's card (R_FW_SD_LOG)
       res: dev.res || null,   // heap / PSRAM / CPU of the satellite itself
       battery: dev.battery || null,   // the CoreS3's own battery (R_FW_BATTERY)
+      time: dev.time || null,         // the clock the SD log stamps with (R_FW_TIME)
+      // the Satellite-settings screen's switches (app.js renderSat)
+      ota: dev.ota || null,           // R_FW_OTA
+      display: dev.display || null,   // R_FW_DISPLAY_WAKE
+      auto_camper: dev.auto_camper || null,   // R_FW_AUTO_CAMPER, with its "restoring" state
+      experimental: !!(dev.experimental && dev.experimental.sensors),   // R_FW_EXPERIMENTAL
     },
   };
   // = AutoCamper.snapshot()

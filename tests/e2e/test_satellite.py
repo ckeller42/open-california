@@ -145,7 +145,8 @@ def test_menu_device_status_screen(sat, stub):
     """The in-app Device-status screen as two cards (UX review 3.2 / M4): "Camper unit" (connection,
     pairing with the MAC behind Details, Unpair…) and "Satellite" (firmware, WiFi ssid · ip · dBm,
     uptime, storage, battery, resources, Satellite settings ›); no buspi card, no "BLE link" row
-    duplicating the connection, the battery labelled like /device (L6)."""
+    duplicating the connection, the battery labelled like /device (L6). Satellite settings › opens
+    the settings screen in the same app."""
     sat.click("#menu")
     sat.locator(".menupop").get_by_text("Device status").click()
     expect(sat.locator("#title")).to_have_text("Device status")
@@ -167,8 +168,8 @@ def test_menu_device_status_screen(sat, stub):
     assert sat.get_by_text("BLE link").count() == 0
     expect(_ds_card(sat, "buspi")).to_have_count(0)
     s.get_by_role("button", name="Satellite settings ›").click()  # satellite-only link
-    sat.wait_for_url(stub.base + "/device")
-    sat.wait_for_selector('#device a[href="/"]')  # the link back (station mode)
+    expect(sat.locator("#title")).to_have_text("Satellite settings")
+    assert "/device" not in stub.requests
 
 
 def test_device_status_in_german(stub, error_gated_page):
