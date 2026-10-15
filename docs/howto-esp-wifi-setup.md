@@ -84,7 +84,7 @@ camper screen's side: [How to pair your camper unit](howto-pair-your-camper.md))
 
 **No WiFi at the van?** Pairing works over the setup hotspot too, so a phone alone is enough;
 only the controls need your WiFi. **Unit's Bluetooth was reset?** Just pair again (or ⋮ →
-**Unpair…** first); the satellite drops the old pairing itself.
+**Device status** → **Unpair…** first); the satellite drops the old pairing itself.
 
 ## Finding the satellite on your network
 

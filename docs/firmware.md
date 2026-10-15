@@ -226,8 +226,8 @@ poll waits up to the command's deadline (the UI shows "Sending…", never the of
 
 ### The pairing wizard (`R_FW_PAIRING_WIZARD`)
 
-The satellite pairs from its web page with the **same** wizard calictl serves on buspi (⋮ →
-*Pair…*, or the *No camper unit is paired yet* banner's *Pair…*):
+The satellite pairs from its web page with the **same** wizard calictl serves on buspi (the *No camper unit is paired yet* banner's
+*Pair…*, Device status → *Pair…*, or the `/device` page's *Pair now ›* link, `#pair`):
 `/api/pairing` answers in calictl's contract, so `calictl/webui/app.js` runs it unchanged. The
 endpoint is a thin mapping onto the runner the console drives — `start` = `pair`, `passkey` =
 `passkey N`, `reset` = `forget`, plus `cancel` — so the console and the page can never disagree
