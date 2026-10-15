@@ -43,7 +43,7 @@
  *                                  "water_held":<bool>,
  *                                  "water_held_age_ms":<int>},   -- only while held AND the baseline
  *                                                                   was measured on this boot
- *                      "ext":{"<alias>":{<field>:<num|null>,…,"age_s":<int|null>},…}}   -- ONLY while
+ *                      "ext":{"<alias>":{"type":"<id>",<field>:<num|null>,…,"age_s":<int|null>},…}}   -- ONLY while
  *                                  exp_sensors is on (off: the key is absent); cali_sensors_state_json
  *                     built whole in one handler call (one consistent snapshot) into a
  *                     NET_JSON_MAX buffer; overflow -> 500 + LOG "http: overflow".

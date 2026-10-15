@@ -209,7 +209,10 @@ def c_decode(cli, tmp_path, advs, key="-"):
         lines += ["now %d" % t, "adv %s 1 -60 S_0009 %s" % (addr, a.hex()), "state %d" % t]
     out = [json.loads(x[4:])["s"] for x in run(cli, tmp_path, lines) if x.startswith("EXT ")]
     assert len(out) == len(advs)
-    return [({k: v for k, v in r.items() if k != "age_s"}, r["age_s"] == 0) for r in out]
+    assert all(
+        r["type"] in ("govee", "victron_mppt", "victron_battery") for r in out
+    )  # every entry names its type
+    return [({k: v for k, v in r.items() if k not in ("age_s", "type")}, r["age_s"] == 0) for r in out]
 
 
 def _r2(fields):

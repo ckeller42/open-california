@@ -145,7 +145,9 @@ Tests
 .. autofunction:: tests.e2e.test_satellite.test_an_unconfirmed_write_is_watched_across_the_reconnect
 .. autofunction:: tests.e2e.test_satellite.test_wakeup_card_is_live_and_sends_the_browsers_wall_clock
 .. autofunction:: tests.e2e.test_satellite.test_auto_camper_toggle_on_a_firmware_that_reports_it
-.. autofunction:: tests.e2e.test_satellite.test_sensors_card_shows_the_esps_external_sensors
+.. autofunction:: tests.e2e.test_satellite.test_victron_readings_on_the_energy_screen
+.. autofunction:: tests.e2e.test_satellite.test_govee_readings_on_the_vehicle_screen_and_tile
+.. autofunction:: tests.e2e.test_satellite.test_sensors_card_shows_only_unknown_types
 .. autofunction:: tests.e2e.test_satellite.test_wizard_pairs_the_satellite
 .. autofunction:: tests.e2e.test_satellite.test_wizard_over_the_setup_hotspot_via_app
 .. autofunction:: tests.e2e.test_pwa.test_offline_reload_shows_the_last_state

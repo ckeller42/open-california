@@ -338,6 +338,8 @@ void cali_sensors_state_json(cali_json_t *j, uint64_t now_ms) {
     for (int i = 0; i < s_cfg.n; i++) {
         cali_json_key(j, s_cfg.e[i].alias);
         cali_json_obj_begin(j);
+        cali_json_key(j, "type");   /* first: the UI places a reading by its type, not its alias */
+        cali_json_str(j, TYPES[s_cfg.e[i].type].id);
         fields_json(j, i);
         cali_json_key(j, "age_s");
         if (s_val[i].r.n) cali_json_int(j, (long long)((now_ms - s_val[i].r.at_ms) / 1000u));

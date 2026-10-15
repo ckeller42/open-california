@@ -209,8 +209,9 @@ DISPLAY_ON = {
 
 # /api/state ext while exp_sensors is on (R_FW_SENSORS): one sensor of each type, by default alias
 EXT_SENSORS = {
-    "govee": {"temp_c": 16.5, "humidity": 58.6, "battery": 49, "age_s": 6},
+    "govee": {"type": "govee", "temp_c": 16.5, "humidity": 58.6, "battery": 49, "age_s": 6},
     "mppt-75-15": {
+        "type": "victron_mppt",
         "battery_current": 0,
         "battery_voltage": 13.21,
         "charge_state": 0,
@@ -220,7 +221,34 @@ EXT_SENSORS = {
         "yield_today_kwh": 0.19,
         "age_s": 7,
     },
-    "battery-sense": {"battery_voltage": 13.32, "temperature_c": 17.25, "age_s": 7},
+    "battery-sense": {
+        "type": "victron_battery",
+        "battery_voltage": 13.32,
+        "temperature_c": 17.25,
+        "age_s": 7,
+    },
+}
+MPPT_100_20 = {  # a second solar charger (a two-MPPT van)
+    "type": "victron_mppt",
+    "battery_current": 2.3,
+    "battery_voltage": 13.52,
+    "charge_state": 3,
+    "error_code": 0,
+    "load_current": None,
+    "pv_power": 87,
+    "yield_today_kwh": 0.42,
+    "age_s": 9,
+}
+# The ext combinations the shared UI must place (Energy / Vehicle / Sensors card), by name:
+# tests/e2e/test_satellite.py swaps one into the satellite fixture's /api/state.
+EXT_VARIANTS = {
+    "none": {},
+    "mppt": {"mppt-75-15": EXT_SENSORS["mppt-75-15"]},
+    "mppt+battery": {k: EXT_SENSORS[k] for k in ("mppt-75-15", "battery-sense")},
+    "two-mppt": {"mppt-75-15": EXT_SENSORS["mppt-75-15"], "mppt-100-20": MPPT_100_20},
+    "govee": {"govee": EXT_SENSORS["govee"]},
+    "all": EXT_SENSORS,
+    "unknown": {"acme": {"type": "acme_gas", "co2": 800, "age_s": 5}},  # a type this UI does not know
 }
 
 
@@ -319,15 +347,13 @@ def esp_fixtures():
         "configured": [
             {
                 "id": 0x1001 + 2 * i,  # boot-local ids, never a MAC
-                "type": typ,
+                "type": e["type"],
                 "alias": alias,
-                "last_seen_s": EXT_SENSORS[alias]["age_s"],
-                "value": {k: v for k, v in EXT_SENSORS[alias].items() if k != "age_s"},
-                "has_key": typ != "govee",
+                "last_seen_s": e["age_s"],
+                "value": {k: v for k, v in e.items() if k not in ("age_s", "type")},
+                "has_key": e["type"] != "govee",
             }
-            for i, (alias, typ) in enumerate(
-                (("govee", "govee"), ("mppt-75-15", "victron_mppt"), ("battery-sense", "victron_battery"))
-            )
+            for i, (alias, e) in enumerate(EXT_SENSORS.items())
         ],
         "seen": [],
         "scan": "ok",

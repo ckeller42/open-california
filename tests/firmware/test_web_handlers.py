@@ -28,6 +28,7 @@ from .api_shape import (
     CONTROL_KEYS,
     DEVICE_KEYS,
     DISPLAY_KEYS,
+    EXT_ENTRY_KEYS,
     LINK_KEYS,
     OTA_KEYS,
     PAIRING_API_KEYS,
@@ -1712,8 +1713,9 @@ def test_sensors_get_seen_add_remove_roundtrip(web_cli):
     assert c == [
         {"id": sid, "type": "govee", "alias": "kitchen", "last_seen_s": None, "value": None, "has_key": False}
     ]
+    assert all(EXT_ENTRY_KEYS <= set(e) for e in json.loads(rs[1].body)["ext"].values())
     assert json.loads(rs[1].body)["ext"] == {
-        "kitchen": {"temp_c": 23.96, "humidity": 58.48, "battery": 90, "age_s": 0}
+        "kitchen": {"type": "govee", "temp_c": 23.96, "humidity": 58.48, "battery": 90, "age_s": 0}
     }
     assert rs[2].json()["configured"] == []
 

@@ -6,6 +6,7 @@ docs screenshots — so a handler shape change that updates one and not the othe
 """
 
 STATE_KEYS = frozenset({"t", "fn", "device"})  # GET /api/state (+ "ext" while exp_sensors is on)
+EXT_ENTRY_KEYS = frozenset({"type", "age_s"})  # every ext.<alias> entry: these + its type's fields
 SENSORS_KEYS = frozenset({"configured", "seen", "scan"})  # GET /api/sensors (R_FW_SENSORS)
 SENSOR_CFG_KEYS = frozenset({"id", "type", "alias", "last_seen_s", "value", "has_key"})  # .configured[]
 SENSOR_SEEN_KEYS = frozenset({"id", "type", "model", "rssi"})  # .seen[]

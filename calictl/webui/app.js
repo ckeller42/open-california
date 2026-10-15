@@ -144,8 +144,9 @@
  */
 /**
  * One external BLE sensor's last reading, the ESP's `/api/state` `ext.<alias>` (R_FW_SENSORS): its
- * fields (`null` = not read yet) and the reading's age in s (`null` before the first one).
- * @typedef {Record<string, number|null>} SensorReading
+ * `type` (govee | victron_mppt | victron_battery | a future one), its fields (`null` = not read
+ * yet) and the reading's age in s (`null` before the first one).
+ * @typedef {Record<string, number|string|null>} SensorReading
  */
 /**
  * A queued/in-flight control command (`command()` -> POST /api/command). `value` is the token or
@@ -184,13 +185,18 @@
  * @typedef {{ label: string, get: (s: FnState) => (string|number|null|undefined), bar?: (s: FnState) => (number|null|undefined), widget?: (s: FnState) => (Node|null), tick?: boolean, show?: (s: FnState) => boolean }} Readout
  */
 /**
+ * Where the ESP's external sensors of one type join a screen's readouts: one EXT_TYPES row set per
+ * `STATE.ext` entry of that type (renderFeature expands it), none without one.
+ * @typedef {{ ext: string }} ExtReadouts
+ */
+/**
  * A curated feature card. `lighting`/`roof` swap in a custom renderer; `warn`/`note` are dynamic
  * banners; `confirm` is a feature-level actuation gate.
  * @typedef {Object} Feature
  * @property {string} title
  * @property {string} [icon]
  * @property {Control[]} [controls]
- * @property {Readout[]} [readouts]
+ * @property {(Readout|ExtReadouts)[]} [readouts]
  * @property {(s: FnState) => (string|null|undefined)} [summary]
  * @property {(s: FnState) => (string|null|undefined)} [warn]
  * @property {(s: FnState) => (string|null|undefined)} [note]
@@ -842,6 +848,7 @@ const FEATURES = {
       { label: "Second battery", get: (s) => (s.soc2_pct != null ? `${s.soc2_pct}%` : "—"), bar: (s) => s.soc2_pct },
       { label: "Second battery voltage", get: (s) => withUnit(s.batt2_v, "V") },
       { label: "Second battery current", get: (s) => withUnit(s.batt2_current, "A") },
+      { ext: "victron_battery" },
       { label: "Time remaining", get: (s) => (s.batt2_remaining_h != null ? `${s.batt2_remaining_h} h` : "—") },
       { label: "Starter battery", get: (s) => (s.soc1_pct != null ? `${s.soc1_pct}%` : "—"), bar: (s) => s.soc1_pct },
       { label: "Starter voltage", get: (s) => withUnit(s.batt1_v, "V") },
@@ -850,9 +857,17 @@ const FEATURES = {
       { label: "Vehicle power", show: (s) => !!s.dcdc_installed, get: (s) => `${t(s.dcdc_state)} (${s.dcdc_power} W · ${s.dcdc_current} A)` },
       { label: "Shore power", show: (s) => !!s.shore_installed, get: (s) => `${t(s.shore_state)} (${s.shore_power} W · ${s.shore_current} A)` },
       { label: "Solar power", show: (s) => !!s.solar_installed, get: (s) => `${t(s.solar_state)} (${s.solar_power} W · ${s.solar_current} A)` },
-      // The unit's own dialog texts (ENERGY_FAULT_MSG), never the raw flag names.
-      { label: "Issues", get: (s) => (s.faults && s.faults.length
-        ? s.faults.map((f) => t(ENERGY_FAULT_MSG[/** @type {string} */ (f)] || f)).join(" · ") : t("none")) },
+      { ext: "victron_mppt" },
+      // The unit's own dialog texts (ENERGY_FAULT_MSG), never the raw flag names; then the ESP's
+      // solar chargers' error codes.
+      { label: "Issues", get: (s) => {
+        const all = (s.faults || []).map((/** @type {string} */ f) => t(ENERGY_FAULT_MSG[f] || f));
+        const mppt = extEntries("victron_mppt");
+        for (const [alias, e] of mppt) {
+          if (e.error_code) all.push(tf("Solar charger error {n}", { n: e.error_code }) + (mppt.length > 1 ? ` (${alias})` : ""));
+        }
+        return all.length ? all.join(" · ") : t("none");
+      } },
       // The unit reports an age ONLY for the STARTER battery (AgeOneBattValuesMinutes); 255 = the
       // stale sentinel (starter subsystem asleep). The leisure battery has no such field — it is
       // measured continuously, so its freshness is just the daemon's read age. Label it as STARTER
@@ -890,6 +905,7 @@ const FEATURES = {
         widget: (s) => (s.level_popup === 2 && s.ignition_on ? null
           : levelGauges(s.level_roll, s.level_pitch, roofIsUp())) },
       { label: "Vehicle clock", get: (s) => s.car_clock ?? "—", tick: true },
+      { ext: "govee" },
       { label: "Firmware (amb · cm · comm)",
         get: () => {
           const fw = (STATE._meta && STATE._meta.firmware) || {};
@@ -898,7 +914,13 @@ const FEATURES = {
             + (fw.untested ? t("  ⚠ untested") : t("  ✓ tested"));
         } },
     ],
-    summary: (s) => /** @type {string} */ (t(s.ignition_on ? "Ignition on" : "Ignition off")),
+    // The climate inside when the ESP reads a Govee (the first by alias), else the ignition.
+    summary: (s) => {
+      const g = extEntries("govee")[0];
+      if (!g) return /** @type {string} */ (t(s.ignition_on ? "Ignition on" : "Ignition off"));
+      const e = g[1];
+      return `${fix(e.temp_c, 1, " °C")} · ${fix(e.humidity, 0, " %")}` + (extStale(e) ? " 🕒" : "");
+    },
   },
 };
 
@@ -1909,9 +1931,69 @@ function renderSummary() {
   return card;
 }
 
-// The ESP's external BLE sensors (R_FW_SENSORS, `ext`): one row per alias. Only the satellite
-// reports them, so buspi's page never shows the card. The type is read off the field set (the
-// firmware's /api/sensors names it, but the shared UI does not fetch that).
+// The ESP's external BLE sensors (R_FW_SENSORS, `ext`), placed by their `type`: EXT_TYPES' rows join
+// the screen whose readouts carry `{ ext: type }` (Energy: Victron, Vehicle: Govee); an entry of a
+// type not listed here (a future firmware's) shows on the start page's Sensors card. Only the
+// satellite reports `ext`, so buspi's page shows neither.
+// Victron's charger states the solar charger reports most (VictronConnect's words)
+/** @type {Record<number, string>} */
+const CHARGE_STATES = { 0: "off", 2: "fault", 3: "bulk", 4: "absorption", 5: "float", 6: "storage", 7: "equalize" };
+const SENSOR_STALE_S = 600;   // the firmware's /api/sensors drops a reading this old too
+const LOW_SENSOR_BATTERY = 20;   // % — below it the Govee's battery joins its temperature row
+
+/** @param {unknown} v @param {number} digits @param {string} [unit] @returns {string} a number, else "—" */
+const fix = (v, digits, unit = "") => (typeof v === "number" ? v.toFixed(digits) + unit : "—");
+/** @param {unknown} v @returns {string} the raw value, else "—" */
+const raw = (v) => (typeof v === "number" ? String(v) : "—");
+/** @param {SensorReading} e */
+const extStale = (e) => typeof e.age_s !== "number" || e.age_s > SENSOR_STALE_S;
+
+/** Rows per external sensor type: [label, value of one entry]. Labels go through t() on render.
+ * @type {Record<string, { rows: [string, (e: SensorReading) => string][] }>} */
+const EXT_TYPES = {
+  // The unit's own "Solar power" format: charge state word (W · A)
+  victron_mppt: { rows: [
+    ["Solar power (Victron)", (e) => `${typeof e.charge_state === "number" ? t(CHARGE_STATES[e.charge_state] || String(e.charge_state)) : "—"}`
+      + ` (${raw(e.pv_power)} W · ${raw(e.battery_current)} A)`],
+    ["Solar yield today", (e) => fix(e.yield_today_kwh, 2, " kWh")],
+  ] },
+  victron_battery: { rows: [
+    ["Battery sensor (Victron)", (e) => `${fix(e.battery_voltage, 2, " V")} · ${fix(e.temperature_c, 1, " °C")}`],
+  ] },
+  // A comfort reading: whole percent. The sensor's own battery is no row — only a low one shows,
+  // like the unit's own low-battery alerts.
+  govee: { rows: [
+    ["Temperature (Govee)", (e) => fix(e.temp_c, 1, " °C")
+      + (typeof e.battery === "number" && e.battery < LOW_SENSOR_BATTERY ? ` · 🔋 ${e.battery} %` : "")],
+    ["Humidity", (e) => fix(e.humidity, 0, " %")],
+  ] },
+};
+
+/** @param {string} type @returns {[string, SensorReading][]} the `ext` entries of a type, by alias */
+function extEntries(type) {
+  return Object.entries(STATE.ext || {}).filter(([, e]) => e.type === type).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/**
+ * A screen's readouts with each `{ ext: type }` marker expanded into its type's rows per entry; the
+ * label names the alias only when two or more entries share the type; an old reading keeps its
+ * value and adds "🕒 <ago>" (never colour alone).
+ * @param {(Readout|ExtReadouts)[]} readouts
+ * @returns {Readout[]}
+ */
+function expandReadouts(readouts) {
+  return readouts.flatMap((r) => {
+    if (!("ext" in r)) return [r];
+    const entries = extEntries(r.ext);
+    return entries.flatMap(([alias, e]) => EXT_TYPES[r.ext].rows.map(([label, get]) => ({
+      label: entries.length > 1 ? `${t(label)} · ${alias}` : label,
+      get: () => get(e) + (extStale(e) ? ` 🕒 ${agoText(/** @type {number|null} */ (e.age_s))}` : ""),
+    })));
+  });
+}
+
+// The Sensors card's generic formatting for a type EXT_TYPES does not know: the fields it shares
+// with the known ones, in this order, then any other field raw.
 /** @type {[string, number, string, string?][]} field, decimals, unit, prefix — in display order;
  * unit "" = the solar charger's charge state, shown as a word */
 const SENSOR_FIELDS = [
@@ -1919,18 +2001,6 @@ const SENSOR_FIELDS = [
   ["battery_voltage", 2, "V"], ["battery_current", 1, "A"], ["pv_power", 0, "W"],
   ["yield_today_kwh", 2, "kWh"], ["charge_state", 0, ""], ["temperature_c", 1, "°C"],
 ];
-// Victron's charger states the solar charger reports most (VictronConnect's words)
-/** @type {Record<number, string>} */
-const CHARGE_STATES = { 0: "off", 3: "bulk", 4: "absorption", 5: "float" };
-const SENSOR_STALE_S = 600;   // the firmware's /api/sensors drops a reading this old too
-
-/** @param {SensorReading} r @returns {string|null} the type's name, null = unknown shape */
-function sensorType(r) {
-  if ("temp_c" in r && "humidity" in r) return /** @type {string} */ (t("Thermo-hygrometer (Govee)"));
-  if ("pv_power" in r) return /** @type {string} */ (t("Solar charger (Victron)"));
-  if ("battery_voltage" in r && "temperature_c" in r) return /** @type {string} */ (t("Battery sense (Victron)"));
-  return null;
-}
 
 /** @param {SensorReading} r @returns {string} */
 function sensorValues(r) {
@@ -1938,34 +2008,31 @@ function sensorValues(r) {
   for (const [k, digits, unit, prefix] of SENSOR_FIELDS) {
     if (!(k in r)) continue;
     const v = r[k];
-    if (!unit) parts.push(v == null ? "—" : /** @type {string} */ (t(CHARGE_STATES[v] || String(v))));
-    else parts.push((prefix || "") + (v == null ? "—" : v.toFixed(digits)) + " " + unit);
+    if (!unit) parts.push(typeof v === "number" ? /** @type {string} */ (t(CHARGE_STATES[v] || String(v))) : "—");
+    else parts.push((prefix || "") + fix(v, digits) + " " + unit);
   }
+  const known = new Set(["type", "age_s", "error_code", ...SENSOR_FIELDS.map((f) => f[0])]);
+  for (const [k, v] of Object.entries(r)) if (!known.has(k)) parts.push(`${k} ${v ?? "—"}`);
   if (r.error_code) parts.push(tf("error {n}", { n: r.error_code }));
   return parts.join(" · ");
 }
 
 function renderSensors() {
-  const ext = STATE.ext;
-  if (!ext || !Object.keys(ext).length) return null;
+  const unknown = Object.entries(STATE.ext || {}).filter(([, r]) => !(String(r.type) in EXT_TYPES));
+  if (!unknown.length) return null;
   const card = document.createElement("div");
   card.className = "card sensors";
   card.setAttribute("role", "group");
   card.setAttribute("aria-label", /** @type {string} */ (t("Sensors")));
-  for (const [alias, r] of Object.entries(ext)) {
-    const age = r.age_s;
+  for (const [alias, r] of unknown) {
+    const age = typeof r.age_s === "number" ? r.age_s : null;
     const stale = age != null && age > SENSOR_STALE_S;
     const row = document.createElement("div");
     row.className = "row sensor" + (stale ? " stale" : "");
     const lbl = document.createElement("span"); lbl.className = "lbl";
     const name = document.createElement("span"); name.className = "sname";
-    const type = sensorType(r);
-    name.textContent = type || alias;
+    name.textContent = alias;   // the name the owner gave the device: this UI knows no better one
     lbl.appendChild(name);
-    if (type) {   // the name the owner gave the device
-      const a = document.createElement("span"); a.className = "alias"; a.textContent = alias;
-      lbl.appendChild(a);
-    }
     const sv = document.createElement("span"); sv.className = "sv"; sv.textContent = sensorValues(r);
     lbl.appendChild(sv);
     const val = document.createElement("span"); val.className = "val";
@@ -2340,7 +2407,7 @@ function renderFeature(fn) {
   if (f.readouts && f.readouts.length) {
     const card = document.createElement("div");
     card.className = "card";
-    for (const r of f.readouts) if (!r.show || r.show(s)) card.appendChild(renderReadout(r, s));
+    for (const r of expandReadouts(f.readouts)) if (!r.show || r.show(s)) card.appendChild(renderReadout(r, s));
     app.appendChild(card);
   }
 }

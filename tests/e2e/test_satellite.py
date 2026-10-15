@@ -185,6 +185,9 @@ def _tile_texts(pg):
 
 def test_tiles_and_summary_equal_calictl_for_the_same_frames(stub, error_gated_page):
     _display_only(stub)
+    stub.fixtures["satellite"]["/api/state"].pop(
+        "ext"
+    )  # the unit's frames only: a Govee owns the Vehicle tile
     with error_gated_page(stub.base) as pg:
         expect(pg.get_by_text("Satellite — display only")).to_be_visible()
         satellite = _tile_texts(pg)
@@ -1035,20 +1038,36 @@ def test_auto_camper_toggle_on_a_firmware_that_reports_it(stub, error_gated_page
         expect(pg.get_by_role("switch", name="Auto camper mode")).to_be_disabled()
 
 
-# ---- external sensors (R_FW_SENSORS, #371) ------------------------------------------------------
+# ---- external sensors (R_FW_SENSORS, #371): placed by their type ------------------------------
 
-SENSOR_ROWS = {
-    "en-US": [
-        ("Thermo-hygrometer (Govee)", "govee", "16.5 °C · 58.6 % · 🔋 49 %", "just now"),
-        ("Solar charger (Victron)", "mppt-75-15", "13.21 V · 0.0 A · 0 W · 0.19 kWh · off", "just now"),
-        ("Battery sense (Victron)", "battery-sense", "13.32 V · 17.3 °C", "just now"),
-    ],
-    "de-DE": [
-        ("Thermo-Hygrometer (Govee)", "govee", "16.5 °C · 58.6 % · 🔋 49 %", "gerade eben"),
-        ("Solarladeregler (Victron)", "mppt-75-15", "13.21 V · 0.0 A · 0 W · 0.19 kWh · aus", "gerade eben"),
-        ("Batteriesensor (Victron)", "battery-sense", "13.32 V · 17.3 °C", "gerade eben"),
-    ],
+EXT_LABELS = {
+    "victron_mppt": ("Solar power (Victron)", "Solar yield today"),
+    "victron_battery": ("Battery sensor (Victron)",),
+    "govee": ("Temperature (Govee)", "Humidity"),
 }
+
+
+def _ext(stub, variant):
+    """Swap one of ``ux_gallery.EXT_VARIANTS`` into the satellite's /api/state ext; returns it."""
+    st = stub.fixtures["satellite"]["/api/state"]
+    st["ext"] = json.loads(json.dumps(ux_gallery.EXT_VARIANTS[variant]))
+    return st["ext"]
+
+
+def _readouts(pg):
+    """[(label, value)] of the open screen's readout rows, in order."""
+    pg.wait_for_selector(".row.ro")
+    return [
+        tuple(x)
+        for x in pg.locator(".row.ro").evaluate_all(
+            "rs => rs.map(r => [r.querySelector('.lbl').textContent, r.querySelector('.val').textContent])"
+        )
+    ]
+
+
+def _around(rows, label, before=0, after=0):
+    i = [lbl for lbl, _ in rows].index(label)
+    return rows[i - before : i] if before else rows[i + 1 : i + 1 + after]
 
 
 def _sensor_rows(pg):
@@ -1056,54 +1075,165 @@ def _sensor_rows(pg):
     return pg.locator(".card.sensors .sensor")
 
 
-@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
-def test_sensors_card_shows_the_esps_external_sensors(stub, error_gated_page, locale):
-    """The ESP's ``ext`` readings get their own Sensors card right after the summary card: one row
-    per alias with the type's name, the alias the owner chose, the values with units and the age.
+ENERGY = {
+    "en-US": ("Energy", "Second battery current", "Issues", [("Battery sensor (Victron)", "13.32 V · 17.3 °C")],
+              [("Solar power (Victron)", "off (0 W · 0 A)"), ("Solar yield today", "0.19 kWh")]),
+    "de-DE": ("Energie", "Zweitbatterie-Strom", "Probleme", [("Batteriesensor (Victron)", "13.32 V · 17.3 °C")],
+              [("Solarstrom (Victron)", "aus (0 W · 0 A)"), ("Solarertrag heute", "0.19 kWh")]),
+}  # fmt: skip
+VEHICLE = {
+    "en-US": ("Vehicle", "Vehicle clock", [("Temperature (Govee)", "16.5 °C"), ("Humidity", "59 %")]),
+    "de-DE": ("Fahrzeug", "Fahrzeuguhr", [("Temperatur (Govee)", "16.5 °C"), ("Luftfeuchte", "59 %")]),
+}
 
-    .. test:: The shared UI shows the ESP's external sensors on a Sensors card
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_victron_readings_on_the_energy_screen(stub, error_gated_page, locale):
+    """The ESP's Victron readings join the Energy screen in the unit's own row format: the solar
+    charger's rows before Issues (after the unit's own Solar power row), the battery sensor right
+    after the second battery's current; no Sensors card for known types.
+
+    .. test:: The shared UI places Victron readings on the Energy screen by their type
+       :id: T_SAT_UI_EXT_ENERGY
+       :links: R_FW_SHARED_UI, R_FW_SENSORS
+    """
+    _ext(stub, "all")
+    screen, after, before, battery, solar = ENERGY[locale]
+    with error_gated_page(stub.base, locale=locale) as pg:
+        expect(_sensor_rows(pg)).to_have_count(0)
+        expect(pg.locator(".card.sensors")).to_have_count(0)
+        _open(pg, screen)
+        rows = _readouts(pg)
+        assert _around(rows, after, after=1) == battery
+        assert _around(rows, before, before=2) == solar
+        assert dict(rows)[before] == ("none" if locale == "en-US" else "keine")
+
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_govee_readings_on_the_vehicle_screen_and_tile(stub, error_gated_page, locale):
+    """The Govee's temperature + humidity follow the vehicle clock; its own battery is no row; the
+    Vehicle tile shows the climate.
+
+    .. test:: The shared UI places the Govee on the Vehicle screen and tile
+       :id: T_SAT_UI_EXT_VEHICLE
+       :links: R_FW_SHARED_UI, R_FW_SENSORS
+    """
+    _ext(stub, "all")
+    screen, after, govee = VEHICLE[locale]
+    with error_gated_page(stub.base, locale=locale) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        expect(pg.locator(".tile", has_text=screen).first).to_contain_text("16.5 °C · 59 %")
+        _open(pg, screen)
+        assert _around(_readouts(pg), after, after=2) == govee
+        expect(pg.get_by_text("49 %")).to_have_count(0)  # the sensor's battery is fine: no row, no hint
+
+
+@pytest.mark.parametrize(
+    "variant,types,card",
+    [
+        ("none", (), 0),
+        ("mppt", ("victron_mppt",), 0),
+        ("mppt+battery", ("victron_mppt", "victron_battery"), 0),
+        ("govee", ("govee",), 0),
+        ("all", ("victron_mppt", "victron_battery", "govee"), 0),
+        ("unknown", (), 1),
+    ],
+)
+def test_each_sensor_combination_renders_where_its_type_belongs(stub, error_gated_page, variant, types, card):
+    _ext(stub, variant)
+    want = {lbl for ty in types for lbl in EXT_LABELS[ty]}
+    every = {lbl for v in EXT_LABELS.values() for lbl in v}
+    with error_gated_page(stub.base) as pg:
+        expect(_sensor_rows(pg)).to_have_count(card)
+        govee = "govee" in types
+        expect(pg.locator(".tile", has_text="Vehicle").first).to_contain_text(
+            "16.5 °C · 59 %" if govee else "Ignition"
+        )
+        got = set()
+        for screen in ("Energy", "Vehicle"):
+            _open(pg, screen)
+            got |= {lbl for lbl, _ in _readouts(pg)} & every
+            _home(pg)
+        assert got == want
+
+
+def test_two_solar_chargers_carry_their_alias(stub, error_gated_page):
+    """Two entries of one type: each row's label names its alias, the entries in alias order."""
+    _ext(stub, "two-mppt")
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        _open(pg, "Energy")
+        assert _around(_readouts(pg), "Issues", before=4) == [
+            ("Solar power (Victron) · mppt-100-20", "bulk (87 W · 2.3 A)"),
+            ("Solar yield today · mppt-100-20", "0.42 kWh"),
+            ("Solar power (Victron) · mppt-75-15", "off (0 W · 0 A)"),
+            ("Solar yield today · mppt-75-15", "0.19 kWh"),
+        ]
+
+
+def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
+    """An old reading (> 10 min) keeps its value and carries "🕒 <ago>" (never colour alone); a value
+    not read yet is "—"; a Govee battery below 20 % joins the temperature; a solar charger error
+    joins the Issues row."""
+    ext = _ext(stub, "all")
+    ext["govee"].update(age_s=720, humidity=None, battery=15)
+    ext["mppt-75-15"].update(charge_state=4, error_code=2, pv_power=None)
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        _open(pg, "Vehicle")
+        assert _around(_readouts(pg), "Vehicle clock", after=2) == [
+            ("Temperature (Govee)", "16.5 °C · 🔋 15 % 🕒 12 min ago"),
+            ("Humidity", "— 🕒 12 min ago"),
+        ]
+        _home(pg)
+        expect(pg.locator(".tile", has_text="Vehicle").first).to_contain_text("16.5 °C · — 🕒")
+        _open(pg, "Energy")
+        rows = _readouts(pg)
+        assert _around(rows, "Issues", before=2)[0] == ("Solar power (Victron)", "absorption (— W · 0 A)")
+        assert dict(rows)["Issues"] == "Solar charger error 2"
+
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_sensors_card_shows_only_unknown_types(stub, error_gated_page, locale):
+    """A type this UI does not place (a future firmware's) keeps the Sensors card after the summary:
+    its alias, its raw fields and the age. Known types never appear there.
+
+    .. test:: The shared UI shows unknown external sensor types on a Sensors card
        :id: T_SAT_UI_SENSORS_CARD
        :links: R_FW_SHARED_UI, R_FW_SENSORS
     """
+    _ext(stub, "all").update(ux_gallery.EXT_VARIANTS["unknown"])
     with error_gated_page(stub.base, locale=locale) as pg:
         rows = _sensor_rows(pg)
-        expect(rows).to_have_count(3)
-        for i, (label, alias, values, age) in enumerate(SENSOR_ROWS[locale]):
-            row = rows.nth(i)
-            expect(row.locator(".sname")).to_have_text(label)
-            expect(row.locator(".alias")).to_have_text(alias)
-            expect(row.locator(".sv")).to_have_text(values)
-            expect(row.locator(".val")).to_have_text(age)
-            expect(row).not_to_have_class(re.compile(r"\bstale\b"))
+        expect(rows).to_have_count(1)
+        expect(rows.locator(".sname")).to_have_text("acme")
+        expect(rows.locator(".sv")).to_have_text("co2 800")
+        expect(rows.locator(".val")).to_have_text("just now" if locale == "en-US" else "gerade eben")
         expect(pg.locator(".card.summary + .card.sensors")).to_have_count(1)  # placed after the summary
 
 
-def test_sensors_card_marks_old_and_missing_values(stub, error_gated_page):
-    """An old reading (> 10 min) is muted and carries the 🕒 marker (never colour alone); a value not
-    read yet is "—"; the charge state is a word, a non-zero error code shows; an unknown shape shows
-    its alias."""
-    ext = stub.fixtures["satellite"]["/api/state"]["ext"]
-    ext["govee"].update(age_s=720, humidity=None)
-    ext["mppt-75-15"].update(charge_state=4, error_code=2, pv_power=None)
-    ext["thing"] = {"foo": 1, "age_s": None}
+def test_unknown_sensor_marks_an_old_reading(stub, error_gated_page):
+    ext = _ext(stub, "unknown")
+    ext["acme"].update(age_s=720, co2=None)
     with error_gated_page(stub.base) as pg:
-        rows = _sensor_rows(pg)
-        expect(rows).to_have_count(4)
-        expect(rows.nth(0)).to_have_class(re.compile(r"\bstale\b"))
-        expect(rows.nth(0).locator(".val")).to_have_text("🕒 12 min ago")
-        expect(rows.nth(0).locator(".sv")).to_have_text("16.5 °C · — % · 🔋 49 %")
-        expect(rows.nth(1).locator(".sv")).to_have_text(
-            "13.21 V · 0.0 A · — W · 0.19 kWh · absorption · error 2"
-        )
-        expect(rows.nth(3).locator(".sname")).to_have_text("thing")
-        expect(rows.nth(3).locator(".val")).to_have_text("unknown")
+        row = _sensor_rows(pg).first
+        expect(row).to_have_class(re.compile(r"\bstale\b"))
+        expect(row.locator(".val")).to_have_text("🕒 12 min ago")
+        expect(row.locator(".sv")).to_have_text("co2 —")
 
 
 @pytest.mark.parametrize("mode", ["satellite", "calictl"])
-def test_no_sensors_card_without_ext(stub, error_gated_page, mode):
-    """No ``ext`` (the sensor track off, or calictl's /api/state) -> no Sensors card."""
+def test_no_ext_no_card_no_rows(stub, error_gated_page, mode):
+    """No ``ext`` (the sensor track off, or calictl's /api/state) -> no Sensors card, no sensor rows,
+    the Vehicle tile as before."""
     stub.fixtures["satellite"]["/api/state"].pop("ext")
     stub.mode = mode
+    every = {lbl for v in EXT_LABELS.values() for lbl in v}
     with error_gated_page(stub.base) as pg:
         expect(_sensor_rows(pg)).to_have_count(0)
         expect(pg.locator(".card.sensors")).to_have_count(0)
+        expect(pg.locator(".tile", has_text="Vehicle").first).to_contain_text("Ignition")
+        for screen in ("Energy", "Vehicle"):
+            _open(pg, screen)
+            assert not {lbl for lbl, _ in _readouts(pg)} & every
+            _home(pg)
