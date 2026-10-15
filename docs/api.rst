@@ -164,6 +164,7 @@ Tests
 .. autofunction:: tests.e2e.test_esp_page.test_auto_camper_row_shows_and_switches
 .. autofunction:: tests.e2e.test_esp_page.test_screen_row_shows_state_and_switches
 .. autofunction:: tests.e2e.test_esp_page.test_usage_data_row_shows_and_switches
+.. automodule:: tests.e2e.test_device_sensors
 .. autofunction:: tests.e2e.test_satellite.test_beacons_carry_views_controls_errors_never_values
 .. autofunction:: tests.test_web.test_ux_beacon_recorded_any_content_type
 .. autofunction:: tests.test_influx_fields.test_serve_backend_ux_logs_and_writes

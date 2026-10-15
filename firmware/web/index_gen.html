@@ -24,6 +24,8 @@ label{display:block;margin:10px 0 4px;color:var(--muted)}
 select,input,button{font:inherit;width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
 button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px;cursor:pointer}
 button.secondary{background:transparent;color:var(--accent)}
+button.danger{background:var(--bad);border-color:var(--bad)}
+.acts{display:flex;flex-wrap:wrap;gap:0 8px;align-items:center}.acts>*{flex:1 1 8em}.acts>span,.acts>input{flex-basis:100%;margin-top:8px}
 a{color:var(--accent)}
 #scr input{width:auto;margin-right:6px}#scr button{width:3em;margin:0 8px}
 </style>
@@ -89,7 +91,7 @@ a{color:var(--accent)}
 </main>
 <script>
 const CFG = {pollMs: 2000, connectTimeoutMs: 8000, connectRetryMs: 3000, host: "calictl-esp", ssidMax: 32, pskMin: 8, pskMax: 63};
-const STR = {"ac_armed":{"de":"⟳ wird beim Parken wiederhergestellt","en":"⟳ will restore on park"},"ac_error":{"de":"Auto-Campingmodus konnte nicht geändert werden","en":"Couldn't change auto camper"},"ac_off":{"de":"Auto-Campingmodus aus","en":"Auto camper off"},"ac_on":{"de":"Auto-Campingmodus an","en":"Auto camper on"},"ac_restoring":{"de":"⟳ wird wiederhergestellt …","en":"⟳ restoring …"},"ac_station_only":{"de":"braucht das Heim-WLAN","en":"needs the home WiFi"},"ac_title":{"de":"Campingmodus nach dem Parken wiederherstellen","en":"Restore camping after you park"},"ac_turn_off":{"de":"Ausschalten","en":"Turn off"},"ac_turn_on":{"de":"Einschalten","en":"Turn on"},"app_link":{"de":"Camper-Oberfläche öffnen","en":"Open the camper UI"},"app_link_pair":{"de":"Camper-Oberfläche öffnen, um die Einheit zu koppeln","en":"Open the camper UI to pair the unit"},"batt_charging":{"de":"an USB, lädt","en":"on USB, charging"},"batt_left":{"de":"noch ~{time}","en":"~{time} left"},"batt_on":{"de":"im Akkubetrieb","en":"on battery"},"batt_title":{"de":"Akku","en":"Battery"},"batt_usb":{"de":"an USB","en":"on USB"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"exp_error":{"de":"Schalter konnte nicht geändert werden","en":"Couldn't change the switch"},"exp_hint":{"de":"Schaltet Sensorsuche und -einrichtung frei. Stabile Funktionen hängen nicht davon ab.","en":"Enables the sensor scan and setup. Stable features do not depend on it."},"exp_off":{"de":"Sensoren (experimentell): aus","en":"Sensors (experimental): off"},"exp_on":{"de":"Sensoren (experimentell): an","en":"Sensors (experimental): on"},"exp_title":{"de":"Experimentell","en":"Experimental"},"fw_ch_error":{"de":"Kanal konnte nicht geändert werden","en":"Couldn't change the channel"},"fw_ch_latest":{"de":"neueste (jeder Merge)","en":"latest (every merge)"},"fw_ch_stable":{"de":"stabil (getestet)","en":"stable (tested)"},"fw_channel":{"de":"Kanal","en":"Channel"},"fw_check":{"de":"Nach Update suchen","en":"Check for update"},"fw_install":{"de":"{sha} installieren","en":"Install {sha}"},"fw_running":{"de":"Läuft: {sha}","en":"Running {sha}"},"fw_station_only":{"de":"Updates brauchen das Heim-WLAN.","en":"Updates need the home WiFi."},"fw_title":{"de":"Firmware-Update","en":"Firmware update"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"network":{"de":"Netzwerk","en":"Network"},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"ota_available":{"de":"{sha} ist verfügbar","en":"{sha} is available"},"ota_checking":{"de":"suche …","en":"checking …"},"ota_downloading":{"de":"lade {pct} %","en":"downloading {pct} %"},"ota_error":{"de":"Update fehlgeschlagen ({error})","en":"update failed ({error})"},"ota_rebooting":{"de":"installiert, startet neu …","en":"installed, restarting …"},"ota_up_to_date":{"de":"aktuell","en":"up to date"},"ota_verifying":{"de":"prüfe …","en":"verifying …"},"password":{"de":"Passwort","en":"Password"},"res_cpu":{"de":"CPU {pct} %","en":"CPU {pct} %"},"res_psram":{"de":"PSRAM {free} KB frei","en":"PSRAM {free} KB free"},"res_ram":{"de":"RAM {free} KB frei (Minimum {min})","en":"RAM {free} KB free (lowest {min})"},"res_title":{"de":"Ressourcen","en":"Resources"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"scr_auto":{"de":"Helligkeit nach Raumlicht","en":"Brightness from room light"},"scr_dim":{"de":"gedimmt","en":"dimmed"},"scr_motion":{"de":"Bei Bewegung einschalten","en":"Wake on motion"},"scr_nolux":{"de":"kein Lichtsensor-Wert","en":"no light sensor reading"},"scr_off":{"de":"aus","en":"off"},"scr_offset":{"de":"Helligkeit {n}","en":"Brightness {n}"},"scr_on":{"de":"an","en":"on"},"scr_prox":{"de":"Bei Annäherung einschalten","en":"Wake when a hand is near"},"scr_title":{"de":"Bildschirm","en":"Screen"},"sd_absent":{"de":"Keine SD-Karte","en":"No SD card"},"sd_dropped":{"de":"{n} Einträge verworfen","en":"{n} records dropped"},"sd_error":{"de":"SD-Kartenfehler","en":"SD card error"},"sd_log":{"de":"Log Nr. {seq}","en":"log #{seq}"},"sd_ok":{"de":"SD {free} von {total} GB frei","en":"SD {free} of {total} GB free"},"sd_title":{"de":"Speicher","en":"Storage"},"sens_add":{"de":"Hinzufügen","en":"Add"},"sens_alias":{"de":"Name (a–z, 0–9, -, _)","en":"Name (a–z, 0–9, -, _)"},"sens_confirm_remove":{"de":"{alias} entfernen?","en":"Remove {alias}?"},"sens_err_bad_alias":{"de":"Name vergeben oder ungültig","en":"Name taken or invalid"},"sens_err_bad_key":{"de":"Schlüssel muss 32 Hex-Zeichen haben","en":"Key must be 32 hex digits"},"sens_err_full":{"de":"Sensorliste ist voll (16)","en":"Sensor list is full (16)"},"sens_err_key_mismatch":{"de":"Schlüssel passt nicht zu diesem Gerät","en":"Key does not match this device"},"sens_error":{"de":"Sensoren konnten nicht geändert werden","en":"Couldn't change the sensors"},"sens_hint":{"de":"Sensoren in der Nähe erscheinen unten; füge deine hinzu.","en":"Nearby sensors appear below; add the ones that are yours."},"sens_key":{"de":"Verschlüsselungsschlüssel (32 Hex-Zeichen)","en":"Encryption key (32 hex digits)"},"sens_none":{"de":"Noch keine Sensoren gefunden (die Suche läuft jede Minute).","en":"No sensors found yet (the scan runs every minute)."},"sens_paused":{"de":"Suche pausiert während der Kopplung","en":"Scan paused while pairing"},"sens_remove":{"de":"Entfernen","en":"Remove"},"sens_t_govee":{"de":"Thermo-Hygrometer (Govee)","en":"Thermo-hygrometer (Govee)"},"sens_t_victron_battery":{"de":"Batteriesensor (Victron)","en":"Battery sense (Victron)"},"sens_t_victron_mppt":{"de":"Solarladeregler (Victron)","en":"Solar charger (Victron)"},"sens_title":{"de":"Sensoren","en":"Sensors"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"time_none":{"de":"Keine Zeitquelle · Start Nr. {boot}","en":"No clock source · boot {boot}"},"time_synced":{"de":"Uhr synchronisiert (SNTP) · Start Nr. {boot}","en":"Clock synced (SNTP) · boot {boot}"},"time_unit":{"de":"Uhr der Camper-Einheit · Start Nr. {boot}","en":"Clock from the camper unit · boot {boot}"},"time_waiting":{"de":"Uhr noch nicht synchronisiert · Start Nr. {boot}","en":"Clock not synced yet · boot {boot}"},"title":{"de":"Camper-Einrichtung","en":"Camper setup"},"ux_error":{"de":"Nutzungsdaten konnten nicht geändert werden","en":"Couldn't change usage data"},"ux_off":{"de":"Nutzungsdaten senden: aus","en":"Send usage data: off"},"ux_on":{"de":"Nutzungsdaten senden: an","en":"Send usage data: on"}};
+const STR = {"ac_armed":{"de":"⟳ wird beim Parken wiederhergestellt","en":"⟳ will restore on park"},"ac_error":{"de":"Auto-Campingmodus konnte nicht geändert werden","en":"Couldn't change auto camper"},"ac_off":{"de":"Auto-Campingmodus aus","en":"Auto camper off"},"ac_on":{"de":"Auto-Campingmodus an","en":"Auto camper on"},"ac_restoring":{"de":"⟳ wird wiederhergestellt …","en":"⟳ restoring …"},"ac_station_only":{"de":"braucht das Heim-WLAN","en":"needs the home WiFi"},"ac_title":{"de":"Campingmodus nach dem Parken wiederherstellen","en":"Restore camping after you park"},"ac_turn_off":{"de":"Ausschalten","en":"Turn off"},"ac_turn_on":{"de":"Einschalten","en":"Turn on"},"app_link":{"de":"Camper-Oberfläche öffnen","en":"Open the camper UI"},"app_link_pair":{"de":"Camper-Oberfläche öffnen, um die Einheit zu koppeln","en":"Open the camper UI to pair the unit"},"batt_charging":{"de":"an USB, lädt","en":"on USB, charging"},"batt_left":{"de":"noch ~{time}","en":"~{time} left"},"batt_on":{"de":"im Akkubetrieb","en":"on battery"},"batt_title":{"de":"Akku","en":"Battery"},"batt_usb":{"de":"an USB","en":"on USB"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"exp_error":{"de":"Schalter konnte nicht geändert werden","en":"Couldn't change the switch"},"exp_hint":{"de":"Schaltet Sensorsuche und -einrichtung frei. Stabile Funktionen hängen nicht davon ab.","en":"Enables the sensor scan and setup. Stable features do not depend on it."},"exp_off":{"de":"Sensoren (experimentell): aus","en":"Sensors (experimental): off"},"exp_on":{"de":"Sensoren (experimentell): an","en":"Sensors (experimental): on"},"exp_title":{"de":"Experimentell","en":"Experimental"},"fw_ch_error":{"de":"Kanal konnte nicht geändert werden","en":"Couldn't change the channel"},"fw_ch_latest":{"de":"neueste (jeder Merge)","en":"latest (every merge)"},"fw_ch_stable":{"de":"stabil (getestet)","en":"stable (tested)"},"fw_channel":{"de":"Kanal","en":"Channel"},"fw_check":{"de":"Nach Update suchen","en":"Check for update"},"fw_install":{"de":"{sha} installieren","en":"Install {sha}"},"fw_running":{"de":"Läuft: {sha}","en":"Running {sha}"},"fw_station_only":{"de":"Updates brauchen das Heim-WLAN.","en":"Updates need the home WiFi."},"fw_title":{"de":"Firmware-Update","en":"Firmware update"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"network":{"de":"Netzwerk","en":"Network"},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"ota_available":{"de":"{sha} ist verfügbar","en":"{sha} is available"},"ota_checking":{"de":"suche …","en":"checking …"},"ota_downloading":{"de":"lade {pct} %","en":"downloading {pct} %"},"ota_error":{"de":"Update fehlgeschlagen ({error})","en":"update failed ({error})"},"ota_rebooting":{"de":"installiert, startet neu …","en":"installed, restarting …"},"ota_up_to_date":{"de":"aktuell","en":"up to date"},"ota_verifying":{"de":"prüfe …","en":"verifying …"},"password":{"de":"Passwort","en":"Password"},"res_cpu":{"de":"CPU {pct} %","en":"CPU {pct} %"},"res_psram":{"de":"PSRAM {free} KB frei","en":"PSRAM {free} KB free"},"res_ram":{"de":"RAM {free} KB frei (Minimum {min})","en":"RAM {free} KB free (lowest {min})"},"res_title":{"de":"Ressourcen","en":"Resources"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"scr_auto":{"de":"Helligkeit nach Raumlicht","en":"Brightness from room light"},"scr_dim":{"de":"gedimmt","en":"dimmed"},"scr_motion":{"de":"Bei Bewegung einschalten","en":"Wake on motion"},"scr_nolux":{"de":"kein Lichtsensor-Wert","en":"no light sensor reading"},"scr_off":{"de":"aus","en":"off"},"scr_offset":{"de":"Helligkeit {n}","en":"Brightness {n}"},"scr_on":{"de":"an","en":"on"},"scr_prox":{"de":"Bei Annäherung einschalten","en":"Wake when a hand is near"},"scr_title":{"de":"Bildschirm","en":"Screen"},"sd_absent":{"de":"Keine SD-Karte","en":"No SD card"},"sd_dropped":{"de":"{n} Einträge verworfen","en":"{n} records dropped"},"sd_error":{"de":"SD-Kartenfehler","en":"SD card error"},"sd_log":{"de":"Log Nr. {seq}","en":"log #{seq}"},"sd_ok":{"de":"SD {free} von {total} GB frei","en":"SD {free} of {total} GB free"},"sd_title":{"de":"Speicher","en":"Storage"},"sens_add":{"de":"Hinzufügen","en":"Add"},"sens_alias":{"de":"Name (a–z, 0–9, -, _)","en":"Name (a–z, 0–9, -, _)"},"sens_cancel":{"de":"Abbrechen","en":"Cancel"},"sens_confirm_remove":{"de":"{alias} entfernen?","en":"Remove {alias}?"},"sens_err_bad_alias":{"de":"Name vergeben oder ungültig","en":"Name taken or invalid"},"sens_err_bad_key":{"de":"Schlüssel muss 32 Hex-Zeichen haben","en":"Key must be 32 hex digits"},"sens_err_full":{"de":"Sensorliste ist voll (16)","en":"Sensor list is full (16)"},"sens_err_key_mismatch":{"de":"Schlüssel passt nicht zu diesem Gerät","en":"Key does not match this device"},"sens_error":{"de":"Sensoren konnten nicht geändert werden","en":"Couldn't change the sensors"},"sens_hint":{"de":"Sensoren in der Nähe erscheinen unten; füge deine hinzu.","en":"Nearby sensors appear below; add the ones that are yours."},"sens_key":{"de":"Verschlüsselungsschlüssel (32 Hex-Zeichen)","en":"Encryption key (32 hex digits)"},"sens_none":{"de":"Noch keine Sensoren gefunden (die Suche läuft jede Minute).","en":"No sensors found yet (the scan runs every minute)."},"sens_paused":{"de":"Suche pausiert während der Kopplung","en":"Scan paused while pairing"},"sens_remove":{"de":"Entfernen","en":"Remove"},"sens_rename":{"de":"Umbenennen","en":"Rename"},"sens_save":{"de":"Speichern","en":"Save"},"sens_t_govee":{"de":"Thermo-Hygrometer (Govee)","en":"Thermo-hygrometer (Govee)"},"sens_t_victron_battery":{"de":"Batteriesensor (Victron)","en":"Battery sense (Victron)"},"sens_t_victron_mppt":{"de":"Solarladeregler (Victron)","en":"Solar charger (Victron)"},"sens_title":{"de":"Sensoren","en":"Sensors"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"time_none":{"de":"Keine Zeitquelle · Start Nr. {boot}","en":"No clock source · boot {boot}"},"time_synced":{"de":"Uhr synchronisiert (SNTP) · Start Nr. {boot}","en":"Clock synced (SNTP) · boot {boot}"},"time_unit":{"de":"Uhr der Camper-Einheit · Start Nr. {boot}","en":"Clock from the camper unit · boot {boot}"},"time_waiting":{"de":"Uhr noch nicht synchronisiert · Start Nr. {boot}","en":"Clock not synced yet · boot {boot}"},"title":{"de":"Camper-Einrichtung","en":"Camper setup"},"ux_error":{"de":"Nutzungsdaten konnten nicht geändert werden","en":"Couldn't change usage data"},"ux_off":{"de":"Nutzungsdaten senden: aus","en":"Send usage data: off"},"ux_on":{"de":"Nutzungsdaten senden: an","en":"Send usage data: on"}};
 </script>
 <script>
 "use strict";
@@ -248,8 +250,10 @@ async function toggle(path, id, err, key) {
   if (!ok) msg.textContent = t(err);
 }
 
-const SENS_T = {govee: "sens_t_govee", victron_mppt: "sens_t_victron_mppt", victron_battery: "sens_t_victron_battery"};
+const SENS_T = {govee: ["sens_t_govee", "govee"], victron_mppt: ["sens_t_victron_mppt", "mppt-75-15"],
+  victron_battery: ["sens_t_victron_battery", "battery-sense"]};
 const SENS_ERR = {bad_alias: "sens_err_bad_alias", bad_key: "sens_err_bad_key", key_mismatch: "sens_err_key_mismatch", full: "sens_err_full"};
+const SENS_U = [[/_c$/, "°C"], [/humidity/, "%"], [/^battery$/, "%"], [/voltage/, "V"], [/power/, "W"], [/kwh/, "kWh"], [/current/, "A"]];
 let sensOn = false;
 function renderSensors(d) {
   $("sens").hidden = !(d.experimental && d.experimental.sensors);
@@ -261,32 +265,71 @@ async function pollSensors() {
     setTimeout(pollSensors, 10000);
   }
 }
+function sensVals(v) {
+  const out = [];
+  for (const [k, x] of Object.entries(v || {})) {
+    const i = SENS_U.findIndex(([re]) => /** @type {RegExp} */ (re).test(k));
+    if (i >= 0 && x !== null) out.push([i, x + "\u00a0" + SENS_U[i][1]]);
+  }
+  return out.sort((a, b) => a[0] - b[0]).slice(0, 3).map((e) => e[1]);
+}
+function sensName(value, ph) {
+  const n = el("input");
+  n.value = value;
+  n.placeholder = ph;
+  n.autocapitalize = "none";
+  n.setAttribute("aria-label", t("sens_alias"));
+  return n;
+}
+function sensAlias(n, need) {
+  const a = n.value = n.value.trim().toLowerCase();
+  if ((a || need) && !/^[a-z0-9_-]{1,16}$/.test(a)) { $("sens-msg").textContent = t("sens_err_bad_alias"); return null; }
+  return a;
+}
+function sensAsk(acts, nodes, okKey, okCls, ok) {
+  const old = Array.from(acts.childNodes);
+  acts.className = "acts open";
+  acts.replaceChildren(...nodes);
+  acts.appendChild(el("button", t(okKey), okCls)).onclick = ok;
+  acts.appendChild(el("button", t("sens_cancel"), "secondary")).onclick = () => {
+    acts.className = "acts";
+    acts.replaceChildren(...old);
+    $("sens-msg").textContent = "";
+  };
+}
 function renderSens(s) {
   const cfg = $("sens-cfg"), seen = $("sens-seen");
-  cfg.textContent = "";
+  if ($("sens").querySelector(".open")) return;   /* a confirmation or a name/key being typed */
+  cfg.textContent = seen.textContent = "";
   for (const c of s.configured) {
-    const v = c.value ? Object.entries(c.value).slice(0, 2).map((e) => e.join("=")).join(" ") : "—";
-    const p = cfg.appendChild(el("p", [c.alias, v, c.last_seen_s === null ? "—" : c.last_seen_s + " s"].join(" · ") + " ", "row"));
-    p.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
-      confirm(t("sens_confirm_remove", {alias: c.alias})) && sensPost({remove: c.id});
+    const vals = c.value ? sensVals(c.value) : ["—"];
+    const p = cfg.appendChild(el("p", [t((SENS_T[c.type] || [c.type])[0]), c.alias, ...vals,
+      c.last_seen_s === null ? "—" : c.last_seen_s + " s"].join(" · "), "row"));
+    const acts = p.appendChild(el("span", undefined, "acts"));
+    acts.appendChild(el("button", t("sens_rename"), "secondary")).onclick = () => {
+      const n = sensName(c.alias, "");
+      sensAsk(acts, [n], "sens_save", "", () => { const a = sensAlias(n, true); if (a) sensPost({id: c.id, alias: a}); });
+    };
+    acts.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
+      sensAsk(acts, [el("span", t("sens_confirm_remove", {alias: c.alias}))], "sens_remove", "danger", () => sensPost({remove: c.id}));
   }
-  if (seen.querySelector("input")) return;   /* a key or name being typed */
-  seen.textContent = "";
   if (s.scan === "paused" || !s.seen.length) seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : "sens_none"), "muted"));
   for (const r of s.seen) {
-    const p = seen.appendChild(el("p", [t(SENS_T[r.type] || r.type), r.model, r.rssi + " dBm"].join(" · ") + " ", "row"));
-    const b = p.appendChild(el("button", t("sens_add")));
-    const need = [];
-    if (r.type.startsWith("victron")) need.push(["key", "sens_key", "password"]);
-    if (s.configured.some((c) => c.type === r.type)) need.push(["alias", "sens_alias", "text"]);
-    b.onclick = () => {
-      const ins = p.querySelectorAll("input");
-      const o = {add: r.id};
-      need.forEach(([k, ph, ty], i) => {
-        if (ins[i]) o[k] = ins[i].value;
-        else { const n = p.insertBefore(el("input"), b); n.type = ty; n.placeholder = t(ph); }
+    const p = seen.appendChild(el("p", [t((SENS_T[r.type] || [r.type])[0]), r.model, r.rssi + " dBm"].join(" · "), "row"));
+    const acts = p.appendChild(el("span", undefined, "acts"));
+    acts.appendChild(el("button", t("sens_add"))).onclick = () => {
+      const need = s.configured.some((c) => c.type === r.type), def = (SENS_T[r.type] || [])[1];
+      const n = sensName("", need || !def ? t("sens_alias") : def), nodes = [n];
+      const k = r.type.startsWith("victron") ? el("input") : null;
+      if (k) { k.type = "password"; k.placeholder = t("sens_key"); k.setAttribute("aria-label", t("sens_key")); nodes.push(k); }
+      sensAsk(acts, nodes, "sens_add", "", () => {
+        const a = sensAlias(n, need);
+        if (a === null) return;
+        const o = {add: r.id};
+        if (a) o.alias = a;
+        if (k) o.key = k.value.trim();
+        sensPost(o);
       });
-      if (ins.length === need.length) sensPost(o);
     };
   }
 }
@@ -297,7 +340,7 @@ async function sensPost(o) {
     const r = /** @type {{status: number, body: Sensors}} */ (await fetchJson("/api/sensors", {method: "POST",
       headers: {"Content-Type": "application/json"}, body: JSON.stringify(o)}));
     if (r.status !== 200) { msg.textContent = t(SENS_ERR[r.body.error || ""] || "sens_error"); return; }
-    $("sens-seen").textContent = "";
+    $("sens-cfg").textContent = $("sens-seen").textContent = "";   /* closes the open step */
     renderSens(r.body);
   } catch (e) { msg.textContent = t("sens_error"); }
 }

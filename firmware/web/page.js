@@ -236,10 +236,13 @@ async function toggle(path, id, err, key) {
 }
 
 /* External sensors (R_FW_SENSORS): shown while the flag is on; its own 10 s poll (a GET kicks a window) */
-/** @type {Record<string, string>} */
-const SENS_T = {govee: "sens_t_govee", victron_mppt: "sens_t_victron_mppt", victron_battery: "sens_t_victron_battery"};
+/** type -> [its name's key, its default alias (sensors.c TYPES)] @type {Record<string, string[]>} */
+const SENS_T = {govee: ["sens_t_govee", "govee"], victron_mppt: ["sens_t_victron_mppt", "mppt-75-15"],
+  victron_battery: ["sens_t_victron_battery", "battery-sense"]};
 /** @type {Record<string, string>} */
 const SENS_ERR = {bad_alias: "sens_err_bad_alias", bad_key: "sens_err_bad_key", key_mismatch: "sens_err_key_mismatch", full: "sens_err_full"};
+/* a field name -> its unit, in display order (the rest has none and is not shown here) */
+const SENS_U = [[/_c$/, "°C"], [/humidity/, "%"], [/^battery$/, "%"], [/voltage/, "V"], [/power/, "W"], [/kwh/, "kWh"], [/current/, "A"]];
 let sensOn = false;
 /** @param {Device} d */
 function renderSensors(d) {
@@ -252,36 +255,82 @@ async function pollSensors() {
     setTimeout(pollSensors, 10000);
   }
 }
+/** Up to 3 readings with their units ("16.5 °C"). @param {Record<string, number|null>|null} v @returns {string[]} */
+function sensVals(v) {
+  /** @type {[number, string][]} */
+  const out = [];
+  for (const [k, x] of Object.entries(v || {})) {
+    const i = SENS_U.findIndex(([re]) => /** @type {RegExp} */ (re).test(k));
+    if (i >= 0 && x !== null) out.push([i, x + "\u00a0" + SENS_U[i][1]]);
+  }
+  return out.sort((a, b) => a[0] - b[0]).slice(0, 3).map((e) => e[1]);
+}
+/** A name field. @param {string} value @param {string} ph @returns {HTMLInputElement} */
+function sensName(value, ph) {
+  const n = el("input");
+  n.value = value;
+  n.placeholder = ph;
+  n.autocapitalize = "none";
+  n.setAttribute("aria-label", t("sens_alias"));
+  return n;
+}
+/** The name typed, lowercased; null (and the error shown) when invalid or missing but needed.
+ * @param {HTMLInputElement} n @param {boolean} need @returns {string|null} */
+function sensAlias(n, need) {
+  const a = n.value = n.value.trim().toLowerCase();
+  if ((a || need) && !/^[a-z0-9_-]{1,16}$/.test(a)) { $("sens-msg").textContent = t("sens_err_bad_alias"); return null; }
+  return a;
+}
+/** Swap a row's buttons for an inline step (a question or fields) + OK and Cancel; Cancel puts them back.
+ * The 10 s poll leaves the box alone while one is open (.open).
+ * @param {HTMLElement} acts @param {Node[]} nodes @param {string} okKey @param {string} okCls @param {() => void} ok */
+function sensAsk(acts, nodes, okKey, okCls, ok) {
+  const old = Array.from(acts.childNodes);
+  acts.className = "acts open";
+  acts.replaceChildren(...nodes);
+  acts.appendChild(el("button", t(okKey), okCls)).onclick = ok;
+  acts.appendChild(el("button", t("sens_cancel"), "secondary")).onclick = () => {
+    acts.className = "acts";
+    acts.replaceChildren(...old);
+    $("sens-msg").textContent = "";
+  };
+}
 /** @param {Sensors} s */
 function renderSens(s) {
   const cfg = $("sens-cfg"), seen = $("sens-seen");
-  cfg.textContent = "";
+  if ($("sens").querySelector(".open")) return;   /* a confirmation or a name/key being typed */
+  cfg.textContent = seen.textContent = "";
   for (const c of s.configured) {
-    const v = c.value ? Object.entries(c.value).slice(0, 2).map((e) => e.join("=")).join(" ") : "—";
-    const p = cfg.appendChild(el("p", [c.alias, v, c.last_seen_s === null ? "—" : c.last_seen_s + " s"].join(" · ") + " ", "row"));
-    p.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
-      confirm(t("sens_confirm_remove", {alias: c.alias})) && sensPost({remove: c.id});
+    const vals = c.value ? sensVals(c.value) : ["—"];
+    const p = cfg.appendChild(el("p", [t((SENS_T[c.type] || [c.type])[0]), c.alias, ...vals,
+      c.last_seen_s === null ? "—" : c.last_seen_s + " s"].join(" · "), "row"));
+    const acts = p.appendChild(el("span", undefined, "acts"));
+    acts.appendChild(el("button", t("sens_rename"), "secondary")).onclick = () => {
+      const n = sensName(c.alias, "");
+      sensAsk(acts, [n], "sens_save", "", () => { const a = sensAlias(n, true); if (a) sensPost({id: c.id, alias: a}); });
+    };
+    acts.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
+      sensAsk(acts, [el("span", t("sens_confirm_remove", {alias: c.alias}))], "sens_remove", "danger", () => sensPost({remove: c.id}));
   }
-  if (seen.querySelector("input")) return;   /* a key or name being typed */
-  seen.textContent = "";
   if (s.scan === "paused" || !s.seen.length) seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : "sens_none"), "muted"));
   for (const r of s.seen) {
-    const p = seen.appendChild(el("p", [t(SENS_T[r.type] || r.type), r.model, r.rssi + " dBm"].join(" · ") + " ", "row"));
-    const b = p.appendChild(el("button", t("sens_add")));
-    /* a key type asks for its key, a second one of a type for a name: inputs first, then Add posts */
-    /** @type {string[][]} */
-    const need = [];
-    if (r.type.startsWith("victron")) need.push(["key", "sens_key", "password"]);
-    if (s.configured.some((c) => c.type === r.type)) need.push(["alias", "sens_alias", "text"]);
-    b.onclick = () => {
-      const ins = p.querySelectorAll("input");
-      /** @type {Record<string, string|number>} */
-      const o = {add: r.id};
-      need.forEach(([k, ph, ty], i) => {
-        if (ins[i]) o[k] = ins[i].value;
-        else { const n = p.insertBefore(el("input"), b); n.type = ty; n.placeholder = t(ph); }
+    const p = seen.appendChild(el("p", [t((SENS_T[r.type] || [r.type])[0]), r.model, r.rssi + " dBm"].join(" · "), "row"));
+    const acts = p.appendChild(el("span", undefined, "acts"));
+    /* a name (optional for the first of a type: its default alias), a key type's key; then Add posts */
+    acts.appendChild(el("button", t("sens_add"))).onclick = () => {
+      const need = s.configured.some((c) => c.type === r.type), def = (SENS_T[r.type] || [])[1];
+      const n = sensName("", need || !def ? t("sens_alias") : def), nodes = [n];
+      const k = r.type.startsWith("victron") ? el("input") : null;
+      if (k) { k.type = "password"; k.placeholder = t("sens_key"); k.setAttribute("aria-label", t("sens_key")); nodes.push(k); }
+      sensAsk(acts, nodes, "sens_add", "", () => {
+        const a = sensAlias(n, need);
+        if (a === null) return;
+        /** @type {Record<string, string|number>} */
+        const o = {add: r.id};
+        if (a) o.alias = a;
+        if (k) o.key = k.value.trim();
+        sensPost(o);
       });
-      if (ins.length === need.length) sensPost(o);
     };
   }
 }
@@ -293,7 +342,7 @@ async function sensPost(o) {
     const r = /** @type {{status: number, body: Sensors}} */ (await fetchJson("/api/sensors", {method: "POST",
       headers: {"Content-Type": "application/json"}, body: JSON.stringify(o)}));
     if (r.status !== 200) { msg.textContent = t(SENS_ERR[r.body.error || ""] || "sens_error"); return; }
-    $("sens-seen").textContent = "";
+    $("sens-cfg").textContent = $("sens-seen").textContent = "";   /* closes the open step */
     renderSens(r.body);
   } catch (e) { msg.textContent = t("sens_error"); }
 }
