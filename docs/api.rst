@@ -166,7 +166,10 @@ Tests
 .. autofunction:: tests.e2e.test_esp_page.test_screen_row_shows_state_and_switches
 .. autofunction:: tests.e2e.test_esp_page.test_usage_data_row_shows_and_switches
 .. automodule:: tests.e2e.test_device_sensors
-.. autofunction:: tests.e2e.test_satellite.test_beacons_carry_views_controls_errors_never_values
+.. autofunction:: tests.e2e.test_satellite.test_beacons_carry_views_controls_values_errors
+.. autofunction:: tests.e2e.test_satellite.test_a_control_without_a_value_omits_the_key_and_a_number_is_a_string
+.. autofunction:: tests.e2e.test_satellite.test_secrets_never_reach_a_beacon
+.. autofunction:: tests.test_web.test_ux_control_value_is_optional_printable_ascii_up_to_32
 .. autofunction:: tests.test_web.test_ux_beacon_recorded_any_content_type
 .. autofunction:: tests.test_influx_fields.test_serve_backend_ux_logs_and_writes
 .. autofunction:: tests.test_influx_fields.test_ux_points_identical_events_of_one_beacon_stay_distinct

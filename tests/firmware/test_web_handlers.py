@@ -1529,6 +1529,25 @@ def test_ux_beacon_writes_one_sd_record_per_event(web_cli):
     ]
 
 
+@pytest.mark.parametrize("value", ["3", "on", "21:30", "x" * 32, 'a "q" \\ ~!', '"' * 32])
+def test_ux_control_value_is_recorded_after_the_ids(web_cli, value):
+    """A control's optional ``value`` (printable ASCII 1-32) is recorded as the last member, escapes and
+    all; the worst-case record (32-char sid/fn/control, all-escaped value) still fits the SD record.
+
+    .. test:: ESP POST /api/ux records a control's value, same rules as calictl
+       :id: T_UX_VALUE_ESP
+       :links: R_UX_TELEMETRY
+    """
+    ev = {"type": "control", "fn": "f" * 32, "control": "c" * 32, "value": value}
+    body = _with(sid="a" * 32, ua_class="android", origin="busnet", events=[ev])
+    resps, other = drive(
+        web_cli, [*(s.encode() for s in STATION), b"sdcard", req("POST", "/api/ux", json.dumps(body))]
+    )
+    assert resps[0].status == 204
+    (rec,) = _sd(other)
+    assert list(rec)[10:] == ["type", "fn", "control", "value"] and rec["value"] == value
+
+
 def test_ux_long_error_is_cut_to_fit_the_sd_record(web_cli):
     """A 200-char message full of escapes is cut (never dropped) so the record fits
     CALI_SDLOG_DATA_MAX; the line stays valid JSON."""
@@ -1593,7 +1612,16 @@ def _ev(**e):
         json.dumps(UX)[:-1] + ',"sid":"abcdef12"}',  # a member twice
         json.dumps(_ev(type="view")),
         json.dumps(_ev(type="view", screen="home", value=3)),  # never a value
-        json.dumps(_ev(type="control", fn="cooler", control="level", value="7")),
+        json.dumps(_ev(type="control", fn="cooler", control="level", value=7)),  # a string, not a number
+        json.dumps(_ev(type="control", fn="cooler", control="level", value=None)),  # omit the key instead
+        json.dumps(_ev(type="control", fn="cooler", control="level", value="")),
+        json.dumps(_ev(type="control", fn="cooler", control="level", value="7" * 33)),
+        json.dumps(_ev(type="control", fn="cooler", control="level", value="caf\u00e9")),
+        json.dumps(_ev(type="control", fn="cooler", control="level", value="a\nb")),
+        json.dumps(_ev(type="control", fn="cooler", control="level", value=["7"])),
+        json.dumps(_ev(type="timing", ttfb=1, dcl=1, tiles=1, value="7")),  # only controls carry a value
+        json.dumps(_ev(type="error", msg="x", value="7")),
+        json.dumps(_ev(type="control", fn="cooler", control="level", value="7", extra="x")),
         json.dumps(_ev(type="view", screen="Cooler")),
         json.dumps(_ev(type="view", screen="x" * 33)),
         json.dumps(_ev(type="timing", ttfb=-1, dcl=0, tiles=0)),

@@ -364,10 +364,10 @@ const qKey = (fn, what) => fn + "·" + what;
 const localNow = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 1000);
 const hasWork = () => !!inflight || queue.length > 0;
 
-// --- UX telemetry (R_UX_TELEMETRY): screen views, control ids (NEVER values), load timings and
+// --- UX telemetry (R_UX_TELEMETRY): screen views, control ids + values (no secrets), load timings and
 // script errors, batched into one navigator.sendBeacon("/api/ux") per 10 s + one on pagehide, and
 // only while `_meta.ux` is true (events queued before the first `_meta` wait for it). A random
-// per-tab id held in memory only; no user identity, no values. Telemetry never breaks the page: an
+// per-tab id held in memory only; no user identity, no secrets. Telemetry never breaks the page: an
 // old firmware's 404 is ignored (a beacon has no answer to read), and every step is guarded.
 const UX_FLUSH_MS = 10000, UX_MAX_EVENTS = 16, UX_MAX_BYTES = 1024;   // the ESP's request buffer is 2 KB with headers
 /** @type {Record<string, string|number>[]} */
@@ -1168,7 +1168,12 @@ async function refreshState(force) {
  */
 function command(fn, what, value) {
   if (readOnly()) { toast("Read-only mode — writes are disabled", "warn"); return; }
-  ux({ type: "control", fn: uxId(fn), control: uxId(what) });   // which control, never its value
+  /** @type {Record<string, string|number>} */
+  const ev = { type: "control", fn: uxId(fn), control: uxId(what) };
+  // the value too (printable ASCII, <= 32); secrets never pass through here: the pairing passkey,
+  // WiFi password and sensor keys have their own endpoints
+  if (value !== null && value !== undefined) ev.value = String(value).replace(/[^ -~]/g, "?").slice(0, 32) || "?";
+  ux(ev);
   const key = qKey(fn, what);
   optimistic[key] = value;
   const i = queue.findIndex((c) => c.key === key);   // prune a superseded queued command

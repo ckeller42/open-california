@@ -84,15 +84,20 @@ UX_EVENTS = {
     "timing": ("ttfb", "dcl", "tiles"),
     "error": ("msg",),
 }
+UX_OPTIONAL = {"control": ("value",)}  # keys an event of that type may also carry
+UX_VALUE_MAX = 32
 _UX_ID = re.compile(r"[a-z0-9_.-]{1,32}\Z")
 _UX_SID = re.compile(r"[0-9a-f]{8,32}\Z")
 _UX_MSG = re.compile(r"[ -~]{1,%d}\Z" % UX_MSG_MAX)  # printable ASCII: the page sanitizes first
+_UX_VALUE = re.compile(r"[ -~]{1,%d}\Z" % UX_VALUE_MAX)  # a control's value: printable ASCII
 _UX_INT_MAX = 600000  # ms: a timing beyond 10 min is no page load
 
 
 def _ux_value(key, v):
     if key == "msg":
         return isinstance(v, str) and bool(_UX_MSG.match(v))
+    if key == "value":
+        return isinstance(v, str) and bool(_UX_VALUE.match(v))
     if key in ("ttfb", "dcl", "tiles"):
         return isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= _UX_INT_MAX
     return isinstance(v, str) and bool(_UX_ID.match(v))
@@ -103,8 +108,9 @@ def ux_batch(obj):
 
     ``{"sid": <8-32 hex>, "ua_class": ios|android|mac|other, "standalone": <bool>,
     "origin": lan|busnet|buspi, "events": [<1-16 events>]}``, each event ``{"type": …}`` plus exactly
-    its :data:`UX_EVENTS` keys: ids ``[a-z0-9_.-]{1,32}``, timings ints 0..600000 ms, ``msg`` 1-200
-    printable ASCII chars. No values, no free text beyond an error message. The firmware's
+    its :data:`UX_EVENTS` keys (a ``control`` may also carry ``value``, printable ASCII 1-32 chars): ids ``[a-z0-9_.-]{1,32}``, timings ints 0..600000 ms, ``msg`` 1-200
+    printable ASCII chars. Values only of controls (never a password or PIN: those use their
+    own endpoints), no other free text than an error message. The firmware's
     ``web.c`` ``api_ux`` holds the same rules (``tests/firmware/test_web_handlers.py``).
 
     .. req:: UX telemetry: the web UI's usage beacons, no values, with an off switch
@@ -112,7 +118,7 @@ def ux_batch(obj):
        :status: implemented
        :tags: web, firmware, telemetry
 
-       The web UI shall batch usage events (screen views, control ids — never their values —
+       The web UI shall batch usage events (screen views, control ids and values (never a password or PIN: those never pass through a control) —
        load timings, script errors truncated to 200 chars) with a random per-tab id into at most
        one ``navigator.sendBeacon('/api/ux')`` per 10 s plus one on ``pagehide``, and only while
        ``_meta.ux`` is true; a missing endpoint shall never break the page. calictl shall validate
@@ -137,7 +143,12 @@ def ux_batch(obj):
         return None
     for e in evs:
         keys = UX_EVENTS.get(str(e.get("type"))) if isinstance(e, dict) else None
-        if keys is None or set(e) != {"type", *keys} or not all(_ux_value(k, e[k]) for k in keys):
+        if keys is None:
+            return None
+        opt = UX_OPTIONAL.get(e["type"], ())
+        if not {"type", *keys} <= set(e) <= {"type", *keys, *opt} or not all(
+            _ux_value(k, e[k]) for k in set(e) - {"type"}
+        ):
             return None
     return obj
 
