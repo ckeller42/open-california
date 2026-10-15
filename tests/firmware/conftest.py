@@ -134,6 +134,11 @@ def _fw_controller_class():
       unit sees a supervision timeout; Bumble's controller outlives the TCP host and keeps the link
       up, so the fake unit would never advertise again. ``host_gone()`` drops
       every link (Connection Timeout to the peer) and forgets the pending connection and the list.
+
+    Test knobs: ``hold_connects``, ``cancel_delay_s`` / ``connect_on_cancel`` (a cancel of a held
+    connection), and ``disconnect_delay_s`` — the peer learns of a host Disconnect at once (and
+    re-advertises) but the host's Disconnection Complete arrives this much later, as a real
+    controller ends a link at a connection event (#381).
     """
     import asyncio
 
@@ -152,6 +157,7 @@ def _fw_controller_class():
             # completes first and the cancel is refused (the race a real radio can lose)
             self.cancel_delay_s = 0.0
             self.connect_on_cancel = False
+            self.disconnect_delay_s = 0.0  # Disconnection Complete to the host this much later
             self._last_rpa = None  # the latest resolvable advertiser address seen
 
         # -- resolving list ----------------------------------------------------------------
@@ -237,6 +243,21 @@ def _fw_controller_class():
             # after this command's Command Complete (send_hci_packet itself defers with call_soon)
             asyncio.get_running_loop().call_later(self.cancel_delay_s, self.send_hci_packet, done)
             return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.SUCCESS)
+
+        # -- disconnect: the host hears late (#381) ------------------------------------------
+        def on_hci_disconnect_command(self, command):
+            conn = self.find_le_connection_by_handle(command.connection_handle)
+            if not self.disconnect_delay_s or conn is None:
+                return super().on_hci_disconnect_command(command)
+            self._send_hci_command_status(hci.HCI_COMMAND_STATUS_PENDING, command.op_code)
+            conn.send_ll_control_pdu(ll.TerminateInd(command.reason))  # the unit learns at once
+
+            def complete():
+                if self.le_connections.get(conn.peer_address) is conn:
+                    self.on_le_disconnected(conn, command.reason)
+
+            asyncio.get_running_loop().call_later(self.disconnect_delay_s, complete)
+            return None
 
         # -- the host went away (process exit = ESP reboot) -----------------------------------
         def host_gone(self):

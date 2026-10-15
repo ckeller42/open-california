@@ -15,7 +15,9 @@
  * A read/heartbeat of a char not yet in the table (e.g. the 1004 verify read right after pairing)
  * first looks it up with ble_gattc_disc_chrs_by_uuid.
  * disconnect() during a connect cancels it; until that cancel's CONNECT event arrives a scan is
- * deferred (NimBLE refuses it) and a link that completed anyway is dropped. A GATT op that fails
+ * deferred (NimBLE refuses it) and a link that completed anyway is dropped. A connect while our own
+ * dropped link still holds NimBLE's one connection slot (its DISCONNECT not yet in) waits for that
+ * drop, then starts (#381). A GATT op that fails
  * ENOTCONN (the link is going down) is not reported: the queue is dropped and DISCONNECTED follows.
  * scan_window() (R_FW_SENSORS) runs a passive ble_gap_disc of its own: refused while the runner's
  * scan or a connect is under way, cancelled by either (a connect, start_scan), and its reports with
@@ -77,6 +79,10 @@ static int s_scanning, s_found;
 static ble_addr_t s_found_addr;
 static int s_connecting, s_connect_cancelled;
 static int s_scan_deferred;                 /* start_scan() while our connect cancel is in flight */
+static uint16_t s_dying_conn = BLE_HS_CONN_HANDLE_NONE;   /* a link we terminated, until its DISCONNECT */
+static int s_connect_deferred;              /* connect_to() waits for s_dying_conn's drop (#381) */
+static ble_addr_t s_deferred_addr;
+static int s_deferred_enc;
 static int s_window;                        /* a passive scan window is open (sensors, R_FW_SENSORS):
                                                DISC reports go out as CALI_TEV_ADV */
 static int s_encrypt_on_connect;            /* connect_bonded(): re-encrypt once the link is up */
@@ -101,6 +107,7 @@ static char s_identity[18];
 static int gap_cb(struct ble_gap_event *ev, void *arg);
 static void op_kick(void);
 static void scan_deferred(void);
+static void connect_deferred(void);
 
 /* ---- helpers ------------------------------------------------------------------------------- */
 
@@ -491,6 +498,7 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
             /* Connected before our cancel landed: nobody wants this link (disconnect() already
              * reported it gone) — end it, then run the scan that waited for the cancel. */
             s_connect_cancelled = 0;
+            s_dying_conn = ev->connect.conn_handle;
             ble_gap_terminate(ev->connect.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
             scan_deferred();
         } else if (ev->connect.status == 0) {
@@ -507,11 +515,18 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
             s_connect_cancelled = 0;                        /* our own disconnect(): silent */
             scan_deferred();
         } else {
+            cali_log("ble: connect failed (0x%02x)", log_code(ev->connect.status));
             emit(CALI_TEV_CONNECT_FAIL, ev->connect.status, 0, NULL, 0, NULL);
         }
         return 0;
     case BLE_GAP_EVENT_DISCONNECT:
+        if (ev->disconnect.conn.conn_handle == s_dying_conn) {    /* our own drop: the slot is free */
+            s_dying_conn = BLE_HS_CONN_HANDLE_NONE;
+            connect_deferred();
+            return 0;
+        }
         if (ev->disconnect.conn.conn_handle != s_conn) return 0;  /* a link we already dropped */
+        cali_log("ble: link dropped (0x%02x)", log_code(ev->disconnect.reason));
         if (s_probing && auth_failure(ev->disconnect.reason)) {
             cali_log("pair: the stored bond is stale (link dropped, reason 0x%02x): dropping it",
                      log_code(ev->disconnect.reason));
@@ -519,6 +534,19 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
         }
         link_reset();
         emit(CALI_TEV_DISCONNECTED, ev->disconnect.reason, 0, NULL, 0, NULL);
+        return 0;
+    case BLE_GAP_EVENT_TERM_FAILURE:
+        /* The controller refused our terminate: the link stays and so does its slot. Give up the
+         * wait and fail the deferred connect (its retry scans again) rather than hang on a
+         * DISCONNECT that never comes (review, #383). */
+        if (ev->term_failure.conn_handle != s_dying_conn) return 0;
+        cali_log("ble: terminate failed (0x%02x)", log_code(ev->term_failure.status));
+        s_dying_conn = BLE_HS_CONN_HANDLE_NONE;
+        if (s_connect_deferred) {
+            s_connect_deferred = 0;
+            s_connecting = 0;
+            emit(CALI_TEV_CONNECT_FAIL, ev->term_failure.status, 0, NULL, 0, NULL);
+        }
         return 0;
     case BLE_GAP_EVENT_PASSKEY_ACTION:
         if (ev->passkey.conn_handle != s_conn) return 0;
@@ -631,17 +659,39 @@ static int t_stop_scan(void) {
     return rc == BLE_HS_EALREADY ? 0 : rc;
 }
 
-static int connect_to(const ble_addr_t *addr) {
+/* encrypt: re-encrypt with the stored bond once connected (connect_bonded). */
+static int connect_to(const ble_addr_t *addr, int encrypt) {
     if (s_conn != BLE_HS_CONN_HANDLE_NONE || s_connecting) return BLE_HS_EALREADY;
     if (s_connect_cancelled) return BLE_HS_EBUSY;   /* our cancel has not landed yet */
+    if (s_dying_conn != BLE_HS_CONN_HANDLE_NONE) {
+        /* #381: our terminate is asynchronous and the link keeps NimBLE's one connection slot
+         * until its DISCONNECT (else BLE_HS_ENOMEM); the unit re-advertises at once, so a re-pair
+         * on a live session lands here. Report a connect in flight; DISCONNECT starts it. */
+        cali_log("ble: connect waits for our drop to complete");
+        s_deferred_addr = *addr;
+        s_deferred_enc = encrypt;
+        s_connect_deferred = 1;
+        s_connecting = 1;
+        return 0;
+    }
     if (s_window) {                                 /* NimBLE refuses a connect while discovering: */
         ble_gap_disc_cancel();                      /* the unit's link wins over a sensor window */
         s_window = 0;
     }
-    s_encrypt_on_connect = 0;
+    s_encrypt_on_connect = encrypt;
     int rc = ble_gap_connect(s_own_addr_type, addr, CONNECT_TIMEOUT_MS, NULL, gap_cb, NULL);
     s_connecting = rc == 0;
+    if (rc != 0) cali_log("ble: connect refused (%d)", rc);
     return rc;
+}
+
+/* The connect connect_to() deferred, now that our dropped link freed the slot. */
+static void connect_deferred(void) {
+    if (!s_connect_deferred) return;
+    s_connect_deferred = 0;
+    s_connecting = 0;
+    int rc = connect_to(&s_deferred_addr, s_deferred_enc);
+    if (rc != 0) emit(CALI_TEV_CONNECT_FAIL, rc, 0, NULL, 0, NULL);
 }
 
 static int first_bond(ble_addr_t *out) {
@@ -732,20 +782,17 @@ static int t_connect_found(void) {
     if (!s_found) return BLE_HS_ENOENT;
     if (found_is_bonded(&id)) {
         cali_log("pair: the unit found is our bonded peer, connecting by its identity");
-        return connect_to(&id);
+        return connect_to(&id, 0);
     }
-    return connect_to(&s_found_addr);
+    return connect_to(&s_found_addr, 0);
 }
 
 /* The stored identity address; NimBLE resolves the unit's rotating RPA through the bond's IRK. */
 static int t_connect_bonded(void) {
     ble_addr_t id;
     int rc = first_bond(&id);
-    if (rc == 0) rc = connect_to(&id);
-    if (rc == 0) {
-        s_encrypt_on_connect = 1;
-        cali_log("ble: connect_bonded started");     /* a reconnect attempt is pending */
-    }
+    if (rc == 0) rc = connect_to(&id, 1);
+    if (rc == 0) cali_log("ble: connect_bonded started");   /* a reconnect attempt is pending */
     return rc;
 }
 
@@ -825,6 +872,11 @@ static int t_write(uint16_t short_id, const uint8_t *data, size_t len) {
 }
 
 static int t_disconnect(void) {
+    if (s_connect_deferred) {       /* nothing started in NimBLE yet: just forget it */
+        s_connect_deferred = 0;
+        s_connecting = 0;
+        return 0;
+    }
     if (s_connecting) {
         s_connecting = 0;
         int rc = ble_gap_conn_cancel();
@@ -837,7 +889,9 @@ static int t_disconnect(void) {
     if (s_conn == BLE_HS_CONN_HANDLE_NONE) return 0;
     uint16_t h = s_conn;
     link_reset();                   /* our own drop: its DISCONNECT event is not reported */
+    s_dying_conn = h;               /* ... but frees the connection slot (connect_to waits) */
     int rc = ble_gap_terminate(h, BLE_ERR_REM_USER_CONN_TERM);
+    if (rc != 0 && rc != BLE_HS_EALREADY) s_dying_conn = BLE_HS_CONN_HANDLE_NONE;   /* no DISCONNECT follows */
     return rc == BLE_HS_ENOTCONN ? 0 : rc;
 }
 
@@ -923,7 +977,8 @@ static void on_sync(void) {
 static void on_reset(int reason) {
     cali_log("ble: host reset %d", reason);
     s_scanning = s_connecting = s_window = 0;
-    s_connect_cancelled = s_scan_deferred = 0;
+    s_connect_cancelled = s_scan_deferred = s_connect_deferred = 0;
+    s_dying_conn = BLE_HS_CONN_HANDLE_NONE;
     link_reset();
 }
 
