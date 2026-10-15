@@ -208,10 +208,10 @@ DISPLAY_ON = {
 }
 
 
-# /api/state ext while exp_sensors is on (R_FW_SENSORS): one sensor of each type, by default alias
+# /api/state ext while exp_sensors is on (R_FW_SENSORS): one sensor of each type, by default alias (= its type id)
 EXT_SENSORS = {
     "govee": {"type": "govee", "temp_c": 16.5, "humidity": 58.6, "battery": 49, "age_s": 6},
-    "mppt-75-15": {
+    "victron_mppt": {
         "type": "victron_mppt",
         "battery_current": 0,
         "battery_voltage": 13.21,
@@ -222,18 +222,13 @@ EXT_SENSORS = {
         "yield_today_kwh": 0.19,
         "age_s": 7,
     },
-    "battery-sense": {
+    "victron_battery": {
         "type": "victron_battery",
         "battery_voltage": 13.32,
         "temperature_c": 17.25,
         "age_s": 7,
     },
 }
-SENS_DEFAULT_ALIAS = {
-    "govee": "govee",
-    "victron_mppt": "mppt-75-15",
-    "victron_battery": "battery-sense",
-}  # sensors.c
 MPPT_100_20 = {  # a second solar charger (a two-MPPT van)
     "type": "victron_mppt",
     "battery_current": 2.3,
@@ -249,9 +244,9 @@ MPPT_100_20 = {  # a second solar charger (a two-MPPT van)
 # tests/e2e/test_satellite.py swaps one into the satellite fixture's /api/state.
 EXT_VARIANTS = {
     "none": {},
-    "mppt": {"mppt-75-15": EXT_SENSORS["mppt-75-15"]},
-    "mppt+battery": {k: EXT_SENSORS[k] for k in ("mppt-75-15", "battery-sense")},
-    "two-mppt": {"mppt-75-15": EXT_SENSORS["mppt-75-15"], "mppt-100-20": MPPT_100_20},
+    "mppt": {"victron_mppt": EXT_SENSORS["victron_mppt"]},
+    "mppt+battery": {k: EXT_SENSORS[k] for k in ("victron_mppt", "victron_battery")},
+    "two-mppt": {"dach": EXT_SENSORS["victron_mppt"], "heck": MPPT_100_20},
     "govee": {"govee": EXT_SENSORS["govee"]},
     "all": EXT_SENSORS,
     "unknown": {"acme": {"type": "acme_gas", "co2": 800, "age_s": 5}},  # a type this UI does not know
@@ -589,7 +584,7 @@ class EspStub:
                 bad = "unknown_id"
             elif alias is None and any(c["type"] == r["type"] for c in cfg):
                 bad = "bad_alias"  # the default alias only for the first of a type
-            elif taken(alias or SENS_DEFAULT_ALIAS.get(r["type"], r["type"])):
+            elif taken(alias or r["type"]):
                 bad = "bad_alias"
             elif (r["type"].startswith("victron") or key is not None) and not re.fullmatch(
                 r"[0-9a-fA-F]{32}", key or ""
@@ -602,7 +597,7 @@ class EspStub:
                     {
                         "id": r["id"],
                         "type": r["type"],
-                        "alias": alias or SENS_DEFAULT_ALIAS.get(r["type"], r["type"]),
+                        "alias": alias or r["type"],
                         "last_seen_s": None,
                         "value": None,
                         "has_key": key is not None,

@@ -24,7 +24,6 @@ typedef struct {
     const char *id;
     uint16_t mfr;
     int needs_key;
-    const char *default_alias;
     const char *const *fields;
     uint8_t nfields;
     int (*match)(const uint8_t *adv, size_t len);   /* NULL: the mfr id alone decides */
@@ -161,10 +160,10 @@ static const char *const MPPT_F[] = {"battery_current", "battery_voltage", "char
                                      "load_current", "pv_power", "yield_today_kwh"};
 static const char *const VBATT_F[] = {"battery_voltage", "temperature_c"};
 static const sens_type_t TYPES[] = {   /* the index is the NVS type: append only */
-    {"govee", 0xEC88, 0, "govee", GOVEE_F, 3, NULL, decode_govee},
-    {"victron_mppt", 0x02E1, 1, "mppt-75-15", MPPT_F, 7, match_victron_mppt, decode_victron_mppt},
-    {"victron_battery", 0x02E1, 1, "battery-sense", VBATT_F, 2, match_victron_battery, decode_victron_battery},
-    {"govee", 0x0001, 0, "govee", GOVEE_F, 3, match_govee_0001, decode_govee_0001},   /* GV5179 & co. */
+    {"govee", 0xEC88, 0, GOVEE_F, 3, NULL, decode_govee},
+    {"victron_mppt", 0x02E1, 1, MPPT_F, 7, match_victron_mppt, decode_victron_mppt},
+    {"victron_battery", 0x02E1, 1, VBATT_F, 2, match_victron_battery, decode_victron_battery},
+    {"govee", 0x0001, 0, GOVEE_F, 3, match_govee_0001, decode_govee_0001},   /* GV5179 & co. */
 };
 #define NTYPES (sizeof TYPES / sizeof TYPES[0])
 
@@ -407,7 +406,7 @@ int cali_sensors_add(uint16_t id, const char *alias, const char *key_hex, uint64
     if (!alias) {   /* the default alias only for the first sensor of its type */
         for (int i = 0; i < s_cfg.n; i++)
             if (s_cfg.e[i].type == s_seen[row].type) return CALI_SENS_E_ALIAS;
-        alias = t->default_alias;
+        alias = t->id;   /* the type id is a valid alias */
     }
     if (alias_ok(alias, -1) != 0) return CALI_SENS_E_ALIAS;
     sens_cfg_t c;

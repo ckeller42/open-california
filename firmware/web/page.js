@@ -266,9 +266,8 @@ async function toggle(path, id, err, key, msgId) {
 }
 
 /* External sensors (R_FW_SENSORS): shown while the flag is on; its own 10 s poll (a GET kicks a window) */
-/** type -> [its name's key, its default alias (sensors.c TYPES)] @type {Record<string, string[]>} */
-const SENS_T = {govee: ["sens_t_govee", "govee"], victron_mppt: ["sens_t_victron_mppt", "mppt-75-15"],
-  victron_battery: ["sens_t_victron_battery", "battery-sense"]};
+/** type -> its name's key @type {Record<string, string>} */
+const SENS_T = {govee: "sens_t_govee", victron_mppt: "sens_t_victron_mppt", victron_battery: "sens_t_victron_battery"};
 /** @type {Record<string, string>} */
 const SENS_ERR = {bad_alias: "sens_err_bad_alias", bad_key: "sens_err_bad_key", key_mismatch: "sens_err_key_mismatch", full: "sens_err_full"};
 /* a field name -> its unit, in display order (the rest has none and is not shown here) */
@@ -345,7 +344,7 @@ function renderSens(s) {
   cfg.textContent = seen.textContent = "";
   for (const c of s.configured) {
     const vals = c.value ? sensVals(c.value) : ["—"];
-    const p = cfg.appendChild(el("p", [t((SENS_T[c.type] || [c.type])[0]), c.alias, ...vals,
+    const p = cfg.appendChild(el("p", [t(SENS_T[c.type] || c.type), c.alias, ...vals,
       c.last_seen_s === null ? "—" : c.last_seen_s + " s"].join(" · "), "row"));
     const acts = p.appendChild(el("span", undefined, "acts"));
     acts.appendChild(el("button", t("sens_rename"), "secondary")).onclick = () => {
@@ -359,12 +358,12 @@ function renderSens(s) {
   if (s.scan === "paused" || !s.seen.length)
     seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : s.configured.length ? "sens_none_more" : "sens_none"), "muted"));
   for (const r of s.seen) {
-    const p = seen.appendChild(el("p", [t((SENS_T[r.type] || [r.type])[0]), r.model, r.rssi + " dBm"].join(" · "), "row"));
+    const p = seen.appendChild(el("p", [t(SENS_T[r.type] || r.type), r.model, r.rssi + " dBm"].join(" · "), "row"));
     const acts = p.appendChild(el("span", undefined, "acts"));
     /* a name (optional for the first of a type: its default alias), a key type's key; then Add posts */
     acts.appendChild(el("button", t("sens_add"))).onclick = () => {
-      const need = s.configured.some((c) => c.type === r.type), def = (SENS_T[r.type] || [])[1];
-      const n = sensName("", need || !def ? t("sens_alias") : def), nodes = [n];
+      const need = s.configured.some((c) => c.type === r.type);
+      const n = sensName("", need ? t("sens_alias") : r.type), nodes = [n];
       const k = r.type.startsWith("victron") ? el("input") : null;
       if (k) { k.autocomplete = "off"; k.spellcheck = false; k.placeholder = t("sens_key"); k.setAttribute("aria-label", t("sens_key")); nodes.push(k); }
       ask(acts, nodes, "sens_add", "", () => {

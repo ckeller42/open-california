@@ -355,7 +355,7 @@ never fails the verdict.
 | 7 | `heap_min` | `heap_min` is at least 32768 B in every `esp_diag` sample |
 | 8 | `screen` | always SKIP until an `evt display` record exists (reserved, see [firmware](firmware.md)) |
 | 9 | `i2c_timeouts` | `esp_log` lines with `i2c.master` and `timeout`: at most 2 per 24 h |
-| 10 | `sensors` | for each ESP sensor alias (`govee`, `mppt-75-15`, `battery-sense`) whose `/api/state` `ext` reading and buspi's own last point (no `source` tag) are both at most 5 min old: `battery_voltage` within 0.05 V, `temp_c`/`temperature_c` within 0.5 °C, `humidity` within 2 %, `battery` within 5; a FAIL names `alias.field esp=… buspi=…` (SKIP when nothing is comparable) |
+| 10 | `sensors` | for each ESP sensor alias (`ext.<alias>` paired by its `type`) whose `/api/state` `ext` reading and buspi's own last point (no `source` tag) are both at most 5 min old: `battery_voltage` within 0.05 V, `temp_c`/`temperature_c` within 0.5 °C, `humidity` within 2 %, `battery` within 5; a FAIL names `alias.field esp=… buspi=…` (SKIP when nothing is comparable) |
 
 Requirement `R_SOAK_REPORT` (in the script's docstring, `docs/api.rst`).
 

@@ -171,9 +171,20 @@ def test_fw_unreachable_or_no_boot_skips():
 
 
 ESP_EXT = {
-    "govee": {"temp_c": 20.5, "humidity": 59.1, "battery": 50, "age_s": 12},
-    "mppt-75-15": {"battery_voltage": 13.52, "battery_current": 2.3, "pv_power": 87, "age_s": 30},
-    "battery-sense": {"battery_voltage": 12.98, "temperature_c": 25.0, "age_s": 40},
+    "govee": {"type": "govee", "temp_c": 20.5, "humidity": 59.1, "battery": 50, "age_s": 12},
+    "victron_mppt": {
+        "type": "victron_mppt",
+        "battery_voltage": 13.52,
+        "battery_current": 2.3,
+        "pv_power": 87,
+        "age_s": 30,
+    },
+    "victron_battery": {
+        "type": "victron_battery",
+        "battery_voltage": 12.98,
+        "temperature_c": 25.0,
+        "age_s": 40,
+    },
 }
 BUSPI = {
     "govee": {"temp_c": 20.7, "humidity": 58.0, "battery": 50.0, "age_s": 20},
@@ -184,24 +195,31 @@ BUSPI = {
 
 def test_sensors_match_passes():
     v, detail = by_name(soak.evaluate(data(ext=ESP_EXT, buspi_sensors=BUSPI)))["sensors"]
-    assert v == "PASS" and detail.startswith("6 fields")  # 3 govee + 1 mppt voltage + 2 battery-sense
+    assert v == "PASS" and detail.startswith("6 fields")  # 3 govee + 1 mppt voltage + 2 victron_battery
 
 
 def test_sensors_pair_by_type_not_alias():
     """A renamed sensor still meets buspi's measurement: the entry's ``type`` names it."""
     ext = {
-        "kitchen": {**ESP_EXT["govee"], "type": "govee"},
-        "roof-mppt": {**ESP_EXT["mppt-75-15"], "type": "victron_mppt"},
+        "kitchen": ESP_EXT["govee"],
+        "roof-mppt": ESP_EXT["victron_mppt"],
     }
     v, detail = by_name(soak.evaluate(data(ext=ext, buspi_sensors=BUSPI)))["sensors"]
     # 3 govee + 1 mppt voltage; type itself is never compared
     assert v == "PASS" and detail.startswith("4 fields")
 
 
+def test_sensors_without_type_are_skipped():
+    """No alias guessing: an entry without ``type`` has no measurement to pair with."""
+    ext = {k: {f: v for f, v in e.items() if f != "type"} for k, e in ESP_EXT.items()}
+    v, _ = by_name(soak.evaluate(data(ext=ext, buspi_sensors=BUSPI)))["sensors"]
+    assert v == "SKIP"
+
+
 def test_sensors_voltage_delta_fails_naming_the_field():
     bad = {**BUSPI, "victron_mppt": {"battery_voltage": 13.22, "age_s": 25}}
     v, detail = by_name(soak.evaluate(data(ext=ESP_EXT, buspi_sensors=bad)))["sensors"]
-    assert v == "FAIL" and "mppt-75-15.battery_voltage esp=13.52 buspi=13.22" in detail
+    assert v == "FAIL" and "victron_mppt.battery_voltage esp=13.52 buspi=13.22" in detail
 
 
 def test_sensors_small_live_voltage_gap_passes():
