@@ -1951,10 +1951,11 @@ const extStale = (e) => typeof e.age_s !== "number" || e.age_s > SENSOR_STALE_S;
 /** Rows per external sensor type: [label, value of one entry]. Labels go through t() on render.
  * @type {Record<string, { rows: [string, (e: SensorReading) => string][] }>} */
 const EXT_TYPES = {
-  // The unit's own "Solar power" format: charge state word (W · A)
+  // The unit's own "Solar power" format, charge state word (W · A), plus the battery voltage the
+  // charger measures (owner decision 2026-10-15)
   victron_mppt: { rows: [
     ["Solar power", (e) => `${typeof e.charge_state === "number" ? t(CHARGE_STATES[e.charge_state] || String(e.charge_state)) : "—"}`
-      + ` (${raw(e.pv_power)} W · ${raw(e.battery_current)} A)`],
+      + ` (${raw(e.pv_power)} W · ${raw(e.battery_current)} A · ${fix(e.battery_voltage, 1, " V")})`],
     ["Solar yield today", (e) => fix(e.yield_today_kwh, 2, " kWh")],
   ] },
   victron_battery: { rows: [
