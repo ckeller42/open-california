@@ -8,6 +8,11 @@ description: Use when editing the calictl web UI (calictl/webui/*.js, strings.de
 The UI is **un-built JS** served by calictl on buspi **and** compiled into the ESP firmware. No
 bundler catches mistakes, so the gates below are the only safety net.
 
+- **The ESP serves ONE UI** (this one, at `/` in every WiFi mode). Satellite-only screens — Satellite
+  settings (`satsettings`) and WiFi setup (`wifisetup`) — live in `app.js` and show only when the
+  satellite flavour is detected (`satellite()`). `/device` (`firmware/web/index.html`) is a minimal
+  WiFi recovery page: never add features there.
+
 ## Gates (all must pass)
 
 | Gate | Command | Why |
@@ -25,6 +30,9 @@ bundler catches mistakes, so the gates below are the only safety net.
   (`decompile-app` skill, "Localized UI strings"; tables on buspi). Copy label strings only, never code.
 - Only when the app has no string: write a proposal and list it in the PR body for the owner.
 - `t()` keys must exist in `strings.de.js` (`tests/test_i18n_de.py`); `tf()` for `{n}` templates.
+- Glossary (owner 2026-10-15), EN/DE: camper unit/Camper-Einheit; satellite/Satellit (never "Gerät");
+  pair/koppeln, pairing/Kopplung; connect/verbinden = WiFi only; "Satellite settings"/"Satellit-Einstellungen";
+  "Pair now"/"Jetzt koppeln".
 
 ## UI behaviour rules
 
@@ -35,6 +43,12 @@ bundler catches mistakes, so the gates below are the only safety net.
 - **Optimistic overlay** for a sent value until the command completes, then show the unit's state.
   A re-render must not reset a field from stale state while a command is in flight.
 - **Gate like the app** (greyed + reason) but the server gate in `command_precondition` is the real one.
+- **Screens are history entries:** `goto()` pushes state, the URL hash names the screen (`#devicestatus`,
+  `#satsettings`, `#<function>`; a reload stays there), back/swipe stay in the app; `#pair` is an action.
+- **Pairing lives in exactly three places:** the unpaired banner, Device status' Camper-unit card, the
+  satsettings Camper-unit box — never in the ⋮ menu.
+- **External sensors** (`ext`) are placed by `type` via `EXT_TYPES` (Energy: Victron, Vehicle: Govee);
+  rows lead with the alias, a default alias (= the type id) shows no prefix; power rows read "W · A · V".
 
 ## Review lens
 
