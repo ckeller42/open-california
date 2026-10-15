@@ -1937,7 +1937,7 @@ function renderSummary() {
 // satellite reports `ext`, so buspi's page shows neither.
 // Victron's charger states the solar charger reports most (VictronConnect's words)
 /** @type {Record<number, string>} */
-const CHARGE_STATES = { 0: "off", 3: "bulk", 4: "absorption", 5: "float" };
+const CHARGE_STATES = { 0: "off", 2: "fault", 3: "bulk", 4: "absorption", 5: "float", 6: "storage", 7: "equalize" };
 const SENSOR_STALE_S = 600;   // the firmware's /api/sensors drops a reading this old too
 const LOW_SENSOR_BATTERY = 20;   // % — below it the Govee's battery joins its temperature row
 

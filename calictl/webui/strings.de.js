@@ -261,6 +261,9 @@ window.STRINGS_DE = {
   "bulk": "Konstantstrom",
   "absorption": "Konstantspannung",
   "float": "Erhaltungsladung",
+  "storage": "Lagerung",
+  "equalize": "Ausgleichsladung",
+  "fault": "Fehler",
   "error {n}": "Fehler {n}",
 
   // --- energy --------------------------------------------------------------------------------
