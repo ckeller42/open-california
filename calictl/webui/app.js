@@ -570,6 +570,10 @@ const HELP = {
   home: ["index.html",
     "Each tile is one function of the camper unit; tap it for details. Only functions fitted to this van "
     + "are shown. A ⚠ on a tile means the unit reports a fault there.\n\n"
+    + "Sensors: on the ESP satellite, add-on Bluetooth sensors you added on its setup page join the "
+    + "screens, named by the alias you gave them: Victron solar charger and battery sensor on Energy, a "
+    + "Govee thermometer on Vehicle (its tile then shows the temperature). They are not part of the unit "
+    + "and keep updating while it sleeps.\n\n"
     + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
     + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live.\n\n"
     + "Not reachable: this page cannot reach calictl or the satellite (WiFi, Tailscale, power). The van "
@@ -1951,10 +1955,11 @@ const extStale = (e) => typeof e.age_s !== "number" || e.age_s > SENSOR_STALE_S;
 /** Rows per external sensor type: [label, value of one entry]. Labels go through t() on render.
  * @type {Record<string, { rows: [string, (e: SensorReading) => string][] }>} */
 const EXT_TYPES = {
-  // The unit's own "Solar power" format: charge state word (W · A)
+  // The unit's own "Solar power" format, charge state word (W · A), plus the battery voltage the
+  // charger measures (owner decision 2026-10-15)
   victron_mppt: { rows: [
     ["Solar power", (e) => `${typeof e.charge_state === "number" ? t(CHARGE_STATES[e.charge_state] || String(e.charge_state)) : "—"}`
-      + ` (${raw(e.pv_power)} W · ${raw(e.battery_current)} A)`],
+      + ` (${raw(e.pv_power)} W · ${raw(e.battery_current)} A · ${fix(e.battery_voltage, 1, " V")})`],
     ["Solar yield today", (e) => fix(e.yield_today_kwh, 2, " kWh")],
   ] },
   victron_battery: { rows: [

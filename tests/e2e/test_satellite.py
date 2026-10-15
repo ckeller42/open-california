@@ -1077,9 +1077,9 @@ def _sensor_rows(pg):
 
 ENERGY = {
     "en-US": ("Energy", "Second battery current", "Issues", [("Battery-sense Battery sensor", "13.32 V · 17.3 °C")],
-              [("Mppt-75-15 Solar power", "off (0 W · 0 A)"), ("Mppt-75-15 Solar yield today", "0.19 kWh")]),
+              [("Mppt-75-15 Solar power", "off (0 W · 0 A · 13.2 V)"), ("Mppt-75-15 Solar yield today", "0.19 kWh")]),
     "de-DE": ("Energie", "Zweitbatterie-Strom", "Probleme", [("Battery-sense Batteriesensor", "13.32 V · 17.3 °C")],
-              [("Mppt-75-15 Solarstrom", "aus (0 W · 0 A)"), ("Mppt-75-15 Solarertrag heute", "0.19 kWh")]),
+              [("Mppt-75-15 Solarstrom", "aus (0 W · 0 A · 13.2 V)"), ("Mppt-75-15 Solarertrag heute", "0.19 kWh")]),
 }  # fmt: skip
 VEHICLE = {
     "en-US": ("Vehicle", "Vehicle clock", [("Govee Temperature", "16.5 °C"), ("Govee Humidity", "59 %")]),
@@ -1164,9 +1164,9 @@ def test_two_solar_chargers_carry_their_alias(stub, error_gated_page):
         pg.wait_for_selector(".tilegrid .tile")
         _open(pg, "Energy")
         assert _around(_readouts(pg), "Issues", before=4) == [
-            ("Mppt-100-20 Solar power", "bulk (87 W · 2.3 A)"),
+            ("Mppt-100-20 Solar power", "bulk (87 W · 2.3 A · 13.5 V)"),
             ("Mppt-100-20 Solar yield today", "0.42 kWh"),
-            ("Mppt-75-15 Solar power", "off (0 W · 0 A)"),
+            ("Mppt-75-15 Solar power", "off (0 W · 0 A · 13.2 V)"),
             ("Mppt-75-15 Solar yield today", "0.19 kWh"),
         ]
 
@@ -1189,7 +1189,10 @@ def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
         expect(pg.locator(".tile", has_text="Vehicle").first).to_contain_text("16.5 °C · — 🕒")
         _open(pg, "Energy")
         rows = _readouts(pg)
-        assert _around(rows, "Issues", before=2)[0] == ("Mppt-75-15 Solar power", "absorption (— W · 0 A)")
+        assert _around(rows, "Issues", before=2)[0] == (
+            "Mppt-75-15 Solar power",
+            "absorption (— W · 0 A · 13.2 V)",
+        )
         assert dict(rows)["Issues"] == "Solar charger error 2 (Mppt-75-15)"
 
 
