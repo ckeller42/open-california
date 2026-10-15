@@ -69,7 +69,10 @@ def _start(fw):
 
 def _http_pair(fw, hu):
     """The wizard's happy path over HTTP -> the final snapshot (bonded or error)."""
+    mark = len(fw.log)
     s = _start(fw)
+    if s["state"] != "waiting_passkey":  # the firmware's own account, in full (#381)
+        print("\n".join(l for l in fw.log[mark:] if l.startswith(("LOG", "STATE"))), flush=True)
     assert s["state"] == "waiting_passkey", s
     status, _ = _post(fw, {"action": "passkey", "value": "%06d" % hu.call(hu.unit.next_passkey)})
     assert status == 200
@@ -396,4 +399,31 @@ def test_probe_hit_by_a_link_drop_keeps_the_bond(host_fw, hci_unit, tmp_path):
     pair_log = [l for l in fw.log[mark:] if l.startswith("LOG pair:")]
     assert (s["state"], s["address"], s["attempts"]) == ("bonded", IDENTITY, 1), (s, pair_log)
     assert not [l for l in pair_log if "the stored bond is stale" in l], pair_log
+    fw.expect("SNAP", timeout=40)
+
+
+async def _late_disconnects(hu, delay_s):
+    """The host's Disconnection Complete arrives ``delay_s`` after its Disconnect (the unit learns at once)."""
+    hu.fw_controller.disconnect_delay_s = delay_s
+
+
+def test_repair_on_a_live_session_waits_for_the_handover(host_fw, hci_unit, tmp_path):
+    """#381: Connect now while the bonded session's link is up. Stopping the session drops that link,
+    but NimBLE holds its one connection slot until the Disconnection Complete; the unit re-advertises
+    at once, so the wizard's connect comes first. It must wait for the drop (not fail BLE_HS_ENOMEM
+    and burn an attempt): the flow ends bonded with no attempt spent.
+
+    .. test:: A Connect now on a live session waits for the session link's drop before connecting
+       :id: T_FW_PAIRING_HANDOVER_CONNECT
+       :links: R_FW_PAIRING_WIZARD
+    """
+    fw = _bonded_and_reading(host_fw, hci_unit, tmp_path)
+    hci_unit.call(_late_disconnects, hci_unit, 1.0)
+    mark = len(fw.log)
+    assert _post(fw, {"action": "start"})[0] == 200
+    s = _wait(fw, lambda s: s["state"] in ("bonded", "error"), timeout=60)
+    log = [l for l in fw.log[mark:] if l.startswith(("LOG pair:", "LOG ble:", "STATE"))]
+    assert (s["state"], s["address"], s["attempts"]) == ("bonded", IDENTITY, 0), (s, log)
+    assert "LOG ble: connect waits for our drop to complete" in fw.log[mark:], log
+    assert not [l for l in log if "connect refused" in l], log
     fw.expect("SNAP", timeout=40)

@@ -1742,7 +1742,9 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 - **`R_FW_PAIRING_WIZARD`** — verified by `T_FW_PAIRING_API`, `T_FW_PAIRING_BUSY`,
   `T_FW_PAIRING_PROBE_KEEPS_BOND` (`tests/firmware/test_pairing_web_e2e.py`: Connect now on a
   bonded satellite with the unit's pairing screen closed ends bonded, bond kept, `SNAP` flows),
-  `T_FW_PAIRING_HOTSPOT` (`tests/firmware/test_web_handlers.py`: the shape, every code, busy, every
+  `T_FW_PAIRING_HANDOVER_CONNECT` (same file, #381: Connect now on a live session waits for the
+  session link's drop to complete before connecting — NimBLE has one connection slot — so no
+  attempt is burnt), `T_FW_PAIRING_HOTSPOT` (`tests/firmware/test_web_handlers.py`: the shape, every code, busy, every
   WiFi mode, `/app`), `T_FW_PAIRING_WIZARD_E2E` (`tests/firmware/test_pairing_web_e2e.py`: start →
   passkey → bonded → `SNAP` over real NimBLE + the fake unit, station and hotspot, a wrong passcode,
   the unit's pairing screen closed, a stale bond after the unit's Bluetooth reset, cancel/reset,
