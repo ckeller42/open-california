@@ -15,6 +15,15 @@ Camper unit
 buspi
   The Raspberry Pi that runs calictl and the other readers in the van.
 
+Active scan
+  A WiFi scan that sends probe requests on each channel and waits a short, fixed time for answers.
+
+Passive scan
+  A WiFi scan that only listens for access-point beacons on each channel, so it stays longer per channel.
+
+Per-channel dwell
+  How long a WiFi scan stays on one channel before moving on.
+
 Dictionary
   `protocol/dictionary.yaml`, the extracted map of frame fields.
 

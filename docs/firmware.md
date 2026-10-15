@@ -505,12 +505,13 @@ it) and starts it on the first tick after the flow ends.
 most one per `NET_SCAN_MIN_INTERVAL_MS` (30 s, `cali_wifi_run_scan_auto`), and held while BLE pairs
 (above). The trade-off: an ESP-IDF scan while associated is allowed but takes the radio off the
 station's channel for each scanned channel. `net_esp.c`'s scan config already bounds that: an
-**active** scan at the default per-channel dwell (IDF requires the default with Bluetooth on; a
-passive scan would dwell longer per channel), back on the home channel for
+{term}`active scan` at the default {term}`per-channel dwell` (IDF requires the default with Bluetooth on; a
+{term}`passive scan` would dwell longer per channel), back on the home channel for
 `NET_SCAN_HOME_DWELL_MS` (100 ms) between channels, `coex_background_scan` so it returns home under
 BLE coexistence too. So the station keeps its AP association and buffered traffic resumes on each
 return; a page request in flight can see a few hundred ms of extra latency, and the BLE `1003`
-heartbeat is untouched (BLE is time-sliced by the coex scheduler, not stopped). Board check:
+heartbeat is expected to stay untouched (BLE is time-sliced by the coex scheduler, not stopped) — not yet
+confirmed on the board. Board check:
 [network watch items](#network-watch-items-board-only) 1 and 11.
 
 **Size** (ruling R18): the WiFi stack (net80211, wpa_supplicant + PSA crypto, lwIP, pp/phy, mdns)

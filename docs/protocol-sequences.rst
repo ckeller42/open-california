@@ -1426,7 +1426,7 @@ link holds (:need:`S_SEQ_SLEEP`). See :doc:`firmware`
 .. spec:: Satellite WiFi setup through the hotspot and captive portal
    :id: S_SEQ_ESP_WIFI
    :status: mock-only
-   :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX, R_NET_CONSTS_SINGLE_SOURCE
+   :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX, R_NET_CONSTS_SINGLE_SOURCE, R_FW_WIFI_ROLLBACK
 
    **Contract.** A satellite with no saved WiFi network opens its own setup hotspot at boot. The
    state machine (``wifi_sm.c``, a C twin of ``tools/wifi_sm_ref.py``) and the runner
