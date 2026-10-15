@@ -228,6 +228,28 @@ EXT_SENSORS = {
         "age_s": 7,
     },
 }
+MPPT_100_20 = {  # a second solar charger (a two-MPPT van)
+    "type": "victron_mppt",
+    "battery_current": 2.3,
+    "battery_voltage": 13.52,
+    "charge_state": 3,
+    "error_code": 0,
+    "load_current": None,
+    "pv_power": 87,
+    "yield_today_kwh": 0.42,
+    "age_s": 9,
+}
+# The ext combinations the shared UI must place (Energy / Vehicle / Sensors card), by name:
+# tests/e2e/test_satellite.py swaps one into the satellite fixture's /api/state.
+EXT_VARIANTS = {
+    "none": {},
+    "mppt": {"mppt-75-15": EXT_SENSORS["mppt-75-15"]},
+    "mppt+battery": {k: EXT_SENSORS[k] for k in ("mppt-75-15", "battery-sense")},
+    "two-mppt": {"mppt-75-15": EXT_SENSORS["mppt-75-15"], "mppt-100-20": MPPT_100_20},
+    "govee": {"govee": EXT_SENSORS["govee"]},
+    "all": EXT_SENSORS,
+    "unknown": {"acme": {"type": "acme_gas", "co2": 800, "age_s": 5}},  # a type this UI does not know
+}
 
 
 def esp_fixtures():

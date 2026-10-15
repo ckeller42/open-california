@@ -1034,12 +1034,17 @@ to the sensors and never to the pairing SM or the session.
   (`{"type", fields…, "age_s"}`: `type` first, the type's id from the table above; `null`s before
   the first reading) and the `ext` SD record above, at most
   once a minute each. Numbers: two decimals at most, trailing zeros dropped (`cali_json_num`).
-- **Shared UI:** the calictl web UI the ESP serves shows them on its **Sensors** card on the start
-  page, after the summary card (#371): one row per alias — the type's name read off the field set
-  (Thermo-hygrometer (Govee), Solar charger (Victron), Battery sense (Victron), else the alias), the
-  alias, the values with units (`null` = "—"; the charge state as a word, the error code only when
-  not 0) and the age; a reading older than 10 min is muted with the 🕒 marker. Without `ext` (the flag
-  off, or buspi's `/api/state`) there is no card.
+- **Shared UI:** the calictl web UI the ESP serves places each reading by its `type` (#371,
+  `EXT_TYPES` in `app.js`): the Victron solar charger joins the **Energy** screen after the unit's
+  own Solar power row ("Solar power (Victron)" in the unit's format, charge state (W · A), and
+  "Solar yield today"; a non-zero error code joins the Issues row), the Victron battery sensor
+  follows the second battery's current (V · °C); the Govee joins the **Vehicle** screen after the
+  vehicle clock (temperature, humidity; its own battery only when below 20 %) and the Vehicle tile
+  shows its climate. Two sensors of one type carry their alias in the label. A reading older than
+  10 min keeps its value and adds "🕒 <age>"; `null` = "—". A type the UI does not know (a later
+  firmware's) shows on the start page's **Sensors** card after the summary card (alias, raw
+  fields, age); without one, or without `ext` (the flag off, buspi's `/api/state`), there is no
+  card. `/api/sensors`' `type` is unchanged.
 - **Console** (the board/QEMU probe and the host e2e's path): `sensors` prints `SENSORS {…}` (the
   `/api/sensors` object: `configured`, `seen`, `scan`); `sensors on|off` sets the flag as
   `POST /api/experimental` does; `sensors add <id> [alias|-] [key|-]` / `sensors remove <id>` answer

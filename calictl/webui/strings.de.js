@@ -252,9 +252,12 @@ window.STRINGS_DE = {
   // --- external sensors (the ESP's ext, R_FW_SENSORS) ---------------------------------------
   // Victron charge states in VictronConnect's German words (Bulk/Absorption/Float)
   "Sensors": "Sensoren",
-  "Thermo-hygrometer (Govee)": "Thermo-Hygrometer (Govee)",
-  "Solar charger (Victron)": "Solarladeregler (Victron)",
-  "Battery sense (Victron)": "Batteriesensor (Victron)",
+  "Solar power (Victron)": "Solarstrom (Victron)",
+  "Solar yield today": "Solarertrag heute",
+  "Battery sensor (Victron)": "Batteriesensor (Victron)",
+  "Temperature (Govee)": "Temperatur (Govee)",
+  "Humidity": "Luftfeuchte",
+  "Solar charger error {n}": "Solarladeregler-Fehler {n}",
   "bulk": "Konstantstrom",
   "absorption": "Konstantspannung",
   "float": "Erhaltungsladung",
