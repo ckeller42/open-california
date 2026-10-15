@@ -1962,7 +1962,8 @@ function renderSummary() {
 // satellite reports `ext`, so buspi's page shows neither.
 // Victron's charger states the solar charger reports most (VictronConnect's words)
 /** @type {Record<number, string>} */
-const CHARGE_STATES = { 0: "off", 2: "fault", 3: "bulk", 4: "absorption", 5: "float", 6: "storage", 7: "equalize" };
+const CHARGE_STATES = { 0: "off", 2: "fault", 3: "bulk", 4: "absorption", 5: "float", 6: "storage", 7: "equalize",
+  245: "starting up", 247: "recondition", 252: "external control" };
 const SENSOR_STALE_S = 600;   // the firmware's /api/sensors drops a reading this old too
 const LOW_SENSOR_BATTERY = 20;   // % — below it the Govee's battery joins its temperature row
 
@@ -1979,8 +1980,9 @@ const EXT_TYPES = {
   // The unit's own "Solar power" format, charge state word (W · A), plus the battery voltage the
   // charger measures (owner decision 2026-10-15)
   victron_mppt: { rows: [
-    ["Solar power", (e) => `${typeof e.charge_state === "number" ? t(CHARGE_STATES[e.charge_state] || String(e.charge_state)) : "—"}`
-      + ` (${raw(e.pv_power)} W · ${raw(e.battery_current)} A · ${fix(e.battery_voltage, 1, " V")})`],
+    // W · A · V like the battery rows; the charge phase on its own row (owner 2026-10-15)
+    ["Solar power", (e) => `${raw(e.pv_power)} W · ${raw(e.battery_current)} A · ${fix(e.battery_voltage, 1, " V")}`],
+    ["Charge phase", (e) => (typeof e.charge_state === "number" ? /** @type {string} */ (t(CHARGE_STATES[e.charge_state] || String(e.charge_state))) : "—")],
     ["Solar yield today", (e) => fix(e.yield_today_kwh, 2, " kWh")],
   ] },
   victron_battery: { rows: [

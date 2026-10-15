@@ -1086,7 +1086,7 @@ def test_auto_camper_toggle_on_a_firmware_that_reports_it(stub, error_gated_page
 # ---- external sensors (R_FW_SENSORS, #371): placed by their type ------------------------------
 
 EXT_LABELS = {
-    "victron_mppt": ("Mppt-75-15 Solar power", "Mppt-75-15 Solar yield today"),
+    "victron_mppt": ("Mppt-75-15 Solar power", "Mppt-75-15 Charge phase", "Mppt-75-15 Solar yield today"),
     "victron_battery": ("Battery-sense Battery sensor",),
     "govee": ("Govee Temperature", "Govee Humidity"),  # "<Alias> <row>": the alias leads every row
 }
@@ -1122,9 +1122,9 @@ def _sensor_rows(pg):
 
 ENERGY = {
     "en-US": ("Energy", "Second battery power", "Issues", [("Battery-sense Battery sensor", "13.32 V · 17.3 °C")],
-              [("Mppt-75-15 Solar power", "off (0 W · 0 A · 13.2 V)"), ("Mppt-75-15 Solar yield today", "0.19 kWh")]),
+              [("Mppt-75-15 Solar power", "0 W · 0 A · 13.2 V"), ("Mppt-75-15 Charge phase", "off"), ("Mppt-75-15 Solar yield today", "0.19 kWh")]),
     "de-DE": ("Energie", "Zweitbatterie-Leistung", "Probleme", [("Battery-sense Batteriesensor", "13.32 V · 17.3 °C")],
-              [("Mppt-75-15 Solarstrom", "aus (0 W · 0 A · 13.2 V)"), ("Mppt-75-15 Solarertrag heute", "0.19 kWh")]),
+              [("Mppt-75-15 Solarstrom", "0 W · 0 A · 13.2 V"), ("Mppt-75-15 Ladephase", "aus"), ("Mppt-75-15 Solarertrag heute", "0.19 kWh")]),
 }  # fmt: skip
 VEHICLE = {
     "en-US": ("Vehicle", "Vehicle clock", [("Govee Temperature", "16.5 °C"), ("Govee Humidity", "59 %")]),
@@ -1134,8 +1134,8 @@ VEHICLE = {
 
 @pytest.mark.parametrize("locale", ["en-US", "de-DE"])
 def test_victron_readings_on_the_energy_screen(stub, error_gated_page, locale):
-    """The ESP's Victron readings join the Energy screen in the unit's own row format: the solar
-    charger's rows before Issues (after the unit's own Solar power row), the battery sensor right
+    """The ESP's Victron readings join the Energy screen (W · A · V, the charge phase on its own row):
+    the solar charger's rows before Issues (after the unit's own Solar power row), the battery sensor right
     after the second battery's current; no Sensors card for known types.
 
     .. test:: The shared UI places Victron readings on the Energy screen by their type
@@ -1150,7 +1150,7 @@ def test_victron_readings_on_the_energy_screen(stub, error_gated_page, locale):
         _open(pg, screen)
         rows = _readouts(pg)
         assert _around(rows, after, after=1) == battery
-        assert _around(rows, before, before=2) == solar
+        assert _around(rows, before, before=len(solar)) == solar
         assert dict(rows)[before] == ("none" if locale == "en-US" else "keine")
 
 
@@ -1208,10 +1208,12 @@ def test_two_solar_chargers_carry_their_alias(stub, error_gated_page):
     with error_gated_page(stub.base) as pg:
         pg.wait_for_selector(".tilegrid .tile")
         _open(pg, "Energy")
-        assert _around(_readouts(pg), "Issues", before=4) == [
-            ("Mppt-100-20 Solar power", "bulk (87 W · 2.3 A · 13.5 V)"),
+        assert _around(_readouts(pg), "Issues", before=6) == [
+            ("Mppt-100-20 Solar power", "87 W · 2.3 A · 13.5 V"),
+            ("Mppt-100-20 Charge phase", "bulk"),
             ("Mppt-100-20 Solar yield today", "0.42 kWh"),
-            ("Mppt-75-15 Solar power", "off (0 W · 0 A · 13.2 V)"),
+            ("Mppt-75-15 Solar power", "0 W · 0 A · 13.2 V"),
+            ("Mppt-75-15 Charge phase", "off"),
             ("Mppt-75-15 Solar yield today", "0.19 kWh"),
         ]
 
@@ -1234,10 +1236,10 @@ def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
         expect(pg.locator(".tile", has_text="Vehicle").first).to_contain_text("16.5 °C · — 🕒")
         _open(pg, "Energy")
         rows = _readouts(pg)
-        assert _around(rows, "Issues", before=2)[0] == (
-            "Mppt-75-15 Solar power",
-            "absorption (— W · 0 A · 13.2 V)",
-        )
+        assert _around(rows, "Issues", before=3)[:2] == [
+            ("Mppt-75-15 Solar power", "— W · 0 A · 13.2 V"),
+            ("Mppt-75-15 Charge phase", "absorption"),
+        ]
         assert dict(rows)["Issues"] == "Solar charger error 2 (Mppt-75-15)"
 
 

@@ -262,6 +262,10 @@ window.STRINGS_DE = {
   "float": "Erhaltungsladung",
   "storage": "Lagerung",
   "equalize": "Ausgleichsladung",
+  "starting up": "Startet",
+  "recondition": "Regeneration",
+  "external control": "Externe Steuerung",
+  "Charge phase": "Ladephase",
   "fault": "Fehler",
   "error {n}": "Fehler {n}",
 
