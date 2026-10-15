@@ -57,7 +57,7 @@ def test_govee_24bit_values_after_add(cli, tmp_path):
     out = run(cli, tmp_path, ["init", f"adv A4:C1:38:00:00:01 1 -60 GVH5075_0001 {GOVEE_H5075}",
                               f"add {sid} - -", f"adv A4:C1:38:00:00:01 1 -60 GVH5075_0001 {GOVEE_H5075}", "state 0"])  # fmt: skip
     assert json.loads(out[-1][4:]) == {
-        "govee": {"temp_c": 24.3, "humidity": 90.9, "battery": 100, "age_s": 0}
+        "govee": {"type": "govee", "temp_c": 24.3, "humidity": 90.9, "battery": 100, "age_s": 0}
     }
 
 
@@ -73,7 +73,8 @@ def test_govee_7byte_layout_and_reading_after_add(cli, tmp_path):
         for line in out
     )
     ext = json.loads(out[-1][4:])
-    assert ext == {"govee": {"temp_c": 23.96, "humidity": 58.48, "battery": 90, "age_s": 2}}
+    assert ext == {"govee": {"type": "govee", "temp_c": 23.96, "humidity": 58.48, "battery": 90, "age_s": 2}}
+    assert next(iter(ext["govee"])) == "type"  # the entry's first key: the UI places a reading by it
 
 
 def test_configured_list_persists_and_ids_are_boot_local(cli, tmp_path):
@@ -200,7 +201,7 @@ def test_victron_mppt_decodes(cli, tmp_path):
     assert json.loads(out[-1][4:])["seen"][0]["type"] == "victron_mppt"
     out = run(cli, tmp_path, ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", f"add {sid} - {KEY.hex()}",
                               f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "state 2000"])  # fmt: skip
-    assert json.loads(out[-1][4:]) == {"mppt-75-15": {"battery_current": 2.3, "battery_voltage": 13.52, "charge_state": 5,
+    assert json.loads(out[-1][4:]) == {"mppt-75-15": {"type": "victron_mppt", "battery_current": 2.3, "battery_voltage": 13.52, "charge_state": 5,
                                        "error_code": 0, "load_current": None, "pv_power": 87, "yield_today_kwh": 0.42,
                                        "age_s": 2}}  # fmt: skip
 
@@ -212,7 +213,12 @@ def test_victron_battery_sense_decodes(cli, tmp_path):
     out = run(cli, tmp_path, ["init", f"adv CB:F2:E4:00:00:01 1 -58 BatterySense_00 {adv}", f"add {sid} - {KEY.hex()}",
                               f"adv CB:F2:E4:00:00:01 1 -58 BatterySense_00 {adv}", "state 2000"])  # fmt: skip
     assert json.loads(out[-1][4:]) == {
-        "battery-sense": {"battery_voltage": 12.98, "temperature_c": 25.0, "age_s": 2}
+        "battery-sense": {
+            "type": "victron_battery",
+            "battery_voltage": 12.98,
+            "temperature_c": 25.0,
+            "age_s": 2,
+        }
     }
 
 
@@ -267,7 +273,9 @@ def test_govee_0001_gv5179_layout_decodes(cli, tmp_path):
     assert api["seen"][0]["type"] == "govee" and api["seen"][0]["model"] == "GV5179"
     sid = api["seen"][0]["id"]
     out = run(cli, tmp_path, ["init", a, f"add {sid} - -", a, "state 0"])
-    assert json.loads(out[-1][4:]) == {"govee": {"temp_c": 20.5, "humidity": 59.1, "battery": 50, "age_s": 0}}
+    assert json.loads(out[-1][4:]) == {
+        "govee": {"type": "govee", "temp_c": 20.5, "humidity": 59.1, "battery": 50, "age_s": 0}
+    }
 
 
 def test_company_id_0001_needs_a_plausible_6_byte_payload(cli, tmp_path):

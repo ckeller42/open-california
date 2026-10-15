@@ -37,7 +37,8 @@ HEAP_MIN_B = 32768
 I2C_PER_DAY_MAX = 2
 H = 3_600_000.0
 SENSOR_MAX_AGE_S = 300
-# the ESP's default aliases (sensors.c TYPES) -> buspi's measurement (esp_ingest.EXT)
+# the ESP's default aliases (sensors.c TYPES) -> buspi's measurement (esp_ingest.EXT); a reading's own
+# "type" (= the measurement name) wins, this covers a firmware that predates it
 SENSOR_MEAS = {"govee": "govee", "mppt-75-15": "victron_mppt", "battery-sense": "victron_battery"}
 SENSOR_TOL = {"battery_voltage": 0.05, "temperature_c": 0.5, "temp_c": 0.5, "humidity": 2.0, "battery": 5.0}
 
@@ -174,7 +175,7 @@ def _sensors(d):
     """Value drift: the ESP's live readings vs buspi's own last point per measurement."""
     n, bad = 0, []
     for alias, esp in sorted(d.ext.items()):
-        bus = d.buspi_sensors.get(SENSOR_MEAS.get(alias))
+        bus = d.buspi_sensors.get(esp.get("type") or SENSOR_MEAS.get(alias))
         if not (_fresh(esp) and _fresh(bus)):
             continue
         for f, tol in SENSOR_TOL.items():

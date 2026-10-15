@@ -22,6 +22,7 @@ from tests.firmware.api_shape import (
     CONTROL_KEYS,
     DEVICE_KEYS,
     DISPLAY_KEYS,
+    EXT_ENTRY_KEYS,
     LINK_KEYS,
     OTA_KEYS,
     PAIRING_API_KEYS,
@@ -74,7 +75,10 @@ def test_sensors_fixture_shape(fixtures):
     readings /api/state's ext carries."""
     sens, ext = fixtures["satellite"]["/api/sensors"], fixtures["satellite"]["/api/state"]["ext"]
     assert set(sens) == SENSORS_KEYS and all(set(c) == SENSOR_CFG_KEYS for c in sens["configured"])
-    assert {c["alias"]: dict(c["value"], age_s=c["last_seen_s"]) for c in sens["configured"]} == ext
+    assert all(EXT_ENTRY_KEYS <= set(e) for e in ext.values())
+    assert {
+        c["alias"]: dict(c["value"], type=c["type"], age_s=c["last_seen_s"]) for c in sens["configured"]
+    } == ext
 
 
 @pytest.mark.parametrize("mode", ["setup", "station", "satellite"])

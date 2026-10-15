@@ -187,6 +187,17 @@ def test_sensors_match_passes():
     assert v == "PASS" and detail.startswith("6 fields")  # 3 govee + 1 mppt voltage + 2 battery-sense
 
 
+def test_sensors_pair_by_type_not_alias():
+    """A renamed sensor still meets buspi's measurement: the entry's ``type`` names it."""
+    ext = {
+        "kitchen": {**ESP_EXT["govee"], "type": "govee"},
+        "roof-mppt": {**ESP_EXT["mppt-75-15"], "type": "victron_mppt"},
+    }
+    v, detail = by_name(soak.evaluate(data(ext=ext, buspi_sensors=BUSPI)))["sensors"]
+    # 3 govee + 1 mppt voltage; type itself is never compared
+    assert v == "PASS" and detail.startswith("4 fields")
+
+
 def test_sensors_voltage_delta_fails_naming_the_field():
     bad = {**BUSPI, "victron_mppt": {"battery_voltage": 13.22, "age_s": 25}}
     v, detail = by_name(soak.evaluate(data(ext=ESP_EXT, buspi_sensors=bad)))["sensors"]

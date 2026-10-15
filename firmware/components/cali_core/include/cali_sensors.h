@@ -54,7 +54,7 @@ void cali_sensors_init(void);   /* loads sens_list from kv; empties the seen tab
 void cali_sensors_tick(uint64_t now_ms, const cali_transport_t *t, int enabled, int pairing_active);
 void cali_sensors_on_adv(const cali_tevent_t *e, uint64_t now_ms);   /* CALI_TEV_ADV */
 void cali_sensors_kick(void);   /* GET /api/sensors: the next tick opens a window unless one ran < 15 s ago */
-/* /api/state "ext": writes {"<alias>":{<field>:<num|null>,…,"age_s":<int|null>},…}'s MEMBERS into the
+/* /api/state "ext": writes {"<alias>":{"type":"<id>",<field>:<num|null>,…,"age_s":<int|null>},…}'s MEMBERS into the
  * open object (the caller writes the braces). */
 void cali_sensors_state_json(cali_json_t *j, uint64_t now_ms);
 /* GET /api/sensors: writes the members "configured":[{id,type,alias,last_seen_s,value,has_key}],

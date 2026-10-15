@@ -209,8 +209,9 @@ DISPLAY_ON = {
 
 # /api/state ext while exp_sensors is on (R_FW_SENSORS): one sensor of each type, by default alias
 EXT_SENSORS = {
-    "govee": {"temp_c": 16.5, "humidity": 58.6, "battery": 49, "age_s": 6},
+    "govee": {"type": "govee", "temp_c": 16.5, "humidity": 58.6, "battery": 49, "age_s": 6},
     "mppt-75-15": {
+        "type": "victron_mppt",
         "battery_current": 0,
         "battery_voltage": 13.21,
         "charge_state": 0,
@@ -220,7 +221,12 @@ EXT_SENSORS = {
         "yield_today_kwh": 0.19,
         "age_s": 7,
     },
-    "battery-sense": {"battery_voltage": 13.32, "temperature_c": 17.25, "age_s": 7},
+    "battery-sense": {
+        "type": "victron_battery",
+        "battery_voltage": 13.32,
+        "temperature_c": 17.25,
+        "age_s": 7,
+    },
 }
 
 
@@ -319,15 +325,13 @@ def esp_fixtures():
         "configured": [
             {
                 "id": 0x1001 + 2 * i,  # boot-local ids, never a MAC
-                "type": typ,
+                "type": e["type"],
                 "alias": alias,
-                "last_seen_s": EXT_SENSORS[alias]["age_s"],
-                "value": {k: v for k, v in EXT_SENSORS[alias].items() if k != "age_s"},
-                "has_key": typ != "govee",
+                "last_seen_s": e["age_s"],
+                "value": {k: v for k, v in e.items() if k not in ("age_s", "type")},
+                "has_key": e["type"] != "govee",
             }
-            for i, (alias, typ) in enumerate(
-                (("govee", "govee"), ("mppt-75-15", "victron_mppt"), ("battery-sense", "victron_battery"))
-            )
+            for i, (alias, e) in enumerate(EXT_SENSORS.items())
         ],
         "seen": [],
         "scan": "ok",
