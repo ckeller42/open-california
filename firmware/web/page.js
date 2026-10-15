@@ -1,5 +1,6 @@
-/* page.js — the ESP32 firmware's WiFi setup page script (#154): the provisioning form + a link to the
- * calictl UI, whose Device status screen shows the satellite's status (#267). SOURCE: tools/gen_c_dict.py inlines
+/* page.js — the ESP32 firmware's "Satellite settings" page script (/device; #154 setup page): the WiFi
+ * box (first setup over the hotspot, Change network… online), the camper unit's pairing state + a link
+ * to the calictl UI (whose Device status screen shows the satellite's status, #267), the switches. SOURCE: tools/gen_c_dict.py inlines
  * it into index_gen.html (index.html's PAGE_JS placeholder), right after the script that defines
  * CFG (generated constants) and STR (the strings.json table) — their types: globals.d.ts.
  * Un-built JS: `tools/ci.sh webcheck` type-checks it (tsc --checkJs, jsconfig.json, 0 errors) and
@@ -22,7 +23,7 @@
  * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, battery: Battery, auto_camper: AutoCamper, display: Display, ux?: { enabled: boolean }, experimental?: { sensors: boolean } }} Device  the /api/state fields this page reads
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
- * @typedef {{ ssid: string, polls: number, left: boolean }} Join
+ * @typedef {{ ssid: string, polls: number, left: boolean, away: boolean }} Join  away: seen off station or unreachable since the POST
  * @typedef {{ id: number, type: string, alias: string, last_seen_s: number|null, value: Record<string, number|null>|null }} SensCfg
  * @typedef {{ id: number, type: string, model: string, rssi: number }} SensSeen
  * @typedef {{ configured: SensCfg[], seen: SensSeen[], scan: string, error?: string }} Sensors  GET/POST /api/sensors
@@ -90,13 +91,19 @@ async function getWifi() {
   return (/** @type {{body: WifiGet}} */ (await fetchJson("/api/wifi"))).body;
 }
 
-$("title").textContent = t("title");
-$("setup-title").textContent = t("setup_title");
+document.title = $("title").textContent = t("title");
 $("setup-hint").textContent = t("setup_hint");
 $("ssid-label").textContent = t("network");
+$("scan-empty").textContent = t("no_networks");
+input("ssid-name").placeholder = t("ssid_name");
+$("ssid-name").setAttribute("aria-label", t("ssid_name"));
 $("psk-label").textContent = t("password");
+$("psk-show-l").textContent = t("show_psk");
 $("connect").textContent = t("connect");
 $("rescan").textContent = t("rescan");
+$("wifi-change").textContent = t("wifi_change");
+$("pair-title").textContent = t("pair_title");
+$("adv-title").textContent = t("adv_title");
 $("fw-title").textContent = t("fw_title");
 $("ac-title").textContent = t("ac_title");
 $("fw-check").textContent = t("fw_check");
@@ -108,23 +115,45 @@ $("exp-title").textContent = t("exp_title");
 $("exp-hint").textContent = t("exp_hint");
 $("sens-title").textContent = t("sens_title");
 $("sens-hint").textContent = t("sens_hint");
-$("scr-auto-l").textContent = t("scr_auto");
-$("scr-prox-l").textContent = t("scr_prox");
-$("scr-motion-l").textContent = t("scr_motion");
 document.documentElement.lang = LANG;
 
 /** @type {Join|null} a submitted join being watched */
 let joining = null;
+/** @type {Wifi|null} the last polled device.wifi */
+let wifi = null;
 
-/** @param {Device} d */
+/** A link. @param {string} text @param {string} href @returns {HTMLAnchorElement} */
+function link(text, href) {
+  const a = el("a", text);
+  a.href = href;
+  return a;
+}
+
+/** The back link + the Camper unit box. @param {Device} d */
 function renderLink(d) {
   /* the calictl web UI: GET / in station mode; elsewhere (the setup hotspot) GET /app, where its
    * pairing wizard pairs the unit without home WiFi */
-  const box = $("device"), station = d.wifi.mode === "station";
-  box.textContent = "";
-  const a = el("a", t(station || d.pairing.address ? "app_link" : "app_link_pair"));
-  a.href = station ? "/" : "/app";
-  box.appendChild(a);
+  const href = d.wifi.mode === "station" ? "/" : "/app";
+  $("device").replaceChildren(link(t("app_link"), href));
+  $("pair-status").textContent = t(d.pairing.address ? "pair_on" : "pair_off");
+  $("pair-link").textContent = t("pair_link");
+  /** @type {HTMLAnchorElement} */ ($("pair-link")).href = href;
+}
+
+/** @type {boolean} Change network… was tapped (online, the form shows only then) */
+let wifiOpen = false, formShown = false;
+/** The WiFi box: online "Connected to <ssid> · <ip> · <dBm>" + Change network…; the join form over
+ * the hotspot (first setup), after Change network…, or while a setup-flow join runs.
+ * @param {Wifi} w */
+function renderWifi(w) {
+  const st = w.mode === "station", form = !st || wifiOpen;
+  $("setup-title").textContent = t(st ? "wifi_title" : "setup_title");
+  $("wifi-now").textContent = st && $("wifi-switch").hidden ? [t("wifi_now", {ssid: w.ssid || ""}), w.ip, w.rssi + " dBm"].join(" · ") : "";
+  $("wifi-change").hidden = form || joining !== null || !$("wifi-switch").hidden;
+  $("wifi-form").hidden = !form || !$("wifi-switch").hidden;
+  $("rescan").hidden = st;   /* GET /api/wifi scans only over the setup hotspot */
+  if (form && !formShown && !joining) scan();
+  formShown = form;
 }
 
 /* The clock the SD log stamps with (R_FW_TIME): SNTP synced or not, and the boot number. */
@@ -179,7 +208,7 @@ function renderFw(d) {
   const station = d.wifi.mode === "station", busy = ["checking", "downloading", "verifying", "rebooting"].includes(o.state);
   let text = t("fw_running", {sha: d.fw}) + " · " + t(o.channel === "latest" ? "fw_ch_latest" : "fw_ch_stable");
   if (key) text += " · " + t(key, {sha: sha, pct: o.progress_pct, error: o.error || ""});
-  if (!station) text += " · " + t("fw_station_only");
+  if (!station) text += " · " + t("station_only");
   $("fw-status").textContent = text;
   $("fw-check").hidden = !station || busy;
   const install = $("fw-install");
@@ -191,40 +220,32 @@ function renderFw(d) {
   if (document.activeElement !== sel) sel.value = o.channel;
 }
 
-/* Auto camper (R_FW_AUTO_CAMPER): on/off, a restore owed, the toggle (station mode only) */
-/** @param {Device} d */
-function renderAutoCamper(d) {
-  const a = d.auto_camper, st = d.wifi.mode === "station", b = $("ac-toggle");
-  $("ac-status").textContent = [t(a.enabled ? "ac_on" : "ac_off"), a.state === "armed" ? t("ac_armed") : "",
-    a.state === "restoring" ? t("ac_restoring") : "", st ? "" : t("ac_station_only")].filter(Boolean).join(" · ");
+/** The one on/off row pattern: "<id>-status" + one "<id>-toggle" naming the target state. Every switch
+ * is station only (the firmware's 403 setup_mode): over the hotspot the status ends in "needs the
+ * home WiFi" and the button is hidden.
+ * @param {string} id @param {string[]} parts the status (empty parts dropped) @param {boolean} on @param {boolean} st station mode */
+function row(id, parts, on, st) {
+  const b = $(id + "-toggle");
+  $(id + "-status").textContent = [...parts, st ? "" : t("station_only")].filter(Boolean).join(" · ");
   b.hidden = !st;
-  b.textContent = t(a.enabled ? "ac_turn_off" : "ac_turn_on");
-  b.dataset.on = a.enabled ? "1" : "";
-}
-
-/* "Send usage data" (R_UX_TELEMETRY): the web UI's usage beacons on/off (station mode only) */
-/** @param {Device} d */
-function renderUx(d) {
-  const on = !!(d.ux && d.ux.enabled), b = $("ux-toggle");
-  $("ux-status").textContent = t(on ? "ux_on" : "ux_off");
-  b.hidden = d.wifi.mode !== "station";
   b.textContent = t(on ? "ac_turn_off" : "ac_turn_on");
   b.dataset.on = on ? "1" : "";
 }
 
-/* Experimental sensor track (R_FW_EXPERIMENTAL): on/off, station mode only */
-/** @param {Device} d */
-function renderExp(d) {
-  const on = !!(d.experimental && d.experimental.sensors), b = $("exp-toggle");
-  $("exp-status").textContent = t(on ? "exp_on" : "exp_off");
-  b.hidden = d.wifi.mode !== "station";
-  b.textContent = t(on ? "ac_turn_off" : "ac_turn_on");
-  b.dataset.on = on ? "1" : "";
+/** Auto camper (R_FW_AUTO_CAMPER), "Send usage data" (R_UX_TELEMETRY), Experimental (R_FW_EXPERIMENTAL). @param {Device} d */
+function renderRows(d) {
+  const a = d.auto_camper, st = d.wifi.mode === "station", ux = !!(d.ux && d.ux.enabled);
+  const exp = !!(d.experimental && d.experimental.sensors);
+  row("ac", [t(a.enabled ? "ac_on" : "ac_off"), a.state === "armed" ? t("ac_armed") : "",
+    a.state === "restoring" ? t("ac_restoring") : ""], a.enabled, st);
+  row("ux", [t(ux ? "ux_on" : "ux_off")], ux, st);
+  row("exp", [t(exp ? "exp_on" : "exp_off")], exp, st);
 }
 
-/** POST {<key, default "enabled">: <the opposite>} to a toggle endpoint. @param {string} path @param {string} id the row's id prefix @param {string} err @param {string} [key] */
-async function toggle(path, id, err, key) {
-  const b = $(id + "-toggle"), msg = $(id + "-msg");
+/** POST {<key, default "enabled">: <the opposite>} to a toggle endpoint.
+ * @param {string} path @param {string} id the row's id prefix @param {string} err @param {string} [key] @param {string} [msgId] default id + "-msg" */
+async function toggle(path, id, err, key, msgId) {
+  const b = $(id + "-toggle"), msg = $(msgId || id + "-msg");
   msg.textContent = "";
   b.hidden = true;   /* the next poll shows it again */
   let ok = false;
@@ -288,21 +309,24 @@ function sensErr(key) {
   m.textContent = t(key);
   m.scrollIntoView({block: "nearest"});
 }
-/** Swap a row's buttons for an inline step (a question or fields) + OK and Cancel; Cancel puts them back.
- * The 10 s poll leaves the box alone while one is open (.open). Focus: the first field, else Cancel.
+/** Swap a row's buttons for an inline step (a question or fields) + OK and Cancel; Cancel puts them back
+ * (and clears msgId). The Sensors poll leaves its box alone while one is open (.open). Focus: the first
+ * field, else Cancel.
  * @param {HTMLElement} acts @param {Node[]} nodes @param {string} okKey @param {string} okCls
- * @param {() => Promise<void>|void} ok OK is disabled while it runs (a double tap posts once) */
-function sensAsk(acts, nodes, okKey, okCls, ok) {
+ * @param {(close: () => void) => Promise<void>|void} ok OK is disabled while it runs (a double tap posts once)
+ * @param {string} [msgId] default "sens-msg" */
+function ask(acts, nodes, okKey, okCls, ok, msgId) {
   const old = Array.from(acts.childNodes);
   acts.className = "acts open";
   acts.replaceChildren(...nodes);
   const b = acts.appendChild(el("button", t(okKey), okCls)), c = acts.appendChild(el("button", t("sens_cancel"), "secondary"));
-  b.onclick = async () => { b.disabled = true; await ok(); b.disabled = false; };
-  c.onclick = () => {
+  const close = () => {
     acts.className = "acts";
     acts.replaceChildren(...old);
-    $("sens-msg").textContent = "";
+    $(msgId || "sens-msg").textContent = "";
   };
+  b.onclick = async () => { b.disabled = true; await ok(close); b.disabled = false; };
+  c.onclick = close;
   (nodes[0] instanceof HTMLInputElement ? nodes[0] : c).focus();
 }
 /** @param {Sensors} s */
@@ -317,10 +341,10 @@ function renderSens(s) {
     const acts = p.appendChild(el("span", undefined, "acts"));
     acts.appendChild(el("button", t("sens_rename"), "secondary")).onclick = () => {
       const n = sensName(c.alias, "");
-      sensAsk(acts, [n], "sens_save", "", () => { const a = sensAlias(n, true); if (a) return sensPost({id: c.id, alias: a}); });
+      ask(acts, [n], "sens_save", "", () => { const a = sensAlias(n, true); if (a) return sensPost({id: c.id, alias: a}); });
     };
     acts.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
-      sensAsk(acts, [el("span", t("sens_confirm_remove", {alias: c.alias}))], "sens_remove", "danger", () => sensPost({remove: c.id}));
+      ask(acts, [el("span", t("sens_confirm_remove", {alias: c.alias}))], "sens_remove", "danger", () => sensPost({remove: c.id}));
   }
   if (s.scan === "paused" || !s.seen.length) seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : "sens_none"), "muted"));
   for (const r of s.seen) {
@@ -332,7 +356,7 @@ function renderSens(s) {
       const n = sensName("", need || !def ? t("sens_alias") : def), nodes = [n];
       const k = r.type.startsWith("victron") ? el("input") : null;
       if (k) { k.autocomplete = "off"; k.spellcheck = false; k.placeholder = t("sens_key"); k.setAttribute("aria-label", t("sens_key")); nodes.push(k); }
-      sensAsk(acts, nodes, "sens_add", "", () => {
+      ask(acts, nodes, "sens_add", "", () => {
         const a = sensAlias(n, need);
         if (a === null) return;
         /** @type {Record<string, string|number>} */
@@ -361,19 +385,22 @@ async function sensPost(o) {
 /* Screen (R_FW_DISPLAY_WAKE) */
 /** @type {Record<string, string>} */
 const SCR = {on: "scr_on", dim: "scr_dim", off: "scr_off"};
+/* its on/off rows: [id suffix, device.display member = the POST key, label key] */
+const SCR_ROWS = [["auto", "auto", "scr_auto"], ["prox", "prox_wake", "scr_prox"], ["motion", "motion_wake", "scr_motion"]];
 /** @param {Device} d */
 function renderScreen(d) {
-  const p = d.display;
+  const p = d.display, st = d.wifi.mode === "station";
   $("scr").hidden = p.state === null;
   if (p.state === null) return;
   $("scr-status").textContent = [t(SCR[p.state]), p.brightness_pct + " % (" + p.min + "–" + p.max + ")",
-    p.lux === null ? "" : p.lux + " lx", p.sensor === "ok" ? "" : t("scr_nolux")].filter(Boolean).join(" · ");
-  input("scr-auto").checked = p.auto;
-  input("scr-prox").checked = p.prox_wake;
-  input("scr-motion").checked = p.motion_wake;
+    p.lux === null ? "" : p.lux + " lx", p.sensor === "ok" ? "" : t("scr_nolux"), st ? "" : t("station_only")].filter(Boolean).join(" · ");
+  for (const [id, k, l] of SCR_ROWS) {
+    const on = !!(/** @type {Record<string, unknown>} */ (p))[k];
+    row("scr-" + id, [t(l) + ": " + t(on ? "scr_on" : "scr_off")], on, st);
+  }
   scrOff = p.offset;
   $("scr-off").textContent = t("scr_offset", {n: (p.offset > 0 ? "+" : "") + p.offset});
-  for (const id of ["scr-auto", "scr-prox", "scr-motion", "scr-dn", "scr-up"]) input(id).disabled = d.wifi.mode !== "station";
+  $("scr-dn").hidden = $("scr-up").hidden = !st;
 }
 
 let scrOff = 0;
@@ -409,19 +436,24 @@ async function otaChannel(ch) {
   select("fw-channel").value = $("fw-channel").dataset.v || "";
 }
 
-/** @param {Ap[]} scan */
+/** The scan list + "Other network…" (value "": the typed name; the only choice while the list is empty,
+ * e.g. online, where the firmware does not scan over HTTP). @param {Ap[]} scan */
 function renderNetworks(scan) {
-  const sel = select("ssid"), keep = sel.value;
+  const sel = select("ssid"), keep = sel.value, had = sel.options.length;
   sel.textContent = "";
-  if (!scan.length) { sel.appendChild(el("option", t("no_networks"))).value = ""; return; }
   for (const ap of scan) {
     const o = el("option", ap.ssid + "  (" + ap.rssi + " dBm" + (ap.secure ? "" : ", " + t("open_unsupported")) + ")");
     o.value = ap.ssid;
     o.disabled = !ap.secure;  /* the device requires a NET_PSK_MIN..NET_PSK_MAX passphrase */
     sel.appendChild(o);
   }
-  if (scan.some((ap) => ap.ssid === keep)) sel.value = keep;
+  sel.appendChild(el("option", t("other_network"))).value = "";
+  if (scan.some((ap) => ap.ssid === keep) || (had && !keep)) sel.value = keep;   /* else the first network */
+  $("scan-empty").hidden = scan.length > 0;
+  other();
 }
+/* the name field shows while "Other network…" is chosen */
+const other = () => { $("ssid-name").hidden = select("ssid").value !== ""; };
 
 /** @type {ReturnType<typeof setTimeout>|null} the pending delayed re-read from the last scan() */
 let scanTimer = null;
@@ -443,14 +475,39 @@ async function scan() {
   } catch (e) { if (still()) msg.textContent = t("err_net"); }
 }
 
-async function connect() {
-  const ssid = select("ssid").value, psk = input("psk").value, msg = $("setup-msg");
+/* Connect: over the hotspot it posts at once; online it asks first (the satellite leaves its network,
+ * and a wrong password loses it: the honest warning), then shows the Switching panel BEFORE posting —
+ * the phone loses the page once the satellite leaves, so the panel needs no server. */
+function connect() {
+  const ssid = select("ssid").value || input("ssid-name").value.trim(), psk = input("psk").value, msg = $("setup-msg");
   if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
   msg.className = "bad";
   if (!ssid || ssid.length > CFG.ssidMax) { msg.textContent = t("err_ssid", {max: CFG.ssidMax}); return; }
   if (psk.length < CFG.pskMin || psk.length > CFG.pskMax) {
     msg.textContent = t("err_psk", {min: CFG.pskMin, max: CFG.pskMax}); return;
   }
+  msg.textContent = "";
+  const w = wifi;
+  if (!w || w.mode !== "station") return join(ssid, psk, true);
+  const vars = {ssid: w.ssid || "", ap: CFG.ap, appsk: CFG.apPsk};
+  ask($("wifi-acts"), [el("span", t("wifi_warn", vars))], "wifi_switch", "danger", (close) => {
+    close();
+    const p = $("wifi-switch"), url = "http://" + CFG.host + ".local", ap = "http://" + CFG.apAddr;
+    /** @param {string} key @param {string} href */
+    const line = (key, href) => { const e = el("p", t(key, Object.assign({}, vars, {ssid: ssid})) + " "); e.appendChild(link(href, href)); return e; };
+    p.replaceChildren(el("h2", t("switch_title")), line(ssid === w.ssid ? "switch_same" : "switch_other", url), line("switch_lost", ap));
+    p.hidden = false;
+    $("wifi-now").textContent = "";   /* it is leaving that network */
+    $("wifi-form").hidden = true;
+    wifiOpen = false;
+    return join(ssid, psk, false);
+  }, "setup-msg");
+}
+
+/** POST /api/wifi and watch the join. @param {string} ssid @param {string} psk
+ * @param {boolean} hotspot over the hotspot a lost answer is retried once; online it means the satellite already left */
+async function join(ssid, psk, hotspot) {
+  const msg = $("setup-msg");
   /* a hanging POST (answers lost, connection still open) ends after CFG.connectTimeoutMs: the retry path */
   const send = () => {
     const ac = new AbortController(), timer = setTimeout(() => ac.abort(), CFG.connectTimeoutMs);
@@ -459,28 +516,31 @@ async function connect() {
       .finally(() => clearTimeout(timer));
   };
   try {
-    let res;
+    let res = null;
     try { res = await send(); }
     catch (e) {
       /* no answer: the phone can drop off the setup hotspot for a moment (the shared radio scans or
-       * switches channel) — say so, wait, and try once more */
-      msg.className = "";
-      msg.textContent = t("retrying");
-      await new Promise((done) => setTimeout(done, CFG.connectRetryMs));
-      msg.className = "bad";
-      res = await send();
+       * switches channel) — say so, wait, and try once more. Online the satellite already left. */
+      if (hotspot) {
+        msg.className = "";
+        msg.textContent = t("retrying");
+        await new Promise((done) => setTimeout(done, CFG.connectRetryMs));
+        msg.className = "bad";
+        res = await send();
+      }
     }
-    const r = {body: /** @type {PostResult} */ (await res.json())};
+    const r = {body: /** @type {PostResult} */ (res ? await res.json() : {ok: true})};
     if (!r.body.ok) {
       const e = POST_ERROR[r.body.error || ""] || "err_json";
       msg.textContent = t(e, {max: e === "err_ssid" ? CFG.ssidMax : CFG.pskMax, min: CFG.pskMin});
+      $("wifi-switch").hidden = true;
       return;
     }
     input("psk").value = "";
     msg.className = "";
     msg.textContent = t("joining", {ssid: ssid});
-    joining = {ssid: ssid, polls: 0, left: false};
-  } catch (e) { msg.textContent = t("err_net"); }
+    joining = {ssid: ssid, polls: 0, left: false, away: hotspot};
+  } catch (e) { msg.textContent = t("err_net"); $("wifi-switch").hidden = true; }
 }
 
 /** @param {Join} j the join being watched */
@@ -489,13 +549,13 @@ async function watchJoin(j) {
   const w = await getWifi();
   j.polls++;
   if (w.mode !== "setup") j.left = true;
-  if (w.mode === "station" && w.ip) {
+  if (w.mode !== "station") j.away = true;
+  if (w.mode === "station" && w.ip && j.away) {   /* online: only once it left and came back */
     msg.className = "";
     msg.textContent = t("joined", {ip: w.ip, ssid: j.ssid}) + " ";
     const url = "http://" + CFG.host + ".local";
-    const a = el("a", url);
-    a.href = url;
-    msg.appendChild(a);
+    msg.appendChild(link(url, url));
+    $("wifi-switch").hidden = true;
     joining = null;
   } else if (w.mode === "setup" && (j.left || j.polls > 3)) {
     msg.className = "bad";
@@ -505,28 +565,24 @@ async function watchJoin(j) {
   }
 }
 
-let setupShown = false;
 async function poll() {
   try {
     if (joining) await watchJoin(joining);
     const s = (/** @type {{body: State}} */ (await fetchJson("/api/state"))).body;
     $("banner").style.display = "none";
+    wifi = s.device.wifi;
     renderLink(s.device);
+    renderWifi(wifi);
     renderFw(s.device);
-    renderAutoCamper(s.device);
-    renderUx(s.device);
-    renderExp(s.device);
+    renderRows(s.device);
     renderSensors(s.device);
     renderScreen(s.device);
     renderTime(s.device.time);
     renderSd(s.device.sd);
     renderRes(s.device.res);
     renderBattery(s.device.battery);
-    const setup = s.device.wifi.mode === "setup" || joining !== null || $("setup-msg").querySelector("a") !== null;
-    $("setup").hidden = !setup;
-    if (setup && !setupShown && !joining) scan();
-    setupShown = setup;
   } catch (e) {
+    if (joining) joining.away = true;
     $("banner").textContent = t("offline");
     $("banner").style.display = "block";
   }
@@ -535,10 +591,17 @@ async function poll() {
 
 $("connect").addEventListener("click", connect);
 $("rescan").addEventListener("click", scan);
+$("ssid").addEventListener("change", other);
+$("psk-show").addEventListener("change", () => { input("psk").type = input("psk-show").checked ? "text" : "password"; });
+$("wifi-change").addEventListener("click", () => {
+  wifiOpen = true;
+  if (wifi) renderWifi(wifi);
+  select("ssid").focus();
+});
 $("ac-toggle").addEventListener("click", () => toggle("/api/auto_camper", "ac", "ac_error"));
 $("ux-toggle").addEventListener("click", () => toggle("/api/ux_setting", "ux", "ux_error"));
 $("exp-toggle").addEventListener("click", () => toggle("/api/experimental", "exp", "exp_error", "sensors"));
-for (const [id, k] of [["scr-auto", "auto"], ["scr-prox", "prox_wake"], ["scr-motion", "motion_wake"]]) $(id).addEventListener("change", () => scrPost({[k]: input(id).checked}));
+for (const [id, k] of SCR_ROWS) $("scr-" + id + "-toggle").addEventListener("click", () => toggle("/api/display", "scr-" + id, "scr_error", k, "scr-msg"));
 $("scr-dn").addEventListener("click", () => scrStep(-5));
 $("scr-up").addEventListener("click", () => scrStep(5));
 $("fw-check").addEventListener("click", () => ota("check"));

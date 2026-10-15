@@ -40,14 +40,15 @@ A satellite with no saved WiFi opens its own setup hotspot as soon as it boots.
 
    **The page doesn't pop up?** Open a browser and go to **<http://192.168.4.1>** (plain `http`, no
    `s`). That is always the satellite's address on its own hotspot.
-3. **Choose your network and type its password.** The page lists the networks the satellite can
-   see. Pick yours, type the password, tap
-   **Connect**. If your network isn't listed, tap **Search again**.
+3. **Choose your network and type its password.** The page (*Satellite settings*, its WiFi box)
+   lists the networks the satellite can see. Pick yours, type the password (*Show password* shows
+   what you typed), tap **Connect**. If your network isn't listed, tap **Search again**, or pick
+   **Other network…** and type its name.
 
    ![The satellite's setup page on its hotspot: network list, password, Connect](screenshots/esp-setup-page.png)
 
 4. **Wait for "Connected as …".** The page says *Connecting to …*, and once the satellite has
-   joined your network it shows *Connected as 192.168.x.y. Join <your network> with this device
+   joined your network it shows *Connected as 192.168.x.y. Join <your network> with this phone
    too, then open:* followed by a link to **<http://calictl-esp.local>**.
 
    While the satellite joins, its hotspot moves to your network's channel, so your phone may drop
@@ -204,11 +205,29 @@ closes 30 seconds later).
 
 ## Changing networks, or forgetting the WiFi
 
-- **A different network:** join the setup hotspot when it is open (above) and pick the new network
-  on the page — or, on the USB console, `wifi set <network> <password>` at any time. The new
-  details replace the old ones and the satellite joins with them right away. If they are wrong it
-  behaves like a first-time setup: it forgets them and opens the setup hotspot, and the old
-  network is **not** restored.
+- **A different network, while the satellite is online:** open **Satellite settings**
+  (`http://calictl-esp.local/device`, or the camper UI's Device status → *Satellite settings*). The
+  WiFi box shows *Connected to <network> · <address> · <signal>*. Tap **Change network…**, pick the
+  network or choose **Other network…** and type its name (while the satellite is online the list
+  can be empty: it searches for networks only over its setup hotspot), type the password and tap
+  **Connect**. The page asks first and says what can go wrong: the satellite leaves its network
+  now, and if the new password is wrong it opens the setup hotspot `calictl-esp-setup` (password
+  `calictl-setup`) and **forgets the old network**. Tap **Switch network** to go ahead, or
+  **Cancel**.
+
+  The page then shows *Switching networks* — what to do once your phone loses the page:
+  - the same network with a new password: reload the page in about 30 s, or open
+    <http://calictl-esp.local>;
+  - a different network: join that network with your phone, then open <http://calictl-esp.local>;
+  - the satellite didn't come back (a wrong password): join `calictl-esp-setup` and open
+    <http://192.168.4.1> to try again.
+
+  If the satellite comes back on the same network, the page shows *Connected as …* by itself.
+- **A different network, over the setup hotspot:** join the setup hotspot when it is open (above)
+  and pick the new network on the page — or, on the USB console, `wifi set <network> <password>` at
+  any time. The new details replace the old ones and the satellite joins with them right away. If
+  they are wrong it behaves like a first-time setup: it forgets them and opens the setup hotspot,
+  and the old network is **not** restored.
 - **Forget the WiFi completely:** on the USB console type `wifi forget`. The satellite drops the
   saved network and opens the setup hotspot, just like a fresh one.
 

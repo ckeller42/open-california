@@ -8,6 +8,7 @@ firmware HTTP core: tests/firmware/test_web_e2e.py (Linux host tier).
 
 import contextlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -297,7 +298,7 @@ def test_battery_line(page, locale, lang):
 def test_firmware_row_offers_no_update_over_the_setup_hotspot(stub, page):
     """Like the firmware's 403: no Check/Install outside station mode, and the row says why."""
     with page(stub.base, locale="en-US") as pg:
-        expect(pg.locator("#fw-status")).to_contain_text(STRINGS["fw_station_only"]["en"])
+        expect(pg.locator("#fw-status")).to_contain_text(STRINGS["station_only"]["en"])
         expect(pg.locator("#fw-check")).to_be_hidden()
         expect(pg.locator("#fw-install")).to_be_hidden()
 
@@ -342,7 +343,7 @@ def test_auto_camper_row_shows_and_switches(page, locale, lang):
         expect(pg.locator("#ac-msg")).to_have_text(STRINGS["ac_error"][lang])
         assert posts[1] == {"enabled": True}
     with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
-        expect(pg.locator("#ac-status")).to_contain_text(STRINGS["ac_station_only"][lang])
+        expect(pg.locator("#ac-status")).to_contain_text(STRINGS["station_only"][lang])
         expect(pg.locator("#ac-toggle")).to_be_hidden()
 
 
@@ -384,15 +385,18 @@ def test_usage_data_row_shows_and_switches(page, locale, lang):
         expect(pg.locator("#ux-msg")).to_have_text(STRINGS["ux_error"][lang])
         assert posts[1] == {"enabled": True}
     with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
-        expect(pg.locator("#ux-status")).to_have_text(STRINGS["ux_on"][lang])
+        expect(pg.locator("#ux-status")).to_have_text(
+            STRINGS["ux_on"][lang] + " · " + STRINGS["station_only"][lang]
+        )
         expect(pg.locator("#ux-toggle")).to_be_hidden()
 
 
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
 def test_screen_row_shows_state_and_switches(page, locale, lang):
     """The /device Screen row (R_FW_DISPLAY_WAKE): state, brightness with its range, room light, a
-    sensor fault; each switch posts its one member to ``/api/display``, the -/+ stepper the offset in
-    5-point steps; over the setup hotspot the controls are greyed; without a screen (host build, QEMU)
+    sensor fault; each on/off row ("<label>: on" + one button naming the target state) posts its one
+    member to ``/api/display``, the -/+ stepper the offset in 5-point steps; over the setup hotspot
+    the rows say "needs the home WiFi" and show no control; without a screen (host build, QEMU)
     the row is hidden.
 
     .. test:: The /device page shows device.display and switches its settings, EN + DE
@@ -400,6 +404,9 @@ def test_screen_row_shows_state_and_switches(page, locale, lang):
        :links: R_FW_DISPLAY_WAKE
     """
     posts = []
+
+    def row(key, on):
+        return STRINGS[key][lang] + ": " + STRINGS["scr_on" if on else "scr_off"][lang]
 
     with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
         disp = stub.fixtures["station"]["/api/state"]["device"]["display"]
@@ -410,32 +417,28 @@ def test_screen_row_shows_state_and_switches(page, locale, lang):
             route.fulfill(status=200, content_type="application/json", body='{"ok":true}')
 
         pg.route("**/api/display", on_post)
-        status, auto = pg.locator("#scr-status"), pg.locator("#scr-auto")
+        status, auto = pg.locator("#scr-status"), pg.locator("#scr-auto-toggle")
         expect(pg.locator("#scr-title")).to_have_text(STRINGS["scr_title"][lang])
         expect(status).to_have_text(STRINGS["scr_on"][lang] + " · 68 % (8–100) · 42 lx")
-        expect(pg.locator("#scr-auto-l")).to_have_text(STRINGS["scr_auto"][lang])
-        expect(auto).to_be_checked()
-        expect(pg.locator("#scr-prox")).to_be_checked()
-        expect(pg.locator("#scr-motion-l")).to_have_text(STRINGS["scr_motion"][lang])
-        expect(pg.locator("#scr-motion")).to_be_checked()
+        expect(pg.locator("#scr-auto-status")).to_have_text(row("scr_auto", True))
+        expect(auto).to_have_text(STRINGS["ac_turn_off"][lang])
+        expect(pg.locator("#scr-prox-status")).to_have_text(row("scr_prox", True))
+        expect(pg.locator("#scr-motion-status")).to_have_text(row("scr_motion", True))
         expect(pg.locator("#scr-off")).to_have_text(STRINGS["scr_offset"][lang].replace("{n}", "0"))
-        auto.uncheck()
-        for _ in range(50):  # the POST lands before the fixture flips the next poll's state
-            if posts:
-                break
-            pg.wait_for_timeout(100)
+        auto.click()
+        expect(pg.locator("#scr-auto-status")).to_have_text(row("scr_auto", False))
+        expect(auto).to_have_text(STRINGS["ac_turn_on"][lang])
         pg.locator("#scr-up").click()
         expect(pg.locator("#scr-off")).to_have_text(STRINGS["scr_offset"][lang].replace("{n}", "+5"))
         pg.locator("#scr-dn").click()
         pg.locator("#scr-dn").click()
         expect(pg.locator("#scr-off")).to_have_text(STRINGS["scr_offset"][lang].replace("{n}", "-5"))
-        pg.locator("#scr-motion").uncheck()
-        expect(pg.locator("#scr-motion")).not_to_be_checked()
+        pg.locator("#scr-motion-toggle").click()
+        expect(pg.locator("#scr-motion-status")).to_have_text(row("scr_motion", False))
         disp.update(state="off", brightness_pct=0, lux=None, sensor="error")
         expect(status).to_have_text(
             STRINGS["scr_off"][lang] + " · 0 % (8–100) · " + STRINGS["scr_nolux"][lang]
         )
-        expect(auto).not_to_be_checked()
         assert posts == [
             {"auto": False},
             {"offset": 5},
@@ -444,8 +447,168 @@ def test_screen_row_shows_state_and_switches(page, locale, lang):
             {"motion_wake": False},
         ]
     with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
-        expect(pg.locator("#scr-auto")).to_be_disabled()
-        expect(pg.locator("#scr-up")).to_be_disabled()
-        expect(pg.locator("#scr-motion")).to_be_disabled()
+        expect(pg.locator("#scr-auto-status")).to_have_text(
+            row("scr_auto", True) + " · " + STRINGS["station_only"][lang]
+        )
+        for hidden in ("#scr-auto-toggle", "#scr-up", "#scr-motion-toggle"):
+            expect(pg.locator(hidden)).to_be_hidden()
         stub.fixtures["setup"]["/api/state"]["device"]["display"].update(state=None)
         expect(pg.locator("#scr")).to_be_hidden()
+
+
+# --- Satellite settings: title, back link, WiFi box (change network), pairing box, hotspot rule ----
+
+
+def _t(key, lang, **kw):
+    out = STRINGS[key][lang]
+    for k, v in kw.items():
+        out = out.replace("{%s}" % k, str(v))
+    return out
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_title_back_link_and_pairing_box(page, locale, lang):
+    """The page names itself "Satellite settings" (also the tab title) and leads back to the camper
+    UI: ``/`` in station mode, ``/app`` over the setup hotspot; the Camper unit box says whether a
+    unit is paired and links to the pairing wizard."""
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        expect(pg.locator("#title")).to_have_text(STRINGS["title"][lang])
+        expect(pg).to_have_title(STRINGS["title"][lang])
+        back = pg.locator("#device a")
+        expect(back).to_have_text(STRINGS["app_link"][lang])
+        expect(back).to_have_attribute("href", "/")
+        expect(pg.locator("#pair-status")).to_have_text(STRINGS["pair_on"][lang])
+        expect(pg.locator("#pair-link")).to_have_text(STRINGS["pair_link"][lang])
+        expect(pg.locator("#pair-link")).to_have_attribute("href", "/")
+    with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
+        expect(pg.locator("#device a")).to_have_attribute("href", "/app")
+        expect(pg.locator("#pair-status")).to_have_text(STRINGS["pair_off"][lang])
+        expect(pg.locator("#pair-link")).to_have_attribute("href", "/app")
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_station_rows_say_they_need_the_home_wifi_over_the_hotspot(page, locale, lang):
+    """One rule over the setup hotspot: every station-only row ends in the same suffix and shows no
+    control (no bare ``disabled``); no stray Channel label (``[hidden]`` wins over ``label``)."""
+    suffix = " · " + STRINGS["station_only"][lang]
+    with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
+        for row in ("ac", "ux", "exp", "scr-auto", "scr-prox", "scr-motion"):
+            expect(pg.locator("#%s-status" % row)).to_have_text(re.compile(re.escape(suffix) + "$"))
+            expect(pg.locator("#%s-toggle" % row)).to_be_hidden()
+        expect(pg.locator("#scr-status")).to_contain_text(suffix)
+        expect(pg.locator("#fw-status")).to_have_text(re.compile(re.escape(suffix) + "$"))
+        for hidden in ("#scr-dn", "#scr-up", "#fw-channel-l", "#fw-channel", "#fw-check", "#wifi-change"):
+            expect(pg.locator(hidden)).to_be_hidden()
+        expect(pg.locator("#adv-title")).to_have_text(STRINGS["adv_title"][lang])
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        expect(pg.locator("#ux-toggle")).to_be_visible()
+        expect(pg.locator("#ux-status")).to_have_text(STRINGS["ux_on"][lang])  # no suffix at home
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_station_wifi_box_shows_the_network_and_opens_the_form(page, locale, lang):
+    """Online, the WiFi box names the network (ssid · ip · dBm) and offers Change network…, which opens
+    the one join form; the station scan list can be empty (no scan while online): the form says so
+    and takes a typed name; "Other network…" reveals that field; the eye shows the password."""
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        expect(pg.locator("#wifi-now")).to_have_text(
+            _t("wifi_now", lang, ssid="HomeNet") + " · 192.168.1.57 · -58 dBm"
+        )
+        expect(pg.locator("#wifi-form")).to_be_hidden()
+        pg.click("#wifi-change")
+        expect(pg.locator("#wifi-form")).to_be_visible()
+        expect(pg.locator("#rescan")).to_be_hidden()  # no scan over HTTP while online (yet)
+        expect(pg.locator("#scan-empty")).to_have_text(STRINGS["no_networks"][lang])
+        expect(pg.locator("#ssid-name")).to_be_visible()
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        stub.fixtures["station"]["/api/wifi"]["scan"] = [{"ssid": "minsel", "rssi": -60, "secure": True}]
+        pg.click("#wifi-change")
+        pg.wait_for_selector("#ssid option[value=minsel]", state="attached")
+        expect(pg.locator("#scan-empty")).to_be_hidden()
+        expect(pg.locator("#ssid-name")).to_be_hidden()
+        pg.select_option("#ssid", label=STRINGS["other_network"][lang])
+        expect(pg.locator("#ssid-name")).to_be_visible()
+        expect(pg.locator("#psk")).to_have_attribute("type", "password")
+        pg.check("#psk-show")
+        expect(pg.locator("#psk")).to_have_attribute("type", "text")
+        pg.uncheck("#psk-show")
+        expect(pg.locator("#psk")).to_have_attribute("type", "password")
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_change_network_asks_first_and_cancel_posts_nothing(page, locale, lang):
+    """Connect online asks in the page first, with the honest warning naming the current network and
+    the setup hotspot; Cancel puts the buttons back and posts nothing."""
+    warn = _t("wifi_warn", lang, ssid="HomeNet", ap=CONSTS["NET_AP_SSID"], appsk=CONSTS["NET_AP_PSK"])
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        pg.click("#wifi-change")
+        pg.fill("#ssid-name", "minsel")
+        pg.fill("#psk", "test-psk-1234")
+        pg.click("#connect")
+        expect(pg.locator("#wifi-acts")).to_contain_text(warn)
+        cancel = pg.locator("#wifi-acts").get_by_role("button", name=STRINGS["sens_cancel"][lang])
+        expect(cancel).to_be_focused()
+        pg.wait_for_timeout(CONSTS["NET_PAGE_POLL_MS"] + 500)  # a poll while the step is open
+        expect(pg.locator("#banner")).to_be_hidden()
+        expect(pg.locator("#wifi-acts")).to_contain_text(warn)
+        cancel.click()
+        expect(pg.locator("#connect")).to_be_visible()
+        expect(pg.locator("#wifi-switch")).to_be_hidden()
+        pg.wait_for_timeout(300)
+        assert stub.wifi_posts == []
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_change_network_switches_and_comes_back(page, locale, lang):
+    """Confirm renders the static "Switching networks" panel BEFORE the POST (the phone loses the page
+    once the satellite leaves), posts ``{ssid, psk}``, and keeps polling: while the satellite is gone
+    nothing claims success; when it answers again on the network, the "Connected as…" result shows."""
+    host = "http://%s.local" % CONSTS["NET_HOSTNAME"]
+    held = []
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        pg.route("**/api/wifi", lambda r: held.append(r) if r.request.method == "POST" else r.continue_())
+        pg.click("#wifi-change")
+        pg.fill("#ssid-name", "minsel")
+        pg.fill("#psk", "test-psk-1234")
+        pg.click("#connect")
+        pg.locator("#wifi-acts button.danger").click()
+        panel = pg.locator("#wifi-switch")
+        expect(panel).to_be_visible()  # the POST is still held: the panel came first
+        assert len(held) == 1 and stub.wifi_posts == []
+        expect(panel).to_contain_text(_t("switch_other", lang, ssid="minsel"))
+        expect(panel).to_contain_text(
+            _t("switch_lost", lang, ap=CONSTS["NET_AP_SSID"], appsk=CONSTS["NET_AP_PSK"])
+        )
+        expect(panel.locator('a[href="%s"]' % host).first).to_be_visible()
+        expect(panel.locator('a[href="http://%s"]' % CONSTS["NET_AP_ADDR"])).to_be_visible()
+        held[0].continue_()
+        for _ in range(50):
+            if stub.wifi_posts:
+                break
+            pg.wait_for_timeout(100)
+        assert stub.wifi_posts == [{"ssid": "minsel", "psk": "test-psk-1234"}]
+        stub.down = True  # the satellite left for minsel: no answers at all
+        pg.wait_for_timeout(3 * CONSTS["NET_PAGE_POLL_MS"])
+        expect(pg.locator("#setup-msg a")).to_have_count(0)  # no success while it is gone
+        stub.down = False
+        msg = pg.locator("#setup-msg")
+        expect(msg).to_contain_text(_t("joined", lang, ip="192.168.1.57", ssid="minsel"), timeout=10000)
+        expect(msg.locator('a[href="%s"]' % host)).to_be_visible()
+        expect(panel).to_be_hidden()
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_change_to_the_same_network_posts_ssid_and_psk(page, locale, lang):
+    """Same network, new password: the panel says reload; the stub receives exactly ``{ssid, psk}``."""
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        stub.fixtures["station"]["/api/wifi"]["scan"] = [{"ssid": "HomeNet", "rssi": -52, "secure": True}]
+        pg.click("#wifi-change")
+        pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
+        pg.select_option("#ssid", "HomeNet")
+        pg.fill("#psk", "new-psk-5678")
+        pg.click("#connect")
+        with pg.expect_response("**/api/wifi"):
+            pg.locator("#wifi-acts button.danger").click()
+        expect(pg.locator("#wifi-switch")).to_contain_text(STRINGS["switch_same"][lang])
+        assert stub.wifi_posts == [{"ssid": "HomeNet", "psk": "new-psk-5678"}]
+        expect(pg.locator("#setup-msg")).to_have_text(_t("joining", lang, ssid="HomeNet"))
