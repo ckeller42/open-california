@@ -283,7 +283,7 @@ write whose link dropped after the frame went out as *unconfirmed* (#271). It ho
 the van is parked: the unit's ATT MTU request is answered since NimBLE keeps its {term}`GATT server`
 (#279), so #266's paced reconnect was removed: a dropped link takes the 1 s→60 s backoff. It
 also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
-then it serves the calictl UI (with a Device status screen), a WiFi setup page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
+then it serves the calictl UI at `/` in every WiFi mode (with Device status, Satellite settings and, over the hotspot, a WiFi-setup screen), a minimal WiFi recovery page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
 from `http://calictl-esp.local` — the same platform-free C (`wifi_sm`/`wifi_run`/`http_core`/`web`)
 on the host tier, where a scripted fake WiFi stands in for the radio, and on the chip. In station mode
 the satellite serves the same calictl web UI at `/` with its controls live (`POST /api/command` in

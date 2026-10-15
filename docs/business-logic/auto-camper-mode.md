@@ -21,7 +21,7 @@ Toggle it on the web-UI **Camping** card. The setting persists across daemon res
 
 **On the ESP32 satellite too** (since 2026-10-11, `R_FW_AUTO_CAMPER`, `docs/firmware.md` "Auto camper
 mode"): the same decision as a C twin held to this function by generated vectors, **on by default**,
-switched on the satellite's `/device` page. If buspi's auto-camper also runs, both may restore after the
+switched in the satellite's Satellite settings. If buspi's auto-camper also runs, both may restore after the
 same park — harmless: the decision skips once camping reads on again, and the camping frame is
 full-packet with every other field at the leave-unchanged sentinel, so a second restore writes the same
 state. buspi's journal 2026-10-11 shows the cycle on the real van: 17:43:20 `armed_engine_shed`, two

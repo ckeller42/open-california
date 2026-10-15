@@ -21,7 +21,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
 | `ui/` | GUI specs (`screens/*.yaml`) — **authoritative for app UI semantics** — + `prototype.html` (an RE preview, not the served UI). VW icons are **never committed** (`ui/assets/` untracked; placeholders without them). |
 | `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
-| `firmware/` | ESP32-S3 satellite (#154): `cali_core` (platform-free C: pairing, session, `control` twin of `calictl.control`, WiFi, HTTP, web endpoints), `cali_ble_nimble`, `platform`, `web/` (edit `index.html`/`page.js`/`strings.json`; `gen_c_dict` renders the rest), `host`/`qemu`/`main` builds. No roof. Features + requirements: `docs/firmware.md` |
+| `firmware/` | ESP32-S3 satellite (#154): `cali_core` (platform-free C: pairing, session, `control` twin of `calictl.control`, WiFi, HTTP, web endpoints), `cali_ble_nimble`, `platform`, `web/` (edit `index.html` = the `/device` recovery page, `strings.json` = the display's texts; `gen_c_dict` renders the rest), `host`/`qemu`/`main` builds. No roof. Features + requirements: `docs/firmware.md` |
 
 ## Hard rules (don't break these)
 
@@ -33,10 +33,10 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
   `asyncio.Lock` in `serve.py` (created **inside** the running loop) serializes all access.
 - **BLE codec is MSB-first**; control frames are **full-packet** (resend every field;
   unchanged fields = the leave-unchanged sentinel, usually `3` for 2-bit).
-- **The web UI is un-built JS; `tsc --checkJs` is its hard gate** (`calictl/webui/jsconfig.json`
-  and the ESP32 page's `firmware/web/jsconfig.json`, baseline **0 errors** — keep it there). `node --check` only parses; an undeclared identifier in a
+- **The web UI is un-built JS; `tsc --checkJs` is its hard gate** (`calictl/webui/jsconfig.json`,
+  baseline **0 errors** — keep it there; webcheck also checks the ESP32 recovery page's inline script). `node --check` only parses; an undeclared identifier in a
   renderer once shipped to buspi because no test rendered that screen. Run `tools/ci.sh webcheck`
-  (also CI `pre-commit` + the `webcheck` pre-commit hook when webui or `firmware/web` JS is staged). Any label/enum shown to the user must
+  (also CI `pre-commit` + the `webcheck` pre-commit hook when webui JS or `firmware/web/index.html` is staged). Any label/enum shown to the user must
   use the unit's own vocabulary (Sofortheizen / Dauerbetrieb / Flüstermodus …), EN + DE
   (`strings.de.js`; `tests/test_i18n_de.py` guards literal `t()` keys).
 - **Every dictionary field has a catalog decision** (`surface` w/ name, or `omit` w/ reason).
@@ -108,7 +108,7 @@ curl -s -X POST http://<esp>/api/ota -d '{"action":"install"}'   # update the ES
 ssh pi@buspi '~/open-california/tools/esplab/flash_ci.sh <ci-run-id> /dev/ttyACM0'   # USB recovery / new partition layout: flash THAT merge's ci.yml run
 ```
 
-**Update the ESP over the air** (`POST /api/ota`, or `/device` → *Install*): CI's `firmware-release`
+**Update the ESP over the air** (`POST /api/ota`, or Satellite settings → *Install*): CI's `firmware-release`
 puts each `main` merge on the `esp-latest` prerelease (`docs/firmware.md` "Firmware update from
 GitHub"). Over USB, **flash by explicit CI run id**, never `flash_ci.sh main`: it picks the latest *successful*
 run, and the `[skip ci]` screenshot commit that lands right after a merge cancels the merge commit's

@@ -14,7 +14,7 @@ pairs with your {term}`camper unit` on its own, without the Raspberry Pi (see [E
 
 The satellite reads the camper unit and, on your home WiFi, controls the fridge, camping mode,
 lights (the wake-up light included), air heater and energy mode with the same frames the Pi sends
-— never the pop-up roof (that stays with {term}`buspi` or the app). Its page shows what the unit reports
+— never the pop-up roof (that stays with {term}`buspi` or the app). Its web UI shows what the unit reports
 and the device's own state (Bluetooth pairing, link, WiFi).
 
 ## What you need
@@ -34,28 +34,28 @@ A satellite with no saved WiFi opens its own setup hotspot as soon as it boots.
 
 1. **Join the setup hotspot.** On your phone, open the WiFi settings and join
    **`calictl-esp-setup`**. Its password is **`calictl-setup`**.
-2. **The setup page opens by itself.** Right after you join, your phone checks whether the network
-   needs a sign-in and finds the satellite's page instead — a "Sign in to network" notice or a
+2. **WiFi setup opens by itself.** Right after you join, your phone checks whether the network
+   needs a sign-in and finds the satellite's camper UI instead, on its **WiFi setup** screen — a "Sign in to network" notice or a
    small browser window pops up. Tap it.
 
-   **The page doesn't pop up?** Open a browser and go to **<http://192.168.4.1>** (plain `http`, no
+   **Nothing pops up?** Open a browser and go to **<http://192.168.4.1>** (plain `http`, no
    `s`). That is always the satellite's address on its own hotspot.
-3. **Choose your network and type its password.** The page (*Satellite settings*, its WiFi box)
+3. **Choose your network and type its password.** The *WiFi setup* screen (*Connect to your WiFi*)
    lists the networks the satellite can see. Pick yours, type the password (*Show password* shows
    what you typed), tap **Connect**. If your network isn't listed, tap **Search again**, or pick
    **Other network…** and type its name.
 
-   ![The satellite's setup page on its hotspot: network list, password, Connect](screenshots/esp-setup-page.png)
+   ![The camper UI's WiFi setup screen on the satellite's hotspot: network list, password, Connect](screenshots/esp-setup-page.png)
 
-4. **Wait for "Connected as …".** The page says *Connecting to …*, and once the satellite has
+4. **Wait for "Connected as …".** The screen says *Connecting to …*, and once the satellite has
    joined your network it shows *Connected as 192.168.x.y. Join <your network> with this phone
    too, then open:* followed by a link to **<http://calictl-esp.local>**.
 
    While the satellite joins, its hotspot moves to your network's channel, so your phone may drop
-   off the setup WiFi for a moment; it comes back by itself and the page then shows the result.
-   (The page also retries a **Connect** that got no answer once, saying *Retrying the connection…*.)
+   off the setup WiFi for a moment; it comes back by itself and the screen then shows the result.
+   (It also retries a **Connect** that got no answer once, saying *Retrying the connection…*.)
 
-   If joining failed, the page says why: *Wrong password — try again.*, *Network not found — check
+   If joining failed, the screen says why: *Wrong password — try again.*, *Network not found — check
    that it is in range, then try again.*, or *Could not join the network — try again.* The
    satellite forgets the failed password and keeps its setup hotspot open, so you can simply try
    again.
@@ -64,6 +64,13 @@ A satellite with no saved WiFi opens its own setup hotspot as soon as it boots.
    **<http://calictl-esp.local>**.
 
 From now on the satellite joins your network by itself every time it starts.
+
+**The camper UI doesn't load at all?** The satellite also serves a tiny fallback page,
+**<http://192.168.4.1/device>** on its hotspot (or `http://calictl-esp.local/device` on your network):
+*Satellite WiFi*, with the current WiFi state, the same network list and password form, and a link
+back to the camper UI. It is only a way back onto WiFi; everything else is in the camper UI.
+
+![The satellite's WiFi recovery page: state, network list, password, Connect](screenshots/esp-recovery-page.png)
 
 ## Pair the satellite with your camper unit
 
@@ -76,7 +83,8 @@ camper screen's side: [How to pair your camper unit](howto-pair-your-camper.md))
    the unit) can collide with it. A Pi running calictl can stay up — the unit serves several
    Bluetooth clients at once, so the satellite pairs alongside it.
 2. Open the calictl UI — **<http://calictl-esp.local>** on your WiFi, or, still on the setup
-   hotspot, the *Pair now ›* link in the device page's *Camper unit* box (**<http://192.168.4.1/app#pair>**).
+   hotspot, the *WiFi setup* screen at **<http://192.168.4.1>**: its *No camper unit is paired yet* banner
+   has **Pair…** (or open **<http://192.168.4.1/#pair>**).
 3. The link opens the wizard; otherwise tap **Pair…** on the *No camper unit is
    paired yet* banner (or ⋮ → **Device status** → **Pair…**). The wizard opens at the top of the page. Tick *I'm on that screen*, tap **Pair now**.
 4. Type the 6-digit passcode the unit now shows and tap **Send**. *✓ Paired — …* — the satellite
@@ -96,9 +104,9 @@ never over the setup hotspot (see [Control from the satellite](#control-from-the
 Device and WiFi details are in the ⋮ menu, **Device status**, one card per device: *Camper unit*
 (connection, last update, pairing with **Pair…** / **Unpair…**, the unit's firmware) and *Satellite*
 (firmware, WiFi network · IP · signal, uptime, storage, battery, resources). Its **Satellite
-settings ›** button goes to **<http://calictl-esp.local/device>**, the satellite's own page: WiFi
-(**Change network…**), restore camping after you park, screen, the firmware update, usage data,
-experimental sensors and a link back to the calictl UI.
+settings ›** button opens the satellite's own settings (**<http://calictl-esp.local/#satsettings>**): WiFi
+(**Change network…**), restore camping after you park, screen, the firmware update, usage data and
+experimental sensors.
 
 **The name doesn't resolve?** Some devices (older Android phones in particular) can't open
 `.local` names. Find the satellite's address instead:
@@ -190,9 +198,9 @@ password) at the bottom. The texts are German by default; an English build exist
 The screen lights up when you **tap it** (that tap only wakes it, it presses nothing), when you
 **reach toward it**, or when a row turns amber or red; it dims after **60 seconds** and goes dark
 after **5 minutes**. How bright it is follows the room light — dim in a dark van, bright in
-daylight. The *Screen* box on `http://calictl-esp.local/device` shows it and switches the
+daylight. The *Screen* box in **Satellite settings** shows it and switches the
 room-light brightness and the wake-on-hand off or on; − / + makes it a little darker or brighter. Each row has room for two lines; only an unusually long network name is cut
-with "…" — the page shows it in full.
+with "…" — the camper UI shows it in full.
 
 ## If your network is out of reach
 
@@ -207,26 +215,26 @@ closes 30 seconds later).
 ## Changing networks, or forgetting the WiFi
 
 - **A different network, while the satellite is online:** open **Satellite settings**
-  (`http://calictl-esp.local/device`, or the camper UI's Device status → *Satellite settings*). The
+  (the camper UI's ⋮ → Device status → *Satellite settings ›*, or `http://calictl-esp.local/#satsettings`). The
   WiFi box shows *Connected to <network> · <address> · <signal>*. Tap **Change network…**, pick the
   network or choose **Other network…** and type its name (the list fills a moment after the form
   opens; **Search again** looks once more — at most every 30 s), type the password and tap
-  **Connect**. The page asks first and says what can go wrong: the satellite leaves its network
+  **Connect**. The screen asks first and says what can go wrong: the satellite leaves its network
   now, and if the new password is wrong it **returns to the old network by itself**. Tap **Switch
   network** to go ahead, or **Cancel**.
 
-  The page then shows *Switching networks* — what to do once your phone loses the page:
+  The screen then shows *Switching networks* — what to do once your phone loses the satellite:
   - the same network with a new password: reload the page in about 30 s, or open
     <http://calictl-esp.local>;
   - a different network: join that network with your phone, then open <http://calictl-esp.local>;
   - a wrong password: the satellite is back on the old network within a minute; otherwise (it
     came back on neither) join `calictl-esp-setup` and open <http://192.168.4.1> to try again.
 
-  If the satellite comes back on the same network, the page shows *Connected as …* by itself — or,
+  If the satellite comes back on the same network, the screen shows *Connected as …* by itself — or,
   when the new network did not work, *The new network didn't work (wrong password); back on
   <network>.*
 - **A different network, over the setup hotspot:** join the setup hotspot when it is open (above)
-  and pick the new network on the page — or, on the USB console, `wifi set <network> <password>` at
+  and pick the new network on the *WiFi setup* screen — or, on the USB console, `wifi set <network> <password>` at
   any time. The new details replace the old ones and the satellite joins with them right away. If
   they are wrong while the satellite was on a working network (online, or still retrying it), it
   goes back to that network as above; over the setup hotspot it behaves like a first-time setup:
@@ -244,10 +252,10 @@ Enter:
 
 | Command | What it does |
 |---|---|
-| `wifi set <network> <password>` | Save the network and join it. The network name must be a single word here — a name with spaces can only be chosen on the setup page. |
+| `wifi set <network> <password>` | Save the network and join it. The network name must be a single word here — a name with spaces can only be chosen on the WiFi setup screen. |
 | `wifi status` | One line: `LOG wifi: <setup\|station\|off> ssid=… ip=… rssi=… scan=<n>` (`-` where there is nothing to report). |
 | `wifi forget` | Forget the saved network and reopen the setup hotspot. |
-| `wifi scan` | Look for networks again (the setup page's list). |
+| `wifi scan` | Look for networks again (the WiFi setup screen's list). |
 | `status` | The Bluetooth pairing state, plus a `"wifi"` part with mode, network and IP. |
 | `set <function> <what> <value>` | A control command, e.g. `set cooler power on` (see [Control from the satellite](#control-from-the-satellite)); works in every WiFi mode, since the cable is physical access. |
 
@@ -260,7 +268,7 @@ back**. The replies you'll see:
 - `LOG wifi: bad psk` — the password is not 8–63 characters; `LOG wifi: bad ssid` — the name is
   longer than 32 characters; `LOG wifi: usage: wifi set <ssid> <psk>` — one of the two is missing,
   or the name **or the password** has a space. `wifi set` cannot take either with a space (WiFi
-  passwords may contain spaces): use the setup page for those.
+  passwords may contain spaces): use the WiFi setup screen for those.
 - `LOG wifi: credentials replaced, reconnecting` — you replaced a saved network.
 - `LOG wifi: setup hotspot up (calictl-esp-setup)` / `LOG wifi: setup hotspot closed`.
 

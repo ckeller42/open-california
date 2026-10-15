@@ -1436,22 +1436,24 @@ link holds (:need:`S_SEQ_SLEEP`). See :doc:`firmware`
      ``192.168.4.1``. The captive DNS answers every A query with that address. The HTTP server
      answers the OS captive-portal probe paths (``/generate_204``, ``/hotspot-detect.html``,
      ``/connecttest.txt`` and the other known ones) with ``302`` to ``http://192.168.4.1/``, and any
-     other path in setup mode with ``302`` to ``/``. A phone that joins is led to the page.
-   * **Page.** ``GET /`` serves the setup page (the same bytes as ``GET /device``). It polls
-     ``GET /api/wifi`` every 2 s: mode, why the last join failed, and the last scan's networks. A
-     scan is deferred while a BLE pairing flow is active (``R_FW_WIFI_BLE_COEX``) and starts on the
+     other path in setup mode with ``302`` to ``/``. A phone that joins is led to the web UI.
+   * **Page.** ``GET /`` serves the calictl web UI in every mode; in setup mode it opens on its
+     WiFi-setup screen (``#wifisetup``). It reads ``GET /api/wifi`` (mode, why the last join failed,
+     the last scan's networks) when the form opens, again a moment later for the fresh scan, and
+     every 2 s while it watches a join. ``GET /device`` is a minimal recovery page with the same join
+     form, the fallback if the UI fails. A scan is deferred while a BLE pairing flow is active (``R_FW_WIFI_BLE_COEX``) and starts on the
      first tick after it.
    * **Submit.** ``POST /api/wifi`` takes exactly ``{"ssid","psk"}``. The SSID is 1 to 32 bytes and
      the passphrase 8 to 63, open networks are not supported. Valid credentials go to the key-value
      store (``wifi_ssid``, ``wifi_psk``) and the runner joins as a station (CONNECTING). The
      hotspot moves to the network's channel, so the phone may drop off for a moment.
    * **Joined.** The station gets an address: ONLINE, mDNS announces ``calictl-esp.local``
-     (``_http._tcp``, port 80), the next page poll reports station mode, and the hotspot closes
-     30 s later so the phone can read the answer first. From now on ``GET /`` serves the calictl
-     web UI and ``/api/state`` reports ``device.control.writes`` true (:need:`S_SEQ_ESP_COMMAND`).
+     (``_http._tcp``, port 80), the next ``/api/wifi`` read reports station mode (WiFi setup shows
+     *Connected as …* with the ``calictl-esp.local`` link), and the hotspot closes 30 s later so the
+     phone can read the answer first. From now on ``/api/state`` reports ``device.control.writes`` true (:need:`S_SEQ_ESP_COMMAND`).
    * **Failed.** Credentials typed in *this* setup flow are cleared and the state returns to
      SETUP_AP with the hotspot still up. ``last_error`` is ``auth``, ``not_found`` or ``other`` and
-     the page turns it into a sentence.
+     WiFi setup turns it into a sentence.
    * **Saved credentials that stop working** (router off, van moved) are never wiped: RETRYING with
      a 1 s doubling to 60 s backoff, and after 5 minutes the hotspot reopens alongside while the
      retries go on (SETUP_AP_RETRYING).
@@ -1473,8 +1475,8 @@ link holds (:need:`S_SEQ_SLEEP`). See :doc:`firmware`
         P->>E: join the hotspot
         P->>E: OS probe GET /generate_204 (or hotspot-detect.html and the others)
         E-->>P: 302 to http://192.168.4.1/ so the sign-in page opens
-        P->>E: GET / (the setup page)
-        loop page poll every 2 s
+        P->>E: GET / (the web UI, it opens on WiFi setup)
+        loop when the form opens, and every 2 s while a join is watched
             P->>E: GET /api/wifi
             E-->>P: mode, last_error, scan list (a scan waits while a BLE pairing flow is active)
         end
@@ -1484,11 +1486,11 @@ link holds (:need:`S_SEQ_SLEEP`). See :doc:`firmware`
         alt joined
             R-->>E: DHCP address
             E->>E: ONLINE, announce calictl-esp.local through mDNS
-            E-->>P: next poll shows station mode and the address
-            Note over E: 30 s later the hotspot closes, GET / now serves the calictl UI
+            E-->>P: next read shows station mode and the address
+            Note over E: 30 s later the hotspot closes, the UI now has its controls live
         else join failed
             E->>E: clear the credentials typed in this flow, back to SETUP_AP, last_error auth, not_found or other
-            E-->>P: the page says why, the hotspot is still open
+            E-->>P: WiFi setup says why, the hotspot is still open
         end
         Note over E,R: saved credentials later unreachable, RETRYING 1 s doubling to 60 s, never wiped, after 5 min the hotspot reopens alongside
         Note over E,R: online, new credentials that fail, the previous ones are restored and rejoined, reverted true
@@ -1497,8 +1499,8 @@ link holds (:need:`S_SEQ_SLEEP`). See :doc:`firmware`
 (``tests/firmware/test_wifi_sm_parity.py``). The captive DNS, the HTTP core, the endpoints and a
 scripted fake WiFi run on the host tier (``test_captive_dns.py``, ``test_http_core.py``,
 ``test_web_handlers.py``, ``test_net_host.py``, ``test_host_e2e.py``). On 2026-10-01 a real CoreS3
-joined a 2.4 GHz network through its hotspot and the page, with a Linux laptop on the hotspot, not a
-phone. A phone's sign-in notice, the captive-portal probes of each OS and a van WiFi are still to be
+joined a 2.4 GHz network through its hotspot and the then setup page (the WiFi-setup screen since U2), with a
+Linux laptop on the hotspot, not a phone. A phone's sign-in notice, the captive-portal probes of each OS and a van WiFi are still to be
 confirmed (`howto-esp-wifi-setup.md` status box and :doc:`firmware`, "Network watch items").
 
 .. spec:: Satellite station-mode control command through the write allow-list

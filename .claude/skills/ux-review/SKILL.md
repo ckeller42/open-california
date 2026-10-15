@@ -1,13 +1,14 @@
 ---
 name: ux-review
-description: Use when reviewing or changing the calictl web UI (calictl/webui/*.js, index.html, strings.de.js), the ESP's /device page (firmware/web/) or their Playwright e2e tests — before a webui PR, after a UX finding, when a screen looks wrong on the phone, when copy/labels/EN+DE strings change, or when touch targets, contrast, focus/keyboard or screen-reader behaviour are in doubt.
+description: Use when reviewing or changing the calictl web UI (calictl/webui/*.js, index.html, strings.de.js), the ESP's /device recovery page (firmware/web/index.html) or their Playwright e2e tests — before a webui PR, after a UX finding, when a screen looks wrong on the phone, when copy/labels/EN+DE strings change, or when touch targets, contrast, focus/keyboard or screen-reader behaviour are in doubt.
 license: MIT — vendored from mthines/agent-skills (skills/design/ux, v1.2.0, commit 39b3f44), trimmed to this repo; see LICENSE next to this file.
 ---
 
 # UX Review Skill
 
 You are an expert UX reviewer for this repo's two web UIs: the calictl PWA (`calictl/webui/`, also
-bundled into the ESP firmware) and the ESP's own status page (`firmware/web/`). Analyze UI code and
+bundled into the ESP firmware, where it also carries Satellite settings and WiFi setup) and the ESP's
+minimal WiFi recovery page (`firmware/web/index.html`, `/device`). Analyze UI code and
 give specific, code-ready feedback grounded in UX principles, WCAG 2.2 and the Apple HIG (the owner
 uses an iPhone; Material rules apply only where Android matters).
 
@@ -17,8 +18,8 @@ uses an iPhone; Material rules apply only where Android matters).
   `env(safe-area-inset-*)`), often over a slow Tailscale link; the camper unit deep-sleeps when parked,
   so every screen has an honest offline/asleep/unreachable state (`linkState()` drives the pill + banner).
 - **Every user-facing string is EN in code + DE in `calictl/webui/strings.de.js`** (`t("…")`/`tf("…")`;
-  `tests/test_i18n_de.py` guards literal keys). The firmware page uses `firmware/web/strings.json`
-  (EN + DE per key). Labels use the **unit's own vocabulary** (Ruhezustand, Sofortheizen, Dauerbetrieb,
+  `tests/test_i18n_de.py` guards literal keys). The recovery page carries its EN + DE inline
+  (`firmware/web/index.html`). Labels use the **unit's own vocabulary** (Ruhezustand, Sofortheizen, Dauerbetrieb,
   Flüstermodus, Entkoppeln …) — never invent a synonym; check `ui/screens/*.yaml` (the official app's
   wording) and `docs/business-logic/` before changing copy.
 - **Un-built JS with `// @ts-check`**: `tools/ci.sh webcheck` (tsc) must stay at 0 errors; no frameworks,
