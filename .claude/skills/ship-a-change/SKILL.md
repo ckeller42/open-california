@@ -77,9 +77,12 @@ Never hand-merge `app_bundle_gen.h`, `semantics.json`, control vectors, `screens
 python3.13 -m tools.build_web && python3.13 -m tools.gen_semantics_vectors \
   && python3.13 -m tools.gen_control_vectors && python3.13 -m tools.gen_c_dict
 python3.13 -m tools.gen_c_dict --check && git add -A
-git grep -n -e '^<<<<<<< ' -e '^>>>>>>> ' && echo "UNRESOLVED" || git rebase --continue
-git fetch origin    # lease = the remote sha you last saw
-git push --force-with-lease=BRANCH:$(git rev-parse origin/BRANCH) origin BRANCH
+if git grep -n -e '^<<<<<<< ' -e '^>>>>>>> '; then
+  echo "UNRESOLVED conflict markers: fix them, git add, run this block again"
+else
+  git rebase --continue && git fetch origin \
+    && git push --force-with-lease=BRANCH:$(git rev-parse origin/BRANCH) origin BRANCH   # lease = the remote sha you last saw
+fi
 ```
 
 `git add -A` stages a hand-written file **with** its conflict markers (a `docs/api.rst` slipped

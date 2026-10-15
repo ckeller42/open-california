@@ -21,6 +21,19 @@ subprocess.run(["stty", "-F", port, "-hupcl", "115200", "raw", "-echo"], check=T
 fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
 
 
+def send(data):
+    """Write all of data: the port is non-blocking, so retry a short write or EAGAIN."""
+    view = memoryview(data)
+    deadline = time.time() + 5
+    while view:
+        try:
+            view = view[os.write(fd, view) :]
+        except BlockingIOError:
+            if time.time() > deadline:
+                sys.exit("console write timed out")
+            time.sleep(0.01)
+
+
 def pump(t):
     end, buf = time.time() + t, b""
     while time.time() < end:
@@ -32,10 +45,10 @@ def pump(t):
 
 
 pump(0.5)
-os.write(fd, b"wifi status\n")
+send(b"wifi status\n")
 pump(2)
-os.write(fd, ("wifi set %s %s\n" % (ssid, psk)).encode())
+send(("wifi set %s %s\n" % (ssid, psk)).encode())
 pump(20)
-os.write(fd, b"wifi status\n")
+send(b"wifi status\n")
 pump(2)
 os.close(fd)
