@@ -44,7 +44,7 @@ address on the van's WiFi; that one always works there.
 Updates come over WiFi from the project's GitHub page — **only when you ask**; the satellite never
 updates on its own.
 
-1. Open the satellite's page, then **⋮ → Device status → Open setup**.
+1. Open the satellite's page, then **⋮ → Device status → Satellite settings**.
 2. In the **Firmware update** row tap **Check for update**.
 3. If a newer version is there, the button turns into **Install `<version>`**. Tap it.
 4. The row counts up (*downloading … %*, *verifying …*, *installed, restarting …*). The satellite
@@ -58,7 +58,7 @@ normal WiFi network with internet (not its own setup hotspot).
 
 ## What the status rows mean
 
-You see these under **⋮ → Device status**, and on the **Open setup** page:
+You see these under **⋮ → Device status**, and on the **Satellite settings** page:
 
 - **Storage** — the SD card. *SD 28.1 of 29.7 GB free · log #1042* means the card works; the
   number is the latest log entry, so it should go up while the camper unit is connected. *No SD
@@ -70,7 +70,7 @@ You see these under **⋮ → Device status**, and on the **Open setup** page:
   the lowest since it started; *PSRAM … KB free* is its larger second memory; *CPU 4 %* is how busy
   the processor is. Nothing to do here unless something stops working — then these numbers help
   when reporting the problem.
-- **Clock** (on the *Open setup* page) — where the satellite gets the time for its log. *Clock
+- **Clock** (on the *Satellite settings* page) — where the satellite gets the time for its log. *Clock
   synced (SNTP)* is internet time, the best. *Clock from the camper unit* uses the camper unit's own
   clock, which is a few seconds behind — fine for the log. *Clock not synced yet* or *No clock
   source* happen briefly after a restart, or when there is no internet and the camper unit's clock

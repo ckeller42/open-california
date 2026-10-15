@@ -17,7 +17,7 @@ window.STRINGS_DE = {
   "More in the documentation": "Mehr in der Dokumentation",
   "Camper unit": "Camper-Einheit",
   "Last update": "Letzte Aktualisierung",
-  "Bonded unit": "Gekoppelte Einheit",
+  "Paired unit": "Gekoppelte Einheit",
   "not paired": "nicht gekoppelt",
   "online": "online",
   "Unit firmware": "Firmware der Einheit",
@@ -47,11 +47,11 @@ window.STRINGS_DE = {
   "on USB, charging": "an USB, lädt",
   "on battery": "im Akkubetrieb",
   "~{time} left": "noch ~{time}",
-  "Open setup": "Setup öffnen",
-  "Bluetooth pairing…": "Bluetooth-Kopplung…",
+  "Satellite settings": "Satellit-Einstellungen",
+  "Pair…": "Koppeln…",
   "Unpair…": "Entkoppeln…",
-  "Unpair removes the working bond; telemetry stops until re-paired. Continue?":
-    "Entkoppeln entfernt die bestehende Verbindung; die Telemetrie stoppt bis zur erneuten Kopplung. Fortfahren?",
+  "Unpair the camper unit? Data stops until you pair again.":
+    "Camper-Einheit entkoppeln? Bis zum erneuten Koppeln kommen keine Daten.",
 
   // --- word producers (onoff / yn / positions / small values) -------------------------------
   "On": "An",
@@ -367,6 +367,7 @@ window.STRINGS_DE = {
     "Offline — Fahrzeug im Ruhezustand. Letzte Daten {clock} ({ago}).",
   "Offline — no data yet (van asleep since the monitor started). Checked {clock}.":
     "Offline — noch keine Daten (Fahrzeug seit dem Start im Ruhezustand). Geprüft {clock}.",
+  "Not paired yet — no data.": "Noch nicht gekoppelt — keine Daten.",
   "Connecting… Last data {clock} ({ago}).": "Verbinde … Letzte Daten {clock} ({ago}).",
   "Connecting…": "Verbinde …",
   "⚠ {name} not reachable since {since}. Last data {clock} ({ago}).":
@@ -386,9 +387,9 @@ window.STRINGS_DE = {
   // --- pairing wizard ------------------------------------------------------------------------
   "Set up remote control": "Fernsteuerung einrichten",
   "Close": "Schließen",
-  ["On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows "
+  ["On the camper unit open Einstellungen → Bluetooth → Gerät verbinden. It shows "
     + "“Passcode: ---” until buspi connects."]:
-    "Wähle in der Camper-Bedieneinheit Einstellungen → Bluetooth → Gerät verbinden. Dort steht "
+    "Öffne an der Camper-Einheit Einstellungen → Bluetooth → Gerät verbinden. Dort steht "
     + "„Passcode: ---“, bis buspi sich verbindet.",
   ["Close the California On Tour app while pairing — its reconnects can collide with the "
     + "passkey window."]:
@@ -399,9 +400,9 @@ window.STRINGS_DE = {
     "Beende während der Kopplung andere Bluetooth-Scanner auf diesem Pi (zum Beispiel die "
     + "Home-Assistant-Bluetooth-Integration).",
   // the satellite's own variants (R_FW_PAIRING_WIZARD)
-  ["On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows "
+  ["On the camper unit open Einstellungen → Bluetooth → Gerät verbinden. It shows "
     + "“Passcode: ---” until the satellite connects."]:
-    "Wähle in der Camper-Bedieneinheit Einstellungen → Bluetooth → Gerät verbinden. Dort steht "
+    "Öffne an der Camper-Einheit Einstellungen → Bluetooth → Gerät verbinden. Dort steht "
     + "„Passcode: ---“, bis der Satellit sich verbindet.",
   ["If a Raspberry Pi with calictl runs near the van, stop it during pairing — its Bluetooth "
     + "activity can collide with the passkey window."]:
@@ -411,76 +412,74 @@ window.STRINGS_DE = {
     "Auf dem Satelliten gespeichert — übersteht einen Neustart. Keine weitere Aktion nötig.",
   ["Check that “Gerät verbinden” is open on the unit, that the satellite is in range, and that "
     + "no phone is connected to the unit."]:
-    "Prüfe, dass „Gerät verbinden“ auf der Bedieneinheit geöffnet ist, dass der Satellit in "
-    + "Reichweite ist und dass kein Handy mit der Bedieneinheit verbunden ist.",
+    "Prüfe, dass „Gerät verbinden“ an der Camper-Einheit geöffnet ist, dass der Satellit in "
+    + "Reichweite ist und dass kein Handy mit der Camper-Einheit verbunden ist.",
   ["The unit may be asleep, or a phone or a Raspberry Pi with calictl may still hold its single "
     + "connection. Wake the unit at its panel, disconnect the phone, then try again. An existing "
-    + "bond is kept."]:
-    "Die Bedieneinheit schläft vielleicht, oder ein Handy oder ein Raspberry Pi mit calictl belegt "
-    + "noch ihre einzige Verbindung. Wecke die Bedieneinheit an ihrem Bildschirm, trenne das Handy "
+    + "pairing is kept."]:
+    "Die Camper-Einheit schläft vielleicht, oder ein Handy oder ein Raspberry Pi mit calictl belegt "
+    + "noch ihre einzige Verbindung. Wecke die Camper-Einheit an ihrem Bildschirm, trenne das Handy "
     + "und versuche es erneut. Eine bestehende Kopplung bleibt erhalten.",
   "I'm on that screen": "Ich bin auf diesem Bildschirm",
-  "Connect now": "Jetzt verbinden",
+  "Pair now": "Jetzt koppeln",
   "Loading…": "Wird geladen…",
   "Searching…": "Suche…",
   "Connecting…": "Verbindung wird aufgebaut…",
-  ["Enter the passcode now shown on the camper control unit (it replaced ---). "
+  ["Enter the passcode now shown on the camper unit (it replaced ---). "
     + "A fresh code each attempt."]:
-    "Gib den Passcode ein, der jetzt auf der Camper-Bedieneinheit steht (er hat --- ersetzt). "
+    "Gib den Passcode ein, der jetzt auf der Camper-Einheit steht (er hat --- ersetzt). "
     + "Bei jedem Versuch ein neuer Code.",
   "Send": "Senden",
   "Pairing…": "Kopplung läuft…",
   "Verifying…": "Wird geprüft…",
   "Resetting…": "Wird zurückgesetzt…",
   "✓ Paired — ": "✓ Gekoppelt — ",
-  "bonded — address cache unavailable (see logs)":
+  "paired — address cache unavailable (see logs)":
     "gekoppelt — Adress-Cache nicht verfügbar (siehe Logs)",
   "Saved to the daemon — survives a reboot. No further action needed.":
     "Im Dienst gespeichert — übersteht einen Neustart. Keine weitere Aktion nötig.",
-  ["Advanced: only needed if you reflash the Pi (a fresh install wipes the saved bond). "
+  "Advanced": "Erweitert",
+  ["Only needed if you reflash the Pi (a fresh install wipes the saved pairing). "
     + "Set it in /etc/buspi/calictl.env to survive that."]:
-    "Fortgeschritten: nur nötig, wenn du den Pi neu aufsetzt (eine Neuinstallation löscht die "
-    + "gespeicherte Verbindung). Trage es in /etc/buspi/calictl.env ein, damit es das übersteht.",
+    "Nur nötig, wenn du den Pi neu aufsetzt (eine Neuinstallation löscht die gespeicherte "
+    + "Kopplung). Trage es in /etc/buspi/calictl.env ein, damit es das übersteht.",
   "Error: ": "Fehler: ",
   "No vehicle found.": "Kein Fahrzeug gefunden.",
   "Something went wrong. Try again.": "Etwas ist schiefgelaufen. Versuche es erneut.",
-  "Could not connect to the unit.": "Keine Verbindung zum Gerät.",
+  "Could not connect to the camper unit.": "Keine Verbindung zur Camper-Einheit.",
   "Pairing was refused.": "Kopplung abgelehnt.",
-  "Could not verify the bond.": "Verbindung konnte nicht verifiziert werden.",
+  "Could not verify the pairing.": "Kopplung konnte nicht verifiziert werden.",
   ["Check that “Gerät verbinden” is open on the unit, that buspi is in range, and that no "
     + "phone is connected to the unit."]:
-    "Prüfe, dass „Gerät verbinden“ auf der Bedieneinheit geöffnet ist, dass buspi in Reichweite "
-    + "ist und dass kein Handy mit der Bedieneinheit verbunden ist.",
+    "Prüfe, dass „Gerät verbinden“ an der Camper-Einheit geöffnet ist, dass buspi in Reichweite "
+    + "ist und dass kein Handy mit der Camper-Einheit verbunden ist.",
   ["The unit may be asleep, a phone may still hold its single connection, or another app on "
     + "this Pi keeps Bluetooth scanning. Wake the unit at its panel, disconnect the phone, pause "
-    + "other Bluetooth apps, then try again. An existing bond is kept."]:
-    "Die Bedieneinheit schläft vielleicht, ein Handy belegt noch ihre einzige Verbindung, oder "
-    + "eine andere App auf diesem Pi sucht weiter nach Bluetooth-Geräten. Wecke die Bedieneinheit "
+    + "other Bluetooth apps, then try again. An existing pairing is kept."]:
+    "Die Camper-Einheit schläft vielleicht, ein Handy belegt noch ihre einzige Verbindung, oder "
+    + "eine andere App auf diesem Pi sucht weiter nach Bluetooth-Geräten. Wecke die Camper-Einheit "
     + "an ihrem Bildschirm, trenne das Handy, pausiere andere Bluetooth-Apps und versuche es "
     + "erneut. Eine bestehende Kopplung bleibt erhalten.",
   "Enter the 6-digit passcode shown on the unit.":
-    "Gib den 6-stelligen Passcode ein, den die Bedieneinheit anzeigt.",
-  "Confirm the Bluetooth reset first.": "Bestätige zuerst das Zurücksetzen der Bluetooth-Kopplung.",
+    "Gib den 6-stelligen Passcode ein, den die Camper-Einheit anzeigt.",
+  "Confirm the unpair first.": "Bestätige zuerst das Entkoppeln.",
   "The daemon did not answer the pairing request. Try again.":
     "Der Dienst hat auf die Kopplungsanfrage nicht geantwortet. Versuche es erneut.",
   ["Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and "
     + "try again."]:
-    "Falscher Passcode, oder die Bedieneinheit hat den Kopplungsmodus verlassen. Öffne „Gerät "
-    + "verbinden“ auf der Bedieneinheit erneut und versuche es noch einmal.",
-  ["The bond was made but the unit did not answer. Try again; if it repeats, use Bluetooth "
-    + "reset / re-pair."]:
-    "Die Kopplung wurde hergestellt, aber die Bedieneinheit hat nicht geantwortet. Versuche es "
-    + "erneut; wenn das wiederholt passiert, nutze Bluetooth zurücksetzen / neu koppeln.",
+    "Falscher Passcode, oder die Camper-Einheit hat den Kopplungsmodus verlassen. Öffne „Gerät "
+    + "verbinden“ an der Camper-Einheit erneut und versuche es noch einmal.",
+  ["The pairing was made but the unit did not answer. Try again; if it repeats, unpair and pair "
+    + "again."]:
+    "Die Kopplung wurde hergestellt, aber die Camper-Einheit hat nicht geantwortet. Versuche es "
+    + "erneut; wenn das wiederholt passiert, entkopple und kopple neu.",
   "Try again": "Erneut versuchen",
-  "Bluetooth reset / re-pair": "Bluetooth zurücksetzen / neu koppeln",
-  "This removes the working bond; telemetry stops until re-paired. Continue?":
-    "Dies entfernt die bestehende Verbindung; die Telemetrie stoppt bis zur erneuten Kopplung. Fortfahren?",
   ["Another app on this Pi keeps Bluetooth scanning — pairing will likely fail until it stops "
     + "(for example the Home Assistant Bluetooth integration)."]:
     "Eine andere App auf diesem Pi sucht dauerhaft nach Bluetooth-Geräten — die Kopplung "
     + "schlägt wahrscheinlich fehl, bis sie stoppt (zum Beispiel die "
     + "Home-Assistant-Bluetooth-Integration).",
-  "No camper unit is paired yet.": "Noch kein Camper-Gerät gekoppelt.",
+  "No camper unit is paired yet.": "Noch keine Camper-Einheit gekoppelt.",
 
   // --- disabled-control reasons --------------------------------------------------------------
   "Turn camping mode on first": "Zuerst Campingmodus einschalten",
@@ -492,44 +491,49 @@ window.STRINGS_DE = {
   // --- per-screen Help sheets (⋮ → Help, #314): keys = the HELP texts in app.js ----------------
   ["Each tile is one function of the camper unit; tap it for details. Only functions fitted to this van "
     + "are shown. A ⚠ on a tile means the unit reports a fault there.\n\n"
-    + "Sensors: on the ESP satellite, add-on Bluetooth sensors you added on its setup page join the "
+    + "Sensors: on the ESP satellite, add-on Bluetooth sensors you added in its Satellite settings join the "
     + "screens, named by the alias you gave them: Victron solar charger and battery sensor on Energy, a "
     + "Govee thermometer on Vehicle (its tile then shows the temperature). They are not part of the unit "
     + "and keep updating while it sleeps.\n\n"
     + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
     + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live.\n\n"
+    + "Not paired: no camper unit is paired yet, so there is no data; pair it from the ⋮ menu.\n\n"
     + "Not reachable: this page cannot reach calictl or the satellite (WiFi, Tailscale, power). The van "
     + "itself may be fine.\n\n"
-    + "Read-only: control writes are switched off on this device; values still update. An untested-firmware "
+    + "Read-only: control writes are switched off on calictl or the satellite; values still update. An untested-firmware "
     + "warning means the unit runs software this project was not validated on, so decoded values may be off."]:
     "Jede Kachel ist eine Funktion der Camper-Einheit; tippe darauf für Details. Es werden nur "
     + "Funktionen angezeigt, die in diesem Fahrzeug verbaut sind. Ein ⚠ auf einer Kachel heißt, dass "
     + "die Einheit dort eine Störung meldet.\n\n"
-    + "Sensoren: Auf dem ESP-Satelliten erscheinen Bluetooth-Sensoren, die du auf seiner Setup-Seite "
+    + "Sensoren: Auf dem ESP-Satelliten erscheinen Bluetooth-Sensoren, die du in seinen Satellit-Einstellungen "
     + "hinzugefügt hast, mit dem vergebenen Alias auf den Bildschirmen: Victron-Solarladeregler und "
     + "-Batteriesensor unter Energie, ein Govee-Thermometer unter Fahrzeug (die Kachel zeigt dann die "
     + "Temperatur). Sie gehören nicht zur Einheit und aktualisieren sich auch, wenn sie schläft.\n\n"
     + "Offline: Geparkt fällt die Einheit in Tiefschlaf und "
     + "antwortet nicht mehr, bis das Fahrzeug wieder benutzt wird. Die Seite zeigt dann die letzten "
     + "Daten und ihr Alter. 🕒 kennzeichnet einen Wert, der früher gemessen wurde, nicht "
-    + "live.\n\nNicht erreichbar: Diese Seite erreicht calictl oder den Satelliten nicht (WLAN, "
-    + "Tailscale, Strom). Dem Fahrzeug selbst geht es womöglich gut.\n\nNur-Lesen: Steuerbefehle "
-    + "sind auf diesem Gerät abgeschaltet; die Werte aktualisieren "
+    + "live.\n\nNicht gekoppelt: Es ist noch keine Camper-Einheit gekoppelt, daher gibt es keine "
+    + "Daten; kopple sie über das ⋮-Menü.\n\nNicht erreichbar: Diese Seite erreicht calictl oder den "
+    + "Satelliten nicht (WLAN, Tailscale, Strom). Dem Fahrzeug selbst geht es womöglich gut.\n\n"
+    + "Nur-Lesen: Steuerbefehle sind auf calictl bzw. dem Satelliten abgeschaltet; die Werte aktualisieren "
     + "sich trotzdem. Eine Warnung zu ungetesteter Firmware heißt, dass die Einheit Software nutzt, "
     + "auf der dieses Projekt nicht validiert wurde; dekodierte Werte können abweichen.",
   ["Camper unit: online while the Bluetooth link to the unit works; offline usually means the parked unit "
-    + "is asleep. Last update is the age of the newest data. Bonded unit is the unit this device is paired "
-    + "with; pair or unpair from the ⋮ menu.\n\n"
+    + "is asleep. Last update is the age of the newest data. Paired unit is the camper unit that calictl or "
+    + "the satellite is paired with; pair or unpair it from the ⋮ menu (Pair…, Unpair…).\n\n"
     + "On the ESP satellite this screen also shows its firmware, Bluetooth link, WiFi, uptime, microSD log "
-    + "and free memory. Open setup leads to the satellite's own page: WiFi, auto camper, clock and the "
-    + "firmware update (only on request, needs the home WiFi)."]:
+    + "and free memory. Satellite settings opens the satellite's own page: restore camping after you park, "
+    + "screen, usage data, experimental sensors and the firmware update (needs the home WiFi). Its WiFi is "
+    + "set over its setup hotspot."]:
     "Camper-Einheit: online, solange die Bluetooth-Verbindung zur Einheit steht; offline heißt "
     + "meist, dass die geparkte Einheit schläft. Letzte Aktualisierung ist das Alter der neuesten "
-    + "Daten. Gekoppelte Einheit ist die Einheit, mit der dieses Gerät gekoppelt ist; koppeln oder "
-    + "entkoppeln kannst du im ⋮-Menü.\n\nAuf dem ESP-Satelliten zeigt dieser Bildschirm auch seine "
-    + "Firmware, die Bluetooth-Verbindung, WLAN, Laufzeit, das microSD-Log und den freien Speicher. "
-    + "Setup öffnen führt zur eigenen Seite des Satelliten: WLAN, Auto-Campingmodus, Uhr und "
-    + "Firmware-Update (nur auf Anfrage, braucht das Heim-WLAN).",
+    + "Daten. Gekoppelte Einheit ist die Camper-Einheit, mit der calictl oder der Satellit gekoppelt "
+    + "ist; koppeln oder entkoppeln kannst du im ⋮-Menü (Koppeln…, Entkoppeln…).\n\nAuf dem "
+    + "ESP-Satelliten zeigt dieser Bildschirm auch seine Firmware, die Bluetooth-Verbindung, WLAN, "
+    + "Laufzeit, das microSD-Log und den freien Speicher. Satellit-Einstellungen öffnet die eigene "
+    + "Seite des Satelliten: Campingmodus nach dem Parken wiederherstellen, Bildschirm, Nutzungsdaten, "
+    + "experimentelle Sensoren und Firmware-Update (braucht das Heim-WLAN). Sein WLAN stellst du über "
+    + "seinen Einrichtungs-Hotspot ein.",
   ["Switch the refrigerator box on or off and set its cooling level.\n\n"
     + "Quiet mode: Off, Manual or Automatic. Manual runs quiet mode for up to 23 hours; Automatic runs it "
     + "between the start and end hour you set. Quiet mode can only be set while the box is on.\n\n"

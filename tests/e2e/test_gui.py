@@ -257,10 +257,27 @@ def test_pairing_chrome_hidden_when_paired_and_online(page):
     # let the dashboard finish rendering its tiles before checking for absent chrome
     expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()
     expect(page.get_by_text("Set up remote control")).to_have_count(0)
-    expect(page.get_by_role("button", name="Connect now")).to_have_count(0)
+    expect(page.get_by_role("button", name="Pair now")).to_have_count(0)
     expect(page.locator("#unpaired-banner")).to_have_count(0)
     page.get_by_role("button", name="Menu").click()
-    expect(page.get_by_role("menuitem", name="Bluetooth pairing…")).to_be_visible()
+    expect(page.get_by_role("menuitem", name="Pair…", exact=True)).to_be_visible()
+
+
+def test_pair_from_the_menu_shows_the_wizard_at_the_top_on_a_phone(base_url, error_gated_page):
+    """Paired + online van, iPhone size, scrolled down: ⋮ → Pair… renders the wizard above the
+    summary and the tiles and scrolls it into view (UX review H2). Opening sends no POST."""
+    with error_gated_page(base_url, viewport={"width": 390, "height": 844}) as pg:
+        expect(pg.locator(".tilegrid .tile").first).to_be_visible()
+        pg.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        pg.get_by_role("button", name="Menu").click()
+        pg.get_by_role("menuitem", name="Pair…", exact=True).click()
+        card = pg.locator("#pairing-card")
+        expect(card.get_by_role("button", name="Pair now")).to_be_in_viewport()
+        expect(card.get_by_text("Set up remote control")).to_be_in_viewport()
+        assert card.evaluate(
+            "c => c.getBoundingClientRect().bottom"
+            " <= document.querySelector('.tilegrid').getBoundingClientRect().top"
+        ), "the wizard card renders below the tiles"
 
 
 def test_water_screen_shows_level_percent(page):
@@ -599,13 +616,13 @@ def _open_pairing_via_menu(page):
     """The wizard lives behind the topbar context menu — no card in the main flow when the
     daemon is paired/online (UX: the guided flow is only prominent on true first-run)."""
     page.get_by_role("button", name="Menu").click()
-    page.get_by_role("menuitem", name="Bluetooth pairing…").click()
+    page.get_by_role("menuitem", name="Pair…", exact=True).click()
 
 
 def _open_and_start_pairing(page):
     _open_pairing_via_menu(page)
     page.get_by_role("checkbox", name="I'm on that screen").check()
-    page.get_by_role("button", name="Connect now").click()
+    page.get_by_role("button", name="Pair now").click()
 
 
 def _complete_bonding(page):
@@ -615,20 +632,24 @@ def _complete_bonding(page):
     expect(passkey).to_be_visible(timeout=10000)
     passkey.fill(str(FakePairingTransport.RIGHT_PASSKEY))
     page.get_by_role("button", name="Send").click()
-    expect(page.get_by_text("CALICTL_ADDR=" + FakePairingTransport.FOUND_ADDR)).to_be_visible(timeout=10000)
+    expect(page.get_by_text("✓ Paired — " + FakePairingTransport.FOUND_ADDR)).to_be_visible(timeout=10000)
 
 
 def test_pairing_wizard_reaches_bonded(pairing_page):
     """The full happy path: Setup card -> checkbox -> Start -> passkey -> bonded, showing the
-    address and the env line to persist it (design spec step 2)."""
-    _complete_bonding(pairing_page)
-    assert FakePairingTransport.FOUND_ADDR in pairing_page.locator("#app").inner_text()
+    address; the env line to persist it sits behind "Advanced" (design spec step 2, UX review L4)."""
+    page = pairing_page
+    _complete_bonding(page)
+    env = page.get_by_text("CALICTL_ADDR=" + FakePairingTransport.FOUND_ADDR)
+    expect(env).to_be_hidden()
+    page.locator("#pairing-card summary", has_text="Advanced").click()
+    expect(env).to_be_visible()
 
 
 def test_pairing_checklist_before_connect(pairing_page):
     page = pairing_page
     page.get_by_role("button", name="Menu").click()
-    page.get_by_text("Bluetooth pairing…").click()
+    page.get_by_text("Pair…", exact=True).click()
     text = page.locator("#app").inner_text()
     assert "Gerät verbinden" in text  # the unit's own screen name
     assert "Passcode: ---" in text  # what the unit shows before we connect
@@ -739,10 +760,10 @@ def test_pairing_wizard_restarts_cleanly_after_daemon_restart(tmp_path):
         try:
             page.reload()
             page.get_by_role("button", name="Menu").click()
-            page.get_by_text("Bluetooth pairing…").click()
-            expect(page.get_by_role("button", name="Connect now")).to_be_visible()
+            page.get_by_text("Pair…", exact=True).click()
+            expect(page.get_by_role("button", name="Pair now")).to_be_visible()
             page.locator("#pairing-ready").check()
-            page.get_by_role("button", name="Connect now").click()
+            page.get_by_role("button", name="Pair now").click()
             expect(page.locator("#pairing-passkey")).to_be_visible(timeout=10000)
         finally:
             proc.terminate()
@@ -775,7 +796,7 @@ def test_pairing_wizard_never_flashes_a_stale_step_after_daemon_restart(tmp_path
         proc, url = _start_daemon(port, env)  # same port, a FRESH process -> idle
         try:
             page.get_by_role("button", name="Menu").click()
-            page.get_by_text("Bluetooth pairing…").click()
+            page.get_by_text("Pair…", exact=True).click()
             # immediately after the click -- before the fresh fetch can possibly have landed --
             # the stale waiting_passkey step must never appear.
             expect(page.locator("#pairing-passkey")).to_have_count(0)
@@ -826,7 +847,7 @@ def test_pairing_hidden_until_opened_from_menu(unconfigured_pairing_page):
     expect(page.get_by_role("button", name="Menu")).to_be_visible()
     expect(page.locator("#unpaired-banner")).to_be_visible()
     page.get_by_role("button", name="Menu").click()
-    expect(page.get_by_role("menuitem", name="Bluetooth pairing…")).to_be_visible()
+    expect(page.get_by_role("menuitem", name="Pair…", exact=True)).to_be_visible()
     # no bond configured in this daemon -> no Unpair entry
     expect(page.get_by_role("menuitem", name="Unpair…")).to_have_count(0)
 
@@ -949,7 +970,7 @@ def test_status_pill_opens_device_status(page):
 def test_menu_unpair_workflow_after_bonding(pairing_page):
     """The explicit unpair workflow: after bonding, the context menu gains 'Unpair…' which
     confirm()s, removes the bond (reset), and leaves the wizard open guiding a re-pair.
-    'Unpair…' closes the pairing group: right after 'Bluetooth pairing…', then a separator."""
+    'Unpair…' closes the pairing group: right after 'Pair…', then a separator."""
     page = pairing_page
     page.on("dialog", lambda d: d.accept())
     _complete_bonding(page)
@@ -959,7 +980,7 @@ def test_menu_unpair_workflow_after_bonding(pairing_page):
     sib = unpair.evaluate(
         "e => [e.previousElementSibling.textContent, e.nextElementSibling.getAttribute('role')]"
     )
-    assert sib == ["Bluetooth pairing…", "separator"]
+    assert sib == ["Pair…", "separator"]
     expect(unpair).to_have_class(re.compile(r"\bdanger\b"))
     unpair.click()
     # reset drives the SM resetting -> idle; the wizard stays open showing the guided first step
@@ -972,7 +993,7 @@ def test_pairing_wizard_reset_demands_confirm_then_idle(pairing_page):
     page = pairing_page
     page.on("dialog", lambda d: d.accept())  # Playwright auto-dismisses confirm() with no listener
     _complete_bonding(page)
-    page.get_by_role("button", name="Bluetooth reset / re-pair").click()
+    page.get_by_role("button", name="Unpair…").click()
     expect(page.get_by_role("checkbox", name="I'm on that screen")).to_be_visible(timeout=10000)
 
 
@@ -1012,7 +1033,7 @@ def test_calictl_is_never_satellite(page):
     assert page.evaluate("() => typeof adaptSatellite") == "function"
     assert page.evaluate("() => !!(STATE._meta && STATE._meta.satellite)") is False
     page.click("#menu")
-    expect(page.locator(".menupop").get_by_text("Bluetooth pairing…")).to_be_visible()
+    expect(page.locator(".menupop").get_by_text("Pair…", exact=True)).to_be_visible()
 
 
 def test_menu_device_status_screen_on_calictl(page):
@@ -1023,7 +1044,7 @@ def test_menu_device_status_screen_on_calictl(page):
     expect(page.locator("#title")).to_have_text("Device status")
     expect(page.get_by_text("Camper unit", exact=True)).to_be_visible()
     expect(page.get_by_text("Last update", exact=True)).to_be_visible()
-    assert page.get_by_text("Open setup").count() == 0
+    assert page.get_by_text("Satellite settings").count() == 0
     assert page.get_by_text("Satellite firmware").count() == 0
 
 
@@ -1048,7 +1069,7 @@ def test_unknown_runtime_is_restrictive(base_url):
         pg.click("#menu")
         menu = pg.locator(".menupop")
         expect(menu).to_be_visible()
-        assert menu.get_by_text("Bluetooth pairing…").count() == 0
+        assert menu.get_by_text("Pair…", exact=True).count() == 0
         assert menu.get_by_text("Unpair…").count() == 0
         pg.wait_for_timeout(2500)  # past one refresh tick: still nothing fetched but /api/state
         browser.close()

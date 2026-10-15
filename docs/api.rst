@@ -157,6 +157,7 @@ Tests
 .. autofunction:: tests.e2e.test_pwa.test_a_restored_snapshot_connects_then_goes_live
 .. autofunction:: tests.e2e.test_link_state.test_asleep_van_shows_the_amber_banner
 .. autofunction:: tests.e2e.test_link_state.test_backend_down_turns_red_at_15_s_and_recovers
+.. autofunction:: tests.e2e.test_link_state.test_unpaired_never_says_not_paired_not_asleep
 .. autofunction:: tests.e2e.test_esp_page.test_firmware_row_checks_and_installs
 .. autofunction:: tests.e2e.test_esp_page.test_clock_line_shows_sync_and_boot
 .. autofunction:: tests.e2e.test_esp_page.test_storage_and_resources_lines

@@ -182,7 +182,7 @@ Bluetooth jobs at once. The how-to for owners is
   RSSI because another client keeps discovering, or no time left to probe — ends as
   `connect_failed` with the bond and `pairing.json` kept, so opening the wizard remotely while
   the van sleeps costs nothing. The in-flow drop keeps `pairing.json` too (the identity doesn't
-  change; `persist_bond()` rewrites it); only "Bluetooth reset / re-pair" (`ACT_REMOVE_BOND`)
+  change; `persist_bond()` rewrites it); only "Unpair…" (`ACT_REMOVE_BOND`)
   clears it.
 - **The wizard releases its link.** At flow end (`bonded`, `error`, cancel) the transport
   disconnects the link it used for probe/verify, so the daemon's next poll can take the unit's
@@ -274,7 +274,7 @@ bond loss — simply starts a fresh pairing 1.4 s after connecting, with no guid
 (a spinner plus the OS "Bluetooth pairing request" notification; unanswered, the link drops
 after ~33 s and the app returns to "Connect" silently). When the unit refuses pairing (not in
 "Gerät verbinden") the app retries in the background indefinitely and shows nothing. So the
-wizard's `connect_failed` / `pairing_failed` hints and the "Bluetooth reset / re-pair" guidance
+wizard's `connect_failed` / `pairing_failed` hints and the "unpair and pair again" guidance
 are this repo's own UX, not a mirror of the app; the model of the unit they rest on is
 consistent with what the app does. Table in
 [protocol-crosscheck-applab.md](protocol-crosscheck-applab.md) "Pairing".

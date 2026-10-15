@@ -303,16 +303,11 @@ menuEl.onclick = (ev) => {
     // stays reachable from inside that screen).
     groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));
     // calictl and the satellite both serve /api/pairing (R_FW_PAIRING_WIZARD)
-    groups[1].push(menuItem(/** @type {string} */ (t("Bluetooth pairing…")), () => { closeMenu(); openPairingWizard(); }));
+    groups[1].push(menuItem(/** @type {string} */ (t("Pair…")), () => { closeMenu(); openPairingWizard(); }));
     // Unpair only makes sense once a bond exists (PAIRING is fetched at load + while the wizard polls).
     // Destructive: last in its group, behind the divider, in --danger.
     if (PAIRING && PAIRING.address) {
-      groups[1].push(menuItem(/** @type {string} */ (t("Unpair…")), async () => {
-        closeMenu();
-        if (!confirm(/** @type {string} */ (t("Unpair removes the working bond; telemetry stops until re-paired. Continue?")))) return;
-        await openPairingWizard();               // show the flow while the reset runs
-        pairingAction("reset", undefined, true); // then guides straight into re-pairing (idle step)
-      }, "danger"));
+      groups[1].push(menuItem(/** @type {string} */ (t("Unpair…")), () => { closeMenu(); unpair(); }, "danger"));
     }
   }
   if (HELP[view]) groups[2].push(menuItem(/** @type {string} */ (t("Help")), openHelp));   // per-screen help (#314)
@@ -570,23 +565,25 @@ const HELP = {
   home: ["index.html",
     "Each tile is one function of the camper unit; tap it for details. Only functions fitted to this van "
     + "are shown. A ⚠ on a tile means the unit reports a fault there.\n\n"
-    + "Sensors: on the ESP satellite, add-on Bluetooth sensors you added on its setup page join the "
+    + "Sensors: on the ESP satellite, add-on Bluetooth sensors you added in its Satellite settings join the "
     + "screens, named by the alias you gave them: Victron solar charger and battery sensor on Energy, a "
     + "Govee thermometer on Vehicle (its tile then shows the temperature). They are not part of the unit "
     + "and keep updating while it sleeps.\n\n"
     + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
     + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live.\n\n"
+    + "Not paired: no camper unit is paired yet, so there is no data; pair it from the ⋮ menu.\n\n"
     + "Not reachable: this page cannot reach calictl or the satellite (WiFi, Tailscale, power). The van "
     + "itself may be fine.\n\n"
-    + "Read-only: control writes are switched off on this device; values still update. An untested-firmware "
+    + "Read-only: control writes are switched off on calictl or the satellite; values still update. An untested-firmware "
     + "warning means the unit runs software this project was not validated on, so decoded values may be off."],
   devicestatus: ["firmware.html",
     "Camper unit: online while the Bluetooth link to the unit works; offline usually means the parked unit "
-    + "is asleep. Last update is the age of the newest data. Bonded unit is the unit this device is paired "
-    + "with; pair or unpair from the ⋮ menu.\n\n"
+    + "is asleep. Last update is the age of the newest data. Paired unit is the camper unit that calictl or "
+    + "the satellite is paired with; pair or unpair it from the ⋮ menu (Pair…, Unpair…).\n\n"
     + "On the ESP satellite this screen also shows its firmware, Bluetooth link, WiFi, uptime, microSD log "
-    + "and free memory. Open setup leads to the satellite's own page: WiFi, auto camper, clock and the "
-    + "firmware update (only on request, needs the home WiFi)."],
+    + "and free memory. Satellite settings opens the satellite's own page: restore camping after you park, "
+    + "screen, usage data, experimental sensors and the firmware update (needs the home WiFi). Its WiFi is "
+    + "set over its setup hotspot."],
   cooler: ["business-logic/cooler-airheater.html#cooler",
     "Switch the refrigerator box on or off and set its cooling level.\n\n"
     + "Quiet mode: Off, Manual or Automatic. Manual runs quiet mode for up to 23 hours; Automatic runs it "
@@ -1023,7 +1020,7 @@ let stateAt = 0;                                        // ms: STATE (its _meta.
 const connEl = /** @type {HTMLElement} */ (document.getElementById("conn"));
 let connKey = "";
 
-/** @returns {"live"|"asleep"|"never"|"connecting"|"unreachable"} */
+/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"} */
 function linkState() {
   if (waitingSince != null && Date.now() - waitingSince >= UNREACHABLE_MS) return "unreachable";
   const m = STATE._meta;
@@ -1032,7 +1029,8 @@ function linkState() {
   if (lastAnswerAt == null || (m && m.restored)
       || (waitingSince != null && waitingSince - lastAnswerAt > UNREACHABLE_MS)) return "connecting";
   if (!m || m.online) return "live";
-  return m.last_seen ? "asleep" : "never";
+  // no data ever and no unit paired: the cause is "not paired", not a sleeping van (M6)
+  return m.last_seen ? "asleep" : m.paired === false ? "unpaired" : "never";
 }
 
 // This page's own backend: the satellite, or calictl on the host that served the page (buspi).
@@ -1044,6 +1042,7 @@ function backendName() {
 
 /** @type {Record<string, [string, string]>} */
 const LINK_PILL = { live: ["live", "ok"], asleep: ["offline", "warn"], never: ["offline", "warn"],
+  unpaired: ["not paired", ""],
   connecting: ["connecting…", ""], unreachable: ["unreachable", "error"] };
 
 // Paint the pill + the persistent #conn banner (outside #app: a hung poll never reaches render(),
@@ -1073,6 +1072,9 @@ function paintLink() {
     tmpl = "Offline — no data yet (van asleep since the monitor started). Checked {clock}.";
     vars.clock = clockText(/** @type {number} */ (lastAnswerAt) / 1000);
     tick = "clock";
+  } else if (s === "unpaired") {
+    cls += " unpaired";   // neutral: nothing is broken, the setup is not done yet
+    tmpl = "Not paired yet — no data.";
   }
   // the ticking value and its brackets go into the aria-hidden span (no "( )" read aloud)
   const filled = tmpl ? tf(tmpl, Object.assign({}, vars, { [tick]: "\u0001" })) : "";
@@ -1491,6 +1493,7 @@ function roofIsUp() {
 // dashboard poll stays at 2 s. See .superpowers/sdd/2026-08-31-guided-pairing.
 let pairingOpen = false;
 let pairingReady = false;              // "I'm on that screen" checkbox
+let pairingAdvOpen = false;            // the bonded step's "Advanced" disclosure (calictl only)
 // True for the brief window between opening the wizard and the fresh `pairingFetch()` landing,
 // but ONLY when the cached PAIRING snapshot might be stale (see openPairingWizard): renders a
 // neutral loading step instead of flashing a leftover passkey/bonded/error/etc. step from a
@@ -1535,17 +1538,17 @@ function stopPairingPoll() {
 /** @type {Record<string, string>} */
 const PAIRING_ERROR_MSG = {
   timeout: "No vehicle found.",
-  connect_failed: "Could not connect to the unit.",
+  connect_failed: "Could not connect to the camper unit.",
   pairing_failed: "Pairing was refused.",
-  verify_failed: "Could not verify the bond.",
+  verify_failed: "Could not verify the pairing.",
 };
 
 /** @type {Record<string, string>} */
 const PAIRING_ERROR_HINT = {
   timeout: "Check that “Gerät verbinden” is open on the unit, that buspi is in range, and that no phone is connected to the unit.",
-  connect_failed: "The unit may be asleep, a phone may still hold its single connection, or another app on this Pi keeps Bluetooth scanning. Wake the unit at its panel, disconnect the phone, pause other Bluetooth apps, then try again. An existing bond is kept.",
+  connect_failed: "The unit may be asleep, a phone may still hold its single connection, or another app on this Pi keeps Bluetooth scanning. Wake the unit at its panel, disconnect the phone, pause other Bluetooth apps, then try again. An existing pairing is kept.",
   pairing_failed: "Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and try again.",
-  verify_failed: "The bond was made but the unit did not answer. Try again; if it repeats, use Bluetooth reset / re-pair.",
+  verify_failed: "The pairing was made but the unit did not answer. Try again; if it repeats, unpair and pair again.",
 };
 
 // Global constraint: never show a raw error enum to the user (only the four codes above are
@@ -1558,7 +1561,7 @@ const PAIRING_ERROR_FALLBACK = "Something went wrong. Try again.";
 /** @type {Record<string, string>} */
 const PAIRING_REQUEST_ERROR_MSG = {
   bad_passkey: "Enter the 6-digit passcode shown on the unit.",
-  confirm_required: "Confirm the Bluetooth reset first.",
+  confirm_required: "Confirm the unpair first.",
   pairing_failed: "The daemon did not answer the pairing request. Try again.",
   busy: CMD_ERRORS.busy,   // the satellite: start/reset while a control command holds the link (409)
 };
@@ -1568,7 +1571,7 @@ const PAIRING_REQUEST_ERROR_MSG = {
 /** @type {Record<string, string>} */
 const SAT_PAIRING_ERROR_HINT = {
   timeout: "Check that “Gerät verbinden” is open on the unit, that the satellite is in range, and that no phone is connected to the unit.",
-  connect_failed: "The unit may be asleep, or a phone or a Raspberry Pi with calictl may still hold its single connection. Wake the unit at its panel, disconnect the phone, then try again. An existing bond is kept.",
+  connect_failed: "The unit may be asleep, or a phone or a Raspberry Pi with calictl may still hold its single connection. Wake the unit at its panel, disconnect the phone, then try again. An existing pairing is kept.",
 };
 
 /**
@@ -1606,19 +1609,35 @@ async function openPairingWizard() {
   else render();                       // already home: show the card now (idle checklist, or the
                                         // loading step) instead of leaving the click waiting on
                                         // the network round-trip below
+  showPairingCard();
   await pairingFetch();
   pairingLoading = false;
   startPairingPoll();
   render();
+  showPairingCard();
+}
+
+// The card renders at the top of Home; bring it into view however far the user had scrolled (H2).
+function showPairingCard() {
+  const c = document.getElementById("pairing-card");
+  if (c) c.scrollIntoView({ block: "start" });
+}
+
+// The one unpair action (⋮ menu and the wizard's button): one confirm, then the wizard guides
+// straight into pairing again (idle step) while the reset runs.
+async function unpair() {
+  if (!confirm(/** @type {string} */ (t("Unpair the camper unit? Data stops until you pair again.")))) return;
+  if (!pairingOpen) await openPairingWizard();
+  pairingAction("reset", undefined, true);
 }
 
 // The guided-pairing card. UX: invisible in the normal paired+online flow — it renders ONLY
-// while open (entry point: the ⋮ menu) or auto-prominently on true first-run (offline + no
-// bond), so a working installation never shows pairing chrome.
+// while open (the ⋮ menu, Device status, the unpaired banner), always at the top of Home, so a
+// working installation never shows pairing chrome.
 function pairingCard() {
   if (!pairingOpen) return null;
   const card = document.createElement("div");
-  card.className = "card";
+  card.className = "card"; card.id = "pairing-card";
   const head = document.createElement("div"); head.className = "row";
   const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = /** @type {string} */ (t("Set up remote control"));
   head.appendChild(hlbl);
@@ -1650,8 +1669,8 @@ function pairingCard() {
   if (p.state === "idle") {
     const steps = document.createElement("ol"); steps.className = "note";
     for (const s of [
-      sat ? "On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until the satellite connects."
-        : "On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until buspi connects.",
+      sat ? "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until the satellite connects."
+        : "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until buspi connects.",
       "Close the California On Tour app while pairing — its reconnects can collide with the passkey window.",
       sat ? "If a Raspberry Pi with calictl runs near the van, stop it during pairing — its Bluetooth activity can collide with the passkey window."
         : "Stop other Bluetooth scanners on this Pi during pairing (for example the Home Assistant Bluetooth integration).",
@@ -1670,7 +1689,7 @@ function pairingCard() {
     card.appendChild(crow);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const startBtn = document.createElement("button"); startBtn.type = "button"; startBtn.className = "btn";
-    startBtn.textContent = /** @type {string} */ (t("Connect now")); startBtn.disabled = !pairingReady;
+    startBtn.textContent = /** @type {string} */ (t("Pair now")); startBtn.disabled = !pairingReady;
     startBtn.onclick = () => pairingAction("start");
     btns.appendChild(startBtn);
     card.appendChild(btns);
@@ -1689,7 +1708,7 @@ function pairingCard() {
     card.appendChild(btns);
   } else if (p.state === "waiting_passkey") {
     const instr = document.createElement("div"); instr.className = "note";
-    instr.textContent = /** @type {string} */ (t("Enter the passcode now shown on the camper control unit (it replaced ---). A fresh code each attempt."));
+    instr.textContent = /** @type {string} */ (t("Enter the passcode now shown on the camper unit (it replaced ---). A fresh code each attempt."));
     card.appendChild(instr);
     const row = document.createElement("div"); row.className = "row";
     const inp = document.createElement("input");
@@ -1715,7 +1734,7 @@ function pairingCard() {
     card.appendChild(row);
   } else if (p.state === "bonded") {
     const ok = document.createElement("div"); ok.className = "note";
-    ok.textContent = p.address ? (t("✓ Paired — ") + p.address) : /** @type {string} */ (t("bonded — address cache unavailable (see logs)"));
+    ok.textContent = p.address ? (t("✓ Paired — ") + p.address) : /** @type {string} */ (t("paired — address cache unavailable (see logs)"));
     card.appendChild(ok);
     if (p.address && sat) {
       const saved = document.createElement("div"); saved.className = "note";
@@ -1725,13 +1744,16 @@ function pairingCard() {
       const saved = document.createElement("div"); saved.className = "note";
       saved.textContent = /** @type {string} */ (t("Saved to the daemon — survives a reboot. No further action needed."));
       card.appendChild(saved);
-      const envRow = document.createElement("div"); envRow.className = "row";
+      // jargon off the happy path (L4): the env line only matters when the Pi is reflashed
+      const adv = document.createElement("details"); adv.className = "note";
+      adv.open = pairingAdvOpen;
+      adv.ontoggle = () => { pairingAdvOpen = adv.open; };   // survives a re-render
+      const sum = document.createElement("summary"); sum.textContent = /** @type {string} */ (t("Advanced"));
       const code = document.createElement("code"); code.textContent = "CALICTL_ADDR=" + p.address;
-      envRow.appendChild(code);
-      card.appendChild(envRow);
-      const note = document.createElement("div"); note.className = "note";
-      note.textContent = /** @type {string} */ (t("Advanced: only needed if you reflash the Pi (a fresh install wipes the saved bond). Set it in /etc/buspi/calictl.env to survive that."));
-      card.appendChild(note);
+      const note = document.createElement("div");
+      note.textContent = /** @type {string} */ (t("Only needed if you reflash the Pi (a fresh install wipes the saved pairing). Set it in /etc/buspi/calictl.env to survive that."));
+      adv.append(sum, code, note);
+      card.appendChild(adv);
     }
   } else if (p.state === "error") {
     const errRow = document.createElement("div"); errRow.className = "warn";
@@ -1752,16 +1774,13 @@ function pairingCard() {
     btns.appendChild(retryBtn);
     card.appendChild(btns);
   }
-  // reset/re-pair: available whenever a bond exists to lose, on top of whatever step is showing
-  // above (e.g. still visible next to an "error" from a re-pair attempt on an already-bonded unit).
+  // Unpair: available whenever a bond exists to lose, on top of whatever step is showing above
+  // (e.g. still visible next to an "error" from a re-pair attempt on an already-bonded unit).
   if (p.state !== "resetting" && (p.state === "bonded" || p.address)) {
     const rbtns = document.createElement("div"); rbtns.className = "btnrow";
     const resetBtn = document.createElement("button"); resetBtn.type = "button"; resetBtn.className = "btn";
-    resetBtn.textContent = /** @type {string} */ (t("Bluetooth reset / re-pair"));
-    resetBtn.onclick = () => {
-      if (!confirm(/** @type {string} */ (t("This removes the working bond; telemetry stops until re-paired. Continue?")))) return;
-      pairingAction("reset", undefined, true);
-    };
+    resetBtn.textContent = /** @type {string} */ (t("Unpair…"));
+    resetBtn.onclick = () => unpair();
     rbtns.appendChild(resetBtn);
     card.appendChild(rbtns);
   }
@@ -1860,7 +1879,7 @@ function renderDeviceStatus() {
     /** @type {string} */ (m.online ? t("online") : t("offline"))));
   card.appendChild(sumRow(/** @type {string} */ (t("Last update")), agoText(m.age_s)));
   // "not paired" only from a fetched snapshot that says so; a failed/absent fetch is unknown.
-  card.appendChild(sumRow(/** @type {string} */ (t("Bonded unit")),
+  card.appendChild(sumRow(/** @type {string} */ (t("Paired unit")),
     PAIRING ? (PAIRING.address || /** @type {string} */ (t("not paired"))) : "—"));
   const fw = m.firmware;
   if (fw && (fw.amb_sw_version != null || fw.comm_version != null))
@@ -1890,7 +1909,7 @@ function renderDeviceStatus() {
     const open = document.createElement("button");
     open.type = "button";
     open.className = "btn";
-    open.textContent = /** @type {string} */ (t("Open setup"));
+    open.textContent = /** @type {string} */ (t("Satellite settings"));
     open.onclick = () => location.assign("/device");
     row.appendChild(open);
     app.appendChild(row);
@@ -2051,12 +2070,10 @@ function renderSensors() {
 
 function renderDashboard() {
   titleEl.textContent = /** @type {string} */ (t("Vehicle"));
-  // Prominent = the daemon can't reach the van AND no bond exists yet -- the exact moment a
-  // fresh/re-paired install needs the wizard most, so IF it happens to be open (the ⋮ menu, or
-  // the unpaired-banner button below) it renders at the top instead of after the tiles.
-  const prominent = !!(STATE._meta && STATE._meta.online === false && PAIRING && PAIRING.address == null);
+  // The wizard, when open (⋮ menu, Device status, the unpaired banner below), always leads the
+  // page: a card after the tiles was out of sight on a phone (UX review H2).
   const pc = pairingCard();   // null unless open
-  if (prominent && pc) app.appendChild(pc);
+  if (pc) app.appendChild(pc);
   if (STATE._meta && STATE._meta.paired === false && !pairingOpen) {
     const b = document.createElement("div"); b.className = "card"; b.id = "unpaired-banner";
     const msg = document.createElement("span"); msg.className = "lbl";
@@ -2092,7 +2109,6 @@ function renderDashboard() {
     grid.appendChild(tile);
   }
   app.appendChild(grid);
-  if (!prominent && pc) app.appendChild(pc);
 }
 
 // Lighting lamps, grouped like the app (from the HCI capture + screenshots). `what` is the
@@ -2744,7 +2760,7 @@ function roofControls(s) {
   for (const dir of ["open", "close", "stop"]) {
     const b = document.createElement("button");
     b.className = "btn";
-    b.textContent = /** @type {string} */ (t(dir));
+    b.textContent = cap(/** @type {string} */ (t(dir)));   // sentence case: "Open", "Öffnen"
     const blocked = dir !== "stop" && moveBlocked;
     b.disabled = readOnly() || blocked || satellite();
     if (blocked) b.title = /** @type {string} */ (t(ROOF_ALERT_MSG[/** @type {string} */ (s.alert)] || "Roof move blocked"));
