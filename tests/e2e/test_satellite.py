@@ -1121,9 +1121,9 @@ def _sensor_rows(pg):
 
 
 ENERGY = {
-    "en-US": ("Energy", "Second battery current", "Issues", [("Battery-sense Battery sensor", "13.32 V · 17.3 °C")],
+    "en-US": ("Energy", "Second battery power", "Issues", [("Battery-sense Battery sensor", "13.32 V · 17.3 °C")],
               [("Mppt-75-15 Solar power", "off (0 W · 0 A · 13.2 V)"), ("Mppt-75-15 Solar yield today", "0.19 kWh")]),
-    "de-DE": ("Energie", "Zweitbatterie-Strom", "Probleme", [("Battery-sense Batteriesensor", "13.32 V · 17.3 °C")],
+    "de-DE": ("Energie", "Zweitbatterie-Leistung", "Probleme", [("Battery-sense Batteriesensor", "13.32 V · 17.3 °C")],
               [("Mppt-75-15 Solarstrom", "aus (0 W · 0 A · 13.2 V)"), ("Mppt-75-15 Solarertrag heute", "0.19 kWh")]),
 }  # fmt: skip
 VEHICLE = {

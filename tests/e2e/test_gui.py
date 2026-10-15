@@ -530,7 +530,6 @@ def test_dashboard_summary_card(page):
     for label in ("Fresh water", "Waste water", "Second battery"):
         expect(card.get_by_text(label, exact=True)).to_be_visible()
     # a real "<liters> / <capacity> l" readout, not a spec/ghost row
-    import re
 
     assert re.search(r"\d+ / \d+ l", card.inner_text())
 
@@ -1555,3 +1554,23 @@ def test_energy_card_hides_power_sources_the_van_does_not_have(page, base_url):
     expect(card.get_by_text("Vehicle power", exact=True)).to_be_visible()
     expect(card.get_by_text("Solar power", exact=True)).to_have_count(0)
     assert "not installed" not in card.inner_text()
+
+
+def test_battery_rows_read_w_a_v_like_the_solar_row(page, base_url):
+    """One row per battery in the solar row's order, "<W> W · <A> A · <V> V" (owner 2026-10-15); W is
+    V × A rounded. The starter's missing reading (the mock's sleeping starter) keeps its slots as "—"."""
+    page.goto(base_url)
+    page.locator(".tile", has_text="Energy").first.click()
+    rows = dict(
+        page.locator(".row.ro").evaluate_all(
+            "rs => rs.map(r => [r.querySelector('.lbl').textContent, r.querySelector('.val').textContent])"
+        )
+    )
+    assert "Second battery voltage" not in rows and "Second battery current" not in rows
+
+    m = re.fullmatch(r"(-?\d+) W · (-?[\d.]+) A · ([\d.]+) V", rows["Second battery power"])
+    assert m, rows["Second battery power"]
+    assert int(m[1]) == round(float(m[2]) * float(m[3]))
+    assert re.fullmatch(r"(—|-?\d+) W · (—|-?[\d.]+) A · (—|[\d.]+) V", rows["Starter power"]), rows[
+        "Starter power"
+    ]
