@@ -1949,7 +1949,7 @@ const raw = (v) => (typeof v === "number" ? String(v) : "—");
 const extStale = (e) => typeof e.age_s !== "number" || e.age_s > SENSOR_STALE_S;
 
 /** Rows per external sensor type: [label, value of one entry]. Labels go through t() on render.
- * @type {Record<string, { rows: [string, (e: SensorReading) => string][] }>} */
+ * @type {Record<string, { rows: [string, (e: SensorReading) => string][], aliasLabel?: boolean }>} */
 const EXT_TYPES = {
   // The unit's own "Solar power" format: charge state word (W · A)
   victron_mppt: { rows: [
@@ -1961,9 +1961,10 @@ const EXT_TYPES = {
     ["Battery sensor (Victron)", (e) => `${fix(e.battery_voltage, 2, " V")} · ${fix(e.temperature_c, 1, " °C")}`],
   ] },
   // A comfort reading: whole percent. The sensor's own battery is no row — only a low one shows,
-  // like the unit's own low-battery alerts.
-  govee: { rows: [
-    ["Temperature (Govee)", (e) => fix(e.temp_c, 1, " °C")
+  // like the unit's own low-battery alerts. The alias (what the owner named the place: "innen")
+  // leads every row: "Innen Temperature", "Innen Humidity" (owner decision 2026-10-15).
+  govee: { aliasLabel: true, rows: [
+    ["Temperature", (e) => fix(e.temp_c, 1, " °C")
       + (typeof e.battery === "number" && e.battery < LOW_SENSOR_BATTERY ? ` · 🔋 ${e.battery} %` : "")],
     ["Humidity", (e) => fix(e.humidity, 0, " %")],
   ] },
@@ -1976,8 +1977,8 @@ function extEntries(type) {
 
 /**
  * A screen's readouts with each `{ ext: type }` marker expanded into its type's rows per entry; the
- * label names the alias only when two or more entries share the type; an old reading keeps its
- * value and adds "🕒 <ago>" (never colour alone).
+ * label leads with the alias for an `aliasLabel` type, else names it only when two or more entries
+ * share the type; an old reading keeps its value and adds "🕒 <ago>" (never colour alone).
  * @param {(Readout|ExtReadouts)[]} readouts
  * @returns {Readout[]}
  */
@@ -1985,8 +1986,9 @@ function expandReadouts(readouts) {
   return readouts.flatMap((r) => {
     if (!("ext" in r)) return [r];
     const entries = extEntries(r.ext);
-    return entries.flatMap(([alias, e]) => EXT_TYPES[r.ext].rows.map(([label, get]) => ({
-      label: entries.length > 1 ? `${t(label)} · ${alias}` : label,
+    const { rows, aliasLabel } = EXT_TYPES[r.ext];
+    return entries.flatMap(([alias, e]) => rows.map(([label, get]) => ({
+      label: aliasLabel ? `${cap(alias)} ${t(label)}` : entries.length > 1 ? `${t(label)} · ${alias}` : label,
       get: () => get(e) + (extStale(e) ? ` 🕒 ${agoText(/** @type {number|null} */ (e.age_s))}` : ""),
     })));
   });

@@ -255,7 +255,7 @@ window.STRINGS_DE = {
   "Solar power (Victron)": "Solarstrom (Victron)",
   "Solar yield today": "Solarertrag heute",
   "Battery sensor (Victron)": "Batteriesensor (Victron)",
-  "Temperature (Govee)": "Temperatur (Govee)",
+  "Temperature": "Temperatur",
   "Humidity": "Luftfeuchte",
   "Solar charger error {n}": "Solarladeregler-Fehler {n}",
   "bulk": "Konstantstrom",

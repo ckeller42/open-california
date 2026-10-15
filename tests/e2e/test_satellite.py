@@ -1043,7 +1043,7 @@ def test_auto_camper_toggle_on_a_firmware_that_reports_it(stub, error_gated_page
 EXT_LABELS = {
     "victron_mppt": ("Solar power (Victron)", "Solar yield today"),
     "victron_battery": ("Battery sensor (Victron)",),
-    "govee": ("Temperature (Govee)", "Humidity"),
+    "govee": ("Govee Temperature", "Govee Humidity"),  # "<Alias> <row>": the alias leads
 }
 
 
@@ -1082,8 +1082,8 @@ ENERGY = {
               [("Solarstrom (Victron)", "aus (0 W · 0 A)"), ("Solarertrag heute", "0.19 kWh")]),
 }  # fmt: skip
 VEHICLE = {
-    "en-US": ("Vehicle", "Vehicle clock", [("Temperature (Govee)", "16.5 °C"), ("Humidity", "59 %")]),
-    "de-DE": ("Fahrzeug", "Fahrzeuguhr", [("Temperatur (Govee)", "16.5 °C"), ("Luftfeuchte", "59 %")]),
+    "en-US": ("Vehicle", "Vehicle clock", [("Govee Temperature", "16.5 °C"), ("Govee Humidity", "59 %")]),
+    "de-DE": ("Fahrzeug", "Fahrzeuguhr", [("Govee Temperatur", "16.5 °C"), ("Govee Luftfeuchte", "59 %")]),
 }
 
 
@@ -1182,8 +1182,8 @@ def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
         pg.wait_for_selector(".tilegrid .tile")
         _open(pg, "Vehicle")
         assert _around(_readouts(pg), "Vehicle clock", after=2) == [
-            ("Temperature (Govee)", "16.5 °C · 🔋 15 % 🕒 12 min ago"),
-            ("Humidity", "— 🕒 12 min ago"),
+            ("Govee Temperature", "16.5 °C · 🔋 15 % 🕒 12 min ago"),
+            ("Govee Humidity", "— 🕒 12 min ago"),
         ]
         _home(pg)
         expect(pg.locator(".tile", has_text="Vehicle").first).to_contain_text("16.5 °C · — 🕒")
@@ -1237,3 +1237,23 @@ def test_no_ext_no_card_no_rows(stub, error_gated_page, mode):
             _open(pg, screen)
             assert not {lbl for lbl, _ in _readouts(pg)} & every
             _home(pg)
+
+
+def test_two_govees_each_lead_their_rows_with_their_alias(stub, error_gated_page):
+    """Two Govees with different aliases -> one row pair each, sorted by alias, every label led by
+    its own alias; the Vehicle tile summarises the first by alias."""
+    g = dict(ux_gallery.EXT_SENSORS["govee"])
+    stub.fixtures["satellite"]["/api/state"]["ext"] = {
+        "innen": dict(g, temp_c=21.0, humidity=48.0),
+        "aussen": dict(g, temp_c=9.5, humidity=81.0),
+    }
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        expect(pg.locator(".tile", has_text="Vehicle").first).to_contain_text("9.5 °C · 81 %")
+        _open(pg, "Vehicle")
+        assert _around(_readouts(pg), "Vehicle clock", after=4) == [
+            ("Aussen Temperature", "9.5 °C"),
+            ("Aussen Humidity", "81 %"),
+            ("Innen Temperature", "21.0 °C"),
+            ("Innen Humidity", "48 %"),
+        ]
