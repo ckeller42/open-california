@@ -8,7 +8,7 @@
 
 .. test:: WiFi SM Python twin transition rules + golden-vector replay
    :id: T_WIFI_SM_REF
-   :links: R_FW_WIFI_PROVISION
+   :links: R_FW_WIFI_PROVISION, R_FW_WIFI_ROLLBACK
 """
 
 import json
@@ -50,7 +50,8 @@ def test_pinned_enum_values():
         W.WEV_FAILED,
         W.WEV_AP_STARTED,
         W.WEV_TICK,
-    ) == tuple(range(9))
+        W.WEV_CREDS_REPLACE,
+    ) == tuple(range(10))
     assert (
         W.WACT_AP_START,
         W.WACT_AP_STOP,
@@ -59,8 +60,9 @@ def test_pinned_enum_values():
         W.WACT_MDNS,
         W.WACT_CLEAR_CREDS,
         W.WACT_LOG_REASON,
-    ) == tuple(range(7))
-    assert W.MAX_ACTIONS == 3
+        W.WACT_RESTORE_PREV,
+    ) == tuple(range(8))
+    assert W.MAX_ACTIONS == 3 and W.REPLACING == 2
 
 
 def test_fresh_boot_opens_the_setup_ap():
@@ -251,6 +253,64 @@ def test_creds_set_while_setup_ap_retrying_is_a_fresh_first_join():
     ]
 
 
+REPLACE_ACTS = [[W.WACT_STA_STOP, 0], [W.WACT_AP_START, 0], [W.WACT_STA_START, 0]]
+
+
+def test_failed_replacement_restores_the_previous_network():
+    """G2: online on a joined network, new creds that fail (auth) restore the previous, joined creds
+    (RESTORE_PREV) and retry them as joined (RETRYING, never CLEAR_CREDS); the old network answers
+    -> ONLINE, and the hotspot the replacement opened closes NET_AP_CLOSE_MS later."""
+    auth = 15
+    steps = run(
+        [W.WIFI_ONLINE, 0, 1, 0, 5000, 0],
+        (W.WEV_CREDS_REPLACE, 0),
+        (W.WEV_FAILED, auth),
+        (W.WEV_TICK, 40000),
+        (W.WEV_TICK, 40000 + MIN),
+        (W.WEV_GOT_IP, 0),
+        (W.WEV_TICK, 42000),
+        (W.WEV_TICK, 42000 + AP_CLOSE),
+    )
+    assert steps == [
+        ([W.WIFI_CONNECTING, 1, W.REPLACING, 0, 0, 0], REPLACE_ACTS),
+        ([W.WIFI_RETRYING, 1, 1, MIN, 0, 0], [[W.WACT_LOG_REASON, auth], [W.WACT_RESTORE_PREV, 0]]),
+        ([W.WIFI_RETRYING, 1, 1, MIN, 40000, 40000 + MIN], []),
+        ([W.WIFI_RETRYING, 1, 1, 2 * MIN, 40000, 40000 + 3 * MIN], [[W.WACT_STA_START, 0]]),
+        ([W.WIFI_ONLINE, 1, 1, 0, 0, 0], [[W.WACT_MDNS, 0]]),
+        ([W.WIFI_ONLINE, 1, 1, 0, 42000, 0], []),
+        ([W.WIFI_ONLINE, 0, 1, 0, 42000, 0], [[W.WACT_AP_STOP, 0]]),
+    ]
+
+
+def test_successful_replacement_keeps_the_new_network():
+    """G2: the replacement joins -> ONLINE with the new creds joined (1); nothing is restored."""
+    assert run([W.WIFI_ONLINE, 0, 1, 0, 5000, 0], (W.WEV_CREDS_REPLACE, 0), (W.WEV_GOT_IP, 0)) == [
+        ([W.WIFI_CONNECTING, 1, W.REPLACING, 0, 0, 0], REPLACE_ACTS),
+        ([W.WIFI_ONLINE, 1, 1, 0, 0, 0], [[W.WACT_MDNS, 0]]),
+    ]
+
+
+def test_replace_from_retrying_or_mid_replacement():
+    """A joined network that is retrying (or still joining) is a valid fallback too; a replacement
+    of a replacement stays REPLACING (the runner keeps the first, joined network as the fallback)."""
+    for start in ([W.WIFI_RETRYING, 0, 1, 4000, 10000, 17000], [W.WIFI_CONNECTING, 1, W.REPLACING, 0, 0, 0]):
+        assert run(start, (W.WEV_CREDS_REPLACE, 0)) == [
+            ([W.WIFI_CONNECTING, 1, W.REPLACING, 0, 0, 0], REPLACE_ACTS)
+        ], start
+
+
+def test_replace_without_a_joined_network_is_a_noop():
+    """No joined network to fall back to (setup states, a setup-flow join, unprovisioned): the SM
+    ignores CREDS_REPLACE — the runner takes the setup-flow path there, a failure clears as today."""
+    for start in (
+        [W.WIFI_UNPROVISIONED, 0, 0, 0, 0, 0],
+        [W.WIFI_SETUP_AP, 1, 0, 0, 0, 0],
+        [W.WIFI_CONNECTING, 1, 0, 0, 0, 0],
+        [W.WIFI_SETUP_AP_RETRYING, 1, 1, MAX, 10000, 370000],
+    ):
+        assert run(start, (W.WEV_CREDS_REPLACE, 0)) == [(start, [])], start
+
+
 def test_forget_from_every_state():
     forget = [[W.WACT_STA_STOP, 0], [W.WACT_CLEAR_CREDS, 0], [W.WACT_AP_START, 0]]
     for st in range(6):
@@ -265,6 +325,7 @@ def test_stray_events_are_noops():
 
     ids = {c["id"]: c for c in json.loads(VECTORS.read_text())["cases"]}
     assert "stray-retrying-creds-set" in ids and "stray-setup-ap-retrying-failed" in ids
+    assert "stray-setup-ap-creds-replace" in ids and "stray-connecting-unjoined-creds-replace" in ids
     for cid, start, ev in STRAY:
         assert run(list(start), (ev, 7)) == [(list(start), [])], cid
         assert ids[cid]["steps"] == [{"ev": ev, "arg": 7, "state": list(start), "actions": []}]
@@ -282,6 +343,7 @@ def test_vectors_replay_and_are_fresh():
     assert VECTORS.read_text() == gen_wifi_vectors.render()
     cases = json.loads(VECTORS.read_text())["cases"]
     assert len(cases) >= 12
+    assert {"replace-fails-restores-previous", "replace-succeeds"} <= {c["id"] for c in cases}
     for case in cases:
         s = W.WifiState(*case["start"])
         for i, st in enumerate(case["steps"]):

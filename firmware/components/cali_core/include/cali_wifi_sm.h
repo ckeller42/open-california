@@ -29,7 +29,9 @@ typedef struct {
     uint8_t st;           /* WIFI_* */
     uint8_t ap_up;        /* 1 once the SM emitted WACT_AP_START, 0 after WACT_AP_STOP */
     uint8_t joined_once;  /* 1 = creds joined or were loaded from flash (a FAILED retries); 0 = typed
-                           * in this setup flow via WEV_CREDS_SET (a FAILED clears them) — ruling R6 */
+                           * in this setup flow via WEV_CREDS_SET (a FAILED clears them) — ruling R6;
+                           * WIFI_REPLACING (2) = typed to replace joined creds via WEV_CREDS_REPLACE
+                           * (a FAILED emits WACT_RESTORE_PREV and retries the restored ones) — G2 */
     uint32_t retry_ms;    /* current backoff interval while (SETUP_AP_)RETRYING */
     uint64_t since_ms;    /* when ONLINE/RETRYING began; 0 = not stamped by a TICK yet */
     uint64_t next_try_ms; /* next STA_START while retrying */

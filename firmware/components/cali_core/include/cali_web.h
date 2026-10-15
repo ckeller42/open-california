@@ -48,8 +48,11 @@
  *                     built whole in one handler call (one consistent snapshot) into a
  *                     NET_JSON_MAX buffer; overflow -> 500 + LOG "http: overflow".
  *   GET /api/wifi     200 {"mode","ssid","ip","rssi","last_error":"not_found"|"auth"|"other"|null,
- *                     "scan":[{"ssid","rssi","secure":<bool>}]} (last_error = why the last join
- *                     failed, cali_wifi_run_last_fail(); scan = the last SCAN_DONE's list); in setup mode it also asks for a fresh scan
+ *                     "reverted":<bool>,"scan":[{"ssid","rssi","secure":<bool>}]} (last_error = why
+ *                     the last join failed, cali_wifi_run_last_fail(); reverted = a failed
+ *                     replacement put the previous network back, cali_wifi_run_reverted() — then
+ *                     ssid is that network and last_error the replacement's reason; scan = the last
+ *                     SCAN_DONE's list); in setup mode and in WIFI_ONLINE it also asks for a fresh scan
  *                     (cali_wifi_run_scan_auto: at most one per NET_SCAN_MIN_INTERVAL_MS, held
  *                     back while a BLE pairing flow is active — the one coex gate lives in the
  *                     runner, cali_wifi_run.h).
@@ -171,10 +174,10 @@
  *                     Otherwise: not handled (the core answers 404).
  *
  * device.wifi.mode: "setup" while the WiFi SM is in WIFI_SETUP_AP or WIFI_SETUP_AP_RETRYING;
- * "station" in WIFI_ONLINE, and in WIFI_CONNECTING/WIFI_RETRYING when joined_once (creds that joined
- * before or came from flash: a station reconnecting); "off" otherwise — WIFI_UNPROVISIONED, and a
- * setup-flow join in progress (WIFI_CONNECTING with joined_once 0: the page shows its own
- * post-submit view, and no scan disturbs the join).
+ * "station" in WIFI_ONLINE, and in WIFI_CONNECTING/WIFI_RETRYING when joined_once is 1 (creds that
+ * joined before or came from flash: a station reconnecting); "off" otherwise — WIFI_UNPROVISIONED, and
+ * a setup-flow or replacement join in progress (WIFI_CONNECTING with joined_once 0 or WIFI_REPLACING:
+ * the page shows its own post-submit view, and no scan disturbs the join).
  *
  * C99, no malloc, no ESP-IDF/POSIX headers. Driven in tests/firmware/test_web_handlers.py through
  * test/web_cli.c.

@@ -26,6 +26,13 @@ static struct {
     char ssid[NET_SSID_MAX + 1];     /* the station credentials (a copy: callers zero theirs) */
     char psk[NET_PSK_MAX + 1];
     int have_creds;
+    /* G2: the joined creds a replacement (WEV_CREDS_REPLACE) left; WACT_RESTORE_PREV puts them back.
+     * RAM only: a reboot mid-replacement boots the new, unjoined creds as a setup-flow join (as before
+     * G2) — the window is one join (<= the platform's join timeout), and the PSK is not kept in flash twice. */
+    char prev_ssid[NET_SSID_MAX + 1];
+    char prev_psk[NET_PSK_MAX + 1];
+    int have_prev;
+    int reverted;                    /* the last replacement failed and the previous network is back */
     int creds_ok;                    /* the creds joined (kv CALI_WIFI_KEY_OK says so, or GOT_IP did) */
     uint32_t ip;                     /* while ONLINE */
     int rssi;
@@ -56,10 +63,19 @@ static void wipe_creds(void) {
     W.have_creds = 0;
 }
 
+static void wipe_prev(void) {
+    memset(W.prev_ssid, 0, sizeof W.prev_ssid);
+    memset(W.prev_psk, 0, sizeof W.prev_psk);
+    W.have_prev = 0;
+}
+
+static int creds_ok_len(size_t ssid_len, size_t psk_len) {
+    return ssid_len >= 1 && ssid_len <= NET_SSID_MAX && (!psk_len || (psk_len >= NET_PSK_MIN && psk_len <= NET_PSK_MAX));
+}
+
 /* 0 ok: ssid 1..NET_SSID_MAX, psk empty (open) or NET_PSK_MIN..NET_PSK_MAX, both copied. */
 static int copy_creds(const char *ssid, size_t ssid_len, const char *psk, size_t psk_len) {
-    if (ssid_len < 1 || ssid_len > NET_SSID_MAX || (psk_len && (psk_len < NET_PSK_MIN || psk_len > NET_PSK_MAX)))
-        return -1;
+    if (!creds_ok_len(ssid_len, psk_len)) return -1;
     wipe_creds();
     memcpy(W.ssid, ssid, ssid_len);
     memcpy(W.psk, psk, psk_len);
@@ -133,6 +149,22 @@ static void run_action(const cali_wifi_action_t *a) {
         cali_log(ok ? "wifi: credentials cleared" : "wifi: credential erase failed");
         break;
     }
+    case WACT_RESTORE_PREV: {
+        /* the replacement failed: the joined creds come back, in RAM and in the kv store (web.c /
+         * the console stored the replacement there), still "joined" — the SM retries them */
+        int ok;
+        if (!W.have_prev) break;   /* never: CREDS_REPLACE is fed only with a fallback stashed */
+        (void)copy_creds(W.prev_ssid, strlen(W.prev_ssid), W.prev_psk, strlen(W.prev_psk));
+        wipe_prev();
+        ok = cali_kv_set(CALI_WIFI_KEY_SSID, W.ssid, strlen(W.ssid)) == 0;
+        ok = cali_kv_set(CALI_WIFI_KEY_PSK, W.psk, strlen(W.psk)) == 0 && ok;
+        ok = cali_kv_set(CALI_WIFI_KEY_OK, "1", 1) == 0 && ok;
+        W.creds_ok = 1;
+        W.reverted = 1;
+        cali_log("wifi: replacement failed, back to %s", W.ssid);
+        if (!ok) cali_log("wifi: storing the restored credentials failed");
+        break;
+    }
     case WACT_LOG_REASON:
         W.last_fail = a->arg ? a->arg : CALI_NET_REASON_OTHER;   /* the page shows why (R23) */
         cali_log("wifi: failed %s", reason_name(a->arg));
@@ -160,7 +192,8 @@ static void on_net(const cali_net_event_t *e, void *ctx) {
         feed(WEV_GOT_IP, 0);
         if (W.sm.st == WIFI_ONLINE) {
             if (!W.creds_ok && cali_kv_set(CALI_WIFI_KEY_OK, "1", 1) == 0) W.creds_ok = 1;   /* once, not per rejoin */
-            W.last_fail = CALI_NET_REASON_NONE;
+            wipe_prev();                   /* joined: a replacement succeeded, or the fallback is back */
+            if (!W.reverted) W.last_fail = CALI_NET_REASON_NONE;   /* reverted: the page says why */
             W.ip = e->ip;
             W.rssi = W.net->sta_rssi();
             W.rssi_at = 0;
@@ -216,9 +249,15 @@ static void on_net(const cali_net_event_t *e, void *ctx) {
     }
 }
 
-/* WEV_CREDS_SET: a new attempt — the previous attempt's failure reason no longer applies. */
-static void feed_creds_set(void) {
+/* A new attempt: the previous attempt's failure reason and revert no longer apply. */
+static void new_attempt(void) {
     W.last_fail = CALI_NET_REASON_NONE;
+    W.reverted = 0;
+}
+
+static void feed_creds_set(void) {
+    new_attempt();
+    wipe_prev();
     feed(WEV_CREDS_SET, 0);
 }
 
@@ -271,12 +310,28 @@ void cali_wifi_run_set_creds(const char *ssid, const char *psk) {
     if (W.have_creds && (st == WIFI_CONNECTING || st == WIFI_ONLINE) && strcmp(ssid, W.ssid) == 0 &&
         strcmp(psk, W.psk) == 0)
         return;
-    if (copy_creds(ssid, strlen(ssid), psk, strlen(psk)) != 0) return;
+    if (!creds_ok_len(strlen(ssid), strlen(psk))) return;
+    /* G2: replacing creds that joined (joined_once 1) keeps them as the fallback; replacing a
+     * replacement (WIFI_REPLACING) keeps the fallback it already has. */
+    if (W.have_creds && W.sm.joined_once == 1 && (st == WIFI_CONNECTING || st == WIFI_ONLINE || st == WIFI_RETRYING)) {
+        memcpy(W.prev_ssid, W.ssid, sizeof W.prev_ssid);
+        memcpy(W.prev_psk, W.psk, sizeof W.prev_psk);
+        W.have_prev = 1;
+    }
+    (void)copy_creds(ssid, strlen(ssid), psk, strlen(psk));
     /* ponytail: the caller stored the creds a moment before this; a power cut in between keeps the
      * previous flag. Writing "0" before the creds (in web.c/console.c) closes it if it ever matters. */
     mark_unjoined();
     if (st == WIFI_SETUP_AP || st == WIFI_SETUP_AP_RETRYING) {
         feed_creds_set();
+    } else if (W.have_prev && W.sm.joined_once) {
+        /* a joined station gets new creds: station down, hotspot up, join them; a failure restores
+         * the previous creds (WACT_RESTORE_PREV) instead of clearing them */
+        cali_log("wifi: credentials replaced, reconnecting");
+        W.ip = 0;
+        W.rssi = 0;
+        new_attempt();
+        feed(WEV_CREDS_REPLACE, 0);
     } else if (st != WIFI_UNPROVISIONED) {
         /* Online, retrying or mid-join: the SM takes new creds only in setup. Go there the way a
          * forget does — station down, hotspot up — but keep the new creds (the caller stored them;
@@ -294,6 +349,8 @@ void cali_wifi_run_forget(void) {
     if (!W.net) return;
     W.ip = 0;
     W.rssi = 0;
+    W.reverted = 0;
+    wipe_prev();
     feed(WEV_CREDS_FORGET, 0);
 }
 
@@ -308,6 +365,8 @@ void cali_wifi_run_scan_auto(void) {
 }
 
 const char *cali_wifi_run_ssid(void) { return W.have_creds ? W.ssid : NULL; }
+
+int cali_wifi_run_reverted(void) { return W.reverted; }
 
 uint32_t cali_wifi_run_ip(void) { return W.sm.st == WIFI_ONLINE ? W.ip : 0; }
 

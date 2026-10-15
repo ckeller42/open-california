@@ -400,7 +400,8 @@ def generate_net() -> str:
         address, matching ``codec_chars.h``'s ``CODEC_HEARTBEAT_START`` style); every other
         integer becomes a plain decimal ``#define``. Then the pinned ``WIFI_*`` states, ``WEV_*``
         events and ``WACT_*`` actions of :mod:`tools.wifi_sm_ref` (read off the module's own
-        attributes, never hand-typed here) as three enums, plus ``WIFI_MAX_ACTIONS``.
+        attributes, never hand-typed here) as three enums, plus ``WIFI_MAX_ACTIONS`` and
+        ``WIFI_REPLACING`` (the ``joined_once`` value of creds replacing a joined network).
     """
     from tools import wifi_consts, wifi_sm_ref
 
@@ -420,6 +421,10 @@ def generate_net() -> str:
             + "\n};"
         )
     out.append("#define WIFI_MAX_ACTIONS %d" % wifi_sm_ref.MAX_ACTIONS)
+    out.append(
+        "#define WIFI_REPLACING %d  /* joined_once: creds replacing a joined network */"
+        % wifi_sm_ref.REPLACING
+    )
     out.append("#endif /* NET_CONSTS_H */")
     return "\n".join(out) + "\n"
 

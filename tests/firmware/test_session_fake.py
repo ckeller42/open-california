@@ -1097,6 +1097,89 @@ def test_wifi_set_while_online_replaces_and_reconnects(fake):
     ]
 
 
+def test_wifi_failed_replacement_restores_the_previous_network(fake):
+    """G2: online on minsel, a replacement with a wrong password (auth) puts minsel back — RAM and kv,
+    ``wifi_ok`` "1" — and rejoins it on the retry backoff; ``reverted`` + the replacement's reason
+    stay until new credentials (the page says "back on minsel"); no passphrase in any LOG line."""
+    out = run(
+        fake,
+        *_online(
+            "> wifi set typo wrong-psk-99",
+            "NET_FAILED 2",
+            "kv wifi_ssid",
+            "kv wifi_psk",
+            "kv wifi_ok",
+            "lastfail",
+            "reverted",
+            "tick 100",
+            "tick 1100",
+            "NET_GOT_IP 192.168.1.42",
+            "lastfail",
+            "reverted",
+            "> wifi status",
+            "> wifi set other new-psk-5678",
+            "reverted",
+            "lastfail",
+        ),
+    )
+    rest = after(out, "NET sta_start typo wrong-psk-99")
+    assert rest[:13] == [
+        "LOG wifi: failed auth",
+        "LOG wifi: replacement failed, back to minsel",
+        "KV wifi_ssid minsel",
+        "KV wifi_psk " + PSK,
+        "KV wifi_ok 1",
+        "LASTFAIL auth",
+        "REVERTED 1",
+        "LOG wifi: joining minsel",
+        "NET sta_start minsel " + PSK,
+        "NET mdns %s %d" % (CONSTS["NET_HOSTNAME"], CONSTS["NET_HTTP_PORT"]),
+        "LOG wifi: online 192.168.1.42",
+        "LASTFAIL auth",
+        "REVERTED 1",
+    ]
+    assert rest[13].startswith("LOG wifi: station ssid=minsel ip=192.168.1.42")
+    assert rest[-2:] == ["REVERTED 0", "LASTFAIL -"]  # a fresh POST/wifi set clears both
+    assert "LOG wifi: credentials cleared" not in out
+    assert not any(PSK in line or "wrong-psk" in line for line in out if line.startswith("LOG"))
+
+
+def test_wifi_successful_replacement_drops_the_previous_network(fake):
+    """G2: a replacement that joins keeps the new network (no revert); the old one is no longer a
+    fallback — the next failed replacement goes back to the NEW one."""
+    out = run(
+        fake,
+        *_online(
+            "> wifi set other new-psk-5678",
+            "NET_GOT_IP 192.168.1.43",
+            "reverted",
+            "kv wifi_ssid",
+            "> wifi set typo wrong-psk-99",
+            "NET_FAILED 1",
+            "kv wifi_ssid",
+            "lastfail",
+        ),
+    )
+    rest = after(out, "LOG wifi: online 192.168.1.43")
+    assert rest[:2] == ["REVERTED 0", "KV wifi_ssid other"]
+    assert rest[-4:] == [
+        "LOG wifi: failed not_found",
+        "LOG wifi: replacement failed, back to other",
+        "KV wifi_ssid other",
+        "LASTFAIL not_found",
+    ]
+
+
+def test_wifi_first_setup_failure_has_nothing_to_restore(fake):
+    """G2 leaves first-time setup alone: a typo there still clears the creds, nothing is reverted."""
+    out = run(fake, "wifi_boot", "NET_AP_STARTED", "> wifi set typo wrong-psk-99", "NET_FAILED 2", "reverted")
+    assert after(out, "NET sta_start typo wrong-psk-99") == [
+        "LOG wifi: failed auth",
+        "LOG wifi: credentials cleared",
+        "REVERTED 0",
+    ]
+
+
 def test_wifi_same_creds_again_while_joining_is_a_no_op(fake):
     """Review I1: the setup page retries a Connect whose answer got lost — the first POST may well
     have arrived (the join's channel switch dropped the phone). The same SSID + PSK again while that

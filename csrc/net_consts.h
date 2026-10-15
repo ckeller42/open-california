@@ -56,7 +56,8 @@ enum {
     WEV_LOST = 5,
     WEV_FAILED = 6,
     WEV_AP_STARTED = 7,
-    WEV_TICK = 8
+    WEV_TICK = 8,
+    WEV_CREDS_REPLACE = 9
 };
 enum {
     WACT_AP_START = 0,
@@ -65,7 +66,9 @@ enum {
     WACT_STA_STOP = 3,
     WACT_MDNS = 4,
     WACT_CLEAR_CREDS = 5,
-    WACT_LOG_REASON = 6
+    WACT_LOG_REASON = 6,
+    WACT_RESTORE_PREV = 7
 };
 #define WIFI_MAX_ACTIONS 3
+#define WIFI_REPLACING 2  /* joined_once: creds replacing a joined network */
 #endif /* NET_CONSTS_H */

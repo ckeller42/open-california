@@ -8,7 +8,7 @@ the generated golden vectors through both (``tests/test_wifi_sm_ref.py`` replays
 
 .. test:: C WiFi SM matches the Python golden vectors
    :id: T_FW_WIFI_SM_PARITY
-   :links: R_FW_WIFI_PROVISION
+   :links: R_FW_WIFI_PROVISION, R_FW_WIFI_ROLLBACK
 """
 
 import json

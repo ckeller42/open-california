@@ -40,6 +40,7 @@
  *     kverasefail <n>      the next n cali_kv_erase calls fail (-1, nothing erased)
  *     rssi <dBm>           what the fake net's sta_rssi() answers (default 0)
  *     lastfail             print "LASTFAIL <cali_wifi_run_last_fail() or ->"
+ *     reverted             print "REVERTED <cali_wifi_run_reverted()>"
  *     webscan              cali_wifi_run_scan_auto() (what a setup-mode GET /api/wifi asks for)
  *   fake-net events (through the sink the WiFi runner registered):
  *     NET_GOT_IP <a.b.c.d> | NET_LOST | NET_FAILED <reason> | NET_AP_STARTED | NET_AP_STOPPED
@@ -396,6 +397,8 @@ int main(void) {
             s_rssi = n1;
         } else if (strcmp(word, "webscan") == 0) {
             cali_wifi_run_scan_auto();
+        } else if (strcmp(word, "reverted") == 0) {
+            printf("REVERTED %d\n", cali_wifi_run_reverted());
         } else if (strcmp(word, "lastfail") == 0) {
             const char *f = cali_wifi_run_last_fail();
             printf("LASTFAIL %s\n", f ? f : "-");

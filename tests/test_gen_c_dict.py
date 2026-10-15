@@ -157,7 +157,7 @@ def test_net_consts_header_pins_the_wifi_sm_enums():
     from tools import wifi_sm_ref as W
 
     text = gen_c_dict.generate_net()
-    for prefix, n in (("WIFI_", 6), ("WEV_", 9), ("WACT_", 7)):
+    for prefix, n in (("WIFI_", 6), ("WEV_", 10), ("WACT_", 8)):
         members = gen_c_dict._int_members(W, prefix)
         assert [v for _, v in members] == list(range(n)), prefix
         for name, val in members:
@@ -166,3 +166,5 @@ def test_net_consts_header_pins_the_wifi_sm_enums():
     assert "    WEV_TICK = 8" in text
     assert "    WACT_LOG_REASON = 6" in text
     assert "#define WIFI_MAX_ACTIONS %d" % W.MAX_ACTIONS in text
+    assert "    WEV_CREDS_REPLACE = 9" in text and "    WACT_RESTORE_PREV = 7" in text
+    assert "#define WIFI_REPLACING %d " % W.REPLACING in text

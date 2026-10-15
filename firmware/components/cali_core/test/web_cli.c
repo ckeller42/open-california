@@ -21,6 +21,7 @@
  *   joined 0|1       the SM state's joined_once
  *   ap <ssid> <rssi> <secure>   append one scan result; "apclear" empties the list
  *   lastfail none|<reason>   what cali_wifi_run_last_fail() answers (NULL for none)
+ *   reverted 0|1     what cali_wifi_run_reverted() answers
  *   pair <name>      the runner's state, by PAIR_STATE_NAMES name
  *   attempts <n>     the runner state's attempts; "pairerr <name>" its error (PAIR_ERR_NAMES)
  *   ctlbusy 0|1      what cali_ctl_busy() answers (a control command is pending)
@@ -227,6 +228,7 @@ static uint32_t s_ip;
 static cali_net_ap_t s_aps[NET_SCAN_MAX];
 static int s_naps;
 static char s_lastfail[64];   /* as long as the line tokens: no truncation */
+static int s_reverted;
 
 const cali_wifi_state_t *cali_wifi_run_state(void) { return &s_wifi; }
 const char *cali_wifi_run_ssid(void) { return s_has_ssid ? s_ssid : NULL; }
@@ -237,6 +239,7 @@ int cali_wifi_run_scan_list(const cali_net_ap_t **out) {
     return s_naps;
 }
 const char *cali_wifi_run_last_fail(void) { return s_lastfail[0] ? s_lastfail : NULL; }
+int cali_wifi_run_reverted(void) { return s_reverted; }
 void cali_wifi_run_set_creds(const char *ssid, const char *psk) { printf("CALL set_creds [%s] [%s]\n", ssid, psk); }
 void cali_wifi_run_forget(void) { printf("CALL forget\n"); }
 void cali_wifi_run_scan_auto(void) { printf("CALL scan_auto\n"); }
@@ -395,6 +398,8 @@ int main(void) {
             s_pair.error = (uint8_t)i;
         }
         else if (strcmp(w, "apclear") == 0) s_naps = 0;
+        else if (strcmp(w, "reverted") == 0)
+            s_reverted = atoi(a1);
         else if (strcmp(w, "lastfail") == 0)
             snprintf(s_lastfail, sizeof s_lastfail, "%s", strcmp(a1, "none") == 0 ? "" : a1);
         else if (strcmp(w, "stamp") == 0 && sscanf(a1, "%llu", &ms) == 1) s_stamp = ms;

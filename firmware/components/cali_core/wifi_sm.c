@@ -48,6 +48,13 @@ int cali_wifi_step(cali_wifi_state_t *s, uint8_t ev, uint64_t arg, cali_wifi_act
         set(s, WIFI_SETUP_AP, 1, 0, 0, 0, 0);
         return emit(o, emit(o, emit(o, 0, WACT_STA_STOP, 0), WACT_CLEAR_CREDS, 0), WACT_AP_START, 0);
     }
+    if (ev == WEV_CREDS_REPLACE) {   /* G2: new creds for a joined station; a failure restores the old */
+        if ((st == WIFI_CONNECTING || st == WIFI_ONLINE || st == WIFI_RETRYING) && s->joined_once) {
+            set(s, WIFI_CONNECTING, 1, WIFI_REPLACING, 0, 0, 0);
+            return emit(o, emit(o, emit(o, 0, WACT_STA_STOP, 0), WACT_AP_START, 0), WACT_STA_START, 0);
+        }
+        return 0;
+    }
     if (st == WIFI_UNPROVISIONED) {
         if (ev == WEV_BOOT_NO_CREDS) { set(s, WIFI_SETUP_AP, 1, 0, 0, 0, 0); return emit(o, 0, WACT_AP_START, 0); }
         /* R6: creds loaded from flash were validated when saved -> joined_once=1 (never wiped) */
@@ -62,8 +69,10 @@ int cali_wifi_step(cali_wifi_state_t *s, uint8_t ev, uint64_t arg, cali_wifi_act
                 set(s, WIFI_SETUP_AP, 1, 0, 0, 0, 0); /* joined_once=0 only via CREDS_SET: AP is up */
                 return emit(o, emit(o, 0, WACT_LOG_REASON, reason), WACT_CLEAR_CREDS, 0);
             }
+            int n = emit(o, 0, WACT_LOG_REASON, reason);
+            if (s->joined_once == WIFI_REPLACING) n = emit(o, n, WACT_RESTORE_PREV, 0);   /* back to the joined creds */
             set(s, WIFI_RETRYING, s->ap_up, 1, NET_RETRY_MIN_MS, 0, 0);
-            return emit(o, 0, WACT_LOG_REASON, reason);
+            return n;
         }
     } else if (st == WIFI_ONLINE) {
         if (ev == WEV_LOST) { set(s, WIFI_RETRYING, s->ap_up, s->joined_once, NET_RETRY_MIN_MS, 0, 0); return emit(o, 0, WACT_STA_STOP, 0); }

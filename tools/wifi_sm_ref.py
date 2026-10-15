@@ -19,6 +19,10 @@ State is ``(st, ap_up, joined_once, retry_ms, since_ms, next_try_ms)`` (:class:`
 ``joined_once`` (ruling R6) is 1 for creds that have joined or were loaded from flash
 (``WEV_BOOT_WITH_CREDS``: saved creds were validated when saved) and 0 only for creds typed in
 the current setup flow (``WEV_CREDS_SET``); only a FAILED with ``joined_once == 0`` clears creds.
+``joined_once == 2`` (:data:`REPLACING`, PR D G2) marks creds typed to *replace* a network that had
+joined (``WEV_CREDS_REPLACE`` from CONNECTING/ONLINE/RETRYING with ``joined_once == 1``): a FAILED
+then emits ``WACT_RESTORE_PREV`` (the runner puts the previous, joined creds back) and retries them
+as joined creds (RETRYING) instead of clearing anything; a GOT_IP makes them joined (1).
 ``ap_up`` tracks the SM's *intent*: it is set when the SM emits ``WACT_AP_START`` and cleared
 when it emits ``WACT_AP_STOP`` (``WEV_AP_STARTED`` is informational and changes nothing).
 """
@@ -40,11 +44,20 @@ from tools.wifi_consts import CONSTS
     WEV_FAILED,
     WEV_AP_STARTED,
     WEV_TICK,
-) = range(9)
-(WACT_AP_START, WACT_AP_STOP, WACT_STA_START, WACT_STA_STOP, WACT_MDNS, WACT_CLEAR_CREDS, WACT_LOG_REASON) = (
-    range(7)
-)
-MAX_ACTIONS = 3  # CREDS_FORGET emits 3 (STA_STOP, CLEAR_CREDS, AP_START); nothing emits more
+    WEV_CREDS_REPLACE,
+) = range(10)
+(
+    WACT_AP_START,
+    WACT_AP_STOP,
+    WACT_STA_START,
+    WACT_STA_STOP,
+    WACT_MDNS,
+    WACT_CLEAR_CREDS,
+    WACT_LOG_REASON,
+    WACT_RESTORE_PREV,
+) = range(8)
+MAX_ACTIONS = 3  # CREDS_FORGET and CREDS_REPLACE emit 3; nothing emits more
+REPLACING = 2  # joined_once: creds replacing a joined network (a failure restores the previous ones)
 
 _AP_CLOSE_MS = CONSTS["NET_AP_CLOSE_MS"]
 _RETRY_MIN_MS = CONSTS["NET_RETRY_MIN_MS"]
@@ -93,6 +106,15 @@ def step(state, ev, arg=0):
             WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0),
             [(WACT_STA_STOP, 0), (WACT_CLEAR_CREDS, 0), (WACT_AP_START, 0)],
         )
+    if ev == WEV_CREDS_REPLACE:
+        # new creds for a station whose creds joined: station down, hotspot up (a fallback to fix a
+        # typo from), join the new ones; a failure restores the previous creds (G2)
+        if st in (WIFI_CONNECTING, WIFI_ONLINE, WIFI_RETRYING) and s.joined_once:
+            return (
+                WifiState(WIFI_CONNECTING, 1, REPLACING, 0, 0, 0),
+                [(WACT_STA_STOP, 0), (WACT_AP_START, 0), (WACT_STA_START, 0)],
+            )
+        return s, []
     if st == WIFI_UNPROVISIONED:
         if ev == WEV_BOOT_NO_CREDS:
             return WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0), [(WACT_AP_START, 0)]
@@ -114,7 +136,10 @@ def step(state, ev, arg=0):
                     WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0),
                     [(WACT_LOG_REASON, reason), (WACT_CLEAR_CREDS, 0)],
                 )
-            return (WifiState(WIFI_RETRYING, s.ap_up, 1, _RETRY_MIN_MS, 0, 0), [(WACT_LOG_REASON, reason)])
+            acts = [(WACT_LOG_REASON, reason)]
+            if s.joined_once == REPLACING:  # the replacement failed: back to the joined creds
+                acts.append((WACT_RESTORE_PREV, 0))
+            return WifiState(WIFI_RETRYING, s.ap_up, 1, _RETRY_MIN_MS, 0, 0), acts
     elif st == WIFI_ONLINE:
         if ev == WEV_LOST:
             return (

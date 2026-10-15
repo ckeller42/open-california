@@ -282,6 +282,8 @@ static void api_wifi_get(cali_http_resp_t *resp) {
     wifi_members(&j, &st);
     cali_json_key(&j, "last_error");
     if (st.last_fail[0]) cali_json_str(&j, st.last_fail); else cali_json_null(&j);
+    cali_json_key(&j, "reverted");
+    cali_json_bool(&j, cali_wifi_run_reverted() != 0);
     cali_json_key(&j, "scan");
     cali_json_arr_begin(&j);
     for (int i = 0; aps && i < n && i < NET_SCAN_MAX; i++) {
@@ -298,8 +300,10 @@ static void api_wifi_get(cali_http_resp_t *resp) {
     finish_json(&j, resp);
     /* the list above is the last SCAN_DONE; a fresh one for a later GET — at most one per
      * NET_SCAN_MIN_INTERVAL_MS (the page GETs twice on load, and each scan takes the radio off the
-     * hotspot's channel), held back while a BLE pairing flow is active (the coex gate, ruling R15) */
-    if (st.wifi_mode == CALI_WIFI_MODE_SETUP) cali_wifi_run_scan_auto();
+     * hotspot's/station's channel), held back while a BLE pairing flow is active (the coex gate,
+     * ruling R15). Over the setup hotspot and online (G1: Change network… lists networks); never
+     * while a join runs (CONNECTING/RETRYING: a scan would disturb it). */
+    if (st.wifi_mode == CALI_WIFI_MODE_SETUP || st.wifi_state == WIFI_ONLINE) cali_wifi_run_scan_auto();
 }
 
 /* ---- the fixed-shape {"ssid":"…","psk":"…"} parser ---- */
