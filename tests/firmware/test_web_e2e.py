@@ -613,16 +613,27 @@ def test_sensors_box_add_and_remove(host_fw, hci_unit, tmp_path, locale, lang):
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_context(locale=locale).new_page()
-        page.on("dialog", lambda d: d.accept())
+        page.on("dialog", lambda d: errors.append("native dialog: " + d.message))  # the page asks itself
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto("http://127.0.0.1:%d/device" % fw.http_port)
         page.wait_for_selector("#sens-seen .row", timeout=90_000)  # the first window finds it
         assert page.inner_text("#sens-title") == STRINGS["sens_title"][lang]
         assert "GVH5074" in page.inner_text("#sens-seen .row")
-        page.click("#sens-seen .row button")  # Add
+        page.click("#sens-seen .row button")  # Add: opens the (optional) name field
+        page.click("#sens-seen .row button:text-is('%s')" % STRINGS["sens_add"][lang])  # no name: "govee"
         page.wait_for_selector("#sens-cfg .row", timeout=10_000)
-        assert page.inner_text("#sens-cfg .row").startswith("govee")
-        page.click("#sens-cfg .row button")  # Remove (confirm auto-accepted)
+        assert " · govee · " in page.inner_text("#sens-cfg .row")
+        page.click("#sens-cfg .row button:text-is('%s')" % STRINGS["sens_rename"][lang])
+        page.fill("#sens-cfg .row input", "innen")
+        page.click("#sens-cfg .row button:text-is('%s')" % STRINGS["sens_save"][lang])
+        page.wait_for_function("() => !!document.querySelector('#sens-cfg .row')?.textContent.includes(' · innen · ')",
+                               timeout=10_000)  # fmt: skip
+        page.click("#sens-cfg .row button:text-is('%s')" % STRINGS["sens_remove"][lang])  # asks in the page
+        page.wait_for_selector("#sens-cfg .row button.danger")
+        assert STRINGS["sens_confirm_remove"][lang].replace("{alias}", "innen") in page.inner_text(
+            "#sens-cfg .row"
+        )
+        page.click("#sens-cfg .row button.danger")  # the confirm
         page.wait_for_function("() => !document.querySelector('#sens-cfg .row')", timeout=10_000)
         browser.close()
     assert not errors, errors

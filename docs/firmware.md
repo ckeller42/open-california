@@ -1051,11 +1051,20 @@ to the sensors and never to the pairing SM or the session.
   `LOG sensors ok` / `LOG sensors err <code>` (`CALI_SENS_E_*`). The host build prints every
   diagnostics record as `REC <body>`.
 - **Setup (`/device` Sensors box, EN + DE):** shown while the flag is on, it polls
-  `GET /api/sensors` every 10 s (each GET kicks a window). Configured rows show alias, the first two
-  fields, the age and **Remove** (asks first); seen rows show the type, the model, the RSSI and
-  **Add** — a key type (`victron_*`) first asks for its key (a password field), a second sensor of
-  a type first asks for a name. The ids in the box are the boot-local ids above: after a reboot
-  the box simply shows the fresh ones.
+  `GET /api/sensors` every 10 s (each GET kicks a window). Configured rows show the type, the alias,
+  up to three readings with their units (°C, %, V, W, kWh, A — fields without a clear unit, and a
+  Govee's own battery, are left to the shared UI) and the age, then **Rename** (an inline name field prefilled with the alias +
+  Save/Cancel; posts `{"id","alias"}`) and **Remove**, which asks in the page ("Remove <alias>?" with
+  a red **Remove** + **Cancel**; no `window.confirm()`, which iOS home-screen apps and in-app
+  browsers may never show). Seen rows show the type, the model, the RSSI and **Add**, which opens a
+  name field (optional for the first sensor of a type — its placeholder is the type's default
+  alias; required for a second) plus, for a key type (`victron_*`), the key (a plain text field, no
+  autofill: the owner must see a typo) and Cancel; an opened step takes the focus (the name field,
+  Cancel for the question), and OK posts once however often it is tapped. The name is lowercased
+  and checked against `[a-z0-9_-]{1,16}` before posting ("Use a–z, 0–9, - or _"); the firmware's
+  own errors (name already used, bad/mismatched key, list full) show below the box, scrolled into
+  view and announced (`aria-live`). While a confirmation or a field is open, the 10 s poll leaves the box alone. The ids in the box are the
+  boot-local ids above: after a reboot the box simply shows the fresh ones.
 
 ## UX telemetry (`R_UX_TELEMETRY`)
 
@@ -1855,9 +1864,12 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   Govee, the console configures it, its `ext` record lands; a window never blocks a pairing; flag off
   = nothing seen), `T_FW_SENSORS_API` (`tests/firmware/test_web_handlers.py`: `/api/sensors` 404 while
   off and no `ext` in `/api/state`; seen -> add -> `ext.<alias>` -> remove; every 400 code, 500 `store`,
-  405; a second sensor of a type needs a name; the list survives the flag off/on; the setup hotspot) and
+  405; a second sensor of a type needs a name; the list survives the flag off/on; the setup hotspot),
   `T_FW_SENSORS_UI` (`tests/firmware/test_web_e2e.py`: the `/device` Sensors box finds the Bumble
-  Govee, Add and Remove, EN + DE). QEMU boots with the flag on (`tests/firmware/test_qemu_boot.py`).
+  Govee, Add, Rename and the in-page Remove confirmation, EN + DE) and `T_FW_SENSORS_UI_E2E`
+  (`tests/e2e/test_device_sensors.py`: the box against `EspStub`'s stateful `/api/sensors` — default
+  and own names, a second of a type, invalid and taken names, a Victron's key, Cancel, the
+  confirmation, rename, the poll leaving an open step alone). QEMU boots with the flag on (`tests/firmware/test_qemu_boot.py`).
 - **`R_FW_STATUS_DISPLAY`** — verified by `T_FW_DISPLAY_MODEL` (`tests/firmware/test_display_model.py`,
   every row state, the 10 s stale rule, the setup footer and the bright/dim timing through a C driver
   over `display_model.c`), `T_FW_DISPLAY_FONT` (`tests/test_display_font.py`, every EN/DE screen

@@ -32,6 +32,7 @@ import argparse
 import http.server
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -228,6 +229,11 @@ EXT_SENSORS = {
         "age_s": 7,
     },
 }
+SENS_DEFAULT_ALIAS = {
+    "govee": "govee",
+    "victron_mppt": "mppt-75-15",
+    "victron_battery": "battery-sense",
+}  # sensors.c
 MPPT_100_20 = {  # a second solar charger (a two-MPPT van)
     "type": "victron_mppt",
     "battery_current": 2.3,
@@ -372,21 +378,23 @@ def esp_fixtures():
 
 class EspStub:
     """A stdlib HTTP stub of the firmware's web endpoints: ``GET /`` = the generated page bytes,
-    ``GET /api/state`` / ``/api/wifi`` = ``esp_fixtures()[mode]``. Switch pages with ``mode``.
+        ``GET /api/state`` / ``/api/wifi`` = ``esp_fixtures()[mode]``. Switch pages with ``mode``.
 
-    ``POST /api/command`` records the body in ``commands`` and answers ``command_status`` +
-    ``command_reply`` (default: the firmware's success shape, ``applied: null``) after
-    ``command_delay_s``; like the ESP's single-connection core, a ``GET /api/state`` arriving
-    meanwhile waits for the answer (``polls_while_pending`` counts them).
+        ``POST /api/command`` records the body in ``commands`` and answers ``command_status`` +
+        ``command_reply`` (default: the firmware's success shape, ``applied: null``) after
+        ``command_delay_s``; like the ESP's single-connection core, a ``GET /api/state`` arriving
+        meanwhile waits for the answer (``polls_while_pending`` counts them).
 
-    ``POST /api/pairing`` records the body in ``pairing_posts`` and walks the fixture's snapshot like
-    the firmware's runner would, compressed: start -> ``waiting_passkey`` (from idle/error), the
-    passkey ``pairing_passkey`` -> ``bonded`` (any other -> ``error`` / ``pairing_failed``), cancel ->
-    ``idle``, reset (``confirm: true``) -> ``idle`` without a bond; ``pairing_status`` other than 200
-    answers ``{"error": pairing_error}`` instead. ``POST /api/ux`` (the UI's usage beacons,
-    R_UX_TELEMETRY) appends the parsed body to ``ux_beacons`` and answers ``ux_status`` (204; 404 =
-    a firmware without the endpoint). ``GET /app`` is the UI bundle in every mode, and the
-    manifest + icons (``gen_c_dict.pwa_assets``) are served in every mode too."""
+        ``POST /api/pairing`` records the body in ``pairing_posts`` and walks the fixture's snapshot like
+        the firmware's runner would, compressed: start -> ``waiting_passkey`` (from idle/error), the
+        passkey ``pairing_passkey`` -> ``bonded`` (any other -> ``error`` / ``pairing_failed``), cancel ->
+        ``idle``, reset (``confirm: true``) -> ``idle`` without a bond; ``pairing_status`` other than 200
+        answers ``{"error": pairing_error}`` instead. ``POST /api/ux`` (the UI's usage beacons,
+        R_UX_TELEMETRY) appends the parsed body to ``ux_beacons`` and answers ``ux_status`` (204; 404 =
+        a firmware without the endpoint). ``POST /api/sensors`` applies the firmware's add/remove/rename
+    rules (``_sensors``; bodies in ``sensor_posts``), a removed sensor is seen again on the next
+    ``GET /api/sensors``. ``GET /app`` is the UI bundle in every mode, and the
+        manifest + icons (``gen_c_dict.pwa_assets``) are served in every mode too."""
 
     def __init__(self, mode="setup"):
         from tools import gen_c_dict
@@ -405,6 +413,9 @@ class EspStub:
         self.pairing_posts = []  # POST /api/pairing bodies, in order
         self.ux_beacons = []  # POST /api/ux bodies, in order
         self.ux_status = 204
+        self.sensor_posts = []  # POST /api/sensors bodies, in order
+        self._sens_back = []  # removed sensors, seen again on the next GET /api/sensors
+        self._sens_model = {}  # id -> the advert's model, kept while configured
         self.pairing_passkey = "123456"  # the code the stub "unit" shows
         self.pairing_status, self.pairing_error = 200, None  # e.g. 409, "busy"
         self.pairing_get_delay_s = 0.0  # GET /api/pairing answers this late (a stalled core)
@@ -445,6 +456,10 @@ class EspStub:
                     self.send_response(stub.ux_status)
                     self.send_header("Content-Length", "0")
                     self.end_headers()
+                    return
+                if path == "/api/sensors":
+                    stub.sensor_posts.append(body)
+                    self._json(*stub._sensors(body))
                     return
                 if path != "/api/command":
                     self.send_error(404)
@@ -487,6 +502,9 @@ class EspStub:
                     stub.polls_while_pending += 1
                     with stub._pending:  # the core serves nothing while a command pends
                         pass
+                if path == "/api/sensors" and path in fx:  # the next window sees removed ones again
+                    fx[path]["seen"] += stub._sens_back
+                    stub._sens_back = []
                 if path == "/app" or (path == "/" and stub.mode in APP_MODES):  # web.c: the UI bundle
                     body, ctype, enc = bundle, "text/html; charset=utf-8", "gzip"
                 elif path in ("/", "/device"):
@@ -534,6 +552,68 @@ class EspStub:
             snap.update(state="idle", attempts=0, error=None, address=None)
         dev.update(state=snap["state"], address=snap["address"])
         return dict(snap)
+
+    def _sensors(self, body):
+        """``POST /api/sensors`` by the firmware's rules (``sensors.c``, ``web.c``) in miniature.
+
+        :returns: ``(status, body)`` — 200 + the GET body, or 400 ``{"ok": false, "error": code}``.
+        """
+        s = self.fixtures[self.mode]["/api/sensors"]
+        cfg, seen, alias = s["configured"], s["seen"], body.get("alias")
+
+        def by_id(rows, key):
+            return next((r for r in rows if r["id"] == body.get(key)), None)
+
+        def taken(a, me=None):
+            return any(c["alias"] == a and c is not me for c in cfg)
+
+        bad = None
+        if alias is not None and not re.fullmatch(r"[a-z0-9_-]{1,16}", alias):
+            bad = "bad_alias"
+        elif "add" in body:
+            r, key = by_id(seen, "add"), body.get("key")
+            if r is None:
+                bad = "unknown_id"
+            elif alias is None and any(c["type"] == r["type"] for c in cfg):
+                bad = "bad_alias"  # the default alias only for the first of a type
+            elif taken(alias or SENS_DEFAULT_ALIAS.get(r["type"], r["type"])):
+                bad = "bad_alias"
+            elif (r["type"].startswith("victron") or key is not None) and not re.fullmatch(
+                r"[0-9a-fA-F]{32}", key or ""
+            ):
+                bad = "bad_key"
+            else:
+                seen.remove(r)
+                self._sens_model[r["id"]] = r["model"]
+                cfg.append(
+                    {
+                        "id": r["id"],
+                        "type": r["type"],
+                        "alias": alias or SENS_DEFAULT_ALIAS.get(r["type"], r["type"]),
+                        "last_seen_s": None,
+                        "value": None,
+                        "has_key": key is not None,
+                    }
+                )
+        elif "remove" in body:
+            c = by_id(cfg, "remove")
+            if c is None:
+                bad = "unknown_id"
+            else:
+                cfg.remove(c)
+                model = self._sens_model.pop(c["id"], c["type"])
+                self._sens_back.append({"id": c["id"], "type": c["type"], "model": model, "rssi": -70})
+        elif "id" in body:
+            c = by_id(cfg, "id")
+            if c is None:
+                bad = "unknown_id"
+            elif alias is None or taken(alias, c):
+                bad = "bad_alias"
+            else:
+                c["alias"] = alias
+        else:
+            bad = "bad_json"
+        return (400, {"ok": False, "error": bad}) if bad else (200, s)
 
     def __enter__(self):
         self._thread.start()
