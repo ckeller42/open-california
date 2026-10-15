@@ -535,6 +535,19 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
         link_reset();
         emit(CALI_TEV_DISCONNECTED, ev->disconnect.reason, 0, NULL, 0, NULL);
         return 0;
+    case BLE_GAP_EVENT_TERM_FAILURE:
+        /* The controller refused our terminate: the link stays and so does its slot. Give up the
+         * wait and fail the deferred connect (its retry scans again) rather than hang on a
+         * DISCONNECT that never comes (review, #383). */
+        if (ev->term_failure.conn_handle != s_dying_conn) return 0;
+        cali_log("ble: terminate failed (0x%02x)", log_code(ev->term_failure.status));
+        s_dying_conn = BLE_HS_CONN_HANDLE_NONE;
+        if (s_connect_deferred) {
+            s_connect_deferred = 0;
+            s_connecting = 0;
+            emit(CALI_TEV_CONNECT_FAIL, ev->term_failure.status, 0, NULL, 0, NULL);
+        }
+        return 0;
     case BLE_GAP_EVENT_PASSKEY_ACTION:
         if (ev->passkey.conn_handle != s_conn) return 0;
         s_probing = 0;   /* an SMP pairing runs: its ENC_CHANGE is the pairing's, not the probe's */
