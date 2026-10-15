@@ -260,17 +260,23 @@ def test_pairing_chrome_hidden_when_paired_and_online(page):
     expect(page.get_by_role("button", name="Pair now")).to_have_count(0)
     expect(page.locator("#unpaired-banner")).to_have_count(0)
     page.get_by_role("button", name="Menu").click()
-    expect(page.get_by_role("menuitem", name="Pair…", exact=True)).to_be_visible()
+    # no pairing in the ⋮ menu (owner 2026-10-15): banner, Device status and /device hold it
+    expect(page.get_by_role("menuitem")).to_have_text(["Device status", "Help", "Deutsch"])
 
 
-def test_pair_from_the_menu_shows_the_wizard_at_the_top_on_a_phone(base_url, error_gated_page):
-    """Paired + online van, iPhone size, scrolled down: ⋮ → Pair… renders the wizard above the
+def _open_pairing(page):
+    """Open the wizard on a paired daemon the way /device's Camper-unit link does: the ``#pair`` deep
+    link (app.js openFromHash), followed on the open page -- no reload, no menu (owner 2026-10-15)."""
+    page.evaluate("location.hash = '#pair'")
+
+
+def test_pair_link_shows_the_wizard_at_the_top_on_a_phone(base_url, error_gated_page):
+    """Paired + online van, iPhone size, scrolled down: the #pair link renders the wizard above the
     summary and the tiles and scrolls it into view (UX review H2). Opening sends no POST."""
     with error_gated_page(base_url, viewport={"width": 390, "height": 844}) as pg:
         expect(pg.locator(".tilegrid .tile").first).to_be_visible()
         pg.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        pg.get_by_role("button", name="Menu").click()
-        pg.get_by_role("menuitem", name="Pair…", exact=True).click()
+        _open_pairing(pg)
         card = pg.locator("#pairing-card")
         expect(card.get_by_role("button", name="Pair now")).to_be_in_viewport()
         expect(card.get_by_text("Set up remote control")).to_be_in_viewport()
@@ -611,15 +617,8 @@ def test_open_control_survives_a_state_poll(page):
     assert page.evaluate("document.activeElement && document.activeElement.tagName") == "SELECT"
 
 
-def _open_pairing_via_menu(page):
-    """The wizard lives behind the topbar context menu — no card in the main flow when the
-    daemon is paired/online (UX: the guided flow is only prominent on true first-run)."""
-    page.get_by_role("button", name="Menu").click()
-    page.get_by_role("menuitem", name="Pair…", exact=True).click()
-
-
 def _open_and_start_pairing(page):
-    _open_pairing_via_menu(page)
+    _open_pairing(page)
     page.get_by_role("checkbox", name="I'm on that screen").check()
     page.get_by_role("button", name="Pair now").click()
 
@@ -647,8 +646,8 @@ def test_pairing_wizard_reaches_bonded(pairing_page):
 
 def test_pairing_checklist_before_connect(pairing_page):
     page = pairing_page
-    page.get_by_role("button", name="Menu").click()
-    page.get_by_text("Pair…", exact=True).click()
+    _open_pairing(page)
+    expect(page.locator("#pairing-card")).to_be_visible()
     text = page.locator("#app").inner_text()
     assert "Gerät verbinden" in text  # the unit's own screen name
     assert "Passcode: ---" in text  # what the unit shows before we connect
@@ -739,6 +738,7 @@ def test_unpaired_daemon_offers_setup(unconfigured_pairing_page):
     expect(page.locator("#unpaired-banner")).to_be_visible(timeout=10000)
     page.locator("#unpaired-banner").get_by_role("button").click()
     expect(page.get_by_text("Gerät verbinden")).to_be_visible()
+    expect(page.locator("#pairing-card")).to_be_in_viewport()  # at the top of Home
 
 
 def test_pairing_wizard_restarts_cleanly_after_daemon_restart(tmp_path):
@@ -758,8 +758,8 @@ def test_pairing_wizard_restarts_cleanly_after_daemon_restart(tmp_path):
         proc, url = _start_daemon(port, env)  # same port: the tab reconnects
         try:
             page.reload()
-            page.get_by_role("button", name="Menu").click()
-            page.get_by_text("Pair…", exact=True).click()
+            page.wait_for_function("() => !!STATE._meta")
+            _open_pairing(page)
             expect(page.get_by_role("button", name="Pair now")).to_be_visible()
             page.locator("#pairing-ready").check()
             page.get_by_role("button", name="Pair now").click()
@@ -794,8 +794,7 @@ def test_pairing_wizard_never_flashes_a_stale_step_after_daemon_restart(tmp_path
         proc.wait(timeout=5)
         proc, url = _start_daemon(port, env)  # same port, a FRESH process -> idle
         try:
-            page.get_by_role("button", name="Menu").click()
-            page.get_by_text("Pair…", exact=True).click()
+            _open_pairing(page)
             # immediately after the click -- before the fresh fetch can possibly have landed --
             # the stale waiting_passkey step must never appear.
             expect(page.locator("#pairing-passkey")).to_have_count(0)
@@ -846,9 +845,17 @@ def test_pairing_hidden_until_opened_from_menu(unconfigured_pairing_page):
     expect(page.get_by_role("button", name="Menu")).to_be_visible()
     expect(page.locator("#unpaired-banner")).to_be_visible()
     page.get_by_role("button", name="Menu").click()
-    expect(page.get_by_role("menuitem", name="Pair…", exact=True)).to_be_visible()
-    # no bond configured in this daemon -> no Unpair entry
-    expect(page.get_by_role("menuitem", name="Unpair…")).to_have_count(0)
+    # no pairing in the menu, unpaired either (owner 2026-10-15)
+    expect(page.get_by_role("menuitem")).to_have_text(["Device status", "Help", "Deutsch"])
+    # Device status: no bond -> "Not paired", Pair… only, the connection says why there is no data
+    page.get_by_role("menuitem", name="Device status").click()
+    unit = _ds_card(page, "Camper unit")
+    expect(unit.locator(".row", has_text="Pairing")).to_contain_text("Not paired")
+    expect(unit.locator(".row", has_text="Connection")).to_contain_text("not paired")
+    expect(unit.get_by_role("button", name="Unpair…")).to_have_count(0)
+    expect(unit.locator("details")).to_have_count(0)  # no MAC to disclose
+    unit.get_by_role("button", name="Pair…", exact=True).click()
+    expect(page.locator("#pairing-card")).to_be_in_viewport()  # the wizard, at the top of Home
 
 
 def test_menu_a11y_escape_closes_and_lang_syncs(page):
@@ -966,24 +973,26 @@ def test_status_pill_opens_device_status(page):
     expect(page.get_by_text("Camper unit", exact=True)).to_be_visible()
 
 
-def test_menu_unpair_workflow_after_bonding(pairing_page):
-    """The explicit unpair workflow: after bonding, the context menu gains 'Unpair…' which
-    confirm()s, removes the bond (reset), and leaves the wizard open guiding a re-pair.
-    'Unpair…' closes the pairing group: right after 'Pair…', then a separator."""
+def test_device_status_unpair_workflow_after_bonding(pairing_page):
+    """The explicit unpair workflow: after bonding, Device status offers 'Unpair…' (no longer the
+    ⋮ menu, UX review 3.2), which confirm()s, removes the bond (reset), and leaves the wizard open
+    at the top of Home guiding a re-pair."""
     page = pairing_page
     page.on("dialog", lambda d: d.accept())
     _complete_bonding(page)
     page.get_by_role("button", name="Menu").click()
-    unpair = page.get_by_role("menuitem", name="Unpair…")
-    expect(unpair).to_be_visible()
-    sib = unpair.evaluate(
-        "e => [e.previousElementSibling.textContent, e.nextElementSibling.getAttribute('role')]"
-    )
-    assert sib == ["Pair…", "separator"]
+    expect(page.get_by_role("menuitem", name="Unpair…")).to_have_count(0)
+    page.get_by_role("menuitem", name="Device status").click()
+    unit = _ds_card(page, "Camper unit")
+    expect(unit.get_by_role("button", name="Pair…", exact=True)).to_have_count(
+        0
+    )  # paired: only Unpair applies
+    unpair = unit.get_by_role("button", name="Unpair…")
     expect(unpair).to_have_class(re.compile(r"\bdanger\b"))
     unpair.click()
     # reset drives the SM resetting -> idle; the wizard stays open showing the guided first step
     expect(page.get_by_role("checkbox", name="I'm on that screen")).to_be_visible(timeout=10000)
+    expect(page.locator("#title")).not_to_have_text("Device status")
 
 
 def test_pairing_wizard_reset_demands_confirm_then_idle(pairing_page):
@@ -1032,19 +1041,43 @@ def test_calictl_is_never_satellite(page):
     assert page.evaluate("() => typeof adaptSatellite") == "function"
     assert page.evaluate("() => !!(STATE._meta && STATE._meta.satellite)") is False
     page.click("#menu")
-    expect(page.locator(".menupop").get_by_text("Pair…", exact=True)).to_be_visible()
+    expect(page.locator(".menupop").get_by_text("Device status")).to_be_visible()
+
+
+def _ds_card(page, title):
+    """A Device-status card by its heading ("Camper unit", "Satellite", "buspi")."""
+    return page.locator("#app .card", has=page.get_by_role("heading", name=title, exact=True))
 
 
 def test_menu_device_status_screen_on_calictl(page):
-    """The Device-status screen on the calictl flavor: daemon/session rows, no satellite rows and
-    no setup link (the /device page exists only on the ESP firmware)."""
+    """The Device-status screen on the calictl flavor (UX review 3.2 / M4): a "Camper unit" card
+    (connection, last update, pairing with the MAC behind Details, Unpair…) and a "buspi" card naming
+    the backend and whether control writes are on; no Satellite card, no settings link (the /device
+    page exists only on the ESP firmware)."""
     page.click("#menu")
     page.locator(".menupop").get_by_text("Device status").click()
     expect(page.locator("#title")).to_have_text("Device status")
-    expect(page.get_by_text("Camper unit", exact=True)).to_be_visible()
-    expect(page.get_by_text("Last update", exact=True)).to_be_visible()
+    unit = _ds_card(page, "Camper unit")
+    expect(unit.locator(".row", has_text="Connection")).to_contain_text("online")
+    expect(unit.get_by_text("Last update", exact=True)).to_be_visible()
+    expect(unit.locator(".row", has_text="Pairing")).to_contain_text("Paired ✓")
+    mac = page.evaluate("PAIRING.address")
+    assert mac
+    expect(unit.get_by_text(mac)).to_be_hidden()  # never shown by default
+    unit.locator("summary", has_text="Details").click()
+    expect(unit.get_by_text(mac)).to_be_visible()
+    expect(unit.get_by_role("button", name="Unpair…")).to_be_visible()
+    expect(unit.get_by_role("button", name="Pair…", exact=True)).to_have_count(0)
+    pi = _ds_card(page, "buspi")
+    expect(pi.locator(".row", has_text="Backend")).to_contain_text("calictl (")
+    ro = page.evaluate("STATE._meta.read_only")
+    expect(pi.locator(".row", has_text="Control writes")).to_contain_text("off" if ro else "on")
+    expect(_ds_card(page, "Satellite")).to_have_count(0)
     assert page.get_by_text("Satellite settings").count() == 0
     assert page.get_by_text("Satellite firmware").count() == 0
+    page.click("#menu")  # the ⋮ menu: Device status, Help, language; no pairing (owner 2026-10-15)
+    items = page.locator(".menupop [role=menuitem]").all_inner_texts()
+    assert items == ["Device status", "Help", "Deutsch"], items
 
 
 def test_unknown_runtime_is_restrictive(base_url):
@@ -1080,7 +1113,7 @@ def test_unknown_runtime_is_restrictive(base_url):
 def test_a_failed_first_poll_still_loads_pairing_once(base_url):
     # Deploy restart on buspi: the page's first /api/state fails (503 {error}, no `_meta`). The
     # one-off /api/pairing fetch must still happen once a calictl `_meta` answers on a later poll,
-    # or "Unpair…" (and the setup card's prominence) is lost for the page's whole life.
+    # or Device status's "Unpair…" (and the setup card's prominence) is lost for the page's whole life.
     seen = []
     fails = [1]
     with sync_playwright() as p:
@@ -1101,7 +1134,8 @@ def test_a_failed_first_poll_still_loads_pairing_once(base_url):
         pg.goto(base_url)
         pg.wait_for_function("() => typeof STATE !== 'undefined' && !!STATE._meta", timeout=10000)
         pg.click("#menu")
-        expect(pg.locator(".menupop").get_by_text("Unpair…")).to_be_visible()
+        pg.locator(".menupop").get_by_text("Device status").click()
+        expect(pg.get_by_role("button", name="Unpair…")).to_be_visible()
         pg.wait_for_timeout(2500)  # more polls: still fetched exactly once
         browser.close()
     assert not errs, errs

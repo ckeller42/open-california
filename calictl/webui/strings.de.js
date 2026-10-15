@@ -17,16 +17,10 @@ window.STRINGS_DE = {
   "More in the documentation": "Mehr in der Dokumentation",
   "Camper unit": "Camper-Einheit",
   "Last update": "Letzte Aktualisierung",
-  "Paired unit": "Gekoppelte Einheit",
   "not paired": "nicht gekoppelt",
   "online": "online",
   "Unit firmware": "Firmware der Einheit",
   "amb {amb} · comm {comm}": "amb {amb} · comm {comm}",
-  "Satellite firmware": "Satellit-Firmware",
-  "BLE link": "BLE-Verbindung",
-  "up": "verbunden",
-  "reconnecting…": "verbindet neu…",
-  "Signal": "Signal",
   "Please slow down (below 10 km/h)": "Bitte langsamer fahren (unter 10 km/h)",
   "Uptime": "Laufzeit",
   "{m} min": "{m} Min",
@@ -42,12 +36,21 @@ window.STRINGS_DE = {
   "RAM {free} KB free (lowest {min})": "RAM {free} KB frei (Minimum {min})",
   "PSRAM {free} KB free": "PSRAM {free} KB frei",
   "CPU {pct} %": "CPU {pct} %",
-  "Satellite battery": "Satellit-Akku",
   "on USB": "an USB",
   "on USB, charging": "an USB, lädt",
   "on battery": "im Akkubetrieb",
   "~{time} left": "noch ~{time}",
-  "Satellite settings": "Satellit-Einstellungen",
+  "Satellite settings ›": "Satellit-Einstellungen ›",
+  "Connection": "Verbindung",
+  "asleep": "im Ruhezustand",
+  "Pairing": "Kopplung",
+  "Paired ✓": "Gekoppelt ✓",
+  "Not paired": "Nicht gekoppelt",
+  "Details": "Details",
+  "Firmware": "Firmware",
+  "WiFi": "WLAN",
+  "Backend": "Dienst",
+  "Control writes": "Steuerbefehle",
   "Pair…": "Koppeln…",
   "Unpair…": "Entkoppeln…",
   "Unpair the camper unit? Data stops until you pair again.":
@@ -498,8 +501,10 @@ window.STRINGS_DE = {
     + "Govee thermometer on Vehicle (its tile then shows the temperature). They are not part of the unit "
     + "and keep updating while it sleeps.\n\n"
     + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
-    + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live.\n\n"
-    + "Not paired: no camper unit is paired yet, so there is no data; pair it from the ⋮ menu.\n\n"
+    + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live. "
+    + "Still offline while the van is in use? Check the pairing in Device status.\n\n"
+    + "Not paired: no camper unit is paired yet, so there is no data; tap Set up remote control on the "
+    + "banner, or Pair… in Device status.\n\n"
     + "Not reachable: this page cannot reach calictl or the satellite (WiFi, Tailscale, power). The van "
     + "itself may be fine.\n\n"
     + "Read-only: control writes are switched off on calictl or the satellite; values still update. An untested-firmware "
@@ -514,28 +519,33 @@ window.STRINGS_DE = {
     + "Offline: Geparkt fällt die Einheit in Tiefschlaf und "
     + "antwortet nicht mehr, bis das Fahrzeug wieder benutzt wird. Die Seite zeigt dann die letzten "
     + "Daten und ihr Alter. 🕒 kennzeichnet einen Wert, der früher gemessen wurde, nicht "
-    + "live.\n\nNicht gekoppelt: Es ist noch keine Camper-Einheit gekoppelt, daher gibt es keine "
-    + "Daten; kopple sie über das ⋮-Menü.\n\nNicht erreichbar: Diese Seite erreicht calictl oder den "
+    + "live. Trotz benutztem Fahrzeug offline? Prüfe die Kopplung im Gerätestatus.\n\nNicht gekoppelt: "
+    + "Es ist noch keine Camper-Einheit gekoppelt, daher gibt es keine Daten; kopple sie über den "
+    + "Hinweis (Fernsteuerung einrichten) oder im Gerätestatus (Koppeln…).\n\nNicht erreichbar: Diese Seite erreicht calictl oder den "
     + "Satelliten nicht (WLAN, Tailscale, Strom). Dem Fahrzeug selbst geht es womöglich gut.\n\n"
     + "Nur-Lesen: Steuerbefehle sind auf calictl bzw. dem Satelliten abgeschaltet; die Werte aktualisieren "
     + "sich trotzdem. Eine Warnung zu ungetesteter Firmware heißt, dass die Einheit Software nutzt, "
     + "auf der dieses Projekt nicht validiert wurde; dekodierte Werte können abweichen.",
-  ["Camper unit: online while the Bluetooth link to the unit works; offline usually means the parked unit "
-    + "is asleep. Last update is the age of the newest data. Paired unit is the camper unit that calictl or "
-    + "the satellite is paired with; pair or unpair it from the ⋮ menu (Pair…, Unpair…).\n\n"
-    + "On the ESP satellite this screen also shows its firmware, Bluetooth link, WiFi, uptime, microSD log "
-    + "and free memory. Satellite settings opens the satellite's own page: restore camping after you park, "
-    + "screen, usage data, experimental sensors and the firmware update (needs the home WiFi). Its WiFi is "
-    + "set over its setup hotspot."]:
-    "Camper-Einheit: online, solange die Bluetooth-Verbindung zur Einheit steht; offline heißt "
-    + "meist, dass die geparkte Einheit schläft. Letzte Aktualisierung ist das Alter der neuesten "
-    + "Daten. Gekoppelte Einheit ist die Camper-Einheit, mit der calictl oder der Satellit gekoppelt "
-    + "ist; koppeln oder entkoppeln kannst du im ⋮-Menü (Koppeln…, Entkoppeln…).\n\nAuf dem "
-    + "ESP-Satelliten zeigt dieser Bildschirm auch seine Firmware, die Bluetooth-Verbindung, WLAN, "
-    + "Laufzeit, das microSD-Log und den freien Speicher. Satellit-Einstellungen öffnet die eigene "
-    + "Seite des Satelliten: Campingmodus nach dem Parken wiederherstellen, Bildschirm, Nutzungsdaten, "
-    + "experimentelle Sensoren und Firmware-Update (braucht das Heim-WLAN). Sein WLAN stellst du über "
-    + "seinen Einrichtungs-Hotspot ein.",
+  ["Camper unit: Connection is online while the Bluetooth link to the unit works; asleep usually means the "
+    + "parked unit sleeps; not paired means no unit is paired yet. Last update is the age of the newest data. "
+    + "Pairing says whether calictl or the satellite is paired with a unit (Details shows its Bluetooth "
+    + "address). Pair… and Unpair… are here. Still offline while the van is in use? Check the pairing "
+    + "here: a reset of the unit's Bluetooth ends it; unpair, then pair again.\n\n"
+    + "Satellite (on the ESP satellite): its firmware, WiFi network, uptime, microSD log, battery and free "
+    + "memory. Satellite settings › opens its own page: WiFi (change the network there), restore camping "
+    + "after you park, screen, firmware update, usage data and experimental sensors.\n\n"
+    + "buspi (on the Pi): the calictl backend that serves this page, and whether control writes are on."]:
+    "Camper-Einheit: Die Verbindung ist online, solange die Bluetooth-Verbindung zur Einheit steht; "
+    + "im Ruhezustand heißt meist, dass die geparkte Einheit schläft; nicht gekoppelt heißt, dass noch "
+    + "keine Einheit gekoppelt ist. Letzte Aktualisierung ist das Alter der neuesten Daten. Kopplung "
+    + "zeigt, ob calictl oder der Satellit mit einer Einheit gekoppelt ist (Details zeigt ihre "
+    + "Bluetooth-Adresse). Koppeln… und Entkoppeln… findest du hier. Trotz benutztem Fahrzeug offline? "
+    + "Prüfe hier die Kopplung: ein Bluetooth-Reset der Einheit beendet sie; entkoppeln, dann neu koppeln.\n\n"
+    + "Satellit (auf dem ESP-Satelliten): seine Firmware, sein WLAN, Laufzeit, das microSD-Log, Akku und "
+    + "freier Speicher. Satellit-Einstellungen › öffnet seine eigene Seite: WLAN (dort wechselst du das "
+    + "Netzwerk), Campingmodus nach dem Parken wiederherstellen, Bildschirm, Firmware-Update, "
+    + "Nutzungsdaten und experimentelle Sensoren.\n\n"
+    + "buspi (auf dem Pi): der calictl-Dienst, der diese Seite liefert, und ob Steuerbefehle an sind.",
   ["Switch the refrigerator box on or off and set its cooling level.\n\n"
     + "Quiet mode: Off, Manual or Automatic. Manual runs quiet mode for up to 23 hours; Automatic runs it "
     + "between the start and end hour you set. Quiet mode can only be set while the box is on.\n\n"
