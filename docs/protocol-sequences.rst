@@ -1359,7 +1359,7 @@ stays ``mock-only``. Details:
      (``R_FW_IO_CAP_BEFORE_LINK``). Setting them inside the pairing call negotiates Just Works and
      the unit refuses it.
    * **Boot never scans.** With a stored bond the session reconnects by bond, with none it stays
-     idle. A flow starts only from the console ``pair`` or the wizard's *Connect now*. On a
+     idle. A flow starts only from the console ``pair`` or the wizard's *Pair now*. On a
      bonded satellite the flow first probes the stored bond (probe before replace): a working bond
      is kept without a passkey, a stale one (the unit hangs up with an auth reason) is dropped and
      paired afresh. ``forget`` drops a bond outright.

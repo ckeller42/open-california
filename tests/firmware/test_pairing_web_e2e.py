@@ -214,7 +214,7 @@ def test_start_while_a_command_runs_is_busy(host_fw, rec_unit, tmp_path):
         (
             "en-US",
             True,
-            ("Set up remote control", "I'm on that screen", "Connect now", "Send", "✓ Paired — "),
+            ("Set up remote control", "I'm on that screen", "Pair now", "Send", "✓ Paired — "),
         ),
         (
             "de-DE",
@@ -222,7 +222,7 @@ def test_start_while_a_command_runs_is_busy(host_fw, rec_unit, tmp_path):
             (
                 "Fernsteuerung einrichten",
                 "Ich bin auf diesem Bildschirm",
-                "Jetzt verbinden",
+                "Jetzt koppeln",
                 "Senden",
                 "✓ Gekoppelt — ",
             ),
@@ -276,7 +276,7 @@ def _bonded_and_reading(host_fw, hu, tmp_path):
 
 
 def test_cancelled_repair_resumes_the_bonded_session(host_fw, hci_unit, tmp_path):
-    """Connect now on a bonded satellite, then Cancel before the pair (the connect held pending):
+    """Pair now on a bonded satellite, then Cancel before the pair (the connect held pending):
     back to idle with the bond, and the session reconnects by bond — SNAP flows again (review I1:
     it used to stay offline until a reboot)."""
     fw = _bonded_and_reading(host_fw, hci_unit, tmp_path)
@@ -293,7 +293,7 @@ def test_cancelled_repair_resumes_the_bonded_session(host_fw, hci_unit, tmp_path
 
 
 def test_failed_repair_resumes_the_bonded_session(host_fw, hci_unit, tmp_path):
-    """Connect now on a bonded satellite that never gets a link (the connect held pending): error
+    """Pair now on a bonded satellite that never gets a link (the connect held pending): error
     (NimBLE's connect timeout -> connect_failed after 3 attempts, or the SM's connecting timeout) before
     any pair(), so the bond is kept and reported, and the session reconnects by
     bond once the unit is reachable — SNAP flows again (review I1)."""
@@ -309,7 +309,7 @@ def test_failed_repair_resumes_the_bonded_session(host_fw, hci_unit, tmp_path):
 
 
 def test_connect_now_on_a_working_bond_keeps_it(host_fw, hci_unit, tmp_path):
-    """Probe before replace (calictl #201): "Connect now" on a bonded satellite while the unit is NOT
+    """Probe before replace (calictl #201): "Pair now" on a bonded satellite while the unit is NOT
     on "Gerät verbinden" re-encrypts with the stored bond, which works — the flow ends bonded with no
     passkey and no SMP pairing, the bond is kept and SNAP flows. (It used to delete the bond before
     pairing, so the refused pair left the satellite unpaired.)
@@ -340,7 +340,7 @@ async def _drop_link(unit):
 
 def test_start_while_the_session_reconnects_scans(host_fw, hci_unit, tmp_path):
     """Watch item 10 (board 2026-10-08): the bond kept, the unit out of reach, the session's
-    connect_bonded pending — Connect now must still scan (the pending connect is cancelled first;
+    connect_bonded pending — Pair now must still scan (the pending connect is cancelled first;
     NimBLE refuses a scan while a connect is open, BLE_HS_EBUSY), find the unit once it is back and
     end bonded (the probe keeps the bond)."""
     fw = _bonded_and_reading(host_fw, hci_unit, tmp_path)
@@ -408,12 +408,12 @@ async def _late_disconnects(hu, delay_s):
 
 
 def test_repair_on_a_live_session_waits_for_the_handover(host_fw, hci_unit, tmp_path):
-    """#381: Connect now while the bonded session's link is up. Stopping the session drops that link,
+    """#381: Pair now while the bonded session's link is up. Stopping the session drops that link,
     but NimBLE holds its one connection slot until the Disconnection Complete; the unit re-advertises
     at once, so the wizard's connect comes first. It must wait for the drop (not fail BLE_HS_ENOMEM
     and burn an attempt): the flow ends bonded with no attempt spent.
 
-    .. test:: A Connect now on a live session waits for the session link's drop before connecting
+    .. test:: A Pair now on a live session waits for the session link's drop before connecting
        :id: T_FW_PAIRING_HANDOVER_CONNECT
        :links: R_FW_PAIRING_WIZARD
     """

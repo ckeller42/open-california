@@ -128,7 +128,7 @@ def _hides_calictl_only_chrome(sat):
     menu = sat.locator(".menupop")
     expect(menu.get_by_text("Device status")).to_be_visible()
     # the pairing wizard runs on the satellite too (R_FW_PAIRING_WIZARD); the fixture holds a bond
-    expect(menu.get_by_text("Bluetooth pairing…")).to_be_visible()
+    expect(menu.get_by_text("Pair…", exact=True)).to_be_visible()
     expect(menu.get_by_text("Unpair…")).to_be_visible()
 
 
@@ -150,7 +150,7 @@ def test_menu_device_status_screen(sat, stub):
     expect(sat.locator(".row", has_text="Satellite battery")).to_contain_text(
         "64 % · 3.89 V · on battery · ~2 h 10 min left"
     )
-    sat.get_by_text("Open setup").click()  # satellite-only link
+    sat.get_by_text("Satellite settings").click()  # satellite-only link
     sat.wait_for_url(stub.base + "/device")
     sat.wait_for_selector('#device a[href="/"]')  # the link back (station mode)
 
@@ -168,7 +168,7 @@ def test_device_status_retries_a_failed_pairing_fetch(stub):
         expect(pg.get_by_text("Satellite — display only")).to_be_visible(timeout=10000)
         pg.click("#menu")
         pg.locator(".menupop").get_by_text("Device status").click()
-        row = pg.locator(".row", has_text="Bonded unit")
+        row = pg.locator(".row", has_text="Paired unit")
         expect(row).to_contain_text("—")
         assert pg.get_by_text("not paired").count() == 0
         pg.click("#back")  # leave and re-open: this retry succeeds
@@ -696,7 +696,7 @@ WIZARD_TEXT = {
     "en-US": {
         "go": "Set up remote control",
         "ready": "I'm on that screen",
-        "connect": "Connect now",
+        "connect": "Pair now",
         "send": "Send",
         "step": "until the satellite connects",
         "saved": "Saved on the satellite — survives a restart. No further action needed.",
@@ -705,7 +705,7 @@ WIZARD_TEXT = {
     "de-DE": {
         "go": "Fernsteuerung einrichten",
         "ready": "Ich bin auf diesem Bildschirm",
-        "connect": "Jetzt verbinden",
+        "connect": "Jetzt koppeln",
         "send": "Senden",
         "step": "bis der Satellit sich verbindet",
         "saved": "Auf dem Satelliten gespeichert — übersteht einen Neustart. Keine weitere Aktion nötig.",
@@ -795,6 +795,51 @@ def test_wizard_error_hints_are_the_satellites(stub, error_gated_page, error, lo
         expect(pg.get_by_text(hint, exact=False)).to_be_visible()
         shown = _card_text(pg)
         assert not [w for w in BUSPI_ONLY if w in shown], shown
+
+
+PHONE = {"width": 390, "height": 844}
+UNPAIR_CONFIRM = "Unpair the camper unit? Data stops until you pair again."
+
+
+def test_pair_from_the_menu_shows_the_wizard_at_the_top(stub, error_gated_page):
+    """On a paired, online van at phone size, ⋮ → Pair… must show the wizard where the user looks:
+    above the summary and the tiles, scrolled into view (UX review H2: it used to land below the
+    eight tiles, out of sight)."""
+    with error_gated_page(stub.base, viewport=PHONE) as pg:
+        pg.wait_for_function(LIVE)
+        pg.evaluate("window.scrollTo(0, document.body.scrollHeight)")  # the user scrolled down
+        pg.click("#menu")
+        pg.get_by_role("menuitem", name="Pair…", exact=True).click()
+        card = pg.locator("#pairing-card")
+        expect(card.get_by_text("Set up remote control")).to_be_in_viewport()
+        expect(card.get_by_role("button", name="Unpair…")).to_be_in_viewport()  # the bonded step
+        above = card.evaluate(
+            "c => c.getBoundingClientRect().bottom"
+            " <= document.querySelector('.tilegrid').getBoundingClientRect().top"
+        )
+        assert above, "the wizard card renders below the tiles"
+
+
+def test_unpair_has_one_word_and_one_confirm(stub, error_gated_page):
+    """The ⋮ menu's Unpair… and the wizard's own button are one action: the same label and the
+    same confirm text (UX review H3); accepting it removes the pairing."""
+    asked = []
+
+    def answer(d):
+        asked.append(d.message)
+        d.dismiss() if len(asked) == 1 else d.accept()
+
+    with error_gated_page(stub.base, viewport=PHONE) as pg:
+        pg.wait_for_function(LIVE)
+        pg.on("dialog", answer)
+        pg.click("#menu")
+        pg.get_by_role("menuitem", name="Unpair…").click()  # dismissed: nothing happens
+        pg.click("#menu")
+        pg.get_by_role("menuitem", name="Pair…", exact=True).click()
+        pg.locator("#pairing-card").get_by_role("button", name="Unpair…").click()
+        expect(pg.get_by_role("button", name="Pair now")).to_be_visible()
+    assert asked == [UNPAIR_CONFIRM, UNPAIR_CONFIRM], asked
+    assert stub.pairing_posts == [{"action": "reset", "confirm": True}], stub.pairing_posts
 
 
 @pytest.mark.parametrize(

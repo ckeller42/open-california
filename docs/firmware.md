@@ -227,7 +227,7 @@ poll waits up to the command's deadline (the UI shows "Sending…", never the of
 ### The pairing wizard (`R_FW_PAIRING_WIZARD`)
 
 The satellite pairs from its web page with the **same** wizard calictl serves on buspi (⋮ →
-*Bluetooth pairing…*, or the *No camper unit is paired yet* banner's *Set up remote control*):
+*Pair…*, or the *No camper unit is paired yet* banner's *Set up remote control*):
 `/api/pairing` answers in calictl's contract, so `calictl/webui/app.js` runs it unchanged. The
 endpoint is a thin mapping onto the runner the console drives — `start` = `pair`, `passkey` =
 `passkey N`, `reset` = `forget`, plus `cancel` — so the console and the page can never disagree
@@ -253,7 +253,7 @@ reports the drop as an encryption result `BLE_HS_ENOTCONN`; the probe waits for 
 reason), and the runner's retry pairs afresh. Anything else (an unreachable unit =
 `connect_failed`, a link lost for another reason such as `0x13`, a timeout) keeps the bond, and
 the retry probes again; unlike calictl, a link that came up but never encrypted is not taken
-as proof (NimBLE reports a definite status; the user still has *Bluetooth reset / re-pair*). A
+as proof (NimBLE reports a definite status; the user still has *Unpair…*). A
 unit no stored bond matches — another camper, issue #255 — is paired as before; **one bond only** (#255): once a pairing is
 verified (`bonded`: encrypted, the auth char read — the runner's `PERSIST_BOND`, any pair path:
 console `pair` or the wizard) the transport deletes every other stored bond
@@ -445,7 +445,7 @@ verbunden — in ein paar Sekunden noch einmal versuchen*. The two wake-up refus
 either) are owner-confirmed (2026-10-08): *Das Wecklicht braucht die Uhrzeit der Webseite — dort einstellen* (the clock reason) and
 *Wecklicht-Einstellungen noch nicht bekannt (die Einheit hat sie nicht gemeldet): Ein/Aus mit
 angeben* (`WAKEUP_UNKNOWN`, which calictl answers too). Device and WiFi details are the calictl UI's
-⋮ menu "Device status" (#267); its "Open setup" goes to `/device`, the WiFi setup page.
+⋮ menu "Device status" (#267); its "Satellite settings" button goes to `/device`, the satellite's own page.
 
 Known gaps (accepted):
 
@@ -1242,7 +1242,7 @@ The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait
 9. **Pairing start during a WiFi scan.** The coexistence gate is one-way: a WiFi scan never starts
    while a pairing flow runs, but `POST /api/pairing {"action":"start"}` is accepted while a scan
    (the hotspot's own at `AP_START`, or one the setup page asked for) is still running. Over the
-   hotspot this is now the main pairing path: press *Connect now* right after the hotspot comes up
+   hotspot this is now the main pairing path: press *Pair now* right after the hotspot comes up
    and check the flow still reaches `waiting_passkey` (no scan-refused or connect-timeout retries).
 10. **Pairing start during the session's pending reconnect (FOUND on the board 2026-10-08; FIXED,
    host-proven — `test_start_while_the_session_reconnects_scans`; board-verified 2026-10-08 on `013877a`:
@@ -1650,7 +1650,9 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 
    One link state shall drive both the status pill and one persistent ``role=status`` banner above
    the page: *live* (no banner); *asleep* (the backend answered, the unit is offline: amber "van
-   asleep" with the last data's time and age); *connecting* (no answer yet in this page life, e.g. a
+   asleep" with the last data's time and age); *unpaired* (offline, no data ever and the backend
+   reports no paired unit: neutral "Not paired yet — no data", pill "not paired", never "asleep");
+   *connecting* (no answer yet in this page life, e.g. a
    restored snapshot: neutral "Connecting…", never red); *unreachable* (no answer for 15 s, timed
    from the oldest unanswered poll's send, so a hidden tab never counts down: red "calictl (host)" or
    "Satellite" "not reachable since" the last answer, overriding asleep). A shorter gap keeps the last
@@ -1738,8 +1740,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 - **`R_UI_PWA_OFFLINE`** — verified by `T_UI_PWA_OFFLINE`, `T_UI_PWA_UPDATE`, `T_UI_PWA_INSECURE`,
   `T_UI_PWA_SATELLITE` (`tests/e2e/test_pwa.py`, Chromium on 127.0.0.1, a secure context) and
   `T_FW_SW_SERVED` (`tests/firmware/test_web_handlers.py`).
-- **`R_UI_LINK_STATE`** — verified by `T_UI_LINK_ASLEEP`, `T_UI_LINK_UNREACHABLE`
-  (`tests/e2e/test_link_state.py`, page.clock over a fixed calictl state: blip, hung poll, hidden
+- **`R_UI_LINK_STATE`** — verified by `T_UI_LINK_ASLEEP`, `T_UI_LINK_UNREACHABLE`,
+  `T_UI_LINK_UNPAIRED` (`tests/e2e/test_link_state.py`, page.clock over a fixed calictl state: blip, hung poll, hidden
   tab, asleep-then-unreachable, DE copy + the quiet live region) and `T_UI_LINK_RESTORED`
   (`tests/e2e/test_pwa.py`); the satellite's 4 s command stall by
   `test_a_pending_command_does_not_trip_the_offline_banner`.
@@ -1755,9 +1757,9 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   toggle lands as one `1101` write, roof + wake-up greyed — a firmware before the wake-up light;
   evidence ledger).
 - **`R_FW_PAIRING_WIZARD`** — verified by `T_FW_PAIRING_API`, `T_FW_PAIRING_BUSY`,
-  `T_FW_PAIRING_PROBE_KEEPS_BOND` (`tests/firmware/test_pairing_web_e2e.py`: Connect now on a
+  `T_FW_PAIRING_PROBE_KEEPS_BOND` (`tests/firmware/test_pairing_web_e2e.py`: Pair now on a
   bonded satellite with the unit's pairing screen closed ends bonded, bond kept, `SNAP` flows),
-  `T_FW_PAIRING_HANDOVER_CONNECT` (same file, #381: Connect now on a live session waits for the
+  `T_FW_PAIRING_HANDOVER_CONNECT` (same file, #381: Pair now on a live session waits for the
   session link's drop to complete before connecting — NimBLE has one connection slot — so no
   attempt is burnt), `T_FW_PAIRING_HOTSPOT` (`tests/firmware/test_web_handlers.py`: the shape, every code, busy, every
   WiFi mode, `/app`), `T_FW_PAIRING_WIZARD_E2E` (`tests/firmware/test_pairing_web_e2e.py`: start →

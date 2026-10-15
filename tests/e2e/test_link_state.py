@@ -228,6 +228,27 @@ def test_german_copy_and_a_quiet_live_region(backend):
         expect(pg.locator("#status")).to_have_text("nicht erreichbar")
 
 
+@pytest.mark.parametrize(
+    "locale,banner,pill",
+    [
+        ("en-US", "Not paired yet — no data.", "not paired"),
+        ("de-DE", "Noch nicht gekoppelt — keine Daten.", "nicht gekoppelt"),
+    ],
+)
+def test_unpaired_never_says_not_paired_not_asleep(backend, locale, banner, pill):
+    """No unit paired and no data ever: the cause is "not paired", not a sleeping van (UX review M6).
+
+    .. test:: With no unit paired the banner says "not paired", never "asleep"
+       :id: T_UI_LINK_UNPAIRED
+       :links: R_UI_LINK_STATE
+    """
+    backend.st["_meta"].update(online=False, last_seen=None, paired=False)
+    with _page(backend, locale=locale) as pg:
+        expect(_conn(pg)).to_have_text(banner)
+        expect(pg.locator("#status")).to_have_text(pill)
+        assert pg.locator("#conn.unreachable").count() == 0
+
+
 def test_an_error_answer_is_no_answer(backend):
     """A cold open whose /api/state answers 500 {error} (the daemon cannot build its state): plain
     "Connecting…" banner at once, red after 15 s with no "Last data" clause, live once it answers."""

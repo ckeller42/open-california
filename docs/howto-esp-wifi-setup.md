@@ -69,21 +69,21 @@ From now on the satellite joins your network by itself every time it starts.
 The satellite pairs from its own page with the same wizard the Pi uses (step by step, with the
 camper screen's side: [How to pair your camper unit](howto-pair-your-camper.md)):
 
-1. On the camper control unit open **Einstellungen → Bluetooth → Gerät verbinden**, and close the
+1. On the camper unit open **Einstellungen → Bluetooth → Gerät verbinden**, and close the
    California On Tour app on your phone for the few minutes pairing takes: the passcode is valid
    for only about 30 seconds, and the app's reconnect attempts (right after a Bluetooth reset on
    the unit) can collide with it. A Pi running calictl can stay up — the unit serves several
    Bluetooth clients at once, so the satellite pairs alongside it.
 2. Open the calictl UI — **<http://calictl-esp.local>** on your WiFi, or, still on the setup
    hotspot, the device page's link *Open the camper UI to pair the unit* (**<http://192.168.4.1/app>**).
-3. Tap **Set up remote control** on the *No camper unit is paired yet* banner (or ⋮ → **Bluetooth
-   pairing…**), tick *I'm on that screen*, tap **Connect now**.
+3. Tap **Set up remote control** on the *No camper unit is paired yet* banner (or ⋮ → **Pair…**);
+   the wizard opens at the top of the page. Tick *I'm on that screen*, tap **Pair now**.
 4. Type the 6-digit passcode the unit now shows and tap **Send**. *✓ Paired — …* — the satellite
-   keeps the bond across restarts and reads the unit from then on.
+   keeps the pairing across restarts and reads the unit from then on.
 
 **No WiFi at the van?** Pairing works over the setup hotspot too, so a phone alone is enough;
 only the controls need your WiFi. **Unit's Bluetooth was reset?** Just pair again (or ⋮ →
-**Unpair…** first); the satellite drops the old bond itself.
+**Unpair…** first); the satellite drops the old pairing itself.
 
 ## Finding the satellite on your network
 
@@ -93,9 +93,10 @@ lights (the wake-up light too), air heater and energy mode; the pop-up roof stay
 app (greyed, with the hint *Only via buspi or the app*). Controls work only on your home WiFi,
 never over the setup hotspot (see [Control from the satellite](#control-from-the-satellite)).
 Device and WiFi details are in the ⋮ menu, **Device status**: firmware, the link to the camper
-unit, WiFi network and signal, uptime and the bonded unit. Its *Open setup* link goes to
-**<http://calictl-esp.local/device>**, the satellite's own setup page (the WiFi form over the
-setup hotspot, and a link back to the calictl UI).
+unit, WiFi network and signal, uptime and the paired unit. Its **Satellite settings** button goes to
+**<http://calictl-esp.local/device>**, the satellite's own page: restore camping after you park,
+screen, usage data, experimental sensors, the firmware update and a link back to the calictl UI.
+The WiFi form shows there only over the setup hotspot.
 
 **The name doesn't resolve?** Some devices (older Android phones in particular) can't open
 `.local` names. Find the satellite's address instead:

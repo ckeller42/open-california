@@ -1,7 +1,7 @@
 # How to pair your camper unit
 
 This walks you — another T7 owner running open-california — through bonding your Raspberry Pi
-("{term}`buspi`" in the rest of the docs; call yours whatever you like) to your camper control unit over
+("{term}`buspi`" in the rest of the docs; call yours whatever you like) to your camper unit over
 Bluetooth LE, using the web UI's guided pairing wizard. It assumes you already installed
 open-california (see [Raspberry Pi setup](raspberry-pi-setup.md)) and are standing at the van.
 
@@ -24,11 +24,11 @@ connected while the satellite pairs — the unit serves several Bluetooth client
 - The web UI open in a browser on a device on the same network as the Pi (`http://<pi>:8080` by
   default, or whatever port you configured — see
   [Raspberry Pi setup → Web UI](raspberry-pi-setup.md#web-ui)).
-- You, standing inside the van, with the camper control unit switched on.
+- You, standing inside the van, with the camper unit switched on.
 
 ## Before you start
 
-The camper control unit serves several Bluetooth clients at once — the phone app, the Pi and an
+The camper unit serves several Bluetooth clients at once — the phone app, the Pi and an
 {term}`ESP32 satellite <Satellite>` can all stay connected. Pairing is the one exception that needs a **quiet radio**:
 the unit's passcode is valid for only about 30 seconds, and other Bluetooth traffic around the Pi
 can make that window run out. Before you open the wizard:
@@ -46,17 +46,18 @@ can make that window run out. Before you open the wizard:
 
 ## Pair, step by step
 
-1. **On the camper control unit**, open **Einstellungen → Bluetooth → Gerät verbinden** (the
+1. **On the camper unit**, open **Einstellungen → Bluetooth → Gerät verbinden** (the
    unit's menus were only seen in German for this project — the English-UI wording is unknown;
    look for the equivalent "Bluetooth" / "connect device" screen if your unit is set to English).
    It shows **"Passcode: ---"** until buspi connects to it.
-2. **In the web UI**, open the **⋮** menu (top right) → **Bluetooth pairing…**. Tick
-   **"I'm on that screen"**, then press **Connect now**.
+2. **In the web UI**, open the **⋮** menu (top right) → **Pair…**. The wizard opens at the top of
+   the start page. Tick **"I'm on that screen"**, then press **Pair now**.
 3. The unit's `---` changes to a **6-digit passcode**. Type that number into the web UI's
    passcode field and press **Send**. (A fresh passcode is shown for every attempt — always
    read the number currently on the unit's screen, not one you remember from a previous try.)
 4. The wizard shows **"✓ Paired — "** followed by the unit's Bluetooth address. You're done —
-   the bond is saved to the daemon and survives a reboot; no further action is needed.
+   the pairing is saved to the daemon and survives a reboot; no further action is needed. (The
+   `CALICTL_ADDR=` line under **Advanced** only matters if you reflash the Pi.)
 
 ## If something goes wrong
 
@@ -66,19 +67,20 @@ next:
 | Wizard message | What it means | What to do |
 |---|---|---|
 | **"No vehicle found."** | The Pi never saw the unit advertising within the scan window. | Check that "Gerät verbinden" is open on the unit and that buspi is in range. |
-| **"Could not connect to the unit."** | The unit was found, but the Bluetooth connection itself failed. | The unit may be asleep, another app on this Pi may keep Bluetooth scanning, or the phone app may be reconnecting after a Bluetooth reset. Wake the unit at its panel, close the phone app and pause other Bluetooth apps for the pairing, then try again. An existing bond is kept. |
+| **"Could not connect to the camper unit."** | The unit was found, but the Bluetooth connection itself failed. | The unit may be asleep, another app on this Pi may keep Bluetooth scanning, or the phone app may be reconnecting after a Bluetooth reset. Wake the unit at its panel, close the phone app and pause other Bluetooth apps for the pairing, then try again. An existing pairing is kept. |
 | **"Pairing was refused."** | The unit rejected the passcode or the pairing request. | Wrong passcode, or the unit left pairing mode. Reopen "Gerät verbinden" on the unit and try again. |
-| **"Could not verify the bond."** | Bluetooth-level pairing succeeded, but the unit didn't answer calictl's own follow-up reads. | The bond was made but the unit did not answer. Try again; if it repeats, use Bluetooth reset / re-pair. |
-| **"Something went wrong. Try again."** | A fallback for an error code this build doesn't have specific wording for. | Try again; if it repeats, use Bluetooth reset / re-pair. |
+| **"Could not verify the pairing."** | Bluetooth-level pairing succeeded, but the unit didn't answer calictl's own follow-up reads. | The pairing was made but the unit did not answer. Try again; if it repeats, unpair and pair again. |
+| **"Something went wrong. Try again."** | A fallback for an error code this build doesn't have specific wording for. | Try again; if it repeats, unpair and pair again. |
 | **Banner: "Another app on this Pi keeps Bluetooth scanning — pairing will likely fail until it stops (for example the Home Assistant Bluetooth integration)."** | Something else on the Pi is holding the radio in discovery. | Stop that other Bluetooth software (see *Before you start*), then press **Try again**. |
 
 Each error step has a **Try again** button that restarts the flow from scanning, and (once a
-bond exists to lose) a **Bluetooth reset / re-pair** button that clears calictl's half of a
-broken bond and drops you back at the checklist to pair again.
+pairing exists to lose) an **Unpair…** button — the same action as **⋮ → Unpair…**, with the same
+confirm, *"Unpair the camper unit? Data stops until you pair again."* It clears calictl's half of
+a broken pairing and drops you back at the checklist to pair again.
 
 ## After the unit's Bluetooth was reset
 
-If you (or a workshop) run **"Bluetooth zurücksetzen"** on the camper control unit itself, the
+If you (or a workshop) run **"Bluetooth zurücksetzen"** on the camper unit itself, the
 unit forgets every phone and Pi it ever bonded with — including buspi. The next time calictl
 tries to connect it will fail (the unit no longer recognizes the old bond), but nothing is
 broken: open the pairing wizard and pair again as above. calictl detects that its own stored
