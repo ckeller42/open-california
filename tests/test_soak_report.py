@@ -204,6 +204,20 @@ def test_sensors_voltage_delta_fails_naming_the_field():
     assert v == "FAIL" and "mppt-75-15.battery_voltage esp=13.52 buspi=13.22" in detail
 
 
+def test_sensors_small_live_voltage_gap_passes():
+    """2026-10-15 soak: MPPT 13.18 V on the ESP vs 13.25 V on buspi, two fresh adverts a moment apart
+    under a changing load: not drift."""
+    ok = {**BUSPI, "victron_mppt": {"battery_voltage": 13.45, "age_s": 25}}
+    assert by_name(soak.evaluate(data(ext=ESP_EXT, buspi_sensors=ok)))["sensors"][0] == "PASS"
+
+
+def test_sensors_readings_far_apart_in_time_are_not_compared():
+    """A pair read more than SENSOR_PAIR_S apart says nothing about drift: skipped, not failed."""
+    far = {**BUSPI, "victron_mppt": {"battery_voltage": 13.22, "age_s": 25 + soak.SENSOR_PAIR_S + 30}}
+    v, detail = by_name(soak.evaluate(data(ext=ESP_EXT, buspi_sensors=far)))["sensors"]
+    assert v == "PASS" and detail.startswith("5 fields")  # the mppt voltage left out
+
+
 def test_sensors_stale_or_absent_skips():
     stale_esp = {a: {**r, "age_s": 301} for a, r in ESP_EXT.items()}
     stale_buspi = {m: {**r, "age_s": 301} for m, r in BUSPI.items()}
