@@ -1,4 +1,4 @@
-/* cali_web.h — the firmware's HTTP endpoints and status/setup page, on the portable HTTP core
+/* cali_web.h — the firmware's HTTP endpoints, web UI and WiFi recovery page, on the portable HTTP core
  * (cali_http.h) (#154).
  *
  * Routes (cali_web_handle):
@@ -6,13 +6,13 @@
  * served) — a matching If-None-Match gets the core's 304 (cali_http.h); HTML + manifest are
  * Cache-Control no-cache, icons max-age=86400. JSON built by finish_json (/api/state, /api/wifi,
  * /api/pairing) is Cache-Control no-store, no ETag.
- *   GET /             station mode: 200 text/html, Content-Encoding gzip, Cache-Control no-cache — the
+ *   GET /, /app       200 text/html, Content-Encoding gzip, Cache-Control no-cache, in every mode — the
  *                     calictl web UI (app_bundle_gen.h's WEB_APP_HTML_GZ, tools/gen_c_dict.py), which
- *                     interprets /api/state in the browser (calictl/webui/semantics.js). Setup and off
- *                     mode: the status/setup page below (the captive portal lands here).
- *   GET /device       200 text/html: the status/setup page (firmware/web/index_gen.html, rendered
- *                     from index.html + page.js + strings.json by tools/gen_c_dict.py; strings_gen.h's
- *                     WEB_INDEX_HTML byte array), in every mode
+ *                     interprets /api/state in the browser (calictl/webui/semantics.js) and opens on
+ *                     its WiFi-setup screen in setup/off mode (the captive portal lands here).
+ *   GET /device       200 text/html: the WiFi recovery page (firmware/web/index_gen.html, rendered
+ *                     from index.html by tools/gen_c_dict.py; strings_gen.h's WEB_INDEX_HTML byte
+ *                     array), in every mode — a way back onto WiFi if the UI fails
  *   GET /api/state    200 application/json:
  *                       {"t":<uptime_ms>,"fn":{<the SNAP "fn" object, cali_snapshot_fn>},
  *                        "device":{"pairing":{"state":"<PAIR_STATE_NAMES>","address":"…"|null},
@@ -98,8 +98,6 @@
  *                     not on/off where calictl would read OFF — the safe direction; a value of
  *                     CALI_CTL_VALUE_MAX (64) bytes or more is 400 bad_json BEFORE the gates, while
  *                     the console `set` (Task 2 I1) runs the gate first and refuses — both refuse.
- *   GET /app          200 the calictl web UI (WEB_APP_HTML_GZ, gzip) in EVERY WiFi mode: over the setup
- *                     hotspot the shared pairing wizard is reachable here (/ is the setup page there).
  *   GET /api/pairing  200 calictl's pairing_snapshot(): {"state","attempts","error","address",
  *                     "radio_busy":false} — the console STATE members (cali_snapshot_pairing).
  *   POST /api/pairing calictl's wizard request {"action":"start"|"passkey"|"cancel"|"reset",
@@ -125,9 +123,9 @@
  *                     shape -> 400 {"error":"bad_ux"}; else one SD text record per event
  *                     {…stamp,"ev":"ux","sid","ua_class","standalone","origin","type",<the event's keys>}
  *                     (cali_sdlog_text; no card: none) and 204. 405 for another method.
- *   POST /api/ux_setting  {"enabled":<bool>} (exactly that object): the /device switch -> NVS ux_on,
+ *   POST /api/ux_setting  {"enabled":<bool>} (exactly that object): the Satellite settings switch -> NVS ux_on,
  *                     200 {"ok":true,"ux":<bool>}; station mode only (403), 400 bad_json, 500 store, 405.
- *   POST /api/experimental  {"sensors":<bool>} (exactly that object; R_FW_EXPERIMENTAL): the /device
+ *   POST /api/experimental  {"sensors":<bool>} (exactly that object; R_FW_EXPERIMENTAL): the Satellite settings
  *                     "Sensors (experimental)" switch -> cali_exp_sensors_set (NVS exp_sensors, applied at
  *                     once, LOG exp: sensors on|off) -> 200 {"ok":true,"sensors":<bool>}; station mode
  *                     only (403 setup_mode), 400 bad_json, 500 store, 405 for another method.

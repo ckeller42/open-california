@@ -28,10 +28,10 @@ two needs: the GATT characteristic map (``calictl.protocol`` state chars + the a
 chars/heartbeat constants from :mod:`calictl.device`) and the pinned pairing
 state-machine enums/timeouts/names from :mod:`calictl.pairing`. ``net_consts.h`` carries the WiFi
 setup constants (:mod:`tools.wifi_consts`), and ``firmware/web/strings_gen.h`` +
-``firmware/web/index_gen.html`` the firmware status/setup page rendered from
-``firmware/web/index.html`` + ``page.js`` + ``strings.json``. ``firmware/web/app_bundle_gen.h`` is
+``firmware/web/index_gen.html`` the on-device display strings (``strings.json``) and the WiFi
+recovery page (``GET /device``) rendered from ``firmware/web/index.html``. ``firmware/web/app_bundle_gen.h`` is
 the calictl web UI (``calictl/webui``) inlined into one document and gzipped (``mtime=0``), served by
-the satellite at ``GET /`` in station mode. ``control_consts.h`` carries what the ESP's C control
+the satellite at ``GET /`` in every WiFi mode. ``control_consts.h`` carries what the ESP's C control
 twin needs from :mod:`calictl.control` (write allow-list, lighting commit, tables, gate texts).
 
 .. req:: The protocol dictionary is the single source for Python and C
@@ -449,27 +449,25 @@ def _web_strings() -> dict:
     return json.loads((WEB_DIR / "strings.json").read_text(encoding="utf-8"))
 
 
-def page_script(text: str | None = None) -> str:
-    """``firmware/web/page.js`` as the page inlines it (and every script of the satellite UI bundle,
-    :func:`render_app_bundle`): without the lines that are only a comment (prose and JSDoc, which
-    ``tsc`` reads but the browser never needs — the page must stay under ``NET_HTTP_BODY_MAX``, the
-    bundle under ``WEB_APP_GZ_MAX``). A comment with code after it on its line (an inline JSDoc cast) stays.
-    Line-based: a comment-looking line inside a template literal would be dropped too (page.js has
-    no template literals; ``tests/test_web_strings.py`` runs ``node --check`` on the result).
+def page_script(text: str) -> str:
+    """A script as the satellite inlines it (every script of the UI bundle, :func:`render_app_bundle`,
+    and the recovery page's, :func:`render_web_page`): without the lines that are only a comment (prose
+    and JSDoc, which ``tsc`` reads but the browser never needs — the bundle must stay under
+    ``WEB_APP_GZ_MAX``). A comment with code after it on its line (an inline JSDoc cast) stays.
+    Line-based: a comment-looking line inside a template literal would be dropped too (the scripts
+    have none; ``tests/test_web_strings.py`` runs ``node --check`` on the result).
 
-    :param text: the script to strip (default: ``page.js``).
+    :param text: the script to strip.
     :returns: the script text.
     :raises ValueError: when a dropped block comment closes on a line with code after ``*/``.
     """
-    if text is None:
-        text = (WEB_DIR / "page.js").read_text(encoding="utf-8")
     out, in_block = [], False
     for n, line in enumerate(text.splitlines(keepends=True), 1):
         s = line.strip()
         if in_block:
             in_block = "*/" not in s
             if not in_block and not s.endswith("*/"):
-                raise ValueError("page.js line %d: code after a multi-line comment's */: %r" % (n, s))
+                raise ValueError("script line %d: code after a multi-line comment's */: %r" % (n, s))
         elif s.startswith("//"):
             pass
         elif s.startswith("/*") and ("*/" not in s or s.find("*/") == len(s) - 2):
@@ -480,55 +478,33 @@ def page_script(text: str | None = None) -> str:
 
 
 def render_web_page() -> str:
-    """Render ``firmware/web/index.html`` into the page the firmware serves (``index_gen.html``).
+    """Render ``firmware/web/index.html`` (the WiFi recovery page, ``GET /device``) into the page the
+    firmware serves (``index_gen.html``).
 
-    :returns: the page with every ``{{NAME}}`` placeholder substituted: ``{{STRINGS}}`` by the
-        ``strings.json`` table (minus the ``d_*`` display keys, which stay out of the page to
-        keep it under ``NET_HTTP_BODY_MAX``) as compact JSON (``{"key": {"en": …, "de": …}}``, sorted keys),
-        ``{{PAGE_JS}}`` by the page script ``firmware/web/page.js`` minus its whole-line comments
-        (:func:`page_script`; its own file so ``tsc --checkJs`` can gate it), and ``{{NET_*}}`` by that
-        :data:`tools.wifi_consts.CONSTS` value (strings unquoted, numbers decimal) — so the page
-        never hand-types a constant (e.g. ``NET_PAGE_POLL_MS``). Substituted text is not scanned
-        again.
-    :raises KeyError: on a placeholder that names none of them.
-    :raises ValueError: when ``page.js`` contains ``</script`` (it would end the inline script).
+    :returns: the page without its ``<!-- -->`` comments and whole-line script comments
+        (:func:`page_script`), every ``{{NET_*}}`` placeholder replaced by that
+        :data:`tools.wifi_consts.CONSTS` value (strings unquoted, numbers decimal), so the page never
+        hand-types a constant.
+    :raises KeyError: on a placeholder that names no constant.
     """
-    import json
     import re
 
     from tools import wifi_consts
 
-    # "d_*" keys belong to the on-device display (strings_gen.h macros only); the page never reads them
-    page_strings = {k: v for k, v in _web_strings().items() if not k.startswith("d_")}
-    table = json.dumps(page_strings, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    # "</" never appears inside the inline <script> (an SSID-free table, but keep it robust)
-    table = table.replace("</", "<\\/")
-
-    script = page_script()
-    if "</script" in script.lower():
-        raise ValueError("firmware/web/page.js must not contain '</script' (it is inlined)")
-
-    def sub(m):
-        name = m.group(1)
-        if name == "STRINGS":
-            return table
-        if name == "PAGE_JS":
-            return script
-        return str(wifi_consts.CONSTS[name])
-
-    return re.sub(r"\{\{([A-Z0-9_]+)\}\}", sub, (WEB_DIR / "index.html").read_text(encoding="utf-8"))
+    page = re.sub(r"<!--.*?-->\n?", "", (WEB_DIR / "index.html").read_text(encoding="utf-8"), flags=re.S)
+    return re.sub(r"\{\{([A-Z0-9_]+)\}\}", lambda m: str(wifi_consts.CONSTS[m.group(1)]), page_script(page))
 
 
 _WEB_HEADER = """\
 /* strings_gen.h — GENERATED by tools/gen_c_dict.py from firmware/web/strings.json and
- * firmware/web/index.html + page.js (rendered into firmware/web/index_gen.html). DO NOT EDIT.
+ * firmware/web/index.html (rendered into firmware/web/index_gen.html). DO NOT EDIT.
  * Regenerate: python3 -m tools.gen_c_dict
  *
- * WEB_STR_EN_* / WEB_STR_DE_*: the status/setup page's EN/DE strings (UTF-8). WEB_INDEX_HTML: the
- * rendered page, byte for byte index_gen.html, as a NUL-terminated byte array (ruling R1: never a
- * C string literal) — web.c serves this array on both the host and the ESP build (the one source
- * of the page's bytes: no EMBED_FILES copy).
- * Include from exactly one translation unit (web.c): the array is static.
+ * WEB_STR_EN_* / WEB_STR_DE_*: the on-device display's EN/DE strings (UTF-8; display_model.c).
+ * WEB_INDEX_HTML: the WiFi recovery page (GET /device), byte for byte index_gen.html, as a
+ * NUL-terminated byte array (ruling R1: never a C string literal) — web.c serves this array on both
+ * the host and the ESP build (the one source of the page's bytes: no EMBED_FILES copy).
+ * Include from web.c only for WEB_INDEX_HTML (the array is static; display_model.c uses the macros).
  */
 #ifndef WEB_STRINGS_GEN_H
 #define WEB_STRINGS_GEN_H
@@ -536,7 +512,7 @@ _WEB_HEADER = """\
 
 
 def generate_web_strings() -> str:
-    """Generate ``firmware/web/strings_gen.h``: string macros per ``strings.json`` key + the page.
+    """Generate ``firmware/web/strings_gen.h``: string macros per ``strings.json`` key + the recovery page.
 
     :returns: the header text: ``#define WEB_STR_EN_<KEY>``/``WEB_STR_DE_<KEY>`` (keys in file order,
         values as JSON-escaped UTF-8 string literals), then ``WEB_INDEX_HTML_LEN`` and the
@@ -883,7 +859,7 @@ _PWA_FILES = (
 
 def render_esp_manifest() -> bytes:
     """calictl/webui/manifest.webmanifest for the satellite: only the icons it serves (no 512 px), and
-    ``start_url`` ``/app`` — the web UI in every WiFi mode (``/`` is the setup page over the hotspot)."""
+    ``start_url`` ``/app`` — the web UI in every WiFi mode, like ``/`` (kept for installed icons)."""
     import json
 
     man = json.loads((WEBUI_DIR / "manifest.webmanifest").read_text(encoding="utf-8"))

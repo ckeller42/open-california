@@ -13,17 +13,18 @@ Review the PNGs (or send them on) after any GUI change — layout, label, and da
 issues show up here that a headless assertion can't judge. The hard-assertion counterpart is
 `tests/e2e/test_gui.py::test_no_red_flag_text`.
 
-It also renders the ESP32 satellite's WiFi setup page (#154) for the docs
-(``docs/howto-esp-wifi-setup.md``): ``esp-setup-page.png`` (setup hotspot mode). No firmware, BLE or radio is involved: a small stdlib HTTP
-stub (``EspStub``) serves the generated page bytes the firmware serves (``firmware/web/index_gen.html``)
+It also renders the ESP32 satellite's WiFi setup screen (#154) for the docs
+(``docs/howto-esp-wifi-setup.md``): ``esp-setup-page.png`` (the web UI over the setup hotspot) and
+``esp-recovery-page.png`` (``/device``). No firmware, BLE or radio is involved: a small stdlib HTTP
+stub (``EspStub``) serves the bytes the firmware serves (the gzipped UI bundle at ``/`` and ``/app``
+in every mode, as ``web.c``; the recovery page ``firmware/web/index_gen.html`` at ``/device``)
 plus canned ``/api/state`` / ``/api/wifi`` JSON (``esp_fixtures``) whose key sets
 ``tests/test_ux_gallery_esp_fixtures.py`` pins to what ``tests/firmware/test_web_handlers.py``
 asserts of the real handlers, so the pictures cannot drift from the firmware's API shape.
 
-    python -m tools.ux_gallery --esp --out docs/screenshots   # only the ESP setup page shot
+    python -m tools.ux_gallery --esp --out docs/screenshots   # only the ESP shots
 
-Station-like stub modes serve the gzipped calictl UI bundle at ``/`` (as ``web.c``) and the page at
-``/device``; the ``satellite`` / ``calictl`` modes back ``tests/e2e/test_satellite.py``.
+The ``satellite`` / ``calictl`` modes back ``tests/e2e/test_satellite.py``.
 """
 
 from __future__ import annotations
@@ -45,7 +46,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCREENS = ["Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", "Vehicle"]
 ESP_PAGE = os.path.join(ROOT, "firmware", "web", "index_gen.html")
 APP_BUNDLE_HEADER = os.path.join(ROOT, "firmware", "web", "app_bundle_gen.h")
-APP_MODES = ("station", "satellite", "calictl")  # GET / = the calictl UI bundle, as web.c in station mode
 # The functions the station-mode fixture shows, decoded from the mock unit's seeded state (the page
 # shows every function the session holds; a few keep the figure readable).
 ESP_FUNCTIONS = ("cooler", "water")
@@ -345,7 +345,7 @@ def esp_fixtures():
             "/api/pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
         },
     }
-    fx["satellite"]["/api/sensors"] = {  # the /device page's Sensors box polls it while the track is on
+    fx["satellite"]["/api/sensors"] = {  # Satellite settings' Sensors box polls it while the track is on
         "configured": [
             {
                 "id": 0x1001 + 2 * i,  # boot-local ids, never a MAC
@@ -557,9 +557,9 @@ class EspStub:
                 if path == "/api/sensors" and path in fx:  # the next window sees removed ones again
                     fx[path]["seen"] += stub._sens_back
                     stub._sens_back = []
-                if path == "/app" or (path == "/" and stub.mode in APP_MODES):  # web.c: the UI bundle
+                if path in ("/", "/app"):  # web.c: the UI bundle, every mode
                     body, ctype, enc = bundle, "text/html; charset=utf-8", "gzip"
-                elif path in ("/", "/device"):
+                elif path == "/device":  # the recovery page
                     body, ctype = page, "text/html; charset=utf-8"
                 elif path in fx:
                     body, ctype = json.dumps(fx[path]).encode(), "application/json"
@@ -678,9 +678,10 @@ class EspStub:
 
 
 def capture_esp(out_dir):
-    """Screenshot the firmware setup page in setup-hotspot mode (light, English) into out_dir.
+    """Screenshot, over the setup hotspot (light, English, into out_dir), the web UI's WiFi setup
+    screen and the ``/device`` recovery page.
 
-    :returns: the PNG paths (``esp-setup-page.png``)
+    :returns: the PNG paths (``esp-setup-page.png``, ``esp-recovery-page.png``)
     """
     from playwright.sync_api import sync_playwright  # tool dep; imported lazily
 
@@ -694,13 +695,12 @@ def capture_esp(out_dir):
             viewport={"width": 420, "height": 900},
             device_scale_factor=2,
         )
-        for mode, name in (("setup", "esp-setup-page.png"),):
-            stub.mode = mode
+        for path, name in (("/", "esp-setup-page.png"), ("/device", "esp-recovery-page.png")):
             pg = ctx.new_page()
-            pg.goto(stub.base + "/")
+            pg.goto(stub.base + path)
             pg.wait_for_selector("#ssid option", state="attached")
             pg.fill("#psk", "example-passphrase")
-            pg.wait_for_timeout(4500)  # the page's follow-up re-scan read clears "Searching…"
+            pg.wait_for_timeout(4500)  # the follow-up re-scan read clears "Searching…"
             p = os.path.join(out_dir, name)
             pg.screenshot(path=p, full_page=True)
             paths.append(p)
@@ -715,7 +715,7 @@ def main(argv=None):
     ap.add_argument(
         "--esp",
         action="store_true",
-        help="only the ESP32 firmware page (setup + station mode, from fixtures)",
+        help="only the ESP32 satellite shots (WiFi setup + recovery page, from fixtures)",
     )
     args = ap.parse_args(argv)
     try:

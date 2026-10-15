@@ -183,7 +183,7 @@ http_core.o: $(COMPONENTS)/cali_core/http_core.c $(CORE_H)/cali_http.h $(CORE_H)
 captive_dns.o: $(COMPONENTS)/cali_core/captive_dns.c $(CORE_H)/cali_captive.h $(CORE_H)/cali_net.h $(CSRC)/net_consts.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-# The web endpoints + status/setup page (#154 Task 6): tests/firmware/test_web_handlers.py.
+# The web endpoints, UI bundle + recovery page (#154 Task 6): tests/firmware/test_web_handlers.py.
 web.o: $(COMPONENTS)/cali_core/web.c $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h \
 		$(CORE_H)/cali_captive.h $(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CORE_H)/cali_status.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_session.h \

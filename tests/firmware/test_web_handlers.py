@@ -1,4 +1,4 @@
-"""cali_web: the firmware's HTTP endpoints and status/setup page, on the portable HTTP core.
+"""cali_web: the firmware's HTTP endpoints, web UI and recovery page, on the portable HTTP core.
 
 ``firmware/components/cali_core/web.c`` answers ``/``, ``/api/state``, ``/api/wifi`` (GET/POST/
 DELETE) and, in setup mode, the OS captive-portal probes. Driven here through ``test/web_cli.c``:
@@ -507,7 +507,7 @@ def test_get_wifi_in_setup_lists_last_scan_and_rescans(web_cli):
 
 @pytest.mark.parametrize("reason", ["not_found", "auth", "other"])
 def test_get_wifi_reports_the_last_join_failure(web_cli, reason):
-    """I1/R23: the setup page says WHY a join failed — ``last_error`` is the runner's last
+    """I1/R23: WiFi setup says WHY a join failed — ``last_error`` is the runner's last
     ``WACT_LOG_REASON`` (cali_wifi_run_last_fail), in setup and every other mode."""
     for state in ("setup_ap", "online"):
         w = json.loads(get(web_cli, "/api/wifi", setup=["wifi " + state, "lastfail " + reason]))
@@ -598,8 +598,14 @@ def test_station_mode_404(web_cli, state, joined):
         assert r.status == 404
 
 
-@pytest.mark.parametrize("state,joined", [("online", 1), ("online", 0), ("connecting", 1), ("retrying", 1)])
-def test_station_root_serves_the_gzipped_calictl_ui(web_cli, state, joined):
+@pytest.mark.parametrize(
+    "state,joined",
+    [("online", 1), ("online", 0), ("connecting", 1), ("retrying", 1)]
+    + [("setup_ap", 0), ("setup_ap_retrying", 1), ("unprovisioned", 0), ("connecting", 0)],
+)
+def test_root_serves_the_gzipped_calictl_ui_in_every_mode(web_cli, state, joined):
+    """/ is the UI bundle in every WiFi mode (one-web-UI design, U2): over the setup hotspot, the
+    captive portal's landing, the app opens on its WiFi-setup screen by itself."""
     r, _ = one(web_cli, "GET", "/", setup=["wifi " + state, "joined %d" % joined])
     assert r.status == 200 and r.headers["content-type"] == "text/html; charset=utf-8"
     assert r.headers["content-encoding"] == "gzip" and r.headers["cache-control"] == "no-cache"
@@ -617,23 +623,12 @@ def test_station_root_streams_the_real_bundle_across_polls(web_cli, sendmax):
     assert gzip.decompress(r.body) == gen_c_dict.render_app_bundle().encode("utf-8")
 
 
-@pytest.mark.parametrize(
-    "state,joined", [("setup_ap", 0), ("setup_ap_retrying", 1), ("unprovisioned", 0), ("connecting", 0)]
-)
-def test_root_outside_station_mode_is_the_setup_page(web_cli, state, joined):
-    """Setup hotspot and a setup-flow join (mode "off": connecting, joined 0) keep the setup page at /."""
-    r, _ = one(web_cli, "GET", "/", setup=["wifi " + state, "joined %d" % joined])
-    assert r.status == 200 and r.headers["content-type"].startswith("text/html")
-    assert r.body == PAGE.read_bytes()
-    assert "content-encoding" not in r.headers and r.headers["cache-control"] == "no-cache"
-    assert r.headers["etag"] == etag(r.body)
-    assert b'id="setup"' in r.body and b'id="device"' in r.body
-
-
 @pytest.mark.parametrize("state,joined", [("online", 1), ("setup_ap", 0), ("unprovisioned", 0)])
-def test_device_is_the_setup_page_in_every_mode(web_cli, state, joined):
+def test_device_is_the_recovery_page_in_every_mode(web_cli, state, joined):
     r, _ = one(web_cli, "GET", "/device", setup=["wifi " + state, "joined %d" % joined])
     assert r.status == 200 and r.body == PAGE.read_bytes() and "content-encoding" not in r.headers
+    assert r.headers["cache-control"] == "no-cache" and r.headers["etag"] == etag(r.body)
+    assert b'<form id="f">' in r.body and b'href="/"' in r.body
 
 
 # ---- "Add to Home Screen": the manifest + icons the bundle links (pwa_assets_gen.h) ---------------
@@ -689,12 +684,11 @@ def test_static_stale_if_none_match_is_200_with_body(web_cli, path):
     assert r.status == 200 and r.body and r.headers["etag"] == etag(r.body)
 
 
-def test_root_etag_follows_the_mode_bytes(web_cli):
-    """/ serves the bundle in station mode and the setup page elsewhere: a tag from one never
-    validates the other."""
+def test_root_etag_is_the_same_in_every_mode(web_cli):
+    """/ serves the same bundle in station and setup mode: the tag from one validates the other."""
     r, _ = one(web_cli, "GET", "/", setup=["wifi online", "joined 1"])
     s = cond(web_cli, "/", r.headers["etag"], setup=("wifi setup_ap", "joined 0"))
-    assert s.status == 200 and s.body == PAGE.read_bytes()
+    assert s.status == 304
 
 
 def test_api_state_is_never_cached(web_cli):
@@ -1255,8 +1249,7 @@ def test_other_methods_on_pairing_are_405(web_cli, method):
     "state,joined", [("online", 1), ("setup_ap", 0), ("connecting", 0), ("unprovisioned", 0)]
 )
 def test_app_is_the_calictl_ui_in_every_mode(web_cli, state, joined):
-    """GET /app serves the UI bundle in every WiFi mode, so a phone on the setup hotspot reaches the
-    wizard (/ stays the setup page there)."""
+    """GET /app (the manifest's start_url, old links) is the UI bundle in every WiFi mode, like /."""
     r, _ = one(web_cli, "GET", "/app", setup=["wifi " + state, "joined %d" % joined])
     assert r.status == 200 and r.headers["content-encoding"] == "gzip" and r.body == BUNDLE
 
@@ -1492,7 +1485,7 @@ def _sd(other):
 
 def test_ux_beacon_writes_one_sd_record_per_event(web_cli):
     """A valid beacon -> 204 and one ``{"ev":"ux"}`` SD record per event, its keys in canonical order;
-    switched off on /device -> 204 and nothing recorded, persisted as ``ux_on`` and in device.ux.
+    switched off (Satellite settings) -> 204 and nothing recorded, persisted as ``ux_on`` and in device.ux.
 
     .. test:: ESP POST /api/ux: validated, one SD record per event, station only, off switch -> 204 no record
        :id: T_UX_ESP_API

@@ -4,14 +4,14 @@
  * A setup hotspot has no real internet behind it, so its DNS lies on purpose: every A-record query
  * gets answered with the hotspot's own address, so any host a client tries to resolve — including
  * the fixed probe host an OS uses right after joining a network to decide whether it is behind a
- * captive portal — lands on calictl's setup page instead of failing to resolve. Driven from the
+ * captive portal — lands on the web UI (its WiFi-setup screen) instead of failing to resolve. Driven from the
  * same tick as cali_http_poll(): each cali_captive_dns_poll() call drains the datagrams already
  * waiting on the UDP socket (loops on udp_recvfrom until it says "nothing more"/"error", at most 16
  * per call), answers each in turn, and never blocks.
  *
  * cali_captive_is_probe() is the table the HTTP handler (Task 6) consults to recognise the fixed
  * set of paths Android/iOS/macOS/Windows/Firefox request for that same captive-portal check, so the
- * setup page can answer those specially instead of a generic 404.
+ * web handler can redirect those to the UI instead of a generic 404.
  *
  * C99, no malloc, no ESP-IDF/POSIX headers: reaches the network only through cali_net_t. Driven in
  * tests/firmware/test_captive_dns.py through test/captive_cli.c.

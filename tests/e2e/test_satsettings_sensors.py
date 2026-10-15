@@ -1,5 +1,5 @@
-"""The Sensors box of the shared UI's Satellite-settings screen (R_FW_SENSORS; the /device page's box
-ported, test_device_sensors.py, which U2 deletes with that page) against the ESP stub's stateful ``/api/sensors``:
+"""The Sensors box of the shared UI's Satellite-settings screen (R_FW_SENSORS; ported from the old
+/device page's box, deleted in U2) against the ESP stub's stateful ``/api/sensors``:
 add (default name, own name, a second of a type, a key type), the client-side name check, the
 in-page Remove confirmation, rename, and the 10 s poll leaving an open step alone. EN + DE where
 text is asserted; every test fails on an uncaught page error (``error_gated_page``).
@@ -340,3 +340,25 @@ def test_the_name_placeholder_is_the_type_id(stub, error_gated_page):
         expect(row.get_by_role("textbox", name=tr("Name (a–z, 0–9, -, _)", "en"))).to_have_attribute(
             "placeholder", "victron_mppt"
         )
+
+
+def test_a_sensor_key_never_reaches_a_beacon(stub, error_gated_page):
+    """The Victron key goes to /api/sensors only: with the usage switch on, a flushed beacon carries the
+    screen views but never the key (ported from the old /device page's test, U2).
+
+    .. test:: A sensor key never appears in a usage beacon
+       :id: T_UX_NO_SECRETS_SENSOR
+       :links: R_UX_TELEMETRY
+    """
+    with _open(error_gated_page, stub, "en") as pg:
+        pg.wait_for_function("() => !!(STATE._meta && STATE._meta.ux)")
+        _add(pg, "en", "SmartSolar", name="solar", key=_key())
+        expect(_cfg_row(pg, "solar")).to_be_visible()
+        pg.evaluate("dispatchEvent(new PageTransitionEvent('pagehide'))")
+        for _ in range(50):
+            if stub.ux_beacons:
+                break
+            pg.wait_for_timeout(100)
+    assert stub.ux_beacons, "no beacon reached the stub"
+    assert stub.sensor_posts[-1]["key"] == _key()
+    assert _key() not in json.dumps(stub.ux_beacons)

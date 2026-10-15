@@ -9,7 +9,7 @@
  *   quit         call cali_console_on_quit (the host exits; NULL hook = ignored)
  *   wifi set <ssid> <psk>   store the credentials (kv "wifi_ssid"/"wifi_psk", like POST /api/wifi)
  *                and hand them to the WiFi runner. Both are single tokens: an SSID or a password
- *                with spaces cannot be typed here (use the setup page). SSID 1..NET_SSID_MAX bytes, PSK
+ *                with spaces cannot be typed here (use WiFi setup). SSID 1..NET_SSID_MAX bytes, PSK
  *                NET_PSK_MIN..NET_PSK_MAX; else "LOG wifi: usage: wifi set <ssid> <psk>" / "LOG
  *                wifi: bad ssid" / "LOG wifi: bad psk". While online/retrying the new creds replace
  *                the old ones ("LOG wifi: credentials replaced, reconnecting"). The line buffers

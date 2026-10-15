@@ -1,11 +1,12 @@
-"""The firmware page's EN/DE string table (``firmware/web/strings.json``) and its generated outputs.
+"""The firmware's on-device display strings (``firmware/web/strings.json``) and the ``/device`` WiFi
+recovery page (``firmware/web/index.html``), with their generated outputs.
 
-Every key carries a non-empty ``en`` and ``de``; every key is used by ``firmware/web/index.html`` or
-its script ``page.js`` (as a quoted literal) and every ``t("…")`` key the page uses exists; the generated
-``strings_gen.h`` + ``index_gen.html`` match a fresh ``tools.gen_c_dict`` regeneration; the rendered
-page fits ``NET_HTTP_BODY_MAX`` and loads nothing external.
+Every key carries a non-empty ``en`` and ``de`` and is used by the display model (``display_model.c``);
+the generated ``strings_gen.h`` + ``index_gen.html`` match a fresh ``tools.gen_c_dict`` regeneration;
+the rendered recovery page fits ``NET_HTTP_BODY_MAX``, loads nothing external, carries EN and DE, and
+its script parses.
 
-.. test:: Firmware page strings: EN/DE complete, all used, generated page + header fresh
+.. test:: Firmware strings + recovery page: EN/DE complete, all used, generated page + header fresh
    :id: T_FW_WEB_STRINGS
    :links: R_FW_HTTP_STATUS
 """
@@ -25,10 +26,14 @@ from tools.wifi_consts import CONSTS
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "firmware" / "web"
 STRINGS = json.loads((WEB / "strings.json").read_text(encoding="utf-8"))
-# the page source: the markup + its script (page.js, inlined by the generator)
-PAGE = (WEB / "index.html").read_text(encoding="utf-8") + (WEB / "page.js").read_text(encoding="utf-8")
 # the on-device display model names its keys as WEB_STR_DE_<KEY> macros (no token pasting)
 DISPLAY_SRC = (ROOT / "firmware/components/cali_core/display_model.c").read_text(encoding="utf-8")
+
+
+def _script(page):
+    """The recovery page's one inline script."""
+    (script,) = re.findall(r"<script>(.*?)</script>", page, re.S)
+    return script
 
 
 def test_every_key_has_en_and_de():
@@ -39,44 +44,20 @@ def test_every_key_has_en_and_de():
         assert tr["en"].strip() and tr["de"].strip(), key
 
 
-def test_no_key_unused_by_the_page():
-    unused = [
-        k
-        for k in STRINGS
-        if '"%s"' % k not in PAGE
-        and "'%s'" % k not in PAGE
-        and ("WEB_STR_DE_%s" % k.upper()) not in DISPLAY_SRC
-    ]
-    assert unused == []
+def test_every_key_is_used_by_the_display():
+    assert [k for k in STRINGS if ("WEB_STR_DE_%s" % k.upper()) not in DISPLAY_SRC] == []
 
 
-def test_every_page_key_exists():
-    used = set(re.findall(r"""\bt\(\s*["']([^"']+)["']""", PAGE))
-    assert used and used - set(STRINGS) == set()
-
-
-def test_page_takes_the_poll_interval_from_the_generator():
-    assert str(CONSTS["NET_PAGE_POLL_MS"]) not in PAGE
-    rendered = gen_c_dict.render_web_page()
-    assert not re.search(r"\{\{[A-Z0-9_]+\}\}", rendered)  # no placeholder left (JSDoc {{…}} types are fine)
-    assert "pollMs: %d" % CONSTS["NET_PAGE_POLL_MS"] in rendered
-
-
-def test_rendered_page_is_small_and_self_contained():
-    rendered = gen_c_dict.render_web_page().encode()
-    assert len(rendered) <= CONSTS["NET_HTTP_BODY_MAX"]
-    assert not re.search(rb"""(src|href)\s*=\s*["']?(https?:)?//""", rendered)
-    assert b"@import" not in rendered and b'id="setup"' in rendered and b'id="device"' in rendered
-
-
-def test_display_keys_stay_out_of_the_page():
-    page = (WEB / "index_gen.html").read_text(encoding="utf-8")
-    d_keys = [k for k in STRINGS if k.startswith("d_")]
-    assert d_keys
-    for k in d_keys:
-        assert '"%s"' % k not in page, k
+def test_recovery_page_is_small_self_contained_and_bilingual():
+    page = gen_c_dict.render_web_page()
     assert len(page.encode()) <= CONSTS["NET_HTTP_BODY_MAX"]
-    assert "WEB_STR_EN_D_RUNNING" in (WEB / "strings_gen.h").read_text(encoding="utf-8")
+    assert not re.search(r"""(src|href)\s*=\s*["']?(https?:)?//""", page)
+    assert "@import" not in page and "<!--" not in page
+    assert not re.search(r"\{\{[A-Z0-9_]+\}\}", page)  # every constant substituted
+    assert '<form id="f">' in page and '<a href="/" id="app">' in page
+    script = _script(page)
+    assert '"/api/wifi"' in script and "Satellite WiFi" in script and "Satellit-WLAN" in script
+    assert "%d" % CONSTS["NET_PSK_MAX"] in script and CONSTS["NET_HOSTNAME"] in script
 
 
 def test_generated_files_are_fresh():
@@ -86,16 +67,6 @@ def test_generated_files_are_fresh():
         [sys.executable, "-m", "tools.gen_c_dict", "--check"], cwd=ROOT, capture_output=True, text=True
     )
     assert r.returncode == 0, r.stderr
-
-
-def test_page_script_is_inlined_once():
-    rendered = gen_c_dict.render_web_page()
-    script = gen_c_dict.page_script()
-    assert "{{PAGE_JS}}" in PAGE and rendered.count(script) == 1
-    assert (
-        "/**" not in script.replace("/** @type", "") and '"use strict";' in script
-    )  # comment lines out, code in
-    assert "const CFG" in rendered.split(script)[0]  # the globals page.js reads come first
 
 
 def test_header_macros_and_page_bytes():
@@ -128,7 +99,7 @@ def test_page_script_stripper():
 
 @pytest.mark.skipif(not shutil.which("node"), reason="no node")
 def test_rendered_page_script_parses(tmp_path):
-    f = tmp_path / "page.js"
-    f.write_text(gen_c_dict.page_script(), encoding="utf-8")
+    f = tmp_path / "recovery.js"
+    f.write_text(_script(gen_c_dict.render_web_page()), encoding="utf-8")
     r = subprocess.run(["node", "--check", str(f)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
