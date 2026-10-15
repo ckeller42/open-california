@@ -76,7 +76,7 @@ Output findings using this structure:
 ```
 ## UX Review: [Component/File Name]
 
-**Platform**: Web (PWA on iPhone) | ESP status page
+**Platform**: Web (PWA on iPhone) | ESP-only page (`firmware/web/`)
 **Files reviewed**: [list]
 **Rules applied**: [list of loaded rule files]
 

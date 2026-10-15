@@ -13,8 +13,8 @@ order of operations so you fix things forward instead of chasing red CI.
 
 | You edited | Must regenerate / update | Enforced by |
 |---|---|---|
-| `protocol/dictionary.yaml` | golden vectors + C header (below) + a catalog decision per new field | `codec-parity` CI, `codec-fresh` pre-commit hook, `test_signal_coverage` |
-| `calictl/overrides.py` (offsets/ranges/frame bytes) | golden vectors + C header | `codec-parity` CI, `codec-fresh` pre-commit hook |
+| `protocol/dictionary.yaml` | golden vectors + C header + semantics/control vectors (below) + a catalog decision per new field | `codec-parity` CI, `codec-fresh` pre-commit hook, `test_signal_coverage` |
+| `calictl/overrides.py` (offsets/ranges/frame bytes) | golden vectors + C header + semantics/control vectors | `codec-parity` CI, `codec-fresh` pre-commit hook |
 | `protocol/signals.yaml` (catalog) | semantics emit + dashboard/HA if surfacing changed | `test_signal_coverage`, auditor |
 
 ## Steps (in order)
@@ -27,9 +27,11 @@ order of operations so you fix things forward instead of chasing red CI.
    ```
    python3 -m tools.gen_codec_vectors     # tests/vectors/camper_codec.json
    python3 -m tools.gen_c_dict            # csrc/codec_dict.h — NEVER hand-edit
+   python3 -m tools.gen_semantics_vectors # tests/vectors/semantics.json (webui twin)
+   python3 -m tools.gen_control_vectors   # tests/vectors/control.json (ESP control)
    ```
 
-   Stage both outputs with your change. Verify: both commands with `--check` exit 0.
+   Stage every output with your change. Verify: `tools/ci.sh codec-fresh` exits 0 (runs all five `--check`s).
    Generation fails loudly (that's correct, fix the cause) if a pinned-length control
    function has an unplaced field or a valid value ≥ 32.
 3. **Catalog every new/changed field** — edit `protocol/signals.yaml` (`python3 -m tools.audit_signals --seed`

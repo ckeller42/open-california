@@ -15,9 +15,11 @@ buspi's `~/open-california` **is a git checkout** (verified HEAD tracks `main`),
 merged code is a pull + a scoped, passwordless restart — no scp, no interactive sudo:
 
 ```sh
-ssh buspi 'cd ~/open-california && git pull --ff-only && \
+ssh buspi 'cd ~/open-california && git checkout main && git pull --ff-only && \
            sudo -n systemctl restart calictl.service && sleep 2 && systemctl is-active calictl.service'
 ```
+
+Never `git checkout <sha>` on buspi (detached HEAD trips other sessions); verify with `git log -1` and `curl -s localhost:8088/api/state`.
 
 The restart/stop/start of `calictl.service` are the ONLY passwordless sudo verbs (scoped rule in
 `deploy/calictl-restart.sudoers`); every other `sudo` (editing `/etc/buspi/*.env`, installing
@@ -73,6 +75,13 @@ ssh -t buspi 'sudo sed -i "/^CALICTL_ADDR=/d" /etc/buspi/calictl.env && sudo -n 
 
 `CALICTL_ADDR` then reverts to a pure manual override (dev boxes, forcing a target).
 
+## After a buspi reboot, or when pairing/reconnect fails
+
+- Run `~/prepair.sh` first (a reboot restarts the other BLE readers; `hci0` is left stuck discovering and connects fail), then pair. The unit's passkey window is **30 s**; a late code gives `Authentication Canceled`.
+- buspi is pinned to kernel 6.18.34 (6.18.50 never reconnects: no `LE Create Connection` in btmon). After any kernel upgrade run `sudo tools/kernel_ble_check.sh` with the unit awake (exit 0 = OK, 1 = regression). Details: `docs/raspberry-pi-setup.md` "Known issue".
+- A stale one-sided bond self-heals since #200; after `reset` also `bluetoothctl remove <addr>` if bluetoothd was not restarted.
+- Stuck scan: restart `bluetooth`. A dead target address after reboot = empty `~/.local/state/calictl/pairing.json` (above).
+
 ## Notes
 
 - Long BLE ops (`get`, `set`, actuate) take ~10-60 s; run detached with a log + poll, or use
@@ -93,7 +102,7 @@ ssh -t buspi 'sudo sed -i "/^CALICTL_ADDR=/d" /etc/buspi/calictl.env && sudo -n 
 
 ## Flash the ESP32 satellite from buspi
 
-buspi can flash the CoreS3 when it is plugged into one of its USB ports (it shows up as
+Recovery only (normal updates are OTA, `ship-a-change`): buspi can flash the CoreS3 when it is plugged into one of its USB ports (it shows up as
 `/dev/ttyACM0`; `pi` is in `dialout`, ModemManager is off). Ready since 2026-10-08:
 `~/esp-venv` with esptool 5.4.0 (the same as thinky), `gh` logged in.
 

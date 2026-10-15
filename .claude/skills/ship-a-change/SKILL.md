@@ -24,6 +24,7 @@ merge commit on buspi and the ESP. Buspi mechanics (live reads, address, tailsca
 | Deploy | `ssh pi@buspi 'cd ~/open-california && git checkout main && git pull --ff-only && sudo systemctl restart calictl'` (never a detached sha); verify `systemctl is-active calictl`, `git log -1`, `/api/state` on :8088. |
 | Dashboard | After signal/enum changes: `push_dashboard.py` to Pi :3000 (`GRAFANA_PASSWORD`) and Cloud (`sudo -n bash -c 'set -a; . /etc/buspi/secrets.env; GRAFANA_TOKEN=$GRAFANA_CLOUD_TOKEN …'`; 503 → retry). Never echo secrets. |
 | Update ESP | If `firmware/`, `calictl/webui/**` or semantics changed (UI is bundled): OTA from the merge's `firmware-release`, below. |
+| Live check | After the OTA (valid after 60 s, `device.link.up`): exercise the merged feature on the real ESP + real unit through the UI/API (and Influx for ingest). Report **verified** vs **still owed** (e.g. needs a drive). Host/QEMU/mock tiers alone are not enough; USB flash is recovery only. |
 | Offline | `until ssh -o ConnectTimeout=8 -o BatchMode=yes pi@buspi true; do sleep 60; done` in background; then deploy/flash, tell the owner. |
 
 ## CI-only gates (green on the Mac, red in CI)
@@ -164,3 +165,4 @@ table, `ota_data_initial.bin`, app at `ota_0`; NVS untouched). Link timing over 
 | Merged while a check was still pending | Gate the merge on `jq -e 'all(pass\|skipping)'` (Quick reference), not on a printed count |
 | Pushed, then pre-commit reformatted | Run pre-commit and check `git status` before the push; amend, push again |
 | Promoting a sha whose CI artifact expired (> 90 d) | `esp-stable.yml` fails loudly; re-run that commit's `main` CI or promote a newer sha |
+| `git`/`cc` print "You have not agreed to the Xcode license" (`checkout -b` silently did nothing, commit lands on `main`) | `export PATH=/opt/local/bin:$PATH` (MacPorts git), push with the `gh auth git-credential` helper above, check `git branch --show-current` before pushing |
