@@ -29,7 +29,8 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 /* the heading is focused programmatically on navigation (a11y); don't flash a ring for that,
    but keep it for genuine keyboard focus. */
 #title:focus:not(:focus-visible) { outline: none; }
-#back { font-size: 1.6rem; line-height: 1; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 .2rem; }
+#back { font-size: 1.6rem; line-height: 1; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 .2rem;
+  min-width: 44px; min-height: 44px; margin: -.6rem 0 -.6rem -.5rem; }   /* 44 px hit area without growing the topbar (C1) */
 .pill { margin-left: auto; font-size: .72rem; color: var(--muted); border: 1px solid var(--border);
   border-radius: 999px; padding: .15rem .55rem; white-space: nowrap; }
 .pill.ok { color: var(--ok); } .pill.busy { color: var(--accent); } .pill.error { color: var(--error); }
@@ -247,3 +248,31 @@ dialog.help::backdrop { background: rgba(0,0,0,.45); }
 dialog.help h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
 dialog.help p { font-size: .92rem; line-height: 1.45; margin: 0 0 .7rem; }
 dialog.help a { display: block; margin: .2rem 0 .9rem; color: var(--accent); }
+
+/* Satellite settings + WiFi setup (app.js renderSat): forms, 44 px switches and buttons */
+.sat { display: grid; gap: .8rem; }
+.sat .card.dcard { margin: 0; padding-bottom: .2rem; }
+.sat > h2.sec { font-size: 1rem; margin: .6rem .2rem 0; color: var(--muted); }
+.sat h3 { font-size: .95rem; margin: .8rem 0 .2rem; }
+.sat label:not(.row):not(.lbl) { display: block; margin: .7rem 0 .3rem; color: var(--muted); font-size: .9rem; }
+.sat select, .sat input:not([type=checkbox]) { width: 100%; min-height: 44px; font: inherit; padding: .45rem .6rem;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--fg); }
+.sat .row select { width: auto; max-width: 60%; }
+.sat .row input[type=text] { max-width: none; letter-spacing: normal; }
+.sat input[type=checkbox] { width: 22px; height: 22px; margin: 0; }
+.sat .switch { width: 65px; height: 44px; border: 6.5px solid transparent; background-clip: padding-box; }
+.sat .btn { min-height: 44px; }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.sat .step { display: flex; gap: .5rem; }
+.sat .step .btn { flex: none; width: 48px; font-size: 1.2rem; }
+.sat .srow { flex-wrap: wrap; gap: .4rem 1rem; }
+.sat .srow + .srow { border-top: 1px solid var(--border); }
+.sat .acts { display: flex; flex-wrap: wrap; gap: .5rem; margin-left: auto; }
+.sat .acts.open { flex-basis: 100%; }
+.sat .acts.open > span, .sat .acts.open > input { flex-basis: 100%; }
+.sat .acts > .btn { flex: 1 1 6em; }
+.sat .warn:empty, .sat .note:empty { padding: 0; margin: 0; }
+.sat p { overflow-wrap: anywhere; }
+.sat [hidden] { display: none !important; }   /* .btnrow/.row set display: hidden must still win */
+.sat .srow > .lbl { flex: 1 1 14em; }        /* narrow: the buttons wrap under the sensor's line */
+.sat .srow > .acts { flex: 1 1 12em; justify-content: flex-end; }

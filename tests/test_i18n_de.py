@@ -37,9 +37,9 @@ def _de_keys():
     return set(json.loads(out))
 
 
-# single-literal first argument to t("...") or tf("...", ...); concatenations (quote then + / ])
+# single-literal first argument to t("...") / T("...") or tf("...", ...); concatenations (quote then + / ])
 # and variable args (t(x), t(a ? "b" : "c")) don't match and are intentionally skipped.
-_T = re.compile(r'\bt\(\s*"((?:[^"\\]|\\.)*)"\s*\)')
+_T = re.compile(r'\b[tT]\(\s*"((?:[^"\\]|\\.)*)"\s*\)')
 _TF = re.compile(r'\btf\(\s*"((?:[^"\\]|\\.)*)"\s*,')
 
 
