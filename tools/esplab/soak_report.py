@@ -38,9 +38,8 @@ HEAP_MIN_B = 32768
 I2C_PER_DAY_MAX = 2
 H = 3_600_000.0
 SENSOR_MAX_AGE_S = 300
-# the ESP's default aliases (sensors.c TYPES) -> buspi's measurement (esp_ingest.EXT); a reading's own
-# "type" (= the measurement name) wins, this covers a firmware that predates it
-SENSOR_MEAS = {"govee": "govee", "mppt-75-15": "victron_mppt", "battery-sense": "victron_battery"}
+# buspi's measurements (esp_ingest.EXT); an ESP reading pairs with one by its "type"
+SENSOR_MEAS = ("govee", "victron_mppt", "victron_battery")
 # A live battery voltage moves with load and sun between two adverts; 0.1 V still flags a decoder that
 # is off by a scale step (2026-10-15: a 0.07 V gap between two fresh reads failed a healthy soak).
 SENSOR_PAIR_S = 60  # the ESP's and buspi's readings must be this close in time to be compared
@@ -179,7 +178,7 @@ def _sensors(d):
     """Value drift: the ESP's live readings vs buspi's own last point per measurement."""
     n, bad = 0, []
     for alias, esp in sorted(d.ext.items()):
-        bus = d.buspi_sensors.get(esp.get("type") or SENSOR_MEAS.get(alias))
+        bus = d.buspi_sensors.get(esp.get("type"))
         if not (_fresh(esp) and _fresh(bus)):
             continue
         if abs(esp["age_s"] - bus["age_s"]) > SENSOR_PAIR_S:  # two different moments: no drift evidence
@@ -287,7 +286,7 @@ def _pull_sensors(db, end):
             db.bucket,
             _rfc(end - SENSOR_MAX_AGE_S * 1000),
             _rfc(end + 1000),
-            ",".join('"%s"' % m for m in SENSOR_MEAS.values()),
+            ",".join('"%s"' % m for m in SENSOR_MEAS),
             ",".join('"%s"' % f for f in SENSOR_TOL),
         )
     )

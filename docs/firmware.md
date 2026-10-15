@@ -1021,12 +1021,12 @@ to the sensors and never to the pairing SM or the session.
   window, so no adverts, no readings, no records.
 - **Types** (match on the manufacturer id, the first two AD bytes, little-endian):
 
-  | id | Manufacturer id | Key | Default alias | Fields |
+  | id | Manufacturer id | Key | Default alias (= id) | Fields |
   |---|---|---|---|---|
   | `govee` | `0xEC88` | no | `govee` | `temp_c`, `humidity`, `battery` — 7+ data bytes: int16 °C × 100, uint16 % × 100, battery %; 5–6 bytes: 24 bits, sign bit 23, `(t / 1000) / 10` °C, `(t % 1000) / 10` %, battery `& 0x7F` (`govee_reader.py parse_govee`) |
   | `govee` | `0x0001` | no | `govee` | GV5179 and the H5101/H5102/H5174/H5177 family: data `01 01`, the 24-bit value at bytes 2–4, battery at 5. The company id is shared, so only a 6-byte payload with plausible values (−40…80 °C, ≤ 100 %, battery ≤ 100) counts (`govee_reader.py` `0x0001` path) |
-  | `victron_mppt` | `0x02E1`, readout type `0x01` (solar charger) | yes | `mppt-75-15` | `battery_current` (A), `battery_voltage` (V), `charge_state`, `error_code`, `load_current` (A), `pv_power` (W), `yield_today_kwh` |
-  | `victron_battery` | `0x02E1`, model `0xA3A4`/`0xA3A5` (Smart Battery Sense), else readout type `0x02` (battery monitor) | yes | `battery-sense` | `battery_voltage` (V), `temperature_c` (aux mode 2: aux / 100 − 273.15, else `null`) |
+  | `victron_mppt` | `0x02E1`, readout type `0x01` (solar charger) | yes | `victron_mppt` | `battery_current` (A), `battery_voltage` (V), `charge_state`, `error_code`, `load_current` (A), `pv_power` (W), `yield_today_kwh` |
+  | `victron_battery` | `0x02E1`, model `0xA3A4`/`0xA3A5` (Smart Battery Sense), else readout type `0x02` (battery monitor) | yes | `victron_battery` | `battery_voltage` (V), `temperature_c` (aux mode 2: aux / 100 − 273.15, else `null`) |
 
   Other `0x0001` layouts and `0x8801` (the H5179's 9-byte form) are not matched: `0x0001` is shared by unrelated devices, so only the `01 01` + 6-byte plausible form above counts.
 - **Victron "Instant Readout"** (`victron_ble` 0.9.3 `parse_container`/`decrypt`): after the
@@ -1055,7 +1055,7 @@ to the sensors and never to the pairing SM or the session.
   (and across boots, as long as the address stays); the MAC itself never leaves the ESP.
 - **Configured list:** NVS blob `sens_list` (`n` + 16 × `{type, addr_type, addr[6], key[16],
   alias[17]}`), rewritten whole on every change; `forget`/unpair never touch it, nor does the flag.
-  Alias `[a-z0-9_-]{1,16}`, unique; omitted = the type's default alias, refused when that type is
+  Alias `[a-z0-9_-]{1,16}`, unique; omitted = the type's id as its alias (existing devices keep their stored aliases), refused when that type is
   already configured. A key type needs 32 hex digits whose first byte matches the advert's
   check byte.
 - **Readings:** per configured sensor the last decode and its age — `/api/state` `ext.<alias>`
@@ -1085,8 +1085,8 @@ to the sensors and never to the pairing SM or the session.
   Save/Cancel; posts `{"id","alias"}`) and **Remove**, which asks in the page ("Remove <alias>?" with
   a red **Remove** + **Cancel**; no `window.confirm()`, which iOS home-screen apps and in-app
   browsers may never show). Seen rows show the type, the model, the RSSI and **Add**, which opens a
-  name field (optional for the first sensor of a type — its placeholder is the type's default
-  alias; required for a second) plus, for a key type (`victron_*`), the key (a plain text field, no
+  name field (optional for the first sensor of a type — its placeholder is the type id,
+  the default alias; required for a second) plus, for a key type (`victron_*`), the key (a plain text field, no
   autofill: the owner must see a typo) and Cancel; an opened step takes the focus (the name field,
   Cancel for the question), and OK posts once however often it is tapped. The name is lowercased
   and checked against `[a-z0-9_-]{1,16}` before posting ("Use a–z, 0–9, - or _"); the firmware's

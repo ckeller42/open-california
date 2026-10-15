@@ -1151,8 +1151,8 @@ def test_auto_camper_toggle_on_a_firmware_that_reports_it(stub, error_gated_page
 
 # ---- external sensors (R_FW_SENSORS, #371): placed by their type ------------------------------
 
-# The fixtures' aliases are the firmware's defaults (sensors.c TYPES), one entry per type: no alias
-# prefix (it would read doubled, "Battery-sense Battery sensor"); a renamed entry or two of a type
+# The fixtures' aliases are the firmware's defaults (the type id), one entry per type: no alias
+# prefix (it would read doubled, "Victron_battery Battery sensor"); a renamed entry or two of a type
 # lead every row with "<Alias> " (test_two_solar_chargers_carry_their_alias, test_a_renamed_sensor_…).
 EXT_LABELS = {
     "victron_mppt": ("Solar power", "Charge phase", "Solar yield today"),
@@ -1278,18 +1278,18 @@ def test_two_solar_chargers_carry_their_alias(stub, error_gated_page):
         pg.wait_for_selector(".tilegrid .tile")
         _open(pg, "Energy")
         assert _around(_readouts(pg), "Issues", before=6) == [
-            ("Mppt-100-20 Solar power", "87 W · 2.3 A · 13.5 V"),
-            ("Mppt-100-20 Charge phase", "bulk"),
-            ("Mppt-100-20 Solar yield today", "0.42 kWh"),
-            ("Mppt-75-15 Solar power", "0 W · 0 A · 13.2 V"),
-            ("Mppt-75-15 Charge phase", "off"),
-            ("Mppt-75-15 Solar yield today", "0.19 kWh"),
+            ("Dach Solar power", "0 W · 0 A · 13.2 V"),
+            ("Dach Charge phase", "off"),
+            ("Dach Solar yield today", "0.19 kWh"),
+            ("Heck Solar power", "87 W · 2.3 A · 13.5 V"),
+            ("Heck Charge phase", "bulk"),
+            ("Heck Solar yield today", "0.42 kWh"),
         ]
 
 
 def test_a_renamed_sensor_leads_its_rows_with_its_alias(stub, error_gated_page):
     """An alias the owner gave (not the type's default) leads every row: "Dach Solar power"."""
-    stub.fixtures["satellite"]["/api/state"]["ext"] = {"dach": dict(ux_gallery.EXT_SENSORS["mppt-75-15"])}
+    stub.fixtures["satellite"]["/api/state"]["ext"] = {"dach": dict(ux_gallery.EXT_SENSORS["victron_mppt"])}
     with error_gated_page(stub.base) as pg:
         pg.wait_for_selector(".tilegrid .tile")
         _open(pg, "Energy")
@@ -1302,16 +1302,16 @@ def test_a_renamed_sensor_leads_its_rows_with_its_alias(stub, error_gated_page):
 
 def test_a_default_alias_keeps_its_prefix_next_to_the_units_own_solar_row(stub, error_gated_page):
     """With the unit's own solar input fitted, its "Solar power" row shows: the solar charger with the
-    default alias keeps "Mppt-75-15 " so the two rows never read the same."""
+    default alias keeps "Victron mppt " so the two rows never read the same."""
     st = stub.fixtures["satellite"]["/api/state"]
     st["fn"]["energy"]["PvInstalled"] = 1
-    st["ext"] = {"mppt-75-15": dict(ux_gallery.EXT_SENSORS["mppt-75-15"])}
+    st["ext"] = {"victron_mppt": dict(ux_gallery.EXT_SENSORS["victron_mppt"])}
     with error_gated_page(stub.base) as pg:
         pg.wait_for_selector(".tilegrid .tile")
         _open(pg, "Energy")
         labels = [lbl for lbl, _ in _readouts(pg)]
         assert labels.count("Solar power") == 1  # the unit's own
-        assert "Mppt-75-15 Solar power" in labels and "Mppt-75-15 Charge phase" in labels
+        assert "Victron mppt Solar power" in labels and "Victron mppt Charge phase" in labels
 
 
 def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
@@ -1320,7 +1320,7 @@ def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
     joins the Issues row."""
     ext = _ext(stub, "all")
     ext["govee"].update(age_s=720, humidity=None, battery=15)
-    ext["mppt-75-15"].update(charge_state=4, error_code=2, pv_power=None)
+    ext["victron_mppt"].update(charge_state=4, error_code=2, pv_power=None)
     with error_gated_page(stub.base) as pg:
         pg.wait_for_selector(".tilegrid .tile")
         _open(pg, "Vehicle")
@@ -1336,7 +1336,7 @@ def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
             ("Solar power", "— W · 0 A · 13.2 V"),
             ("Charge phase", "absorption"),
         ]
-        assert dict(rows)["Issues"] == "Solar charger error 2 (Mppt-75-15)"
+        assert dict(rows)["Issues"] == "Solar charger error 2 (Victron mppt)"
 
 
 @pytest.mark.parametrize("locale", ["en-US", "de-DE"])

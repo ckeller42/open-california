@@ -201,7 +201,7 @@ def test_victron_mppt_decodes(cli, tmp_path):
     assert json.loads(out[-1][4:])["seen"][0]["type"] == "victron_mppt"
     out = run(cli, tmp_path, ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", f"add {sid} - {KEY.hex()}",
                               f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "state 2000"])  # fmt: skip
-    assert json.loads(out[-1][4:]) == {"mppt-75-15": {"type": "victron_mppt", "battery_current": 2.3, "battery_voltage": 13.52, "charge_state": 5,
+    assert json.loads(out[-1][4:]) == {"victron_mppt": {"type": "victron_mppt", "battery_current": 2.3, "battery_voltage": 13.52, "charge_state": 5,
                                        "error_code": 0, "load_current": None, "pv_power": 87, "yield_today_kwh": 0.42,
                                        "age_s": 2}}  # fmt: skip
 
@@ -213,7 +213,7 @@ def test_victron_battery_sense_decodes(cli, tmp_path):
     out = run(cli, tmp_path, ["init", f"adv CB:F2:E4:00:00:01 1 -58 BatterySense_00 {adv}", f"add {sid} - {KEY.hex()}",
                               f"adv CB:F2:E4:00:00:01 1 -58 BatterySense_00 {adv}", "state 2000"])  # fmt: skip
     assert json.loads(out[-1][4:]) == {
-        "battery-sense": {
+        "victron_battery": {
             "type": "victron_battery",
             "battery_voltage": 12.98,
             "temperature_c": 25.0,
@@ -260,7 +260,7 @@ def test_victron_short_advert_never_decodes(cli, tmp_path):
     sid = _seen(cli, tmp_path, adv)[0]["id"]
     a = f"adv CB:F2:E4:00:00:01 1 -58 BMV_00 {adv}"
     out = run(cli, tmp_path, ["init", a, f"add {sid} - {KEY.hex()}", a, "state 0"])
-    assert json.loads(out[-1][4:])["mppt-75-15"]["age_s"] is None and not any(
+    assert json.loads(out[-1][4:])["victron_mppt"]["age_s"] is None and not any(
         x.startswith("REC") for x in out
     )
 

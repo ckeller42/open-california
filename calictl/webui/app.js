@@ -2037,17 +2037,12 @@ function extEntries(type) {
   return Object.entries(STATE.ext || {}).filter(([, e]) => e.type === type).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
-// The firmware's default alias per type (sensors.c TYPES default_alias; tests/test_web_strings.py
-// keeps the two in step): an entry still named that is labelled by its rows alone.
-/** @type {Record<string, string>} */
-const EXT_DEFAULT_ALIAS = { govee: "govee", victron_mppt: "mppt-75-15", victron_battery: "battery-sense" };
-
 /**
  * A screen's readouts with each `{ ext: type }` marker expanded into its type's rows per entry; the
  * label leads with the entry's alias, the name the owner gave the device in /device Sensors ("Innen
  * Temperature", "Dach Solar power"; owner decision 2026-10-15: the sensors broadcast no usable name);
  * an old reading keeps its value and adds "🕒 <ago>" (never colour alone). The one entry of its type
- * still on the firmware's default alias drops it ("Battery sensor", not "Battery-sense Battery
+ * still on the firmware's default alias (its type id) drops it ("Battery sensor", not "Battery-sense Battery
  * sensor"), unless a row would then read like one of the unit's own shown rows ("Solar power").
  * @param {(Readout|ExtReadouts)[]} readouts
  * @param {FnState} s the screen's state (which of the unit's own rows show)
@@ -2059,7 +2054,7 @@ function expandReadouts(readouts, s) {
     if (!("ext" in r)) return [r];
     const entries = extEntries(r.ext), rows = EXT_TYPES[r.ext].rows;
     return entries.flatMap(([alias, e]) => {
-      const bare = entries.length === 1 && alias === EXT_DEFAULT_ALIAS[r.ext] && !rows.some(([l]) => own.has(l));
+      const bare = entries.length === 1 && alias === r.ext && !rows.some(([l]) => own.has(l));
       return rows.map(([label, get]) => ({
         label: (bare ? "" : cap(alias) + " ") + t(label),
         get: () => get(e) + (extStale(e) ? ` 🕒 ${agoText(/** @type {number|null} */ (e.age_s))}` : ""),

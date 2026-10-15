@@ -80,7 +80,7 @@ def test_window_decodes_victron_with_real_aes(host_fw, hci_unit):
     assert seen and seen["type"] == "victron_mppt"
     fw.send("sensors add %d - %s" % (seen["id"], KEY.hex()))
     fw.expect("LOG sensors", lambda v: v == "ok")
-    rec = fw.expect("REC", lambda v: v.startswith('"ev":"ext","dev":"mppt-75-15"'), timeout=90)
+    rec = fw.expect("REC", lambda v: v.startswith('"ev":"ext","dev":"victron_mppt"'), timeout=90)
     assert (
         '"type":"victron_mppt","battery_current":2.3,"battery_voltage":13.52,"charge_state":5,'
         '"error_code":0,"pv_power":87,"yield_today_kwh":0.42' in rec
