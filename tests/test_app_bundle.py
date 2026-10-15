@@ -27,6 +27,12 @@ WEBUI = ROOT / "calictl" / "webui"
 SOURCES = ("index.html", "app.css", "strings.de.js", "semantics_tables.js", "semantics.js", "app.js")
 
 
+def _inlined(name):
+    """A source as the bundle inlines it: a script without its whole-line comments."""
+    text = (WEBUI / name).read_text(encoding="utf-8")
+    return gen_c_dict.page_script(text) if name.endswith(".js") else text
+
+
 def _gz():
     return gen_c_dict.header_array_bytes(HEADER.read_text(encoding="utf-8"))
 
@@ -51,7 +57,7 @@ def test_bundle_requests_nothing_itself():
     assert not re.search(r"<script\b[^>]*\bsrc=", html) and '<link rel="stylesheet"' not in html
     assert set(re.findall(r'<link\b[^>]*\bhref="([^"]*)"', html)) <= served
     for name in SOURCES[1:]:
-        assert html.count((WEBUI / name).read_text(encoding="utf-8")) == 1, name
+        assert html.count(_inlined(name)) == 1, name
 
 
 def test_no_external_reference_left_in_the_markup():
@@ -73,10 +79,7 @@ def _webui_copy(tmp_path):
 
 def test_script_order_is_strings_tables_semantics_app():
     html = gen_c_dict.render_app_bundle()
-    at = [
-        html.index((WEBUI / n).read_text(encoding="utf-8"))
-        for n in ("strings.de.js", "semantics_tables.js", "semantics.js", "app.js")
-    ]
+    at = [html.index(_inlined(n)) for n in ("strings.de.js", "semantics_tables.js", "semantics.js", "app.js")]
     assert at == sorted(at)
 
 
