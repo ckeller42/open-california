@@ -14,7 +14,8 @@ Runs on buspi under calictl-esp-soak.timer (daily 08:00) with the serve env (INF
    (5) touch NACKs <= 5/h per boot; (6) esp-ingest lost = 0 in every summary, held = 0 in the last;
    (7) heap_min >= 32 KB in every diag sample; (8) screen: SKIP until an evt display record exists;
    (9) i2c.master timeout log lines <= 2 per day; (10) sensors: every reading the ESP and buspi
-   both hold fresh (<= 5 min) agrees within SENSOR_TOL (SKIP when none). A SKIP never fails the
+   both hold fresh (<= 5 min) and read within SENSOR_PAIR_S of each other agrees within SENSOR_TOL
+   (SKIP when none). A SKIP never fails the
    verdict.
 """
 
@@ -40,7 +41,10 @@ SENSOR_MAX_AGE_S = 300
 # the ESP's default aliases (sensors.c TYPES) -> buspi's measurement (esp_ingest.EXT); a reading's own
 # "type" (= the measurement name) wins, this covers a firmware that predates it
 SENSOR_MEAS = {"govee": "govee", "mppt-75-15": "victron_mppt", "battery-sense": "victron_battery"}
-SENSOR_TOL = {"battery_voltage": 0.05, "temperature_c": 0.5, "temp_c": 0.5, "humidity": 2.0, "battery": 5.0}
+# A live battery voltage moves with load and sun between two adverts; 0.1 V still flags a decoder that
+# is off by a scale step (2026-10-15: a 0.07 V gap between two fresh reads failed a healthy soak).
+SENSOR_PAIR_S = 60  # the ESP's and buspi's readings must be this close in time to be compared
+SENSOR_TOL = {"battery_voltage": 0.1, "temperature_c": 0.5, "temp_c": 0.5, "humidity": 2.0, "battery": 5.0}
 
 
 @dataclass
@@ -177,6 +181,8 @@ def _sensors(d):
     for alias, esp in sorted(d.ext.items()):
         bus = d.buspi_sensors.get(esp.get("type") or SENSOR_MEAS.get(alias))
         if not (_fresh(esp) and _fresh(bus)):
+            continue
+        if abs(esp["age_s"] - bus["age_s"]) > SENSOR_PAIR_S:  # two different moments: no drift evidence
             continue
         for f, tol in SENSOR_TOL.items():
             a, b = esp.get(f), bus.get(f)
