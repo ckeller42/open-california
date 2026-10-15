@@ -840,7 +840,11 @@ def test_wizard_over_the_setup_hotspot_via_app(stub, error_gated_page):
     stub.mode = "setup"
     _unpaired(stub, "setup")
     with error_gated_page(stub.base + "/app") as pg:
-        expect(pg.get_by_text("Satellite — display only")).to_be_visible()
+        expect(
+            pg.get_by_text("Controls work only on your home WiFi — not over the setup hotspot")
+        ).to_be_visible()
+        expect(pg.get_by_text("Satellite — display only")).to_have_count(0)
+        expect(pg.get_by_text("Not paired yet — no data.")).to_have_count(0)  # the banner below says it
         _pair_in_wizard(pg, stub, WIZARD_TEXT["en-US"])
     assert [b["action"] for b in stub.pairing_posts] == ["start", "passkey"]
 

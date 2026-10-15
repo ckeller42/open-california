@@ -275,15 +275,30 @@ function closeMenu() {
   window.removeEventListener("resize", closeMenu);
 }
 
-/** Deep links: `#devicestatus`, `#pair` (the wizard at the top of Home) and `#satsettings` (the
- * satellite's settings; Home on calictl). Taken once the runtime is known (the first `_meta`) and
- * consumed, so a reload does not reopen it; a deep link wins over the setup landing. */
+/** The URL of screen `v`: `#<screen>` (Home: none), so a reload reopens the screen. @param {string} v */
+const viewUrl = (v) => location.pathname + location.search + (v === "home" ? "" : "#" + v);
+
+/** Deep links, taken once the runtime is known (the first `_meta`): a screen's hash (`#devicestatus`,
+ * `#satsettings`, `#wifisetup`, `#<function>`; the satellite screens are Home on calictl) opens it as
+ * this entry's screen, so a reload stays there; `#pair` (the wizard at the top of Home) is an action
+ * and consumed. A deep link wins over the setup landing. */
 function openFromHash() {
-  const h = location.hash;
-  if (!STATE._meta || !["#devicestatus", "#pair", "#satsettings"].includes(h)) return;
+  const h = location.hash.slice(1);
+  const screen = h === "devicestatus" || ORDER.includes(h) || (SAT_VIEWS.includes(h) && satellite());
+  if (!STATE._meta || !(screen || h === "pair" || SAT_VIEWS.includes(h))) return;
   landChecked = true;
-  history.replaceState(null, "", location.pathname + location.search);
-  if (h === "#pair") openPairingWizard(); else if (h === "#satsettings") goto("satsettings"); else openDeviceStatus();
+  if (h === "pair") {
+    history.replaceState(null, "", viewUrl("home"));
+    openPairingWizard();
+    return;
+  }
+  const v = screen ? h : "home";
+  if (screen && v === view) return;   // back/forward between our own entries fires hashchange too: popstate showed it
+  try { history.replaceState({ v: v }, "", viewUrl(v)); } catch (e) { /* no history API */ }
+  if (SAT_VIEWS.includes(v)) satDom = null;
+  closeMenu();
+  show(v, 0);
+  if (v === "devicestatus" && !PAIRING) pairingFetch().then(() => { if (view === "devicestatus") render(); });
 }
 
 /** The in-app Device-status screen (from the ⋮ menu or the status pill). */
@@ -315,7 +330,7 @@ menuEl.onclick = (ev) => {
   menuPop.setAttribute("role", "menu");
   menuPop.setAttribute("aria-labelledby", "menu");
   // Groups, separated by dividers: [Device status] | [Help, language]. No pairing here (owner
-  // 2026-10-15): it lives in the unpaired banner, Device status's Camper-unit card and /device.
+  // 2026-10-15): it lives in the unpaired banner, Device status's Camper-unit card and the `#pair` link.
   /** @type {HTMLElement[][]} */
   const groups = [[], []];
   // The in-app Device-status screen, on both flavors (the satellite's settings open from it).
@@ -1108,7 +1123,7 @@ function paintLink() {
     tmpl = "Offline — no data yet (van asleep since the monitor started). Checked {clock}.";
     vars.clock = clockText(/** @type {number} */ (lastAnswerAt) / 1000);
     tick = "clock";
-  } else if (s === "unpaired") {
+  } else if (s === "unpaired" && view !== "wifisetup") {   // WiFi setup: its unpaired banner says it once
     cls += " unpaired";   // neutral: nothing is broken, the setup is not done yet
     tmpl = "Not paired yet — no data.";
   }
@@ -1168,15 +1183,15 @@ async function refreshState(force) {
   // the first poll failed (daemon restarting) -- and never on an unknown runtime.
   if (STATE._meta && !pairingFetched) { pairingFetched = true; await pairingFetch(); openFromHash(); }
   // The setup hotspot (device.wifi.mode setup/off): the app lands on WiFi setup once per load; back in
-  // station mode WiFi setup gives way to Home.
+  // station mode WiFi setup gives way to Home (unless the join was made here: it shows the result).
   const wm = satellite() && STATE._meta && STATE._meta.sat && STATE._meta.sat.wifi ? STATE._meta.sat.wifi.mode : null;
   let landed = false;
   if (STATE._meta && !landChecked) {
     landChecked = true;
     if ((wm === "setup" || wm === "off") && view === "home") { view = "wifisetup"; satDom = null; landed = true; }
-  } else if (view === "wifisetup" && wm === "station") { view = "home"; landed = true; }
+  } else if (view === "wifisetup" && wm === "station" && !joinedHere) { view = "home"; landed = true; }
   // the entry shows the new screen: back from a screen opened here returns to it (not pushed: ‹ stays in the app)
-  if (landed) try { history.replaceState(Object.assign({}, history.state, { v: view }), ""); } catch (e) { /* no history API */ }
+  if (landed) try { history.replaceState(Object.assign({}, history.state, { v: view }), "", viewUrl(view)); } catch (e) { /* no history API */ }
   // Auto-camper give-up/stand-down notice: the daemon stamps a one-time {ts,msg} when it stands
   // down (low battery) or gives up (keeps dropping). Show it as a toast once.
   const acn = STATE._meta && STATE._meta.auto_camper && STATE._meta.auto_camper.notice;
@@ -1334,9 +1349,10 @@ function act(fn, what, value) {
   command(fn, what, value);
 }
 
-// Every screen is a history entry (UX review "navigation" H1/M3), the URL stays as it is: the browser's
-// back and the iOS edge swipe walk the screens back (from Home they leave the app, as before), each
-// with its scroll position; ‹ goes back the same way, or to the screen's parent on a fresh page.
+// Every screen is a history entry (UX review "navigation" H1/M3) with its `#<screen>` URL (a reload
+// reopens it: openFromHash): the browser's back and the iOS edge swipe walk the screens back (from Home
+// they leave the app, as before), each with its scroll position; ‹ goes back the same way, or to the
+// screen's parent on a fresh page.
 /** @param {string} v */
 function goto(v) {
   if (SAT_VIEWS.includes(v) && !satellite()) v = "home";   // calictl never shows the satellite screens
@@ -1344,7 +1360,7 @@ function goto(v) {
   if (fwd) {
     try {
       history.replaceState(Object.assign({}, history.state, { y: scrollY }), "");
-      history.pushState({ v: v, pushed: true }, "");
+      history.pushState({ v: v, pushed: true }, "", viewUrl(v));
     } catch (e) { /* no history API (a sandboxed frame): ‹ still works */ }
     if (SAT_VIEWS.includes(v)) satDom = null;   // a fresh visit, a fresh form
   }
@@ -1363,7 +1379,7 @@ function show(v, y) {
 }
 
 window.addEventListener("popstate", (ev) => {
-  if (!ev.state && location.hash) return;   // a followed deep link: hashchange -> openFromHash
+  if (!ev.state && location.hash) return;   // a followed or typed deep link: hashchange -> openFromHash
   const s = ev.state || {};
   const v = s.v && (!SAT_VIEWS.includes(s.v) || satellite()) ? s.v : "home";
   if (SAT_VIEWS.includes(v)) satDom = null;
@@ -1723,7 +1739,7 @@ async function unpair() {
 }
 
 // The guided-pairing card. UX: invisible in the normal paired+online flow — it renders ONLY
-// while open (Device status, the unpaired banner, /device's #pair link), always at the top of Home, so a
+// while open (Device status, the unpaired banner, the #pair link), always at the top of Home, so a
 // working installation never shows pairing chrome.
 function pairingCard() {
   if (!pairingOpen) return null;
@@ -1886,7 +1902,8 @@ function render() {
   const sp = sessionToggle();
   if (sp) app.appendChild(sp);
   paintLink();   // the asleep / unreachable banner lives in #conn, above #app
-  if (readOnly() && STATE._meta && !STATE._meta.restored) {
+  // WiFi setup explains the hotspot once itself (its Camper unit box), not as a read-only warning
+  if (readOnly() && STATE._meta && !STATE._meta.restored && view !== "wifisetup") {
     const b = document.createElement("div");
     b.className = "readonly";
     b.textContent = /** @type {string} */ (satellite() ? t("Satellite — display only")
@@ -1918,7 +1935,7 @@ function render() {
 // --- the in-app Device-status screen (menu, both flavors) -------------------------------------
 // One card per device (UX review 3.2): the Camper unit (from `_meta` + the load-time /api/pairing
 // snapshot, with Pair…/Unpair…), then the satellite (`_meta.sat`, adaptSatellite passthrough, and the
-// link to its Satellite settings page /device) or, on calictl, the buspi backend (no settings page).
+// link to its Satellite settings screen) or, on calictl, the buspi backend (no settings page).
 /** @param {number} ms @returns {string} */
 function uptimeText(ms) {
   const m = Math.floor(ms / 60000);
@@ -1928,7 +1945,7 @@ function uptimeText(ms) {
   return tf("{d} d {h} h", { d: Math.floor(h / 24), h: h % 24 });
 }
 
-/** The SD log's card, as the firmware's /device page says it. @param {SatSd} sd @returns {string} */
+/** The SD log's line. @param {SatSd} sd @returns {string} */
 function sdText(sd) {
   /** @param {number|null} mb */
   const gb = (mb) => ((mb || 0) / 1024).toFixed(1);
@@ -1948,7 +1965,7 @@ function resText(r) {
   return parts.join(" · ");
 }
 
-/** The satellite's own battery, as the firmware's /device page says it; "" while the percent is
+/** The satellite's own battery; "" while the percent is
  * unknown (no power chip). @param {SatBattery} b @returns {string} */
 function batteryText(b) {
   if (b.pct == null) return "";
@@ -2204,6 +2221,7 @@ function satUpdate() {
   satWifi = w;
   satRenderWifi(w);
   sq("pair-status").textContent = T(m.paired ? "Paired ✓" : "Not paired");
+  sq("pair-status").hidden = !m.paired && satDom.view === "wifisetup";   // there the unpaired banner says it
   if (satDom.view !== "satsettings") return;
   sq("ac").hidden = !s.auto_camper;
   if (s.auto_camper) {
@@ -2315,6 +2333,8 @@ let joining = null;
 /** @type {SatWifi|null} the last polled device.wifi */
 let satWifi = null;
 let wifiOpen = false, formShown = false;
+// a join started on WiFi setup: once online the screen stays (its "Connected as … open:" link), no Home
+let joinedHere = false;
 /** @type {ReturnType<typeof setTimeout>|null} the pending re-read of the last scan */
 let scanTimer = null;
 // /api/wifi last_error -> why a join failed (hotspot) / the same as a phrase (a reverted change)
@@ -2433,6 +2453,7 @@ async function satJoin(ssid, psk, hotspot) {
     msg.className = "note";
     msg.textContent = tf("Connecting to {ssid}…", { ssid: ssid });
     joining = { ssid: ssid, polls: 0, left: false, away: hotspot };
+    if (hotspot) joinedHere = true;
     setTimeout(satWatchJoin, NET_PAGE_POLL_MS);
   } catch (e) {
     msg.className = "warn";
@@ -2685,7 +2706,7 @@ function extEntries(type) {
 
 /**
  * A screen's readouts with each `{ ext: type }` marker expanded into its type's rows per entry; the
- * label leads with the entry's alias, the name the owner gave the device in /device Sensors ("Innen
+ * label leads with the entry's alias, the name the owner gave the device in Satellite settings › Sensors ("Innen
  * Temperature", "Dach Solar power"; owner decision 2026-10-15: the sensors broadcast no usable name);
  * an old reading keeps its value and adds "🕒 <ago>" (never colour alone). The one entry of its type
  * still on the firmware's default alias (its type id) drops it ("Battery sensor", not "Battery-sense Battery
@@ -2776,7 +2797,7 @@ function unpairedBanner() {
 
 function renderDashboard() {
   titleEl.textContent = "Open California";   // the app's name (manifest short_name), not the Vehicle screen's (H3)
-  // The wizard, when open (Device status, the unpaired banner below, /device's #pair link), always leads the
+  // The wizard, when open (Device status, the unpaired banner below, the #pair link), always leads the
   // page: a card after the tiles was out of sight on a phone (UX review H2).
   const pc = pairingCard();   // null unless open
   if (pc) app.appendChild(pc);

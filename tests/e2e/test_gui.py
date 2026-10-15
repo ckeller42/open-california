@@ -260,13 +260,13 @@ def test_pairing_chrome_hidden_when_paired_and_online(page):
     expect(page.get_by_role("button", name="Pair now")).to_have_count(0)
     expect(page.locator("#unpaired-banner")).to_have_count(0)
     page.get_by_role("button", name="Menu").click()
-    # no pairing in the ⋮ menu (owner 2026-10-15): banner, Device status and /device hold it
+    # no pairing in the ⋮ menu (owner 2026-10-15): the banner and Device status hold it
     expect(page.get_by_role("menuitem")).to_have_text(["Device status", "Help", "Deutsch"])
 
 
 def _open_pairing(page):
-    """Open the wizard on a paired daemon the way /device's Camper-unit link does: the ``#pair`` deep
-    link (app.js openFromHash), followed on the open page -- no reload, no menu (owner 2026-10-15)."""
+    """Open the wizard on a paired daemon with the ``#pair`` deep link (app.js
+    openFromHash), followed on the open page -- no reload, no menu (owner 2026-10-15)."""
     page.evaluate("location.hash = '#pair'")
 
 
@@ -1052,8 +1052,8 @@ def _ds_card(page, title):
 def test_menu_device_status_screen_on_calictl(page):
     """The Device-status screen on the calictl flavor (UX review 3.2 / M4): a "Camper unit" card
     (connection, last update, pairing with the MAC behind Details, Unpair…) and a "buspi" card naming
-    the backend and whether control writes are on; no Satellite card, no settings link (the /device
-    page exists only on the ESP firmware)."""
+    the backend and whether control writes are on; no Satellite card, no settings link (Satellite
+    settings exist only on the ESP firmware)."""
     page.click("#menu")
     page.locator(".menupop").get_by_text("Device status").click()
     expect(page.locator("#title")).to_have_text("Device status")
@@ -1632,7 +1632,7 @@ def test_home_is_titled_with_the_app_name_not_vehicle(base_url, error_gated_page
 
 
 def test_browser_back_walks_the_screens_and_restores_the_scroll(base_url, error_gated_page):
-    """H1 + M3: every screen is a history entry (the URL stays /): browser back (the iOS edge swipe)
+    """H1 + M3: every screen is a history entry (its URL ``#<screen>``): browser back (the iOS edge swipe)
     returns to the screen before, with its scroll position; ‹ does the same; a forward screen
     starts at the top."""
     with error_gated_page(base_url, viewport={"width": 390, "height": 500}) as pg:
@@ -1643,9 +1643,10 @@ def test_browser_back_walks_the_screens_and_restores_the_scroll(base_url, error_
         pg.locator(".tile", has_text="Energy").click()
         expect(pg.locator("#title")).to_have_text("Energy")
         assert pg.evaluate("window.scrollY") == 0
-        assert pg.evaluate("location.pathname + location.hash") == "/"
+        assert pg.evaluate("location.pathname + location.hash") == "/#energy"
         pg.go_back()
         expect(pg.locator("#title")).to_have_text("Open California")
+        assert pg.evaluate("location.pathname + location.hash") == "/"
         pg.wait_for_function("y => Math.abs(window.scrollY - y) < 2", arg=y)
         pg.go_forward()
         expect(pg.locator("#title")).to_have_text("Energy")
@@ -1655,6 +1656,24 @@ def test_browser_back_walks_the_screens_and_restores_the_scroll(base_url, error_
         expect(pg.locator("#title")).to_have_text("Device status")
         pg.go_back()
         expect(pg.locator("#title")).to_have_text("Open California")
+
+
+def test_a_reload_stays_on_the_screen(base_url, error_gated_page):
+    """The screen is in the URL hash: a reload reopens it (not Home), and ‹ then goes to its parent."""
+    with error_gated_page(base_url) as pg:
+        expect(pg.locator(".tilegrid")).to_be_visible()
+        pg.locator(".tile", has_text="Energy").click()
+        expect(pg.locator("#title")).to_have_text("Energy")
+        pg.reload()
+        expect(pg.locator("#title")).to_have_text("Energy")
+        assert pg.evaluate("location.hash") == "#energy"
+        pg.click("#back")
+        expect(pg.locator("#title")).to_have_text("Open California")
+        assert pg.evaluate("location.hash") == ""
+        pg.click("#status")
+        expect(pg.locator("#title")).to_have_text("Device status")
+        pg.reload()
+        expect(pg.locator("#title")).to_have_text("Device status")
 
 
 def test_menu_lists_device_status_before_the_first_answer(base_url):
