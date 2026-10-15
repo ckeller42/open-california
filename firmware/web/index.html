@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>calictl-esp</title>
-<!-- The ESP32 firmware's WiFi setup page (#154; the status rows moved to the shared UI's Device
-     status screen, #267). SOURCE: tools/gen_c_dict.py renders it into
+<title>Satellite settings</title>
+<!-- The ESP32 firmware's "Satellite settings" page (/device; #154 setup page, #267 status rows in the
+     shared UI's Device status): WiFi (first setup + change network), camper unit, the satellite's switches. SOURCE: tools/gen_c_dict.py renders it into
      index_gen.html (the double-brace placeholders: generated constants, the strings.json table and
      the page script from page.js) and strings_gen.h; never edit those. Self-contained: no external
      assets. -->
@@ -20,36 +20,48 @@ h2{font-size:16px;margin:0 0 8px}
 .box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 12px}
 .muted{color:var(--muted)}.bad{color:var(--bad)}
 #banner{display:none;background:var(--bad);color:#fff;border-radius:8px;padding:8px 12px;margin:0 0 12px}
+[hidden]{display:none!important}
 label{display:block;margin:10px 0 4px;color:var(--muted)}
 select,input,button{font:inherit;width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
 button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px;cursor:pointer}
 button.secondary{background:transparent;color:var(--accent)}
 button.danger{background:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.45;cursor:default}
 .acts{display:flex;flex-wrap:wrap;gap:0 8px;align-items:center}.acts>*{flex:1 1 8em}.acts>span,.acts>input{flex-basis:100%;margin-top:8px}
 a{color:var(--accent)}
-#scr input{width:auto;margin-right:6px}#scr button{width:3em;margin:0 8px}
+input[type=checkbox]{width:auto;margin-right:6px}#scr-step button{width:3em;margin:0 8px}
+.sec{margin:20px 0 8px}
 </style>
 </head>
 <body>
 <main>
+<p id="device"></p>
 <h1 id="title"></h1>
 <div id="banner"></div>
-<section id="setup" class="box" hidden>
+<section id="setup" class="box">
   <h2 id="setup-title"></h2>
-  <p id="setup-hint" class="muted"></p>
-  <label for="ssid" id="ssid-label"></label>
-  <select id="ssid"></select>
-  <label for="psk" id="psk-label"></label>
-  <input id="psk" type="password" autocomplete="off">
-  <button id="connect" type="button"></button>
-  <button id="rescan" class="secondary" type="button"></button>
-  <p id="setup-msg"></p>
+  <p id="wifi-now"></p>
+  <button id="wifi-change" class="secondary" type="button" hidden></button>
+  <div id="wifi-form">
+    <p id="setup-hint" class="muted"></p>
+    <label for="ssid" id="ssid-label"></label>
+    <select id="ssid"></select>
+    <p id="scan-empty" class="muted" hidden></p>
+    <input id="ssid-name" autocomplete="off" autocapitalize="none" spellcheck="false" hidden>
+    <label for="psk" id="psk-label"></label>
+    <input id="psk" type="password" autocomplete="off">
+    <label><input id="psk-show" type="checkbox"><span id="psk-show-l"></span></label>
+    <span id="wifi-acts" class="acts"><button id="connect" type="button"></button></span>
+    <button id="rescan" class="secondary" type="button"></button>
+  </div>
+  <div id="wifi-switch" hidden></div>
+  <p id="setup-msg" aria-live="polite"></p>
 </section>
-<p id="device"></p>
-<p id="time" class="muted"></p>
-<p id="sd" class="muted"></p>
-<p id="res" class="muted"></p>
-<p id="battery" class="muted"></p>
+<section id="pair" class="box">
+  <h2 id="pair-title"></h2>
+  <p id="pair-status"></p>
+  <a id="pair-link"></a>
+</section>
 <section id="ac" class="box">
   <h2 id="ac-title"></h2>
   <p id="ac-status"></p>
@@ -59,13 +71,26 @@ a{color:var(--accent)}
 <section id="scr" class="box" hidden>
   <h2 id="scr-title"></h2>
   <p id="scr-status"></p>
-  <label><input id="scr-auto" type="checkbox"><span id="scr-auto-l"></span></label>
-  <label><input id="scr-prox" type="checkbox"><span id="scr-prox-l"></span></label>
-  <label><input id="scr-motion" type="checkbox"><span id="scr-motion-l"></span></label>
-  <p><button id="scr-dn" class="secondary">−</button><span id="scr-off"></span><button id="scr-up" class="secondary">+</button></p>
+  <p id="scr-auto-status"></p><button id="scr-auto-toggle" class="secondary" type="button" hidden></button>
+  <p id="scr-prox-status"></p><button id="scr-prox-toggle" class="secondary" type="button" hidden></button>
+  <p id="scr-motion-status"></p><button id="scr-motion-toggle" class="secondary" type="button" hidden></button>
+  <p id="scr-step"><button id="scr-dn" class="secondary" type="button">−</button><span id="scr-off"></span><button id="scr-up" class="secondary" type="button">+</button></p>
+  <p id="scr-msg" class="bad"></p>
 </section>
-<p id="ux"><span id="ux-status"></span> <button id="ux-toggle" class="secondary" type="button" hidden></button></p>
-<p id="ux-msg" class="bad"></p>
+<section id="fw" class="box">
+  <h2 id="fw-title"></h2>
+  <p id="fw-status"></p>
+  <button id="fw-install" type="button" hidden></button>
+  <button id="fw-check" class="secondary" type="button" hidden></button>
+  <label for="fw-channel" id="fw-channel-l" hidden></label><select id="fw-channel" hidden><option value="stable"></option><option value="latest"></option></select>
+  <p id="fw-msg" class="bad"></p>
+</section>
+<h2 id="adv-title" class="sec"></h2>
+<section id="ux" class="box">
+  <p id="ux-status"></p>
+  <button id="ux-toggle" class="secondary" type="button" hidden></button>
+  <p id="ux-msg" class="bad"></p>
+</section>
 <section id="exp" class="box">
   <h2 id="exp-title"></h2>
   <p id="exp-hint" class="muted"></p>
@@ -80,17 +105,13 @@ a{color:var(--accent)}
   <div id="sens-seen"></div>
   <p id="sens-msg" class="bad" aria-live="polite"></p>
 </section>
-<section id="fw" class="box">
-  <h2 id="fw-title"></h2>
-  <p id="fw-status"></p>
-  <button id="fw-install" type="button" hidden></button>
-  <button id="fw-check" class="secondary" type="button" hidden></button>
-  <label for="fw-channel" id="fw-channel-l" hidden></label><select id="fw-channel" hidden><option value="stable"></option><option value="latest"></option></select>
-  <p id="fw-msg" class="bad"></p>
-</section>
+<p id="time" class="muted"></p>
+<p id="sd" class="muted"></p>
+<p id="res" class="muted"></p>
+<p id="battery" class="muted"></p>
 </main>
 <script>
-const CFG = {pollMs: {{NET_PAGE_POLL_MS}}, connectTimeoutMs: {{NET_CONNECT_TIMEOUT_MS}}, connectRetryMs: {{NET_CONNECT_RETRY_MS}}, host: "{{NET_HOSTNAME}}", ssidMax: {{NET_SSID_MAX}}, pskMin: {{NET_PSK_MIN}}, pskMax: {{NET_PSK_MAX}}};
+const CFG = {pollMs: {{NET_PAGE_POLL_MS}}, connectTimeoutMs: {{NET_CONNECT_TIMEOUT_MS}}, connectRetryMs: {{NET_CONNECT_RETRY_MS}}, host: "{{NET_HOSTNAME}}", ap: "{{NET_AP_SSID}}", apPsk: "{{NET_AP_PSK}}", apAddr: "{{NET_AP_ADDR}}", ssidMax: {{NET_SSID_MAX}}, pskMin: {{NET_PSK_MIN}}, pskMax: {{NET_PSK_MAX}}};
 const STR = {{STRINGS}};
 </script>
 <script>

@@ -393,7 +393,9 @@ class EspStub:
         R_UX_TELEMETRY) appends the parsed body to ``ux_beacons`` and answers ``ux_status`` (204; 404 =
         a firmware without the endpoint). ``POST /api/sensors`` applies the firmware's add/remove/rename
     rules (``_sensors``; bodies in ``sensor_posts``), a removed sensor is seen again on the next
-    ``GET /api/sensors``. ``GET /app`` is the UI bundle in every mode, and the
+    ``GET /api/sensors``. ``POST /api/wifi`` appends the body to ``wifi_posts`` and answers
+    ``{"ok": true}``; ``down = True`` makes the stub answer nothing at all (the satellite left the
+    network to join another one) until it is set back. ``GET /app`` is the UI bundle in every mode, and the
         manifest + icons (``gen_c_dict.pwa_assets``) are served in every mode too."""
 
     def __init__(self, mode="setup"):
@@ -414,6 +416,8 @@ class EspStub:
         self.ux_beacons = []  # POST /api/ux bodies, in order
         self.ux_status = 204
         self.sensor_posts = []  # POST /api/sensors bodies, in order
+        self.wifi_posts = []  # POST /api/wifi bodies, in order
+        self.down = False  # True: every request gets no answer (the connection just closes)
         self._sens_back = []  # removed sensors, seen again on the next GET /api/sensors
         self._sens_model = {}  # id -> the advert's model, kept while configured
         self.pairing_passkey = "123456"  # the code the stub "unit" shows
@@ -444,6 +448,12 @@ class EspStub:
                 stub.requests.append(path)
                 n = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(n) or b"{}")
+                if stub.down:
+                    return  # no answer: the server closes the connection
+                if path == "/api/wifi":
+                    stub.wifi_posts.append(body)
+                    self._json(200, {"ok": True})
+                    return
                 if path == "/api/pairing":
                     stub.pairing_posts.append(body)
                     if stub.pairing_status != 200:
@@ -481,6 +491,8 @@ class EspStub:
             def do_GET(self):  # noqa: N802 (http.server API)
                 path = self.path.split("?", 1)[0]
                 stub.requests.append(path)
+                if stub.down:
+                    return
                 fx = stub.fixtures[stub.mode]
                 enc = None
                 if path == "/api/pairing" and stub.pairing_get_delay_s:

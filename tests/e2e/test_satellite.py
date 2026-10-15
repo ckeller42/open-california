@@ -257,7 +257,8 @@ def test_device_page_links_to_the_ui_in_every_mode(stub, error_gated_page):
         pg.wait_for_selector('#device a[href="/"]')
     stub.mode = "setup"
     with error_gated_page(stub.base + "/device") as pg:
-        expect(pg.locator('#device a[href="/app"]')).to_have_text("Open the camper UI to pair the unit")
+        expect(pg.locator('#device a[href="/app"]')).to_have_text("‹ Camper UI")
+        expect(pg.locator('#pair-link[href="/app"]')).to_have_text("Pair in the camper UI ›")
         assert pg.locator('#device a[href="/"]').count() == 0
 
 
