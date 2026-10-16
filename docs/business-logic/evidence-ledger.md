@@ -65,6 +65,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` ([dictionary](ht
   vectors as `refused`, so the satellite's C twin answers the same words (tier: CI, below).
 - lighting per-zone SET + power — DEVICE (photon-verified 2026-08-16).
 - general(1001) SW-version decode + DC-DC +2 — DEVICE (live-read `0410`, `dcdc_current` −2→0, 2026-08-17).
+- DC-DC +2 and starter current raw — DECOMPILE re-check on app 5.4.0 (2026-10-16): `og/e.java:30` version list, `og/e.java:844` `dcdcCurrent()` raw + 2; `IOneBattBemAfs` shown raw. Live: second battery = MPPT output − ~0.7 A house load (Influx 07:00–11:00 UTC); starter −10 A at 12.1 V on a van wake-up.
 - roof [InfoPopUp](https://ckeller42.github.io/open-california/glossary.html#term-InfoPopUp) `5` = DRIVING (`_ROOF_ALERT`) + the web move-gate's block set {child_lock, error,
   driving, emergency_locked, not_possible, low_battery, Position==15} — DECOMPILE (2026-09-15,
   `ig/c.java` `j()` movable-check; sensor_error is warn-only there). Call stack (#154): `j()` (`ig/c.java:707-713`:
