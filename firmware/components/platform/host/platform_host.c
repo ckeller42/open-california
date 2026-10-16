@@ -37,6 +37,8 @@ static uint64_t now_ms(void) {
 
 const char *cali_fw_version(void) { return "host"; }
 
+void cali_pi_wake_line(int low) { cali_log("gpio9: %s", low ? "low" : "released"); }   /* no GPIO here */
+
 uint64_t cali_uptime_ms(void) {
     if (!s_clock_started) {
         s_t0_ms = now_ms();

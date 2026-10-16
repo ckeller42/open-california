@@ -25,3 +25,14 @@ Per-function state fields (cooler/energy/water/…) live in the signal catalog
 | POST | `/api/auto_camper` | Toggle the restore-camping-after-park setting |
 | GET | `/api/pairing` | Guided-pairing wizard state |
 | POST | `/api/pairing` | Drive the pairing wizard (`start`/`passkey`/`cancel`/`reset`; not a vehicle write) |
+
+## ESP32 satellite only
+
+The satellite serves the same envelope plus its own settings endpoints (contract:
+`docs/firmware.md`, "Endpoints"). They are not in `openapi.yaml`, which
+`tests/test_openapi_coverage.py` holds to `calictl/web.py`'s routes.
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/pi_wake` | Wake the halted Raspberry Pi: GPIO9 low 200 ms (`{}` or no body; 409 `busy` while a pulse runs; station mode only) |
+| POST | `/api/pi_wake_setting` | `{"enabled":<bool>}`: wake the Pi on the ignition edge (default on) |

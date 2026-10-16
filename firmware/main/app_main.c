@@ -90,6 +90,7 @@
 #include "nimble/nimble_port_freertos.h"
 
 #include "cali_auto_camper.h"
+#include "cali_pi_wake.h"
 #include "cali_ble_nimble.h"
 #include "cali_captive.h"
 #include "cali_console.h"
@@ -327,6 +328,7 @@ static void do_work(void) {
         cali_sensors_tick(now, s_ble, cali_exp_sensors(), cali_runner_in_flow());   /* R_FW_SENSORS */
         cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
         cali_ac_tick(now);            /* auto camper (R_FW_AUTO_CAMPER): restore camping after park */
+        cali_pw_tick(now);            /* Pi wake (R_FW_PI_WAKE): ends a pulse; GPIO9 low on the ignition edge */
         diag_tick(now);               /* R_FW_DIAG_LOG: boot event, the minute's diag record */
         if (s_wifi) {
             cali_net_esp_poll(now);   /* WiFi events -> the runner's sink */
@@ -562,6 +564,7 @@ void app_main(void) {
     (void)cali_time_init();   /* the boot counter (R_FW_TIME): "LOG time: boot N", test_qemu_boot.py */
     cali_session_on_io = cali_sdlog_io;   /* unit frames -> the unit clock + the SD log (R_FW_SD_LOG) */
     cali_ac_init();           /* the auto-camper toggle + restore debt (R_FW_AUTO_CAMPER) */
+    cali_pw_init();           /* GPIO9 open drain, released; the wake-on-ignition toggle (R_FW_PI_WAKE) */
     cali_log("exp: sensors %s", cali_exp_sensors() ? "on" : "off");   /* R_FW_EXPERIMENTAL, test_qemu_boot.py */
     cali_sensors_init();      /* the configured sensor list (NVS sens_list, R_FW_SENSORS) */
 

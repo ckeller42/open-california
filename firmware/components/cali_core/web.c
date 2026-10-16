@@ -15,6 +15,7 @@
 #include "cali_display_model.h"
 #include "cali_json.h"
 #include "cali_ota.h"
+#include "cali_pi_wake.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_sdlog.h"
@@ -242,6 +243,8 @@ static void api_state(cali_http_resp_t *resp) {
     cali_battery_json(&j);
     cali_json_key(&j, "auto_camper");   /* restore camping after park (R_FW_AUTO_CAMPER) */
     cali_ac_json(&j);
+    cali_json_key(&j, "pi_wake");   /* wake the halted Pi over GPIO9 (R_FW_PI_WAKE) */
+    cali_pw_json(&j);
     cali_json_key(&j, "display");   /* screen state + settings (R_FW_DISPLAY_WAKE) */
     cali_display_json(&j);
     cali_json_key(&j, "ux");   /* the web UI's usage beacons (R_UX_TELEMETRY) */
@@ -817,6 +820,45 @@ static void api_auto_camper(const cali_http_req_t *req, cali_http_resp_t *resp) 
     }
 }
 
+/* ---- POST /api/pi_wake {} or no body (R_FW_PI_WAKE): one manual wake pulse, station mode only ---- */
+static void api_pi_wake(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    cursor_t c = {req->body, req->body + req->body_len};
+    int empty = (skip_ws(&c), c.p == c.end);
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (!empty && (expect(&c, '{') != 0 || expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end))) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if (cali_pw_wake("manual") != 0) {
+        SET_CONST(resp, 409, ERR_BUSY);
+    } else {
+        SET_CONST(resp, 200, OK_BODY);
+    }
+}
+
+/* ---- POST /api/pi_wake_setting {"enabled":<bool>} (R_FW_PI_WAKE): wake on ignition, station mode only ---- */
+static void api_pi_wake_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    cursor_t c = {req->body, req->body + req->body_len};
+    char key[8];
+    size_t klen;
+    int on;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (expect(&c, '{') != 0 || parse_str(&c, key, sizeof key, &klen) != 0 || klen != 7 || strcmp(key, "enabled") != 0 ||
+               expect(&c, ':') != 0 || parse_bool(&c, &on) != 0 || expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end)) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if (cali_pw_set_enabled(on) != 0) {
+        SET_CONST(resp, 500, ERR_STORE);
+    } else if (on) {
+        SET_CONST(resp, 200, "{\"ok\":true,\"pi_wake\":true}");
+    } else {
+        SET_CONST(resp, 200, "{\"ok\":true,\"pi_wake\":false}");
+    }
+}
+
 /* ---- POST /api/display {"auto"?,"prox_wake"?,"min"?,"max"?,"offset"?,"motion_wake"?,"dfs"?} (R_FW_DISPLAY_WAKE): station mode only ---- */
 
 static int parse_pct(cursor_t *c, int *out, int sign) {   /* [-]1-3 digits; a 4th is then bad JSON */
@@ -1297,6 +1339,14 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/auto_camper") == 0) {
         api_auto_camper(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/pi_wake") == 0) {
+        api_pi_wake(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/pi_wake_setting") == 0) {
+        api_pi_wake_setting(req, resp);
         return 1;
     }
     if (strcmp(req->path, "/api/display") == 0) {

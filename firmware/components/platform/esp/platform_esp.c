@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "driver/gpio.h"
 #include "esp_app_desc.h"
 #include "esp_timer.h"
 #include "nvs.h"
@@ -65,6 +66,26 @@ int cali_pm_dfs(int on, char *pm, size_t cap) {
     (void)cap;
     return CALI_PM_NONE;
 #endif
+}
+
+/* Open drain only: the Pi's pin 5 has its own 1.8 k pull-up to 3.3 V; this side may sink it, never
+ * source it (push-pull high would fight a Pi that holds the line, e.g. as I2C SCL). */
+#define PI_WAKE_GPIO GPIO_NUM_9
+
+void cali_pi_wake_line(int low) {
+    static int s_cfg;
+    if (!s_cfg) {
+        const gpio_config_t c = {.pin_bit_mask = 1ULL << PI_WAKE_GPIO, .mode = GPIO_MODE_OUTPUT_OD,
+                                 .pull_up_en = GPIO_PULLUP_DISABLE, .pull_down_en = GPIO_PULLDOWN_DISABLE,
+                                 .intr_type = GPIO_INTR_DISABLE};
+        gpio_set_level(PI_WAKE_GPIO, 1);   /* released first: becoming an output must not pulse the Pi */
+        if (gpio_config(&c) != ESP_OK) {
+            cali_log("pi-wake: gpio9 config failed");
+            return;
+        }
+        s_cfg = 1;
+    }
+    gpio_set_level(PI_WAKE_GPIO, low ? 0 : 1);
 }
 
 /* store_dir is the host's; on the ESP the store is NVS (nvs_flash_init() must have run). */

@@ -7,7 +7,7 @@ uncaught JS / console error (``error_gated_page``) unless it says otherwise.
 
 .. test:: Satellite settings and WiFi setup are screens of the shared UI (EN + DE, 390 px)
    :id: T_UI_SAT_SETTINGS
-   :links: R_FW_OTA, R_FW_AUTO_CAMPER, R_UX_TELEMETRY, R_FW_DISPLAY_WAKE, R_FW_TIME
+   :links: R_FW_OTA, R_FW_AUTO_CAMPER, R_UX_TELEMETRY, R_FW_DISPLAY_WAKE, R_FW_TIME, R_FW_PI_WAKE
 """
 
 import contextlib
@@ -267,6 +267,7 @@ def test_boxes_in_order_and_camper_unit_links_to_device_status(station, locale, 
                     "WiFi",
                     "Camper unit",
                     "Restore camping after you park",
+                    "Raspberry Pi",
                     "Screen",
                     "Firmware update",
                     "Advanced",
@@ -354,6 +355,42 @@ def test_auto_camper_usage_data_and_experimental_switch(station, locale, lang):
 
 
 @pytest.mark.parametrize("locale,lang", LOCALES)
+def test_raspberry_pi_box_wakes_and_switches(station, locale, lang):
+    """R_FW_PI_WAKE: "Wake Pi" posts /api/pi_wake and says the signal went out (or the refusal); the
+    last wake shows with its reason; the switch posts /api/pi_wake_setting; a firmware without
+    ``device.pi_wake`` shows no box.
+
+    .. test:: The Satellite-settings Raspberry Pi box: Wake Pi, the last wake, Wake on ignition
+       :id: T_FW_PI_WAKE_UI
+       :links: R_FW_PI_WAKE
+    """
+    dev = station.fixtures["station"]["/api/state"]["device"]
+    with _settings(station, locale=locale, allow=("409",)) as pg:
+        expect(pg.locator("#pw")).to_contain_text(
+            tr("Wakes the Raspberry Pi from halt through a wire to its pin 5.", lang)
+        )
+        expect(pg.locator("#pw-status")).to_have_text(tr("Wake on ignition", lang) + ": " + tr("on", lang))
+        _expect_switch(pg, "pw", True)
+        expect(pg.locator("#pw-last")).to_have_text("")
+        pg.get_by_role("button", name=tr("Wake Pi", lang)).click()
+        expect(pg.locator("#pw-msg")).to_have_text(tr("Wake signal sent", lang))
+        assert _posts(station, "/api/pi_wake") == [{}]
+        dev["pi_wake"].update(last_s=12, reason="ignition")
+        expect(pg.locator("#pw-last")).to_have_text(
+            tr("Last wake: {n} s ago ({reason})", lang, n=12, reason=tr("Ignition", lang))
+        )
+        station.post_reply["/api/pi_wake"] = (409, {"ok": False, "error": "busy"})
+        pg.click("#pw-wake")
+        expect(pg.locator("#pw-msg")).to_have_text(tr("Couldn't wake the Pi ({error})", lang, error="busy"))
+        pg.click("#pw-toggle")
+        expect(pg.locator("#pw-status")).to_have_text(tr("Wake on ignition", lang) + ": " + tr("off", lang))
+        _expect_switch(pg, "pw", False)
+        assert _posts(station, "/api/pi_wake_setting") == [{"enabled": False}]
+        del dev["pi_wake"]  # an older firmware: no box
+        expect(pg.locator("#pw")).to_be_hidden()
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
 def test_screen_box_rows_and_brightness_stepper(station, locale, lang):
     """R_FW_DISPLAY_WAKE: state, brightness with its range, room light; each switch posts its one
     member to /api/display, the -/+ stepper the offset in 5-point steps; without a screen the box
@@ -401,11 +438,19 @@ def test_over_the_hotspot_every_station_row_says_it_needs_the_home_wifi(setup, l
     suffix = " · " + tr("needs the home WiFi", lang)
     with _settings(setup, locale=locale) as pg:
         _title(pg, lang)
-        for row in ("ac", "ux", "exp", "scr-auto", "scr-prox", "scr-motion"):
+        for row in ("ac", "pw", "ux", "exp", "scr-auto", "scr-prox", "scr-motion"):
             expect(pg.locator("#%s-status" % row)).to_have_text(re.compile(re.escape(suffix) + "$"))
             expect(pg.locator("#%s-toggle" % row)).to_be_hidden()
         expect(pg.locator("#fw-status")).to_have_text(re.compile(re.escape(suffix) + "$"))
-        for hidden in ("#scr-dn", "#scr-up", "#fw-channel", "#fw-check", "#fw-install", "#wifi-change"):
+        for hidden in (
+            "#scr-dn",
+            "#scr-up",
+            "#fw-channel",
+            "#fw-check",
+            "#fw-install",
+            "#wifi-change",
+            "#pw-wake",
+        ):
             expect(pg.locator(hidden)).to_be_hidden()
         expect(pg.locator("#wifi-form")).to_be_visible()  # the join form, as on WiFi setup
 
@@ -416,13 +461,13 @@ def test_settings_fit_a_phone_with_44px_targets(station):
     with _settings(station, viewport=PHONE) as pg:
         expect(pg.locator("#scr-prox-toggle")).to_be_visible()
         assert pg.evaluate("document.documentElement.scrollWidth") <= PHONE["width"]
-        for row in ("scr-auto", "scr-prox", "scr-motion", "ac", "ux", "exp"):
+        for row in ("scr-auto", "scr-prox", "scr-motion", "ac", "pw", "ux", "exp"):
             lbl = pg.locator("#%s-status" % row).bounding_box()
             sw = pg.locator("#%s-toggle" % row).bounding_box()
             assert sw["x"] > lbl["x"] + lbl["width"] - 1, row
             assert sw["y"] < lbl["y"] + lbl["height"] and lbl["y"] < sw["y"] + sw["height"], row
             assert sw["width"] >= 44 and sw["height"] >= 44, (row, sw)
-        for b in ("#scr-dn", "#scr-up"):
+        for b in ("#scr-dn", "#scr-up", "#pw-wake"):
             box = pg.locator(b).bounding_box()
             assert box["width"] >= 44 and box["height"] >= 44, (b, box)
         pg.locator("#scr-prox-toggle").focus()

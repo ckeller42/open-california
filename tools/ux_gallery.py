@@ -281,6 +281,7 @@ def esp_fixtures():
             "battery": {"pct": 64, "mv": 3890, "usb": False, "charging": False, "runtime_min": 130},
             "display": dict(DISPLAY_ON),
             "auto_camper": {"enabled": True, "state": "idle"},
+            "pi_wake": {"enabled": True, "last_s": None, "reason": None},
             "ux": {"enabled": True},
             "experimental": {"sensors": False},
             "water_held": False,
@@ -311,6 +312,7 @@ def esp_fixtures():
                     "battery": {"pct": 87, "mv": 4120, "usb": True, "charging": True, "runtime_min": None},
                     "display": dict(DISPLAY_ON),
                     "auto_camper": {"enabled": True, "state": "idle"},
+                    "pi_wake": {"enabled": True, "last_s": None, "reason": None},
                     "ux": {"enabled": True},
                     "experimental": {"sensors": False},
                     "water_held": False,
@@ -386,6 +388,8 @@ def _set(member, key):
 # POST changes in device (/api/ota only starts work, the state moves on by itself).
 _SETTINGS = {
     "/api/auto_camper": _set("auto_camper", "enabled"),
+    "/api/pi_wake_setting": _set("pi_wake", "enabled"),
+    "/api/pi_wake": lambda dev, body: dev["pi_wake"].update(last_s=0, reason="manual"),
     "/api/ux_setting": _set("ux", "enabled"),
     "/api/experimental": _set("experimental", "sensors"),
     "/api/display": lambda dev, body: dev["display"].update(body),

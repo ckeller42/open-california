@@ -57,6 +57,7 @@
 
 #include "cali_console.h"
 #include "cali_diag.h"
+#include "cali_pi_wake.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
@@ -202,6 +203,11 @@ int cali_kv_set(const char *key, const void *buf, size_t len) {
 /* console.c's "sensors" commands link these (web.c / the platform clock are not in this build). */
 int cali_exp_sensors_set(int on) { (void)on; return -1; }
 uint64_t cali_uptime_ms(void) { return 0; }
+/* ... and its "pi" commands these (pi_wake.c: tests/firmware/test_web_handlers.py) */
+int cali_pw_pulse(const char *reason, uint32_t ms) { (void)reason; (void)ms; return -1; }
+int cali_pw_wake(const char *reason) { (void)reason; return -1; }
+int cali_pw_enabled(void) { return 0; }
+void cali_pw_json(cali_json_t *j) { cali_json_obj_begin(j); cali_json_obj_end(j); }
 
 static int s_erase_fail;   /* "kverasefail n": the next n erases fail */
 

@@ -95,6 +95,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "diag.c"),
             str(CORE / "auto_camper.c"),
             str(CORE / "auto_camper_run.c"),
+            str(CORE / "pi_wake.c"),
             str(CORE / "display_cfg.c"),
             str(CORE / "battery.c"),
             str(CORE / "sensors.c"),
@@ -271,6 +272,7 @@ EXPECTED_DEVICE_TAIL = (
     '"res":{"heap_free_kb":null,"heap_min_kb":null,"psram_free_kb":null,"cpu_pct":null},'
     '"battery":{"pct":null,"mv":null,"usb":null,"charging":null,"runtime_min":null},'
     '"auto_camper":{"enabled":true,"state":"idle"},'
+    '"pi_wake":{"enabled":true,"last_s":null,"reason":null},'
     '"display":{"state":null,"lux":null,"prox":null,"motion":null,"brightness_pct":null,"sensor":null,'
     '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0,"dfs":null,"pm":null},'
     '"ux":{"enabled":true},'
@@ -1454,6 +1456,146 @@ def test_auto_camper_reenable_clears_a_stale_debt(web_cli):
 def test_auto_camper_errors(web_cli, setup, method, body, status, error):
     r, _ = one(web_cli, method, "/api/auto_camper", body, setup=setup)
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+# ---- /api/pi_wake + /api/pi_wake_setting + the ignition edge (R_FW_PI_WAKE) ------------------------
+
+
+def _pw(resp):
+    return resp.json()["device"]["pi_wake"]
+
+
+def _gpio(other):
+    return [ln for ln in other if ln.startswith("CALL gpio9")]
+
+
+def test_pi_wake_button_pulses_once_and_refuses_while_low(web_cli):
+    """POST /api/pi_wake ({} or no body) pulls GPIO9 low; a second POST inside the 200 ms is 409 busy;
+    the tick releases the line once the pulse is due, then a wake works again. ``device.pi_wake``
+    says when and why.
+
+    .. test:: POST /api/pi_wake pulses GPIO9 200 ms, busy while low, in device.pi_wake
+       :id: T_FW_PI_WAKE_API
+       :links: R_FW_PI_WAKE
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("GET", "/api/state"),
+            req("POST", "/api/pi_wake", "{}"),
+            req("POST", "/api/pi_wake"),
+            b"pwtick",
+            b"now 100000",
+            b"pwtick",
+            req("POST", "/api/pi_wake", " { } "),
+            b"now 102500",
+            req("GET", "/api/state"),
+        ],
+    )
+    assert _pw(resps[0]) == {"enabled": True, "last_s": None, "reason": None}
+    assert (resps[1].status, resps[1].json()) == (200, {"ok": True})
+    assert (resps[2].status, resps[2].json()) == (409, {"ok": False, "error": "busy"})
+    assert (resps[3].status, resps[3].json()) == (200, {"ok": True})
+    assert _gpio(other) == ["CALL gpio9 low", "CALL gpio9 released", "CALL gpio9 low"]
+    assert other.count("LOG pi-wake[manual]: GPIO9 low 200 ms") == 2
+    assert _pw(resps[4]) == {"enabled": True, "last_s": 2, "reason": "manual"}
+
+
+def test_pi_wake_setting_persists_and_shows_in_state(web_cli):
+    """``{"enabled":false}`` lands in the kv store (``pw_ign``) and ``device.pi_wake``; a boot reads it."""
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/pi_wake_setting", '{"enabled": false}'),
+            b"kv pw_ign",
+            b"pwinit",
+            req("GET", "/api/state"),
+            req("POST", "/api/pi_wake_setting", '{"enabled":true}'),
+            b"kv pw_ign",
+        ],
+    )
+    assert (resps[0].status, resps[0].json()) == (200, {"ok": True, "pi_wake": False})
+    assert _pw(resps[1])["enabled"] is False
+    assert (resps[2].status, resps[2].json()) == (200, {"ok": True, "pi_wake": True})
+    assert [ln for ln in other if ln.startswith("KV ")] == ["KV ", "KV \x01"]
+    assert "LOG pi-wake: off" in other and "CALL gpio9 released" in other  # boot: released, toggle read
+
+
+@pytest.mark.parametrize(
+    "path,setup,method,body,status,error",
+    [
+        ("/api/pi_wake", STATION, "GET", None, 405, "method"),
+        ("/api/pi_wake", STATION, "POST", "{x}", 400, "bad_json"),
+        ("/api/pi_wake", STATION, "POST", '{"a":1}', 400, "bad_json"),
+        ("/api/pi_wake", STATION, "POST", "{}{}", 400, "bad_json"),
+        ("/api/pi_wake", ["wifi setup_ap"], "POST", "{}", 403, "setup_mode"),
+        ("/api/pi_wake_setting", STATION, "GET", None, 405, "method"),
+        ("/api/pi_wake_setting", STATION, "POST", "", 400, "bad_json"),
+        ("/api/pi_wake_setting", STATION, "POST", '{"enabled":1}', 400, "bad_json"),
+        ("/api/pi_wake_setting", STATION, "POST", '{"enabled":true,"x":1}', 400, "bad_json"),
+        ("/api/pi_wake_setting", STATION + ["kvfail 1"], "POST", '{"enabled":false}', 500, "store"),
+        ("/api/pi_wake_setting", ["wifi setup_ap"], "POST", '{"enabled":false}', 403, "setup_mode"),
+    ],
+)
+def test_pi_wake_errors(web_cli, path, setup, method, body, status, error):
+    r, other = one(web_cli, method, path, body, setup=setup)
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+    assert _gpio(other) == []
+
+
+# ign readings (-1 = not read on this link) at the given clock; the pulses they give
+@pytest.mark.parametrize(
+    "steps,pulses",
+    [
+        ([(1000, -1), (2000, 1)], 1),  # boot: unknown -> 1 is an edge
+        ([(1000, 1)], 1),  # the first known reading after boot is 1: an edge
+        ([(1000, 0), (2000, 1)], 1),  # 0 -> 1
+        ([(1000, 1), (2000, 1)], 1),  # 1 -> 1: one pulse only
+        ([(1000, 1), (2000, -1), (3000, 1)], 1),  # a read gap never makes an edge
+        ([(1000, 1), (2000, 0), (30000, 1)], 1),  # a second edge within 60 s: no pulse
+        ([(1000, 1), (2000, 0), (62000, 1)], 2),  # 61 s later: pulses again
+        ([(1000, 0), (2000, 1), (3000, 0), (64000, 1)], 2),
+    ],
+)
+def test_pi_wake_ignition_edge(web_cli, steps, pulses):
+    """The edge rule of ``cali_pw_step`` (driven straight; the tick feeds it ``cali_ac_ignition``).
+
+    .. test:: Pi wake on the ignition rising edge: unknown or 0 -> 1, gaps ignored, 60 s apart
+       :id: T_FW_PI_WAKE_EDGE
+       :links: R_FW_PI_WAKE
+    """
+    lines = []
+    for t, ign in steps:
+        lines += [b"now %d" % t, b"pwtick", b"ign %d" % ign]
+    _, other = drive(web_cli, lines)
+    assert other.count("LOG pi-wake[ignition]: GPIO9 low 200 ms") == pulses
+    assert _gpio(other).count("CALL gpio9 low") == pulses
+
+
+def test_pi_wake_off_never_pulses_and_a_later_enable_does_not_misfire(web_cli):
+    """Switched off: an edge gives no pulse; the edges stay tracked, so switching it on while the
+    ignition is on gives none either — the next real edge does."""
+    _, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"kvhex pw_ign 00",
+            b"pwinit",
+            b"now 1000",
+            b"ign 1",
+            req("POST", "/api/pi_wake_setting", '{"enabled":true}'),
+            b"now 2000",
+            b"ign 1",
+            b"now 3000",
+            b"ign 0",
+            b"now 4000",
+            b"ign 1",
+        ],
+    )
+    assert other.count("LOG pi-wake[ignition]: GPIO9 low 200 ms") == 1
+    assert _gpio(other) == ["CALL gpio9 released", "CALL gpio9 low"]
 
 
 # ---- /api/ux + /api/ux_setting (R_UX_TELEMETRY) ---------------------------------------------------

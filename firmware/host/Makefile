@@ -67,7 +67,7 @@ COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o
 	sensors.o json.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o
+CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o pi_wake.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
@@ -143,7 +143,7 @@ console.o: $(COMPONENTS)/cali_core/console.c $(CORE_H)/cali_console.h $(CORE_H)/
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CORE_H)/cali_pairing_sm.h \
 		$(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CSRC)/pairing_consts.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_net.h $(CSRC)/net_consts.h \
-		$(CORE_H)/cali_sensors.h $(CORE_H)/cali_web.h $(COMPONENTS)/platform/include/cali_platform.h
+		$(CORE_H)/cali_sensors.h $(CORE_H)/cali_web.h $(CORE_H)/cali_pi_wake.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The "fn" emitter + pairing address shared by console.c (SNAP/STATE) and web.c (/api/state).
@@ -188,7 +188,7 @@ web.o: $(COMPONENTS)/cali_core/web.c $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h 
 		$(CORE_H)/cali_captive.h $(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CORE_H)/cali_status.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_session.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_control.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
-		../web/app_bundle_gen.h $(CORE_H)/cali_ota.h $(CORE_H)/cali_time.h $(CORE_H)/cali_sdlog.h $(CORE_H)/cali_auto_camper.h \
+		../web/app_bundle_gen.h $(CORE_H)/cali_ota.h $(CORE_H)/cali_time.h $(CORE_H)/cali_sdlog.h $(CORE_H)/cali_auto_camper.h $(CORE_H)/cali_pi_wake.h \
 		$(CORE_H)/cali_display_model.h $(CORE_H)/cali_sensors.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
@@ -204,6 +204,11 @@ auto_camper.o: $(COMPONENTS)/cali_core/auto_camper.c $(CORE_H)/cali_auto_camper.
 
 auto_camper_run.o: $(COMPONENTS)/cali_core/auto_camper_run.c $(CORE_H)/cali_auto_camper.h $(CORE_H)/cali_control.h \
 		$(CORE_H)/cali_session.h $(CSRC)/codec.h $(CSRC)/codec_chars.h $(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The Pi wake (R_FW_PI_WAKE): GPIO9 pulses on the ignition edge; the host's line only logs.
+pi_wake.o: $(COMPONENTS)/cali_core/pi_wake.c $(CORE_H)/cali_pi_wake.h $(CORE_H)/cali_auto_camper.h \
+		$(CORE_H)/cali_json.h $(CORE_H)/cali_diag.h $(CORE_H)/cali_session.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The boot counter + SNTP state + unit clock (R_FW_TIME): device.time. The host has no SNTP and no
@@ -258,7 +263,7 @@ host_main.o: host_main.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h
 		$(CORE_H)/cali_session.h $(CORE_H)/cali_control.h $(CSRC)/codec.h $(CORE_H)/cali_runner.h \
 		$(CORE_H)/cali_transport.h $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h $(CORE_H)/cali_captive.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(COMPONENTS)/platform/include/cali_net_host.h \
-		$(CORE_H)/cali_sensors.h $(CORE_H)/cali_diag.h \
+		$(CORE_H)/cali_sensors.h $(CORE_H)/cali_diag.h $(CORE_H)/cali_pi_wake.h \
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 

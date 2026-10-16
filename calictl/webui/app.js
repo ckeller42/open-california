@@ -33,6 +33,7 @@
  * @typedef {{id: number, type: string, alias: string, last_seen_s: number|null, value: Record<string, number|null>|null}} SatSensCfg
  * @typedef {{id: number, type: string, model: string, rssi: number}} SatSensSeen
  * @typedef {{configured: SatSensCfg[], seen: SatSensSeen[], scan: string, error?: string}} SatSensors  GET/POST /api/sensors
+ * @typedef {{enabled: boolean, last_s: number|null, reason: string|null}} SatPiWake  device.pi_wake (R_FW_PI_WAKE)
  */
 /**
  * `serve.state()::_meta`. `session`/`session_mode` are `"off"` unless the persistent session is on.
@@ -50,7 +51,7 @@
  * @property {boolean} [restored]           set only by restoreLastState(): the saved offline snapshot shown until a live poll answers
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, experimental?: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, experimental?: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -2073,7 +2074,7 @@ function renderDeviceStatus() {
 // a typed password, an open confirm step or a sensor name must survive the 2 s poll, so a poll only
 // updates them in place (satUpdate). Their endpoints are the firmware's (web.c, firmware/docs):
 // GET/POST /api/wifi, /api/sensors; POST /api/auto_camper, /api/display, /api/ota, /api/ux_setting,
-// /api/experimental — reached through satFetch, never api() (which refuses them by design).
+// /api/experimental, /api/pi_wake, /api/pi_wake_setting — reached through satFetch, never api() (which refuses them by design).
 const SAT_VIEWS = ["satsettings", "wifisetup"];
 /** @type {{view: string, lang: string, root: HTMLElement}|null} the open satellite screen's DOM */
 let satDom = null;
@@ -2180,6 +2181,11 @@ function buildSat(v) {
   const toggle = (/** @type {string} */ id, /** @type {string} */ path, /** @type {string} */ err, /** @type {string} */ key, /** @type {string} */ msgId) =>
     { sq(id + "-toggle").onclick = () => satToggle(path, id, err, key, msgId); };
   root.append(satCard("ac", T("Restore camping after you park"), satSwitchRow("ac"), satMsg("ac-msg")));
+  const wake = satBtn(T("Wake Pi"), "", "pw-wake");
+  wake.onclick = satPiWake;
+  root.append(satCard("pw", T("Raspberry Pi"), h("p", { class: "note" }, T("Wakes the Raspberry Pi from halt through a wire to its pin 5.")),
+    satSwitchRow("pw"), h("div", { class: "btnrow" }, wake), h("p", { class: "note", id: "pw-last" }),
+    h("p", { class: "note", id: "pw-msg", "aria-live": "polite" })));
   const dn = satBtn("−", "", "scr-dn"), up = satBtn("+", "", "scr-up");
   dn.setAttribute("aria-label", T("Darker")); up.setAttribute("aria-label", T("Brighter"));
   dn.onclick = () => satScrStep(-5); up.onclick = () => satScrStep(5);
@@ -2200,6 +2206,7 @@ function buildSat(v) {
     satCard("sens", T("Sensors"), h("p", { class: "note" }, T("Nearby sensors appear below; add the ones that are yours.")),
       h("div", { id: "sens-cfg" }), h("div", { id: "sens-seen" }), h("p", { class: "warn", id: "sens-msg", "aria-live": "polite" })));
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
+  toggle("pw", "/api/pi_wake_setting", "Couldn't change the Pi wake", "enabled", "pw-msg");
   toggle("ux", "/api/ux_setting", "Couldn't change usage data", "enabled", "ux-msg");
   toggle("exp", "/api/experimental", "Couldn't change the switch", "sensors", "exp-msg");
   for (const [id, k] of SAT_SCR_ROWS) toggle("scr-" + id, "/api/display", "Couldn't change the screen setting", k, "scr-msg");
@@ -2233,6 +2240,14 @@ function satUpdate() {
     satRow("ac", [T(a.enabled ? "Auto camper on" : "Auto camper off"), a.state === "armed" ? T("⟳ will restore on park") : "",
       a.state === "restoring" ? T("⟳ restoring …") : ""], a.enabled, st);
   }
+  sq("pw").hidden = !s.pi_wake;
+  if (s.pi_wake) {
+    const p = s.pi_wake;
+    satRow("pw", [T("Wake on ignition") + ": " + T(p.enabled ? "on" : "off")], p.enabled, st);
+    sq("pw-wake").hidden = !st;
+    sq("pw-last").textContent = p.last_s === null ? ""
+      : tf("Last wake: {n} s ago ({reason})", { n: p.last_s, reason: T(p.reason === "ignition" ? "Ignition" : "Manual") });
+  }
   satRow("ux", [T(m.ux ? "Send usage data: on" : "Send usage data: off")], !!m.ux, st);
   satRow("exp", [T(s.experimental ? "Sensors (experimental): on" : "Sensors (experimental): off")], !!s.experimental, st);
   satRenderScreen(s.display || null, st);
@@ -2262,6 +2277,21 @@ async function satToggle(path, id, err, key, msgId) {
   let ok = false;
   try { ok = !!(await satFetch(path, { [key]: on })).body.ok; } catch (e) { /* ok stays false */ }
   if (!ok) msg.textContent = T(err);
+  await refreshState(true);
+  if (satDom) b.disabled = false;
+}
+
+/** Wake Pi (R_FW_PI_WAKE): POST /api/pi_wake, then what the satellite said. */
+async function satPiWake() {
+  const b = /** @type {HTMLButtonElement} */ (sq("pw-wake")), msg = sq("pw-msg");
+  msg.textContent = "";
+  b.disabled = true;   // one pulse per tap
+  ux({ type: "control", fn: "satellite", control: "pi_wake" });
+  /** @type {any} */
+  let r = null;
+  try { r = (await satFetch("/api/pi_wake", {})).body; } catch (e) { /* r stays null */ }
+  msg.textContent = !r ? T("No answer from the satellite.") : r.ok ? T("Wake signal sent")
+    : tf("Couldn't wake the Pi ({error})", { error: r.error || "" });
   await refreshState(true);
   if (satDom) b.disabled = false;
 }
