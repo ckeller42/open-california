@@ -62,6 +62,12 @@ const char *cali_fw_version(void);
 #define CALI_PM_NONE (-2)
 int cali_pm_dfs(int on, char *pm, size_t cap);
 
+/* The Pi wake line (#387, R_FW_PI_WAKE): GPIO9 (Port B PB_OUT) to the Raspberry Pi's pin 5 (GPIO3).
+ * low = 1 pulls it to GND, low = 0 releases it (high-Z). esp: open-drain output, never driven high;
+ * the first call configures it (level set to released BEFORE it becomes an output: no boot glitch).
+ * host: logs "gpio9: low" / "gpio9: released" (the host-tier e2e reads them). Owner task only. */
+void cali_pi_wake_line(int low);
+
 /* host: store_dir is the directory for the kv files (created if missing; NULL = "."); esp: ignored
  * (NVS). Starts the uptime clock. Returns 0 ok, -1 if the store directory is unusable. */
 int cali_platform_init(const char *store_dir);

@@ -176,10 +176,17 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
                 "ota": None,
                 "display": None,
                 "auto_camper": None,
+                "pi_wake": None,  # ... nor device.pi_wake (R_FW_PI_WAKE)
                 "experimental": False,
             },
         },
     )
+
+
+def test_adapter_passes_device_pi_wake_through():
+    """``device.pi_wake`` reaches ``_meta.sat.pi_wake`` as the firmware sent it (the Raspberry Pi box)."""
+    pw = {"enabled": True, "last_s": 12, "reason": "ignition"}
+    assert _adapt(_body(pi_wake=pw))["_meta"]["sat"]["pi_wake"] == pw
 
 
 @pytest.mark.parametrize("ux,want", [({"enabled": True}, True), ({"enabled": False}, False), (None, False)])

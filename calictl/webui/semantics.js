@@ -469,6 +469,7 @@ function adaptSatellite(body, nowMs) {
       ota: dev.ota || null,           // R_FW_OTA
       display: dev.display || null,   // R_FW_DISPLAY_WAKE
       auto_camper: dev.auto_camper || null,   // R_FW_AUTO_CAMPER, with its "restoring" state
+      pi_wake: dev.pi_wake || null,   // R_FW_PI_WAKE: the Raspberry Pi box
       experimental: !!(dev.experimental && dev.experimental.sensors),   // R_FW_EXPERIMENTAL
     },
   };

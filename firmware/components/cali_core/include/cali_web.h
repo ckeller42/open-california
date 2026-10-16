@@ -30,6 +30,9 @@
  *                                        (R_FW_BATTERY); each null when unknown (host, QEMU, no AXP2101)
  *                                  "auto_camper":{"enabled":<bool>,"state":"idle"|"armed"|"restoring"},
  *                                                -- cali_auto_camper.h (R_FW_AUTO_CAMPER)
+ *                                  "pi_wake":{"enabled":<bool>,"last_s":<int>|null,
+ *                                             "reason":"ignition"|"manual"|null},
+ *                                                -- cali_pi_wake.h (R_FW_PI_WAKE); last_s = s since the last pulse
  *                                  "display":{"state":"on"|"dim"|"off","lux","prox","motion","brightness_pct",
  *                                             "sensor":"ok"|"absent"|"error","auto":<bool>,
  *                                             "prox_wake":<bool>,"motion_wake":<bool>,"min","max","offset",
@@ -139,6 +142,12 @@
  *                     full, 500 store; 405 for another method.
  *   POST /api/auto_camper  {"enabled":<bool>} (exactly that object; R_FW_AUTO_CAMPER, serve's endpoint):
  *                     cali_ac_set_enabled -> 200 {"ok":true,"auto_camper":<bool>}; station mode only
+ *                     (403 setup_mode), 400 bad_json, 500 store (not saved), 405 for another method.
+ *   POST /api/pi_wake  {} or no body (R_FW_PI_WAKE): cali_pw_wake("manual"), GPIO9 low 200 ms -> 200
+ *                     {"ok":true}; 409 busy (a pulse in progress); station mode only (403 setup_mode),
+ *                     400 bad_json (any other body), 405 for another method.
+ *   POST /api/pi_wake_setting  {"enabled":<bool>} (exactly that object; R_FW_PI_WAKE): wake on ignition,
+ *                     cali_pw_set_enabled -> 200 {"ok":true,"pi_wake":<bool>}; station mode only
  *                     (403 setup_mode), 400 bad_json, 500 store (not saved), 405 for another method.
  *   POST /api/ota     {"action":"check"|"install"} (R_FW_OTA, cali_ota.h): starts the OTA task and
  *                     answers at once 200 {"ok":true}; progress in /api/state device.ota. Station mode

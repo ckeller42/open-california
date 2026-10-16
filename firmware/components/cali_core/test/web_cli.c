@@ -1,6 +1,6 @@
 /* web_cli.c — line-protocol driver for tests/firmware/test_web_handlers.py ONLY; not part of the ESP
  * build. Links web.c + http_core.c + captive_dns.c (for cali_captive_is_probe) + json.c + snapshot.c
- * + ota.c + time.c + auto_camper.c + auto_camper_run.c (never ticked here) + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
+ * + ota.c + time.c + auto_camper.c + auto_camper_run.c (never ticked here) + pi_wake.c + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
  * frames, the runner state, a transport (has_bond/identity), an in-memory kv store, the clock, the
  * log, cali_fw_version ("test"), the WiFi runtime (cali_wifi_run.h) and the control sequencer
  * (cali_ctl_submit).
@@ -36,6 +36,9 @@
  *   kvfail 0|1       cali_kv_set fails
  *   kvhex <key> <hex>   store <hex> bytes under <key> (e.g. a stale auto-camper debt)
  *   acinit           cali_ac_init (the toggle + debt from the kv store, as at boot)
+ *   pwinit           cali_pw_init (the Pi-wake toggle from the kv store, as at boot)
+ *   ign <-1|0|1>     cali_pw_step(<ignition>, the clock): the Pi wake's edge rule (R_FW_PI_WAKE)
+ *   pwtick           cali_pw_tick(the clock): ends a pulse that is due (the session is never ready here)
  *   sdcard           the SD log's card "ok" + a queue that prints each queued text record as
  *                    "SDTEXT <its cali_sdlog_format line>" (seq 1, boot 0) (R_UX_TELEMETRY)
  *   ctl <rc> [reason…]   what cali_ctl_submit answers (default pending): pending refused elsewhere bad
@@ -50,6 +53,7 @@
  *   otainit          cali_ota_init with fake ops (default: none, so /api/ota answers 503); their
  *                    wake prints "CALL ota_wake", the rest are never reached (ota.c runs on the OTA
  *                    task, tests/firmware/test_ota.py)
+ * The Pi wake line prints "CALL gpio9 low" / "CALL gpio9 released".
  * The runner's actions print "CALL pair_start", "CALL pair_passkey <6 digits>", "CALL pair_cancel",
  * "CALL pair_forget". Calls into the fake WiFi runtime print "CALL set_creds [<ssid>] [<psk>]", "CALL forget",
  * "CALL scan_auto"; cali_ctl_submit prints "CALL submit [<fn>] [<what>] [<value>]" (+ " t=<local_now>"
@@ -64,6 +68,7 @@
 #include "cali_auto_camper.h"
 #include "cali_control.h"
 #include "cali_ota.h"
+#include "cali_pi_wake.h"
 #include "cali_platform.h"
 #include "cali_sdlog.h"
 #include "cali_runner.h"
@@ -196,6 +201,7 @@ int cali_kv_get(const char *key, void *buf, size_t *len) {
 }
 uint64_t cali_uptime_ms(void) { return s_now; }
 const char *cali_fw_version(void) { return "test"; }
+void cali_pi_wake_line(int low) { printf("CALL gpio9 %s\n", low ? "low" : "released"); }
 int cali_pm_dfs(int on, char *pm, size_t cap) {   /* no PM, as the host: device.display.dfs / pm null */
     (void)pm;
     (void)cap;
@@ -380,6 +386,9 @@ int main(void) {
         else if (strcmp(w, "kvfail") == 0) s_kvfail = (int)v;
         else if (strcmp(w, "ctlbusy") == 0) s_ctl_busy = (int)v;
         else if (strcmp(w, "acinit") == 0) cali_ac_init();
+        else if (strcmp(w, "pwinit") == 0) cali_pw_init();
+        else if (strcmp(w, "ign") == 0) cali_pw_step((int)v, s_now);
+        else if (strcmp(w, "pwtick") == 0) cali_pw_tick(s_now);
         else if (strcmp(w, "sdcard") == 0) {
             cali_sdlog_card(CALI_SD_OK, 100, 50);
             cali_sdlog_init(put_rec);

@@ -53,6 +53,13 @@ static long field(const codec_kv_t *kv, int n, const char *name) {
     return -1;
 }
 
+int cali_ac_ignition(void) {
+    static codec_kv_t v[CODEC_KV_MAX], c[CODEC_KV_MAX];   /* static: the 8 KB host-task stack */
+    int nv = frame_fields("vehicle", v), nc = frame_fields("campingmode", c);
+    long t15 = field(v, nv, "TerminalOneFive"), en = field(c, nc, "Enable");
+    return t15 < 0 && en < 0 ? -1 : t15 > 0 || en > 0;
+}
+
 static void pack(uint8_t b[STATE_LEN]) {
     b[0] = (uint8_t)S.owe;
     b[1] = (uint8_t)S.pre;
@@ -161,15 +168,15 @@ static void chain_tick(void) {
 }
 
 static void step(uint64_t now) {
-    static codec_kv_t v[CODEC_KV_MAX], c[CODEC_KV_MAX], e[CODEC_KV_MAX];   /* static: the 8 KB host-task stack */
+    static codec_kv_t c[CODEC_KV_MAX], e[CODEC_KV_MAX];   /* static: the 8 KB host-task stack */
     static const cali_ac_cfg_t cfg = {CALI_AC_MIN_SOC, CALI_AC_MAX_FAILS, CALI_AC_WINDOW_MS};
-    int nv = frame_fields("vehicle", v), nc = frame_fields("campingmode", c), ne = frame_fields("energy", e);
-    long t15 = field(v, nv, "TerminalOneFive"), en = field(c, nc, "Enable"), lvl = field(e, ne, "SocTwoBattAfs");
+    int nc = frame_fields("campingmode", c), ne = frame_fields("energy", e);
+    long lvl = field(e, ne, "SocTwoBattAfs");
     cali_ac_in_t in;
     cali_ac_out_t out;
     const char *event;
     int armed_before = S.owe;
-    in.ign = t15 < 0 && en < 0 ? -1 : t15 > 0 || en > 0;
+    in.ign = cali_ac_ignition();
     in.master = (int)field(c, nc, "State");
     if (in.master > 0) in.master = 1;
     in.usb = field(c, nc, "UsbCharger") > 0;
