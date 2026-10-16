@@ -199,6 +199,9 @@ DEFAULT_SEED = {
         "LadInstalled": 1,
         "PvInstalled": 0,
         "StateDcdcAfs": 0,
+        # The real unit (AmbSw 0410) reports an idle DC-DC as raw -2; the app adds +2 (og/e.java:844),
+        # so the screen shows 0 A. A raw 0 here would read +2 A on an inactive charger.
+        "IDcdcAfs": 0xFFFE,
         "StateLandAfs": 0,
     },
     # Parked, engine-OFF (COHERENT with the energy seed above: terminal-15 off => starter

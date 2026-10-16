@@ -1271,7 +1271,9 @@ def _house(stub, variant, batt2_raw=8, **mppt):
 def test_house_load_row_follows_the_second_battery_power(stub, error_gated_page, locale):
     """House load = the chargers' battery-side current - the second battery's net current, W first;
     one row, right after the second battery's power row (satellite only)."""
-    _house(stub, "two-mppt")["dach"]["battery_current"] = 1.0  # 1.0 + 2.3 + 2.0 - 0.8 = 4.5 A, x 14.1 V
+    _house(stub, "two-mppt")["dach"]["battery_current"] = (
+        1.0  # 1.0 + 2.3 + 0 (idle DC-DC: raw -2, +2 app correction) - 0.8 = 2.5 A, x 14.1 V
+    )
     screen, label = HOUSE[locale]
     with error_gated_page(stub.base, locale=locale) as pg:
         pg.wait_for_selector(".tilegrid .tile")
@@ -1281,20 +1283,22 @@ def test_house_load_row_follows_the_second_battery_power(stub, error_gated_page,
             "Second battery power",
             "Zweitbatterie-Leistung",
         )
-        assert dict(rows)[label] == "63 W · 4.5 A"
+        assert dict(rows)[label] == "35 W · 2.5 A"
 
 
 def test_house_load_with_one_charger(stub, error_gated_page):
-    _house(stub, "mppt", batt2_raw=8)["victron_mppt"]["battery_current"] = 2.3  # 2.3 + 2.0 - 0.8 = 3.5 A
+    _house(stub, "mppt", batt2_raw=8)["victron_mppt"]["battery_current"] = (
+        2.3  # 2.3 + 0 (idle DC-DC) - 0.8 = 1.5 A
+    )
     with error_gated_page(stub.base) as pg:
         pg.wait_for_selector(".tilegrid .tile")
         _open(pg, "Energy")
-        assert dict(_readouts(pg))["House load"] == "49 W · 3.5 A"
+        assert dict(_readouts(pg))["House load"] == "21 W · 1.5 A"
 
 
 @pytest.mark.parametrize(
     ("batt2_raw", "age", "want"),
-    [(8, 120, "—"), (8, None, "—"), (44, 7, "0 W · 0.0 A"), (60, 7, "—")],
+    [(8, 120, "—"), (8, None, "—"), (24, 7, "0 W · 0.0 A"), (60, 7, "—")],
 )
 def test_house_load_guards(stub, error_gated_page, batt2_raw, age, want):
     """A stale charger reading -> "—"; net charging within 0.5 A over the sources -> 0; further -> "—"."""
