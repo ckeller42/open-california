@@ -1590,6 +1590,12 @@ def test_energy_card_hides_power_sources_the_van_does_not_have(page, base_url):
     assert "not installed" not in card.inner_text()
 
 
+def test_calictl_page_has_no_house_load_row(page, base_url):
+    page.goto(base_url)
+    page.locator(".tile", has_text="Energy").first.click()
+    expect(page.locator("#app").get_by_text("House load", exact=True)).to_have_count(0)
+
+
 def test_battery_rows_read_w_a_v_like_the_solar_row(page, base_url):
     """One row per battery in the solar row's order, "<W> W · <A> A · <V> V" (owner 2026-10-15); W is
     V × A rounded. The starter's missing reading (the mock's sleeping starter) keeps its slots as "—"."""

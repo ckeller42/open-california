@@ -290,7 +290,9 @@ def test_cursor_moves_only_after_a_successful_write_and_a_rerun_writes_identical
     assert saved["seq"] == 3  # held at the current boot's unstamped record
     assert list(saved["state"]["thin"]["pending"]) == ["cooler"]  # seq 3 waits in the cursor
     energy = next(dict(p[2]) for p in a.writes[0] if dict(p[1])["function"] == "energy")
-    assert energy["dcdc_current"] == 2.0  # serve's +2 on AmbSwVersion 0410, from the replayed general
+    assert (
+        energy["dcdc_current"] == 0.0
+    )  # raw -2 (the mock's idle DC-DC) + serve's +2 on AmbSwVersion 0410, from the replayed general
     # the next run starts at the hold; a re-run from the same cursor writes byte-identical points
     nxt = pager(records, boot=2)
     esp_ingest.ingest(nxt, DB(), cur)

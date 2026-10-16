@@ -1014,6 +1014,10 @@ is touched. No chip, a failed read or no screen (host, QEMU): every member `null
    boot-local ids. The list (<= 16, NVS sens_list) survives the flag; keys never leave the ESP.
 ```
 
+The satellite's Energy screen derives a **House load** row from the Victron chargers' `battery_current`
+and the unit's own currents; the derivation, evidence and limits are in
+[House load (derived)](business-logic/signals.md#house-load-derived).
+
 `cali_core/sensors.c` (`include/cali_sensors.h`, host-tested) holds the type table, the decoders,
 the seen and configured tables, the readings and the window cadence; the NimBLE transport only
 opens the window (`scan_window`) and turns its reports into `CALI_TEV_ADV`; the runner hands those

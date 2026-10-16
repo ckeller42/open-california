@@ -1250,9 +1250,63 @@ def test_victron_readings_on_the_energy_screen(stub, error_gated_page, locale):
         expect(pg.locator(".card.sensors")).to_have_count(0)
         _open(pg, screen)
         rows = _readouts(pg)
-        assert _around(rows, after, after=1) == battery
+        assert _around(rows, after, after=2)[1:] == battery  # [0] is House load
         assert _around(rows, before, before=len(solar)) == solar
         assert dict(rows)[before] == ("none" if locale == "en-US" else "keine")
+
+
+HOUSE = {"en-US": ("Energy", "House load"), "de-DE": ("Energie", "Bordverbrauch")}
+
+
+def _house(stub, variant, batt2_raw=8, **mppt):
+    """Satellite energy fixture: 14.1 V second battery at ``batt2_raw``/10 A net, dcdc 2.0 A (the fixture unit's SW +2 correction), shore 0 A."""
+    ext = _ext(stub, variant)
+    for e in ext.values():
+        e.update(mppt)
+    stub.fixtures["satellite"]["/api/state"]["fn"]["energy"]["ITwoBattBemAfs"] = batt2_raw
+    return ext
+
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_house_load_row_follows_the_second_battery_power(stub, error_gated_page, locale):
+    """House load = the chargers' battery-side current - the second battery's net current, W first;
+    one row, right after the second battery's power row (satellite only)."""
+    _house(stub, "two-mppt")["dach"]["battery_current"] = (
+        1.0  # 1.0 + 2.3 + 0 (idle DC-DC: raw -2, +2 app correction) - 0.8 = 2.5 A, x 14.1 V
+    )
+    screen, label = HOUSE[locale]
+    with error_gated_page(stub.base, locale=locale) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        _open(pg, screen)
+        rows = _readouts(pg)
+        assert rows[[lbl for lbl, _ in rows].index(label) - 1][0] in (
+            "Second battery power",
+            "Zweitbatterie-Leistung",
+        )
+        assert dict(rows)[label] == "35 W · 2.5 A"
+
+
+def test_house_load_with_one_charger(stub, error_gated_page):
+    _house(stub, "mppt", batt2_raw=8)["victron_mppt"]["battery_current"] = (
+        2.3  # 2.3 + 0 (idle DC-DC) - 0.8 = 1.5 A
+    )
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        _open(pg, "Energy")
+        assert dict(_readouts(pg))["House load"] == "21 W · 1.5 A"
+
+
+@pytest.mark.parametrize(
+    ("batt2_raw", "age", "want"),
+    [(8, 120, "—"), (8, None, "—"), (24, 7, "0 W · 0.0 A"), (60, 7, "—")],
+)
+def test_house_load_guards(stub, error_gated_page, batt2_raw, age, want):
+    """A stale charger reading -> "—"; net charging within 0.5 A over the sources -> 0; further -> "—"."""
+    _house(stub, "mppt", batt2_raw=batt2_raw)["victron_mppt"].update(battery_current=2.3, age_s=age)
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        _open(pg, "Energy")
+        assert dict(_readouts(pg))["House load"] == want
 
 
 @pytest.mark.parametrize("locale", ["en-US", "de-DE"])

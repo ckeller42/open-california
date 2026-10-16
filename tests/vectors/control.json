@@ -121,7 +121,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -259,7 +259,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -396,7 +396,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -533,7 +533,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -670,7 +670,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -807,7 +807,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -944,7 +944,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -1081,7 +1081,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -1218,7 +1218,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -1355,7 +1355,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -1492,7 +1492,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -1629,7 +1629,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -1766,7 +1766,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -1903,7 +1903,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -2040,7 +2040,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -2177,7 +2177,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -2315,7 +2315,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -2453,7 +2453,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -2592,7 +2592,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -2731,7 +2731,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -2870,7 +2870,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -3007,7 +3007,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
@@ -3144,7 +3144,7 @@
     "UOneBattBemAfs": 48,
     "UTwoBattBemAfs": 141,
     "ITwoBattBemAfs": 0,
-    "IDcdcAfs": 0,
+    "IDcdcAfs": 65534,
     "ILandAfs": 0,
     "IPvAfs": 0
    },
