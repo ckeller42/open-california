@@ -278,6 +278,7 @@ window.STRINGS_DE = {
   "ECO": "ECO",
   "Second battery": "Zweitbatterie",
   "Second battery power": "Zweitbatterie-Leistung",
+  "House load": "Bordverbrauch",
   "Time remaining": "Restzeit",
   "Starter battery": "Starterbatterie",
   "Starter power": "Starter-Leistung",
@@ -627,14 +628,16 @@ window.STRINGS_DE = {
     + "The battery bars come from a coarse level shown in 10 % steps, as in the app, not from a precise "
     + "percentage. Voltages and currents are in volts and amps.\n\n"
     + "Vehicle power is the charger fed by the alternator while the engine runs. Shore and solar power "
-    + "appear only if fitted. Issues lists the unit's own warnings.\n\n"
+    + "appear only if fitted. House load is derived: what the chargers deliver minus what reaches the "
+    + "second battery. Issues lists the unit's own warnings.\n\n"
     + "The energy mode is not yet verified on the van, and the unit can lock it."]:
     "Die Zweitbatterie wird ständig gemessen. Die Starterbatterie wird nur bei laufendem Motor "
     + "gemessen, geparkt behält sie daher ihre letzten Werte (🕒 veraltet).\n\nDie Batteriebalken "
     + "beruhen auf einer groben Stufe, angezeigt in 10-%-Schritten wie in der App, nicht auf einem "
     + "genauen Prozentwert. Spannungen und Ströme sind in Volt und Ampere.\n\nFahrzeugstrom ist das "
     + "Ladegerät, das bei laufendem Motor von der Lichtmaschine gespeist wird. Landstrom und "
-    + "Solarstrom erscheinen nur, wenn verbaut. Probleme listet die eigenen Warnungen der "
+    + "Solarstrom erscheinen nur, wenn verbaut. Der Bordverbrauch ist abgeleitet: was die Ladegeräte liefern, abzüglich dessen, was "
+    + "die Zweitbatterie erreicht. Probleme listet die eigenen Warnungen der "
     + "Einheit.\n\nDer Energiemodus ist am Fahrzeug noch nicht verifiziert, und die Einheit kann ihn "
     + "sperren.",
   ["Press and hold open or close: the roof moves while you hold and stops when you release (or press "

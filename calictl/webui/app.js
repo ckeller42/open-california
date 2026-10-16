@@ -682,7 +682,8 @@ const HELP = {
     + "The battery bars come from a coarse level shown in 10 % steps, as in the app, not from a precise "
     + "percentage. Voltages and currents are in volts and amps.\n\n"
     + "Vehicle power is the charger fed by the alternator while the engine runs. Shore and solar power "
-    + "appear only if fitted. Issues lists the unit's own warnings.\n\n"
+    + "appear only if fitted. House load is derived: what the chargers deliver minus "
+    + "what reaches the second battery. Issues lists the unit's own warnings.\n\n"
     + "The energy mode is not yet verified on the van, and the unit can lock it."],
   roof: ["business-logic/lighting-energy-water-sat-roof.html#roof-pop-top-service-0x1400-char-0x1401",
     "Press and hold open or close: the roof moves while you hold and stops when you release (or press "
@@ -901,6 +902,9 @@ const FEATURES = {
       // One row per battery in the solar row's order, W · A · V (owner 2026-10-15); W = V × A, derived
       // here from the two verified values (the unit reports no battery power).
       { label: "Second battery power", get: (s) => wav(s.batt2_v, s.batt2_current) },
+      // Derived (docs/business-logic/signals.md "House load"): chargers in minus the battery's net
+      // current. Satellite only: calictl reads no Victron charger, so its sum would be incomplete.
+      { label: "House load", show: () => satellite(), get: (s) => houseLoad(s) },
       { ext: "victron_battery" },
       { label: "Time remaining", get: (s) => (s.batt2_remaining_h != null ? `${s.batt2_remaining_h} h` : "—") },
       { label: "Starter battery", get: (s) => (s.soc1_pct != null ? `${s.soc1_pct}%` : "—"), bar: (s) => s.soc1_pct },
@@ -2698,6 +2702,35 @@ const EXT_TYPES = {
     ["Humidity", (e) => fix(e.humidity, 0, " %")],
   ] },
 };
+
+/** Age limit (s) of a charger reading in the house-load sum: the two pollers are independent. */
+const HOUSE_LOAD_MAX_AGE_S = 60;
+/**
+ * House load = Σ charger battery-side currents − the second battery's net current, "<W> W · <A> A".
+ * "—" when an installed source or the battery reading is missing, a charger reading is stale, or
+ * the result is below −0.5 A (a measurement mismatch); −0.5…0 A shows as 0.
+ * @param {FnState} s the energy state
+ * @returns {string}
+ */
+function houseLoad(s) {
+  let sum = 0;
+  for (const [, e] of extEntries("victron_mppt")) {
+    if (typeof e.age_s !== "number" || e.age_s > HOUSE_LOAD_MAX_AGE_S || typeof e.battery_current !== "number") return "—";
+    sum += e.battery_current;
+  }
+  /** @type {[boolean|undefined, number|null|undefined][]} */
+  const sources = [[s.solar_installed, s.solar_current], [s.dcdc_installed, s.dcdc_current], [s.shore_installed, s.shore_current]];
+  for (const [on, a] of sources) {
+    if (!on) continue;
+    if (a == null) return "—";
+    sum += a;
+  }
+  if (s.batt2_current == null || s.batt2_v == null) return "—";
+  const amps = sum - s.batt2_current;
+  if (amps < -0.5) return "—";
+  const a = Math.max(0, amps);
+  return `${Math.round(a * s.batt2_v)} W · ${a.toFixed(1)} A`;
+}
 
 /** @param {string} type @returns {[string, SensorReading][]} the `ext` entries of a type, by alias */
 function extEntries(type) {

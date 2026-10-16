@@ -197,6 +197,44 @@ Takeaway: **never verify a raw scale against an uninstalled/asleep subsystem** �
 are sentinels/defaults. `air_temp`/`water_temp`/`target_temp` and the solar/shore currents
 stay `UNVERIFIED` because this van can't exercise them live.
 
+### House load (derived)
+
+The satellite's Energy screen shows **House load**: what the van's 12 V loads (fridge, lights, Pi,
+router, ESP ...) draw from the second-battery system. No sensor measures it; it is derived.
+
+**Method.** Kirchhoff's current law at the second battery's node: every charge source feeds the
+node; the loads and the battery take from it. So sum of sources = I_load + I_battery (net), and
+
+```text
+I_load = sum(sources) - I_battery(net)        W = I_load x batt2_v
+```
+
+**Terms.**
+
+| term | field | note |
+|---|---|---|
+| each Victron charger | `ext` `victron_mppt` `battery_current` | the charger's OUTPUT current at the battery terminals, not the panel side; summed per charger |
+| alternator | `dcdc_current` | via the DC-DC charger; only if `dcdc_installed` |
+| shore power | `shore_current` | only if `shore_installed` |
+| the unit's own solar | `solar_current` | only if `solar_installed` |
+| battery | `batt2_current` | the unit's measured NET current of the second battery, + = charging (x0.1 A, verified, see above) |
+
+An installed source with no value gives "—".
+
+**Evidence.** Live Influx 2026-10-16 (ignition off, no shore): MPPT 8.5 A against battery +7.8 A at
+10:58 UTC gives 0.7 A, about 9 W; a 0.7-0.8 A floor from 07:00 to 11:00 UTC. The buspi-config Grafana
+panel "House load" uses the same formula (7-day floor about 0.70 A, fridge cycles about 3.6 A, peak
+8.5 A). MPPT panel-to-battery efficiency is about 97 % (118 W at the panel, 115 W at the battery).
+
+**Limits.**
+
+- The inputs come from two independent pollers (camper unit, Victron BLE), so readings taken seconds
+  apart can give false spikes. The UI shows "—" when a charger reading is older than 60 s, shows a
+  result from -0.5 A to 0 as 0, and "—" below -0.5 A.
+- 0.1 A resolution is about +-1.3 W.
+- A load on the STARTER battery is not included.
+- On calictl's page the row is absent: calictl does not read the Victron charger.
+
 ## 5. Scales — UNVERIFIED (decode correct, scale not confirmed)
 
 | signal(s) | what we know | do NOT assume |
