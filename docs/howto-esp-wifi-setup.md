@@ -34,9 +34,24 @@ A satellite with no saved WiFi opens its own setup hotspot as soon as it boots.
 
 1. **Join the setup hotspot.** On your phone, open the WiFi settings and join
    **`calictl-esp-setup`**. Its password is **`calictl-setup`**.
+
+   ![Android WiFi settings: calictl-esp-setup in the list](screenshots/esp-android-1-join.png)
+   ![Android asks for the hotspot password: calictl-setup](screenshots/esp-android-2-password.png)
 2. **WiFi setup opens by itself.** Right after you join, your phone checks whether the network
    needs a sign-in and finds the satellite's camper UI instead, on its **WiFi setup** screen — a "Sign in to network" notice or a
    small browser window pops up. Tap it.
+
+   ![Android's notice "Sign in to Wi-Fi network — calictl-esp-setup"](screenshots/esp-android-3-signin-notice.png)
+
+   On Android the notice opens a sign-in window titled *Sign in to calictl-esp-setup* that shows
+   the camper UI's **WiFi setup** screen:
+
+   ![Android's sign-in window showing the WiFi setup screen with the network list](screenshots/esp-android-4-wifi-setup.png)
+
+   **The phone jumps back to your home WiFi?** If your home network is in range too, Android may
+   leave the setup hotspot because it has no internet, and the notice disappears. Join
+   `calictl-esp-setup` again and tap the notice at once, or open **<http://192.168.4.1>** while you
+   are on the hotspot. Mobile data can stay on.
 
    **Nothing pops up?** Open a browser and go to **<http://192.168.4.1>** (plain `http`, no
    `s`). That is always the satellite's address on its own hotspot.
