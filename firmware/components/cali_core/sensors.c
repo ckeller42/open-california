@@ -58,17 +58,19 @@ static int decode_govee(const uint8_t *adv, size_t len, const uint8_t key[16], c
 }
 
 /* Govee company id 0x0001 (GV5179 and the H5101/H5102/H5174/H5177 family, govee_reader.py): data =
- * [0..1] 01 01, [2..4] the 24-bit value, [5] battery. 0x0001 is a shared company id, so the row matches
- * only a 6-byte payload whose values are plausible (-40..80 C, 0..100 %, battery <= 100). */
+ * [0..1] 01 01, [2..4] the 24-bit value, [5] battery; the GV5171 appends [6..7] (00 00 so far, unused).
+ * 0x0001 is a shared company id, so the row matches only a 6- or 8-byte payload whose values are
+ * plausible (-40..80 C, 0..100 %, battery <= 100). */
+static int govee_0001_len(size_t len) { return len == 2 + 6 || len == 2 + 8; }
 static int match_govee_0001(const uint8_t *adv, size_t len) {
     cali_sensor_reading_t r;
-    if (len != 2 + 6 || adv[2] != 0x01 || adv[3] != 0x01) return 0;   /* the Govee prefix seen on the GV5179 */
+    if (!govee_0001_len(len) || adv[2] != 0x01 || adv[3] != 0x01) return 0;   /* the Govee prefix seen on the GV5179 */
     govee24(adv + 2 + 2, &r);
     return r.f[0] >= -40.0f && r.f[0] <= 80.0f && r.f[1] <= 100.0f && r.f[2] <= 100;
 }
 static int decode_govee_0001(const uint8_t *adv, size_t len, const uint8_t key[16], cali_sensor_reading_t *out) {
     (void)key;
-    if (len != 2 + 6) return -1;
+    if (!govee_0001_len(len)) return -1;
     govee24(adv + 2 + 2, out);
     out->n = 3;
     return 0;
@@ -189,10 +191,12 @@ static int s_kick, s_paused;
 /* The boot-local id: never 0, the same for one address all boot. */
 static uint16_t sens_id(const uint8_t addr[6]) { return (uint16_t)((cali_crc32(0, addr, 6) & 0xffffu) | 1u); }
 
-/* The name up to its last '_' (Govee "GVH5075_1A2B" -> "GVH5075"), or all of it. */
+/* The name up to its last '_' (Govee "GVH5075_1A2B" -> "GVH5075"; the GV5171 drops the '_':
+ * "GV51713C57" -> "GV5171"), or all of it. */
 static void model_of(const char *name, char out[24]) {
     const char *u = strrchr(name, '_');
     size_t n = u ? (size_t)(u - name) : strlen(name);
+    if (!u && n == 10 && strncmp(name, "GV", 2) == 0) n = 6;
     if (n > 23) n = 23;
     memcpy(out, name, n);
     out[n] = 0;

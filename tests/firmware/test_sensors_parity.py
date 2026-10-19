@@ -18,7 +18,17 @@ import json
 import random
 
 from . import test_sensors
-from .test_sensors import BSENSE, GOVEE_GV5179, GOVEE_H5074, GOVEE_H5075, KEY, SOLAR, run, victron
+from .test_sensors import (
+    BSENSE,
+    GOVEE_GV5171,
+    GOVEE_GV5179,
+    GOVEE_H5074,
+    GOVEE_H5075,
+    KEY,
+    SOLAR,
+    run,
+    victron,
+)
 
 cli = test_sensors.cli  # the shared sensors_cli build fixture
 
@@ -39,8 +49,8 @@ def _govee24(p):
 
 def twin_govee(adv):
     d = adv[2:]
-    if adv[:2] == b"\x01\x00":  # 0x0001: [0..1] 01 01, [2..4] value, [5] battery
-        return _govee24(d[2:6]) if len(d) == 6 else None
+    if adv[:2] == b"\x01\x00":  # 0x0001: [0..1] 01 01, [2..4] value, [5] battery (+ [6..7] on the GV5171)
+        return _govee24(d[2:6]) if len(d) in (6, 8) else None
     if len(d) >= 7:  # H5074
         return {
             "temp_c": int.from_bytes(d[1:3], "little", signed=True) / 100,
@@ -131,7 +141,7 @@ def _gv0001(temp_tenths, hum_tenths, batt):
 
 def gen_govee_0001():
     rng.seed("gen_govee_0001")  # per generator: independent of test order
-    plausible = [bytes.fromhex(GOVEE_GV5179)]
+    plausible = [bytes.fromhex(GOVEE_GV5179), bytes.fromhex(GOVEE_GV5171)]
     for _ in range(N):
         batt = rng.randrange(101) | (0x80 if rng.random() < 0.2 else 0)  # bit 7: a flag, masked
         plausible.append(_gv0001(rng.randint(-400, 800), rng.randrange(1000), batt))

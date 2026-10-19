@@ -21,6 +21,9 @@ GOVEE_H5074 = (
 GOVEE_GV5179 = (
     "0100" + "0101" + "032317" + "32"
 )  # company id 0x0001 LE; 24-bit 0x032317 -> 20.5 C 59.1 %, batt 50 (a live van advert)
+GOVEE_GV5171 = (
+    "0100" + "0101" + "027789" + "51" + "0000"
+)  # the GV5171's 8-byte form: 24-bit 0x027789 -> 16.1 C 67.3 %, batt 81, then 00 00 (a live van advert)
 
 
 @pytest.fixture(scope="module")
@@ -278,8 +281,21 @@ def test_govee_0001_gv5179_layout_decodes(cli, tmp_path):
     }
 
 
+def test_govee_0001_gv5171_8_byte_layout_decodes(cli, tmp_path):
+    """The GV5171 sends the GV5179 payload plus two trailing bytes, and names itself without a '_'."""
+    a = f"adv A4:C1:38:00:00:06 1 -57 GV51710006 {GOVEE_GV5171}"
+    out = run(cli, tmp_path, ["init", a, "api 1000"])
+    api = json.loads(out[-1][4:])
+    assert api["seen"][0]["type"] == "govee" and api["seen"][0]["model"] == "GV5171"
+    sid = api["seen"][0]["id"]
+    out = run(cli, tmp_path, ["init", a, f"add {sid} - -", a, "state 0"])
+    assert json.loads(out[-1][4:]) == {
+        "govee": {"type": "govee", "temp_c": 16.1, "humidity": 67.3, "battery": 81, "age_s": 0}
+    }
+
+
 def test_company_id_0001_needs_a_plausible_6_byte_payload(cli, tmp_path):
-    # 0x0001 is shared: a 7-byte payload and a 6-byte one with 255 % humidity are not Govees
+    # 0x0001 is shared: a 7-byte payload (6 or 8 only) and a 6-byte one with 255 % humidity are not Govees
     out = run(
         cli,
         tmp_path,
