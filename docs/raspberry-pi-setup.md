@@ -381,23 +381,23 @@ CoreS3's Port B (black Grove socket) to the Pi's 40-pin header:
 
 | Grove wire (Port B) | CoreS3 pin | Pi header | Does |
 |---|---|---|---|
-| yellow | G9 | pin 5 (GPIO3) | wake: 200 ms low boots a halted Pi |
+| yellow | G9 | pin 5 ({term}`GPIO`3) | wake: 200 ms low boots a halted Pi |
 | white | G8 | pin 11 (GPIO17) | shutdown: 500 ms low = the power key |
 | black | GND | pin 6 (GND) | common ground |
 | red | 5V | not connected | tape it off |
 
 On the Pi:
 
-1. `/boot/firmware/config.txt`: add `dtoverlay=gpio-shutdown,gpio_pin=17`. **Never put the overlay
+1. `/boot/firmware/config.txt`: add `dtoverlay=gpio-shutdown,gpio_pin=17` (the {term}`gpio-shutdown` overlay). **Never put the overlay
    on GPIO3:** the ignition wake pulse would then shut a running Pi down.
-2. EEPROM (`sudo rpi-eeprom-config --edit`): `WAKE_ON_GPIO=1` and `POWER_OFF_ON_HALT=0`, so GPIO3
+2. {term}`EEPROM` (`sudo rpi-eeprom-config --edit`): `WAKE_ON_GPIO=1` and `POWER_OFF_ON_HALT=0`, so GPIO3
    still wakes the halted Pi.
-3. logind must act on the power key: `grep -r HandlePowerKey /etc/systemd/logind.conf*` must not
+3. {term}`logind` must act on the power key: `grep -r HandlePowerKey /etc/systemd/logind.conf*` must not
    show `ignore` (the default, `poweroff`, is right).
 4. Reboot once so the overlay loads.
 
 **Wiring test** (before the overlay is active, or it shuts the Pi down): on the ESP console
-`pi halt 5000` holds the shutdown line low for 5 s; meanwhile `pinctrl get 17` on the Pi reads `lo`.
+`pi halt 5000` holds the shutdown line low for 5 s; meanwhile {term}`pinctrl` (`pinctrl get 17`) on the Pi reads `lo`.
 `pi hold 3000` does the same for the wake line (pin 5). The satellite's "Shut down after parking"
 and battery-guard settings are in its Satellite settings ([firmware](firmware.md#pi-halt-r_fw_pi_halt)).
 
