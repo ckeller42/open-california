@@ -207,6 +207,20 @@ DISPLAY_ON = {
     "pm": "40-240",
 }
 
+# device.pi_wake (R_FW_PI_WAKE + R_FW_PI_HALT): never pulsed, parked 18 min of the default 30
+PI_WAKE = {
+    "enabled": True,
+    "last_s": None,
+    "reason": None,
+    "halt_after_min": 30,
+    "halt_soc_pct": 30,
+    "halt_in_s": 720,
+    "halted": False,
+    "halt_last_s": None,
+    "halt_reason": None,
+    "batt_low": False,
+}
+
 
 # /api/state ext while exp_sensors is on (R_FW_SENSORS): one sensor of each type, by default alias (= its type id)
 EXT_SENSORS = {
@@ -281,7 +295,7 @@ def esp_fixtures():
             "battery": {"pct": 64, "mv": 3890, "usb": False, "charging": False, "runtime_min": 130},
             "display": dict(DISPLAY_ON),
             "auto_camper": {"enabled": True, "state": "idle"},
-            "pi_wake": {"enabled": True, "last_s": None, "reason": None},
+            "pi_wake": dict(PI_WAKE),
             "ux": {"enabled": True},
             "experimental": {"sensors": False},
             "water_held": False,
@@ -312,7 +326,7 @@ def esp_fixtures():
                     "battery": {"pct": 87, "mv": 4120, "usb": True, "charging": True, "runtime_min": None},
                     "display": dict(DISPLAY_ON),
                     "auto_camper": {"enabled": True, "state": "idle"},
-                    "pi_wake": {"enabled": True, "last_s": None, "reason": None},
+                    "pi_wake": dict(PI_WAKE),
                     "ux": {"enabled": True},
                     "experimental": {"sensors": False},
                     "water_held": False,
@@ -374,6 +388,16 @@ def esp_fixtures():
     return json.loads(json.dumps(fx))  # independent copies: a test mutating one mode never touches another
 
 
+def _pi_halt(dev, body):
+    """POST /api/pi_halt: the firmware's halt pulse as device.pi_wake shows it."""
+    dev["pi_wake"].update(halted=True, halt_last_s=0, halt_reason="manual", halt_in_s=None)
+
+
+def _pi_setting(dev, body):
+    """POST /api/pi_wake_setting: any subset of enabled / halt_after_min / halt_soc_pct."""
+    dev["pi_wake"].update(body)
+
+
 def _set(member, key):
     """``device[member][key] = body[key]`` when the POST carries it (the firmware's settings rule)."""
 
@@ -388,7 +412,8 @@ def _set(member, key):
 # POST changes in device (/api/ota only starts work, the state moves on by itself).
 _SETTINGS = {
     "/api/auto_camper": _set("auto_camper", "enabled"),
-    "/api/pi_wake_setting": _set("pi_wake", "enabled"),
+    "/api/pi_wake_setting": _pi_setting,
+    "/api/pi_halt": _pi_halt,
     "/api/pi_wake": lambda dev, body: dev["pi_wake"].update(last_s=0, reason="manual"),
     "/api/ux_setting": _set("ux", "enabled"),
     "/api/experimental": _set("experimental", "sensors"),

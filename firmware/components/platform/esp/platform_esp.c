@@ -71,21 +71,31 @@ int cali_pm_dfs(int on, char *pm, size_t cap) {
 /* Open drain only: the Pi's pin 5 has its own 1.8 k pull-up to 3.3 V; this side may sink it, never
  * source it (push-pull high would fight a Pi that holds the line, e.g. as I2C SCL). */
 #define PI_WAKE_GPIO GPIO_NUM_9
+#define PI_HALT_GPIO GPIO_NUM_8   /* the same rules: the Pi's pin 11 has its gpio-shutdown pull-up */
+
+static void pi_line(gpio_num_t pin, int *cfg, int low) {
+    if (!*cfg) {
+        const gpio_config_t c = {.pin_bit_mask = 1ULL << pin, .mode = GPIO_MODE_OUTPUT_OD,
+                                 .pull_up_en = GPIO_PULLUP_DISABLE, .pull_down_en = GPIO_PULLDOWN_DISABLE,
+                                 .intr_type = GPIO_INTR_DISABLE};
+        gpio_set_level(pin, 1);   /* released first: becoming an output must not pulse the Pi */
+        if (gpio_config(&c) != ESP_OK) {
+            cali_log("pi-wake: gpio%d config failed", (int)pin);
+            return;
+        }
+        *cfg = 1;
+    }
+    gpio_set_level(pin, low ? 0 : 1);
+}
 
 void cali_pi_wake_line(int low) {
     static int s_cfg;
-    if (!s_cfg) {
-        const gpio_config_t c = {.pin_bit_mask = 1ULL << PI_WAKE_GPIO, .mode = GPIO_MODE_OUTPUT_OD,
-                                 .pull_up_en = GPIO_PULLUP_DISABLE, .pull_down_en = GPIO_PULLDOWN_DISABLE,
-                                 .intr_type = GPIO_INTR_DISABLE};
-        gpio_set_level(PI_WAKE_GPIO, 1);   /* released first: becoming an output must not pulse the Pi */
-        if (gpio_config(&c) != ESP_OK) {
-            cali_log("pi-wake: gpio9 config failed");
-            return;
-        }
-        s_cfg = 1;
-    }
-    gpio_set_level(PI_WAKE_GPIO, low ? 0 : 1);
+    pi_line(PI_WAKE_GPIO, &s_cfg, low);
+}
+
+void cali_pi_halt_line(int low) {
+    static int s_cfg;
+    pi_line(PI_HALT_GPIO, &s_cfg, low);
 }
 
 /* store_dir is the host's; on the ESP the store is NVS (nvs_flash_init() must have run). */

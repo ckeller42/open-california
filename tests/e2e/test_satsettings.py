@@ -7,7 +7,7 @@ uncaught JS / console error (``error_gated_page``) unless it says otherwise.
 
 .. test:: Satellite settings and WiFi setup are screens of the shared UI (EN + DE, 390 px)
    :id: T_UI_SAT_SETTINGS
-   :links: R_FW_OTA, R_FW_AUTO_CAMPER, R_UX_TELEMETRY, R_FW_DISPLAY_WAKE, R_FW_TIME, R_FW_PI_WAKE
+   :links: R_FW_OTA, R_FW_AUTO_CAMPER, R_UX_TELEMETRY, R_FW_DISPLAY_WAKE, R_FW_TIME, R_FW_PI_WAKE, R_FW_PI_HALT
 """
 
 import contextlib
@@ -367,7 +367,7 @@ def test_raspberry_pi_box_wakes_and_switches(station, locale, lang):
     dev = station.fixtures["station"]["/api/state"]["device"]
     with _settings(station, locale=locale, allow=("409",)) as pg:
         expect(pg.locator("#pw")).to_contain_text(
-            tr("Wakes the Raspberry Pi from halt through a wire to its pin 5.", lang)
+            tr("Wakes the Raspberry Pi through pin 5 and shuts it down through pin 11.", lang)
         )
         expect(pg.locator("#pw-status")).to_have_text(tr("Wake on ignition", lang) + ": " + tr("on", lang))
         _expect_switch(pg, "pw", True)
@@ -388,6 +388,59 @@ def test_raspberry_pi_box_wakes_and_switches(station, locale, lang):
         assert _posts(station, "/api/pi_wake_setting") == [{"enabled": False}]
         del dev["pi_wake"]  # an older firmware: no box
         expect(pg.locator("#pw")).to_be_hidden()
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_raspberry_pi_box_shuts_down_with_a_confirm_and_sets_the_timer(station, locale, lang):
+    """R_FW_PI_HALT: "Shut down Pi" asks in the page first (Cancel posts nothing), then posts
+    /api/pi_halt; both selects post their one setting (a stored value the list lacks is shown);
+    the status line says when the halt is due, or when and why it happened, and "Battery low".
+
+    .. test:: The Raspberry Pi box: Shut down Pi with an in-page confirm, the two selects, the halt status
+       :id: T_FW_PI_HALT_UI
+       :links: R_FW_PI_HALT
+    """
+    pw = station.fixtures["station"]["/api/state"]["device"]["pi_wake"]
+    with _settings(station, locale=locale, allow=("409",)) as pg:
+        st = pg.locator("#pw-halt-st")
+        expect(st).to_have_text(tr("Shutdown in {n} min", lang, n=12))
+        expect(pg.locator("#pw-after")).to_have_value("30")
+        expect(pg.locator("#pw-soc")).to_have_value("30")
+        pg.click("#pw-halt")
+        expect(pg.locator("#pw-hacts")).to_contain_text(tr("Shut down the Raspberry Pi?", lang))
+        pg.get_by_role("button", name=tr("Cancel", lang)).click()
+        assert _posts(station, "/api/pi_halt") == []
+        pg.click("#pw-halt")
+        pg.locator("#pw-hacts").get_by_role("button", name=tr("Shut down Pi", lang)).click()
+        expect(pg.locator("#pw-msg")).to_have_text(tr("Shutdown signal sent", lang))
+        assert _posts(station, "/api/pi_halt") == [{}]
+        pw.update(halt_last_s=185, halt_reason="battery", batt_low=True)
+        expect(st).to_have_text(
+            tr("Shut down {n} min ago ({reason})", lang, n=3, reason=tr("Battery", lang))
+            + " · "
+            + tr("Battery low", lang)
+        )
+        pg.select_option("#pw-after", "120")
+        _wait(
+            pg,
+            lambda: _posts(station, "/api/pi_wake_setting") == [{"halt_after_min": 120}],
+            "halt_after_min posted",
+        )
+        pg.select_option("#pw-soc", "0")
+        _wait(
+            pg,
+            lambda: _posts(station, "/api/pi_wake_setting")[-1:] == [{"halt_soc_pct": 0}],
+            "halt_soc_pct posted",
+        )
+        expect(pg.locator("#pw-soc option:checked")).to_have_text(tr("Off", lang))
+        pw.update(halt_after_min=45)  # set on the console: not in the list
+        expect(pg.locator("#pw-after")).to_have_value("45")
+        station.post_reply["/api/pi_halt"] = (409, {"ok": False, "error": "busy"})
+        pg.click("#pw-halt")
+        pg.locator("#pw-hacts").get_by_role("button", name=tr("Shut down Pi", lang)).click()
+        expect(pg.locator("#pw-msg")).to_have_text(
+            tr("Couldn't shut down the Pi ({error})", lang, error="busy")
+        )
 
 
 @pytest.mark.parametrize("locale,lang", LOCALES)

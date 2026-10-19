@@ -206,9 +206,11 @@ auto_camper_run.o: $(COMPONENTS)/cali_core/auto_camper_run.c $(CORE_H)/cali_auto
 		$(CORE_H)/cali_session.h $(CSRC)/codec.h $(CSRC)/codec_chars.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-# The Pi wake (R_FW_PI_WAKE): GPIO9 pulses on the ignition edge; the host's line only logs.
+# The Pi wake + halt (R_FW_PI_WAKE, R_FW_PI_HALT): GPIO9 pulses on the ignition edge, GPIO8 after
+# parking; the host's lines only log.
 pi_wake.o: $(COMPONENTS)/cali_core/pi_wake.c $(CORE_H)/cali_pi_wake.h $(CORE_H)/cali_auto_camper.h \
-		$(CORE_H)/cali_json.h $(CORE_H)/cali_diag.h $(CORE_H)/cali_session.h $(COMPONENTS)/platform/include/cali_platform.h
+		$(CORE_H)/cali_json.h $(CORE_H)/cali_diag.h $(CORE_H)/cali_session.h $(COMPONENTS)/platform/include/cali_platform.h \
+		$(CSRC)/codec.h $(CSRC)/codec_chars.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The boot counter + SNTP state + unit clock (R_FW_TIME): device.time. The host has no SNTP and no

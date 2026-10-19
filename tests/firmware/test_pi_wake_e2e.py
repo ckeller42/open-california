@@ -3,7 +3,8 @@
 ``cali-host --http`` pairs, reads and goes online; the host's GPIO line only logs (``gpio9: low`` /
 ``gpio9: released``). The fake unit's ignition (terminal 15, ``campingmode.Enable`` following it) rising
 pulls the line low for 200 ms once; ignition off and on again inside a minute does not; the console's
-``pi hold <ms>`` (the wiring test) holds it for that long.
+``pi hold <ms>`` (the wiring test) holds it for that long. ``pi halt <ms>`` holds GPIO8 (the halt line,
+R_FW_PI_HALT) the same way, and a wake waits for it.
 
 .. test:: Pi wake on the host tier: the unit's ignition edge pulses GPIO9 once, the console holds it
    :id: T_FW_PI_WAKE_E2E
@@ -35,11 +36,14 @@ def _pulses(fw):
 def test_ignition_edge_pulses_once_and_the_console_holds(host_fw, rec_unit, tmp_path):
     hu, _ = rec_unit
     fw = _online(host_fw, hu, tmp_path)
-    assert get_json(fw, "/api/state")["device"]["pi_wake"] == {
-        "enabled": True,
-        "last_s": None,
-        "reason": None,
-    }
+    pw = get_json(fw, "/api/state")["device"]["pi_wake"]
+    assert (pw["enabled"], pw["last_s"], pw["reason"], pw["halted"], pw["halt_reason"]) == (
+        True,
+        None,
+        None,
+        False,
+        None,
+    )
     hu.call(_tick, hu.unit)  # the mock's first tick only remembers terminal 15
     hu.call(_tick, hu.unit, {"TerminalOneFive": 1})
     fw.expect("LOG", lambda s: s == "gpio9: low", timeout=10)
@@ -56,3 +60,22 @@ def test_ignition_edge_pulses_once_and_the_console_holds(host_fw, rec_unit, tmp_
     t0 = time.monotonic()
     fw.expect("LOG", lambda s: s == "gpio9: released", timeout=5)
     assert time.monotonic() - t0 >= 1.2
+
+
+def test_console_halt_pulses_gpio8_and_refuses_a_wake_while_low(host_fw, rec_unit, tmp_path):
+    """``pi halt 1500`` (the halt wiring test) holds GPIO8 low; a wake meanwhile is busy (R_FW_PI_HALT).
+
+    .. test:: Pi halt on the host tier: the console holds GPIO8, a wake waits for its release
+       :id: T_FW_PI_HALT_E2E
+       :links: R_FW_PI_HALT
+    """
+    hu, _ = rec_unit
+    fw = _online(host_fw, hu, tmp_path)
+    fw.send("pi halt 1500")
+    fw.expect("LOG", lambda s: s == "gpio8: low", timeout=5)
+    fw.expect("LOG", lambda s: s == "pi-halt[manual]: GPIO8 low 1500 ms", timeout=5)
+    fw.send("pi wake")
+    fw.expect("LOG", lambda s: s == "pi-wake: busy", timeout=5)
+    fw.expect("LOG", lambda s: s == "gpio8: released", timeout=5)
+    pw = get_json(fw, "/api/state")["device"]["pi_wake"]
+    assert (pw["halted"], pw["halt_reason"], pw["halt_in_s"]) == (True, "manual", None)
