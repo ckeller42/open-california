@@ -272,7 +272,8 @@ EXPECTED_DEVICE_TAIL = (
     '"res":{"heap_free_kb":null,"heap_min_kb":null,"psram_free_kb":null,"cpu_pct":null},'
     '"battery":{"pct":null,"mv":null,"usb":null,"charging":null,"runtime_min":null},'
     '"auto_camper":{"enabled":true,"state":"idle"},'
-    '"pi_wake":{"enabled":true,"last_s":null,"reason":null},'
+    '"pi_wake":{"enabled":true,"last_s":null,"reason":null,"halt_after_min":30,"halt_soc_pct":30,'
+    '"halt_in_s":1795,"halted":false,"halt_last_s":null,"halt_reason":null,"batt_low":false},'
     '"display":{"state":null,"lux":null,"prox":null,"motion":null,"brightness_pct":null,"sensor":null,'
     '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0,"dfs":null,"pm":null},'
     '"ux":{"enabled":true},'
@@ -1469,6 +1470,10 @@ def _gpio(other):
     return [ln for ln in other if ln.startswith("CALL gpio9")]
 
 
+def _halts(other):
+    return [ln for ln in other if ln.startswith("CALL gpio8")]
+
+
 def test_pi_wake_button_pulses_once_and_refuses_while_low(web_cli):
     """POST /api/pi_wake ({} or no body) pulls GPIO9 low; a second POST inside the 200 ms is 409 busy;
     the tick releases the line once the pulse is due, then a wake works again. ``device.pi_wake``
@@ -1493,13 +1498,17 @@ def test_pi_wake_button_pulses_once_and_refuses_while_low(web_cli):
             req("GET", "/api/state"),
         ],
     )
-    assert _pw(resps[0]) == {"enabled": True, "last_s": None, "reason": None}
+    assert _pw(resps[0])["last_s"] is None and _pw(resps[0])["reason"] is None
     assert (resps[1].status, resps[1].json()) == (200, {"ok": True})
     assert (resps[2].status, resps[2].json()) == (409, {"ok": False, "error": "busy"})
     assert (resps[3].status, resps[3].json()) == (200, {"ok": True})
     assert _gpio(other) == ["CALL gpio9 low", "CALL gpio9 released", "CALL gpio9 low"]
     assert other.count("LOG pi-wake[manual]: GPIO9 low 200 ms") == 2
-    assert _pw(resps[4]) == {"enabled": True, "last_s": 2, "reason": "manual"}
+    assert {k: _pw(resps[4])[k] for k in ("enabled", "last_s", "reason")} == {
+        "enabled": True,
+        "last_s": 2,
+        "reason": "manual",
+    }
 
 
 def test_pi_wake_setting_persists_and_shows_in_state(web_cli):
@@ -1516,9 +1525,10 @@ def test_pi_wake_setting_persists_and_shows_in_state(web_cli):
             b"kv pw_ign",
         ],
     )
-    assert (resps[0].status, resps[0].json()) == (200, {"ok": True, "pi_wake": False})
+    halt = {"halt_after_min": 30, "halt_soc_pct": 30}
+    assert (resps[0].status, resps[0].json()) == (200, {"ok": True, "pi_wake": False, **halt})
     assert _pw(resps[1])["enabled"] is False
-    assert (resps[2].status, resps[2].json()) == (200, {"ok": True, "pi_wake": True})
+    assert (resps[2].status, resps[2].json()) == (200, {"ok": True, "pi_wake": True, **halt})
     assert [ln for ln in other if ln.startswith("KV ")] == ["KV ", "KV \x01"]
     assert "LOG pi-wake: off" in other and "CALL gpio9 released" in other  # boot: released, toggle read
 
@@ -1535,6 +1545,19 @@ def test_pi_wake_setting_persists_and_shows_in_state(web_cli):
         ("/api/pi_wake_setting", STATION, "POST", "", 400, "bad_json"),
         ("/api/pi_wake_setting", STATION, "POST", '{"enabled":1}', 400, "bad_json"),
         ("/api/pi_wake_setting", STATION, "POST", '{"enabled":true,"x":1}', 400, "bad_json"),
+        ("/api/pi_wake_setting", STATION, "POST", "{}", 400, "bad_json"),
+        ("/api/pi_wake_setting", STATION, "POST", '{"halt_after_min":"30"}', 400, "bad_json"),
+        ("/api/pi_wake_setting", STATION, "POST", '{"halt_after_min":-1}', 400, "bad_json"),
+        ("/api/pi_wake_setting", STATION, "POST", '{"halt_after_min":1.5}', 400, "bad_json"),
+        ("/api/pi_wake_setting", STATION, "POST", '{"halt_soc_pct":true}', 400, "bad_json"),
+        ("/api/pi_wake_setting", STATION, "POST", '{"halt_soc_pct":30,"halt_soc_pct":30}', 400, "bad_json"),
+        ("/api/pi_wake_setting", STATION, "POST", '{"halt_after_min":1441}', 400, "bad_value"),
+        ("/api/pi_wake_setting", STATION, "POST", '{"enabled":true,"halt_soc_pct":101}', 400, "bad_value"),
+        ("/api/pi_wake_setting", STATION + ["kvfail 1"], "POST", '{"halt_after_min":60}', 500, "store"),
+        ("/api/pi_halt", STATION, "GET", None, 405, "method"),
+        ("/api/pi_halt", STATION, "POST", '{"a":1}', 400, "bad_json"),
+        ("/api/pi_halt", STATION, "POST", "{}{}", 400, "bad_json"),
+        ("/api/pi_halt", ["wifi setup_ap"], "POST", "{}", 403, "setup_mode"),
         ("/api/pi_wake_setting", STATION + ["kvfail 1"], "POST", '{"enabled":false}', 500, "store"),
         ("/api/pi_wake_setting", ["wifi setup_ap"], "POST", '{"enabled":false}', 403, "setup_mode"),
     ],
@@ -1542,7 +1565,7 @@ def test_pi_wake_setting_persists_and_shows_in_state(web_cli):
 def test_pi_wake_errors(web_cli, path, setup, method, body, status, error):
     r, other = one(web_cli, method, path, body, setup=setup)
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
-    assert _gpio(other) == []
+    assert _gpio(other) == [] and _halts(other) == []
 
 
 # ign readings (-1 = not read on this link) at the given clock; the pulses they give
@@ -1596,6 +1619,176 @@ def test_pi_wake_off_never_pulses_and_a_later_enable_does_not_misfire(web_cli):
     )
     assert other.count("LOG pi-wake[ignition]: GPIO9 low 200 ms") == 1
     assert _gpio(other) == ["CALL gpio9 released", "CALL gpio9 low"]
+
+
+# ---- /api/pi_halt + the parking timer + the battery guard (R_FW_PI_HALT) ---------------------------
+
+MIN = 60000
+SOC2 = "00000002"  # energy frame: SocTwoBattAfs (bits 28-31) level 2 = 20 %
+SLEEPWARN = "00020000"  # energy frame: SleepWarning (bit 14)
+
+
+def test_pi_halt_button_pulses_gpio8_and_wake_and_halt_never_overlap(web_cli):
+    """POST /api/pi_halt pulls GPIO8 low 500 ms; a wake or a second halt while it is low is 409 busy
+    (and a halt while the wake line is low); the tick releases it; ``device.pi_wake`` says halted.
+
+    .. test:: POST /api/pi_halt pulses GPIO8 500 ms, busy while either line is low, in device.pi_wake
+       :id: T_FW_PI_HALT_API
+       :links: R_FW_PI_HALT
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/pi_halt", "{}"),
+            req("POST", "/api/pi_halt"),
+            req("POST", "/api/pi_wake", "{}"),
+            b"now 1400",
+            b"pwtick",
+            b"now 2000",
+            b"pwtick",
+            b"now 3500",
+            req("GET", "/api/state"),
+            req("POST", "/api/pi_wake", "{}"),
+            b"phhalt",
+        ],
+    )
+    assert [(r.status, r.json()) for r in resps[:3]] == [
+        (200, {"ok": True}),
+        (409, {"ok": False, "error": "busy"}),
+        (409, {"ok": False, "error": "busy"}),
+    ]
+    pw = _pw(resps[3])
+    assert (pw["halted"], pw["halt_last_s"], pw["halt_reason"], pw["halt_in_s"]) == (True, 2, "manual", None)
+    assert resps[4].status == 200  # a wake clears the halt
+    assert "PHHALT -1" in other  # ... and a halt waits while the wake line is low
+    assert _halts(other) == ["CALL gpio8 low", "CALL gpio8 released"]
+    assert other.count("LOG pi-halt[manual]: GPIO8 low 500 ms") == 1
+
+
+def test_pi_halt_settings_persist_and_a_boot_reads_them(web_cli):
+    """``halt_after_min`` / ``halt_soc_pct`` land in kv ``ph_min`` (uint16 LE) / ``ph_soc``; a boot reads them."""
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/pi_wake_setting", '{"halt_after_min": 1440, "halt_soc_pct": 40}'),
+            b"pwinit",
+            req("GET", "/api/state"),
+            req("POST", "/api/pi_wake_setting", '{"halt_after_min":0,"enabled":false,"halt_soc_pct":0}'),
+            b"kvhex ph_min 3c00",
+            b"kvhex ph_soc 14",
+            b"pwinit",
+            req("GET", "/api/state"),
+        ],
+    )
+    assert (resps[0].status, resps[0].json()) == (
+        200,
+        {"ok": True, "pi_wake": True, "halt_after_min": 1440, "halt_soc_pct": 40},
+    )
+    assert (_pw(resps[1])["halt_after_min"], _pw(resps[1])["halt_soc_pct"]) == (1440, 40)
+    assert resps[2].json() == {"ok": True, "pi_wake": False, "halt_after_min": 0, "halt_soc_pct": 0}
+    assert (_pw(resps[3])["halt_after_min"], _pw(resps[3])["halt_soc_pct"]) == (60, 20)
+    assert "LOG pi-halt: after 60 min parked, battery guard 20 %" in other
+    assert "CALL gpio8 released" in other  # boot: the halt line configured released
+
+
+def _timer(web_cli, steps, setup=()):
+    """Steps ``(t_ms, ign | "wake" | "tick")`` after the setup lines; returns the halt reasons in order."""
+    lines = [s.encode() for s in setup]
+    for t, what in steps:
+        lines.append(b"now %d" % t)
+        if what == "wake":
+            lines.append(req("POST", "/api/pi_wake", "{}"))
+        elif what == "tick":
+            lines.append(b"pwtick")
+        else:
+            lines += [b"pwtick", b"ign %d" % what]
+    _, other = drive(web_cli, [s.encode() for s in STATION] + lines)
+    return [ln.split("[")[1].split("]")[0] for ln in other if ln.startswith("LOG pi-halt[")]
+
+
+P = 2000  # parked at: ignition 1 at 1000, 0 at P
+PARK = [(1000, 1), (P, 0)]
+
+
+@pytest.mark.parametrize(
+    "setup,steps,halts",
+    [
+        ([], PARK + [(P + 30 * MIN - 1, -1)], []),  # 1 ms short of 30 min
+        ([], PARK + [(P + 30 * MIN, -1)], ["timer"]),  # unknown (asleep) keeps counting
+        ([], PARK + [(P + 30 * MIN, 0)], ["timer"]),
+        ([], [(1000, 1), (40 * MIN, 1), (90 * MIN, -1)], []),  # driving, then the link drops: no halt
+        ([], PARK + [(P + 30 * MIN, -1), (P + 90 * MIN, -1), (P + 99 * MIN, 0)], ["timer"]),  # halted: once
+        # halted, then a drive and a park: halts again 30 min after that park
+        ([], PARK + [(P + 30 * MIN, -1), (40 * MIN, 1), (41 * MIN, 0), (71 * MIN, -1)], ["timer", "timer"]),
+        # a manual wake at 20 min restarts the 30 min
+        (
+            [],
+            PARK + [(20 * MIN, "wake"), (P + 30 * MIN, -1), (50 * MIN - 1, -1), (50 * MIN + 1000, -1)],
+            ["timer"],
+        ),
+        # halted, a manual wake: 30 more minutes, then halts again
+        (
+            [],
+            PARK + [(P + 30 * MIN, -1), (40 * MIN, "tick"), (40 * MIN, "wake"), (70 * MIN + 1000, -1)],
+            ["timer", "timer"],
+        ),
+        (["kvhex ph_min 0000", "pwinit"], PARK + [(P + 600 * MIN, -1)], []),  # off
+        (["kvhex ph_min 3c00", "pwinit"], PARK + [(P + 59 * MIN, -1), (P + 60 * MIN, -1)], ["timer"]),
+        # battery low (level 2 = 20 % <= the 30 % guard): at 10 min, reason battery
+        (["energy " + SOC2], PARK + [(P + 10 * MIN - 1, -1), (P + 10 * MIN, -1)], ["battery"]),
+        (["energy " + SLEEPWARN], PARK + [(P + 10 * MIN, -1)], ["battery"]),
+        (["energy " + SOC2, "kvhex ph_min 0000", "pwinit"], PARK + [(P + 10 * MIN, -1)], ["battery"]),
+        (["energy " + SOC2, "kvhex ph_min 0500", "pwinit"], PARK + [(P + 5 * MIN, -1)], ["timer"]),  # 5 < 10
+        (
+            ["energy " + SOC2, "kvhex ph_soc 00", "pwinit"],
+            PARK + [(P + 10 * MIN, -1), (P + 30 * MIN, -1)],
+            ["timer"],
+        ),
+        (
+            ["energy 00000003"],
+            PARK + [(P + 10 * MIN, -1), (P + 30 * MIN, -1)],
+            ["battery"],
+        ),  # 30 % <= 30: low
+        (["energy 00000004"], PARK + [(P + 10 * MIN, -1), (P + 30 * MIN, -1)], ["timer"]),  # 40 %: not low
+        # a manual wake on a low battery still gives 10 minutes
+        (
+            ["energy " + SOC2],
+            PARK + [(P + 10 * MIN, -1), (30 * MIN, "tick"), (30 * MIN, "wake"), (40 * MIN + 1000, -1)],
+            ["battery", "battery"],
+        ),
+    ],
+)
+def test_pi_halt_parking_timer(web_cli, setup, steps, halts):
+    """The parking timer and the battery guard of ``cali_pw_step`` on the fake clock.
+
+    .. test:: Pi halt after parking: the timer, driving, unknown ignition, once per park, wake resets, battery guard
+       :id: T_FW_PI_HALT_TIMER
+       :links: R_FW_PI_HALT
+    """
+    assert _timer(web_cli, steps, setup) == halts
+
+
+@pytest.mark.parametrize(
+    "sw,w2,lvl,pct,low",
+    [
+        (-1, -1, -1, 30, 0),  # no energy frame read
+        (1, 0, 5, 30, 1),
+        (0, 1, 5, 30, 1),
+        (0, 2, 5, 0, 1),  # the warnings count without the SoC guard
+        (0, 0, 3, 30, 1),
+        (0, 0, 4, 30, 0),
+        (0, 0, 0, 100, 0),  # level 0: unknown
+        (0, 0, 11, 100, 0),  # 11-15: unknown
+        (0, 0, 1, 0, 0),  # guard 0
+        (0, 0, 10, 100, 1),
+    ],
+)
+def test_pi_batt_low_helper(web_cli, sw, w2, lvl, pct, low):
+    """``cali_pw_batt_low``: SleepWarning, WarningLevelTwo >= 1, or the SoC level 1..10 x 10 <= the guard."""
+    _, other = drive(web_cli, [b"battlow %d %d %d %d" % (sw, w2, lvl, pct)])
+    assert other == ["BATTLOW %d" % low]
 
 
 # ---- /api/ux + /api/ux_setting (R_UX_TELEMETRY) ---------------------------------------------------

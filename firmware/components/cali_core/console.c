@@ -244,11 +244,19 @@ static void sensors_cmd(char *sub) {
     else cali_log("sensors err %d", rc);
 }
 
-/* "pi wake" / "pi hold <ms>" / "pi status" (R_FW_PI_WAKE): the wiring test and a manual wake. */
+/* "pi wake" / "pi hold <ms>" / "pi halt [ms]" / "pi timer <min>" / "pi guard <pct>" / "pi status"
+ * (R_FW_PI_WAKE, R_FW_PI_HALT): the wiring tests, a manual wake or halt, the halt settings. */
+static int num_arg(const char *arg, unsigned lo, unsigned hi, unsigned *out) {
+    if (!arg || strspn(arg, "0123456789") != strlen(arg) || strlen(arg) < 1 || strlen(arg) > 4) return -1;
+    *out = (unsigned)atoi(arg);
+    return *out >= lo && *out <= hi ? 0 : -1;
+}
+
 static void pi_cmd(char *sub) {
     char *op = strtok(sub, " \t"), *arg = op ? strtok(NULL, " \t") : NULL;
-    char j[96];
+    char j[320];
     cali_json_t js;
+    unsigned v;
     if (op && !strcmp(op, "status") && !arg) {
         cali_json_begin(&js, j, sizeof j);
         cali_json_key(&js, "pi_wake");
@@ -256,11 +264,17 @@ static void pi_cmd(char *sub) {
         cali_log("pi-wake: %s", cali_json_end(&js) < 0 ? "?" : j);
     } else if (op && !strcmp(op, "wake") && !arg) {
         if (cali_pw_wake("manual") != 0) cali_log("pi-wake: busy");
-    } else if (op && !strcmp(op, "hold") && arg && strspn(arg, "0123456789") == strlen(arg) && strlen(arg) <= 4 &&
-               atoi(arg) >= 1 && (uint32_t)atoi(arg) <= CALI_PW_HOLD_MAX_MS) {
-        if (cali_pw_pulse("manual", (uint32_t)atoi(arg)) != 0) cali_log("pi-wake: busy");
+    } else if (op && !strcmp(op, "hold") && num_arg(arg, 1, CALI_PW_HOLD_MAX_MS, &v) == 0) {
+        if (cali_pw_pulse("manual", v) != 0) cali_log("pi-wake: busy");
+    } else if (op && !strcmp(op, "halt") && (!arg || num_arg(arg, 1, CALI_PW_HOLD_MAX_MS, &v) == 0)) {
+        if (cali_ph_pulse("manual", arg ? v : CALI_PH_PULSE_MS) != 0) cali_log("pi-halt: busy");
+    } else if (op && !strcmp(op, "timer") && num_arg(arg, 0, CALI_PH_MIN_MAX, &v) == 0) {
+        if (cali_ph_set_min(v) != 0) cali_log("pi-halt: not saved");
+    } else if (op && !strcmp(op, "guard") && num_arg(arg, 0, 100, &v) == 0) {
+        if (cali_ph_set_soc(v) != 0) cali_log("pi-halt: not saved");
     } else {
-        cali_log("pi-wake: usage: pi wake | pi hold <1-%u ms> | pi status", CALI_PW_HOLD_MAX_MS);
+        cali_log("pi-wake: usage: pi wake | pi hold <1-%u ms> | pi halt [1-%u ms] | pi timer <0-%u min> | "
+                 "pi guard <0-100 %%> | pi status", CALI_PW_HOLD_MAX_MS, CALI_PW_HOLD_MAX_MS, CALI_PH_MIN_MAX);
     }
 }
 

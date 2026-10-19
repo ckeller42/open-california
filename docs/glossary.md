@@ -15,6 +15,24 @@ Camper unit
 buspi
   The Raspberry Pi that runs calictl and the other readers in the van.
 
+GPIO
+  A general-purpose input/output pin. On the Raspberry Pi header, GPIO3 (pin 5) wakes a halted Pi
+  and GPIO17 (pin 11) is the satellite's shutdown line.
+
+EEPROM
+  The Raspberry Pi 4 bootloader's settings store (`rpi-eeprom-config`); `WAKE_ON_GPIO=1` with
+  `POWER_OFF_ON_HALT=0` keeps a halted Pi wakeable through GPIO3.
+
+gpio-shutdown
+  The Raspberry Pi device-tree overlay that turns a GPIO pulled low into a power-key press, so
+  logind shuts the Pi down cleanly.
+
+logind
+  systemd's login manager; it acts on the power key (`HandlePowerKey`, default `poweroff`).
+
+pinctrl
+  The Raspberry Pi tool that reads or sets a GPIO's state (`pinctrl get 17`).
+
 Active scan
   A WiFi scan that sends probe requests on each channel and waits a short, fixed time for answers.
 

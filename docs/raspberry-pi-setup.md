@@ -371,6 +371,36 @@ sudo systemctl daemon-reload && sudo systemctl enable --now calictl-esp-soak.tim
 sudo systemctl start calictl-esp-soak.service && cat ~/esp-soak/$(date -I).txt
 ```
 
+## Wake and shutdown wires from the ESP satellite
+
+The {term}`satellite` can wake a halted Pi 4 and shut it down cleanly (firmware: [Pi wake + shutdown
+wiring](firmware.md#pi-wake--shutdown-wiring), `R_FW_PI_WAKE` / `R_FW_PI_HALT`). Three wires from the
+CoreS3's Port B (black Grove socket) to the Pi's 40-pin header:
+
+![Wiring from the CoreS3 Port B to the Pi 4 header: yellow G9 to pin 5, white G8 to pin 11, black GND to pin 6](assets/esp-pi-wiring.svg)
+
+| Grove wire (Port B) | CoreS3 pin | Pi header | Does |
+|---|---|---|---|
+| yellow | G9 | pin 5 ({term}`GPIO`3) | wake: 200 ms low boots a halted Pi |
+| white | G8 | pin 11 (GPIO17) | shutdown: 500 ms low = the power key |
+| black | GND | pin 6 (GND) | common ground |
+| red | 5V | not connected | tape it off |
+
+On the Pi:
+
+1. `/boot/firmware/config.txt`: add `dtoverlay=gpio-shutdown,gpio_pin=17` (the {term}`gpio-shutdown` overlay). **Never put the overlay
+   on GPIO3:** the ignition wake pulse would then shut a running Pi down.
+2. {term}`EEPROM` (`sudo rpi-eeprom-config --edit`): `WAKE_ON_GPIO=1` and `POWER_OFF_ON_HALT=0`, so GPIO3
+   still wakes the halted Pi.
+3. {term}`logind` must act on the power key: `grep -r HandlePowerKey /etc/systemd/logind.conf*` must not
+   show `ignore` (the default, `poweroff`, is right).
+4. Reboot once so the overlay loads.
+
+**Wiring test** (before the overlay is active, or it shuts the Pi down): on the ESP console
+`pi halt 5000` holds the shutdown line low for 5 s; meanwhile {term}`pinctrl` (`pinctrl get 17`) on the Pi reads `lo`.
+`pi hold 3000` does the same for the wake line (pin 5). The satellite's "Shut down after parking"
+and battery-guard settings are in its Satellite settings ([firmware](firmware.md#pi-halt-r_fw_pi_halt)).
+
 ## Troubleshooting
 
 - **`VWCAMPER` not found** — make sure the camper is on its "Connect device" screen (it only

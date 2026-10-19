@@ -33,7 +33,9 @@
  * @typedef {{id: number, type: string, alias: string, last_seen_s: number|null, value: Record<string, number|null>|null}} SatSensCfg
  * @typedef {{id: number, type: string, model: string, rssi: number}} SatSensSeen
  * @typedef {{configured: SatSensCfg[], seen: SatSensSeen[], scan: string, error?: string}} SatSensors  GET/POST /api/sensors
- * @typedef {{enabled: boolean, last_s: number|null, reason: string|null}} SatPiWake  device.pi_wake (R_FW_PI_WAKE)
+ * @typedef {{enabled: boolean, last_s: number|null, reason: string|null, halt_after_min?: number, halt_soc_pct?: number,
+ *   halt_in_s?: number|null, halted?: boolean, halt_last_s?: number|null, halt_reason?: string|null, batt_low?: boolean}} SatPiWake
+ *   device.pi_wake (R_FW_PI_WAKE; the halt_* members R_FW_PI_HALT)
  */
 /**
  * `serve.state()::_meta`. `session`/`session_mode` are `"off"` unless the persistent session is on.
@@ -2074,7 +2076,7 @@ function renderDeviceStatus() {
 // a typed password, an open confirm step or a sensor name must survive the 2 s poll, so a poll only
 // updates them in place (satUpdate). Their endpoints are the firmware's (web.c, firmware/docs):
 // GET/POST /api/wifi, /api/sensors; POST /api/auto_camper, /api/display, /api/ota, /api/ux_setting,
-// /api/experimental, /api/pi_wake, /api/pi_wake_setting — reached through satFetch, never api() (which refuses them by design).
+// /api/experimental, /api/pi_wake, /api/pi_halt, /api/pi_wake_setting — reached through satFetch, never api() (which refuses them by design).
 const SAT_VIEWS = ["satsettings", "wifisetup"];
 /** @type {{view: string, lang: string, root: HTMLElement}|null} the open satellite screen's DOM */
 let satDom = null;
@@ -2181,10 +2183,15 @@ function buildSat(v) {
   const toggle = (/** @type {string} */ id, /** @type {string} */ path, /** @type {string} */ err, /** @type {string} */ key, /** @type {string} */ msgId) =>
     { sq(id + "-toggle").onclick = () => satToggle(path, id, err, key, msgId); };
   root.append(satCard("ac", T("Restore camping after you park"), satSwitchRow("ac"), satMsg("ac-msg")));
-  const wake = satBtn(T("Wake Pi"), "", "pw-wake");
+  const wake = satBtn(T("Wake Pi"), "", "pw-wake"), halt = satBtn(T("Shut down Pi"), "", "pw-halt");
   wake.onclick = satPiWake;
-  root.append(satCard("pw", T("Raspberry Pi"), h("p", { class: "note" }, T("Wakes the Raspberry Pi from halt through a wire to its pin 5.")),
-    satSwitchRow("pw"), h("div", { class: "btnrow" }, wake), h("p", { class: "note", id: "pw-last" }),
+  const hacts = h("div", { class: "btnrow", id: "pw-hacts" }, halt);
+  halt.onclick = () => satAsk(hacts, [h("span", null, T("Shut down the Raspberry Pi?"))], T("Shut down Pi"), "danger", satPiHalt, "pw-msg");
+  root.append(satCard("pw", T("Raspberry Pi"), h("p", { class: "note" }, T("Wakes the Raspberry Pi through pin 5 and shuts it down through pin 11.")),
+    satSwitchRow("pw"), h("div", { class: "btnrow" }, wake), hacts,
+    satPiSelect("pw-after", "Shut down after parking", PI_HALT_MIN),
+    satPiSelect("pw-soc", "Shut down at low battery", PI_HALT_SOC),
+    h("p", { class: "note", id: "pw-last" }), h("p", { class: "note", id: "pw-halt-st" }),
     h("p", { class: "note", id: "pw-msg", "aria-live": "polite" })));
   const dn = satBtn("−", "", "scr-dn"), up = satBtn("+", "", "scr-up");
   dn.setAttribute("aria-label", T("Darker")); up.setAttribute("aria-label", T("Brighter"));
@@ -2247,6 +2254,7 @@ function satUpdate() {
     sq("pw-wake").hidden = !st;
     sq("pw-last").textContent = p.last_s === null ? ""
       : tf("Last wake: {n} s ago ({reason})", { n: p.last_s, reason: T(p.reason === "ignition" ? "Ignition" : "Manual") });
+    satPiHaltUpdate(p, st);
   }
   satRow("ux", [T(m.ux ? "Send usage data: on" : "Send usage data: off")], !!m.ux, st);
   satRow("exp", [T(s.experimental ? "Sensors (experimental): on" : "Sensors (experimental): off")], !!s.experimental, st);
@@ -2294,6 +2302,72 @@ async function satPiWake() {
     : tf("Couldn't wake the Pi ({error})", { error: r.error || "" });
   await refreshState(true);
   if (satDom) b.disabled = false;
+}
+
+// The Pi halt (R_FW_PI_HALT): the select choices (0 = Off); a stored value not listed is added
+const PI_HALT_MIN = [0, 10, 30, 60, 120], PI_HALT_SOC = [0, 20, 30, 40];
+/** @type {Record<string, string>} */
+const PI_HALT_REASON = { timer: "Timer", battery: "Battery", manual: "Manual" };
+
+/** An option's text: Off, "30 min" (pw-after) or "30 %" (pw-soc). @param {string} id @param {number} v */
+const piOpt = (id, v) => h("option", { value: String(v) }, !v ? T("Off") : id === "pw-soc" ? v + " %" : tf("{n} min", { n: v }));
+
+/** A labelled select row posting {key: <number>} to /api/pi_wake_setting.
+ * @param {string} id @param {string} label @param {number[]} vals */
+function satPiSelect(id, label, vals) {
+  const sel = h("select", { id: id });
+  for (const v of vals) sel.append(piOpt(id, v));
+  sel.onchange = () => satPiSetting(sel, id === "pw-after" ? "halt_after_min" : "halt_soc_pct");
+  return h("div", { class: "row", id: id + "-row" }, h("label", { class: "lbl", for: id }, T(label)), sel);
+}
+
+/** Select the current value (an option added for a value the list lacks; never while the owner picks).
+ * @param {string} id @param {number|undefined} v */
+function satPiSelectSet(id, v) {
+  const sel = /** @type {HTMLSelectElement} */ (sq(id));
+  if (v === undefined || document.activeElement === sel) return;
+  if (!Array.from(sel.options).some((o) => o.value === String(v)))
+    sel.append(piOpt(id, v));
+  sel.value = sel.dataset.v = String(v);
+}
+
+/** The halt part of the Raspberry Pi box. @param {SatPiWake} p @param {boolean} st */
+function satPiHaltUpdate(p, st) {
+  const has = p.halt_after_min !== undefined;
+  sq("pw-hacts").hidden = sq("pw-after-row").hidden = sq("pw-soc-row").hidden = !has || !st;
+  satPiSelectSet("pw-after", p.halt_after_min);
+  satPiSelectSet("pw-soc", p.halt_soc_pct);
+  const parts = [];
+  if (has && p.halt_in_s != null) parts.push(tf("Shutdown in {n} min", { n: Math.ceil(p.halt_in_s / 60) }));
+  else if (has && p.halted && p.halt_last_s != null)
+    parts.push(tf("Shut down {n} min ago ({reason})", { n: Math.floor(p.halt_last_s / 60), reason: T(PI_HALT_REASON[p.halt_reason || ""] || "Manual") }));
+  if (has && p.batt_low) parts.push(T("Battery low"));
+  sq("pw-halt-st").textContent = parts.join(" · ");
+}
+
+/** POST one halt setting; a refusal puts the shown value back. @param {HTMLSelectElement} sel @param {string} key */
+async function satPiSetting(sel, key) {
+  const msg = sq("pw-msg");
+  msg.textContent = "";
+  ux({ type: "control", fn: "satellite", control: key });
+  let ok = false;
+  try { ok = !!(await satFetch("/api/pi_wake_setting", { [key]: Number(sel.value) })).body.ok; } catch (e) { /* ok stays false */ }
+  if (!ok) { msg.textContent = T("Couldn't change the Pi shutdown"); sel.value = sel.dataset.v || ""; }
+  sel.blur();
+  await refreshState(true);
+}
+
+/** Shut down Pi (R_FW_PI_HALT), after the in-page confirm: POST /api/pi_halt, then what the satellite said.
+ * @param {() => void} close */
+async function satPiHalt(close) {
+  ux({ type: "control", fn: "satellite", control: "pi_halt" });
+  /** @type {any} */
+  let r = null;
+  try { r = (await satFetch("/api/pi_halt", {})).body; } catch (e) { /* r stays null */ }
+  close();
+  sq("pw-msg").textContent = !r ? T("No answer from the satellite.") : r.ok ? T("Shutdown signal sent")
+    : tf("Couldn't shut down the Pi ({error})", { error: r.error || "" });
+  await refreshState(true);
 }
 
 // Screen (R_FW_DISPLAY_WAKE): [id suffix, device.display member = the POST key, label]

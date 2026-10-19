@@ -837,25 +837,74 @@ static void api_pi_wake(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
-/* ---- POST /api/pi_wake_setting {"enabled":<bool>} (R_FW_PI_WAKE): wake on ignition, station mode only ---- */
-static void api_pi_wake_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
+/* ---- POST /api/pi_halt {} or no body (R_FW_PI_HALT): one manual halt pulse, station mode only ---- */
+static void api_pi_halt(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cursor_t c = {req->body, req->body + req->body_len};
-    char key[8];
-    size_t klen;
-    int on;
+    int empty = (skip_ws(&c), c.p == c.end);
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
         SET_CONST(resp, 403, ERR_SETUP_MODE);
-    } else if (expect(&c, '{') != 0 || parse_str(&c, key, sizeof key, &klen) != 0 || klen != 7 || strcmp(key, "enabled") != 0 ||
-               expect(&c, ':') != 0 || parse_bool(&c, &on) != 0 || expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end)) {
+    } else if (!empty && (expect(&c, '{') != 0 || expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end))) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
-    } else if (cali_pw_set_enabled(on) != 0) {
-        SET_CONST(resp, 500, ERR_STORE);
-    } else if (on) {
-        SET_CONST(resp, 200, "{\"ok\":true,\"pi_wake\":true}");
+    } else if (cali_ph_halt("manual") != 0) {
+        SET_CONST(resp, 409, ERR_BUSY);
     } else {
-        SET_CONST(resp, 200, "{\"ok\":true,\"pi_wake\":false}");
+        SET_CONST(resp, 200, OK_BODY);
+    }
+}
+
+/* {"enabled"?:<bool>,"halt_after_min"?:0..1440,"halt_soc_pct"?:0..100}, at least one, each once:
+ * *on / *min / *soc = the value or -1 when absent. 0 ok, -1 bad JSON, -2 a number out of range. */
+static int parse_pi_setting(const char *body, size_t body_len, int *on, int *min, int *soc) {
+    static const char *const KEYS[3] = {"enabled", "halt_after_min", "halt_soc_pct"};
+    static const unsigned MAX[3] = {1, CALI_PH_MIN_MAX, 100};
+    int *dst[3] = {on, min, soc};
+    cursor_t c = {body, body + body_len};
+    int range = 0;
+    *on = *min = *soc = -1;
+    if (expect(&c, '{') != 0) return -1;
+    for (;;) {
+        char key[16];
+        size_t klen;
+        int i, b;
+        unsigned v;
+        if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
+        for (i = 0; i < 3 && strcmp(key, KEYS[i]) != 0; i++) {}
+        if (i == 3 || *dst[i] != -1 || (i == 0 ? parse_bool(&c, &b) : parse_uint(&c, &v)) != 0) return -1;
+        if (i == 0) v = (unsigned)b;
+        if (v > MAX[i]) range = 1;
+        *dst[i] = (int)(v > MAX[i] ? MAX[i] : v);
+        skip_ws(&c);
+        if (c.p < c.end && *c.p == ',') { c.p++; continue; }
+        if (expect(&c, '}') != 0) return -1;
+        break;
+    }
+    skip_ws(&c);
+    if (c.p != c.end) return -1;
+    return range ? -2 : 0;
+}
+
+/* ---- POST /api/pi_wake_setting (R_FW_PI_WAKE, R_FW_PI_HALT): wake on ignition, the halt timer and
+ * battery guard; station mode only ---- */
+static void api_pi_wake_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    int on, min, soc, rc;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if ((rc = parse_pi_setting(req->body, req->body_len, &on, &min, &soc)) == -1) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if (rc != 0) {
+        SET_CONST(resp, 400, ERR_BAD_VALUE);
+    } else if ((on >= 0 && cali_pw_set_enabled(on) != 0) || (min >= 0 && cali_ph_set_min((unsigned)min) != 0) ||
+               (soc >= 0 && cali_ph_set_soc((unsigned)soc) != 0)) {
+        SET_CONST(resp, 500, ERR_STORE);
+    } else {
+        static char b[96];   /* the response points into it until the connection closes */
+        int n = snprintf(b, sizeof b, "{\"ok\":true,\"pi_wake\":%s,\"halt_after_min\":%d,\"halt_soc_pct\":%d}",
+                         cali_pw_enabled() ? "true" : "false", cali_ph_min(), cali_ph_soc());
+        set_body(resp, 200, JSON_TYPE, b, (size_t)n);
     }
 }
 
@@ -1343,6 +1392,10 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/pi_wake") == 0) {
         api_pi_wake(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/pi_halt") == 0) {
+        api_pi_halt(req, resp);
         return 1;
     }
     if (strcmp(req->path, "/api/pi_wake_setting") == 0) {

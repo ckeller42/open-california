@@ -35,4 +35,5 @@ The satellite serves the same envelope plus its own settings endpoints (contract
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/pi_wake` | Wake the halted Raspberry Pi: GPIO9 low 200 ms (`{}` or no body; 409 `busy` while a pulse runs; station mode only) |
-| POST | `/api/pi_wake_setting` | `{"enabled":<bool>}`: wake the Pi on the ignition edge (default on) |
+| POST | `/api/pi_halt` | Shut the Raspberry Pi down: GPIO8 low 500 ms (`{}` or no body; 409 `busy` while either line is low; station mode only) |
+| POST | `/api/pi_wake_setting` | Any non-empty subset of `{"enabled":<bool>,"halt_after_min":0..1440,"halt_soc_pct":0..100}`: wake on the ignition edge (default on), shut down after parking (default 30 min, 0 off), the battery guard (default 30 %, 0 off) |

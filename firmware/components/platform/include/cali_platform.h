@@ -67,6 +67,10 @@ int cali_pm_dfs(int on, char *pm, size_t cap);
  * the first call configures it (level set to released BEFORE it becomes an output: no boot glitch).
  * host: logs "gpio9: low" / "gpio9: released" (the host-tier e2e reads them). Owner task only. */
 void cali_pi_wake_line(int low);
+/* The Pi halt line (#387, R_FW_PI_HALT): GPIO8 (Port B white) to the Pi's pin 11 (GPIO17, the Pi's
+ * gpio-shutdown overlay). Exactly as cali_pi_wake_line: open drain, released before it becomes an
+ * output, never driven high. host: logs "gpio8: low" / "gpio8: released". Owner task only. */
+void cali_pi_halt_line(int low);
 
 /* host: store_dir is the directory for the kv files (created if missing; NULL = "."); esp: ignored
  * (NVS). Starts the uptime clock. Returns 0 ok, -1 if the store directory is unusable. */

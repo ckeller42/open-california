@@ -31,8 +31,10 @@
  *                                  "auto_camper":{"enabled":<bool>,"state":"idle"|"armed"|"restoring"},
  *                                                -- cali_auto_camper.h (R_FW_AUTO_CAMPER)
  *                                  "pi_wake":{"enabled":<bool>,"last_s":<int>|null,
- *                                             "reason":"ignition"|"manual"|null},
- *                                                -- cali_pi_wake.h (R_FW_PI_WAKE); last_s = s since the last pulse
+ *                                             "reason":"ignition"|"manual"|null,"halt_after_min","halt_soc_pct",
+ *                                             "halt_in_s":<int>|null,"halted":<bool>,"halt_last_s":<int>|null,
+ *                                             "halt_reason":"timer"|"battery"|"manual"|null,"batt_low":<bool>},
+ *                                                -- cali_pi_wake.h (R_FW_PI_WAKE, R_FW_PI_HALT); last_s = s since the last pulse
  *                                  "display":{"state":"on"|"dim"|"off","lux","prox","motion","brightness_pct",
  *                                             "sensor":"ok"|"absent"|"error","auto":<bool>,
  *                                             "prox_wake":<bool>,"motion_wake":<bool>,"min","max","offset",
@@ -146,9 +148,14 @@
  *   POST /api/pi_wake  {} or no body (R_FW_PI_WAKE): cali_pw_wake("manual"), GPIO9 low 200 ms -> 200
  *                     {"ok":true}; 409 busy (a pulse in progress); station mode only (403 setup_mode),
  *                     400 bad_json (any other body), 405 for another method.
- *   POST /api/pi_wake_setting  {"enabled":<bool>} (exactly that object; R_FW_PI_WAKE): wake on ignition,
- *                     cali_pw_set_enabled -> 200 {"ok":true,"pi_wake":<bool>}; station mode only
- *                     (403 setup_mode), 400 bad_json, 500 store (not saved), 405 for another method.
+ *   POST /api/pi_halt  {} or no body (R_FW_PI_HALT): cali_ph_halt("manual"), GPIO8 low 500 ms -> 200
+ *                     {"ok":true}; 409 busy (either Pi line low); station mode only (403 setup_mode),
+ *                     400 bad_json (any other body), 405 for another method.
+ *   POST /api/pi_wake_setting  a non-empty subset of {"enabled":<bool>,"halt_after_min":0..1440,
+ *                     "halt_soc_pct":0..100}, each key once (R_FW_PI_WAKE, R_FW_PI_HALT): wake on ignition,
+ *                     the halt timer and battery guard -> 200 {"ok":true,"pi_wake":<bool>,"halt_after_min":n,
+ *                     "halt_soc_pct":n}; station mode only (403 setup_mode), 400 bad_json, 400 bad_value
+ *                     (out of range), 500 store (not saved), 405 for another method.
  *   POST /api/ota     {"action":"check"|"install"} (R_FW_OTA, cali_ota.h): starts the OTA task and
  *                     answers at once 200 {"ok":true}; progress in /api/state device.ota. Station mode
  *                     only, like /api/command (else 403 setup_mode, checked first after the method);

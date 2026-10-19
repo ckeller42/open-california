@@ -29,6 +29,11 @@
  *   pi wake      one manual Pi wake pulse (cali_pi_wake.h, R_FW_PI_WAKE): "LOG pi-wake[manual]: GPIO9
  *                low 200 ms", or "LOG pi-wake: busy" while a pulse is in progress
  *   pi hold <ms> the wiring test: GPIO9 low for 1..5000 ms (else "LOG pi-wake: usage: …")
+ *   pi halt [ms] one manual Pi halt pulse (R_FW_PI_HALT): GPIO8 low 500 ms (or 1..5000 ms: the
+ *                wiring test, read `pinctrl get 17` on a Pi without the gpio-shutdown overlay):
+ *                "LOG pi-halt[manual]: GPIO8 low <ms> ms", or "LOG pi-halt: busy" while either line is low
+ *   pi timer <min>  halt after parking, 0..1440 min (0 off; cali_ph_set_min)
+ *   pi guard <pct>  the battery guard, 0..100 % (0 off; cali_ph_set_soc)
  *   pi status    "LOG pi-wake: {"pi_wake":<the /api/state device.pi_wake object>}"
  *   Before the WiFi runtime booted (host without --http) every "wifi …" line only prints
  *   "LOG wifi: not enabled".
