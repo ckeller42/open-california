@@ -1158,11 +1158,11 @@ to the sensors and never to the pairing SM or the session.
   | id | Manufacturer id | Key | Default alias (= id) | Fields |
   |---|---|---|---|---|
   | `govee` | `0xEC88` | no | `govee` | `temp_c`, `humidity`, `battery` — 7+ data bytes: int16 °C × 100, uint16 % × 100, battery %; 5–6 bytes: 24 bits, sign bit 23, `(t / 1000) / 10` °C, `(t % 1000) / 10` %, battery `& 0x7F` (`govee_reader.py parse_govee`) |
-  | `govee` | `0x0001` | no | `govee` | GV5179 and the H5101/H5102/H5174/H5177 family: data `01 01`, the 24-bit value at bytes 2–4, battery at 5. The company id is shared, so only a 6-byte payload with plausible values (−40…80 °C, ≤ 100 %, battery ≤ 100) counts (`govee_reader.py` `0x0001` path) |
+  | `govee` | `0x0001` | no | `govee` | GV5179, GV5171 and the H5101/H5102/H5174/H5177 family: data `01 01`, the 24-bit value at bytes 2–4, battery at 5; the GV5171 appends two bytes (`00 00` so far, ignored). The company id is shared, so only a 6- or 8-byte payload with plausible values (−40…80 °C, ≤ 100 %, battery ≤ 100) counts (`govee_reader.py` `0x0001` path) |
   | `victron_mppt` | `0x02E1`, readout type `0x01` (solar charger) | yes | `victron_mppt` | `battery_current` (A), `battery_voltage` (V), `charge_state`, `error_code`, `load_current` (A), `pv_power` (W), `yield_today_kwh` |
   | `victron_battery` | `0x02E1`, model `0xA3A4`/`0xA3A5` (Smart Battery Sense), else readout type `0x02` (battery monitor) | yes | `victron_battery` | `battery_voltage` (V), `temperature_c` (aux mode 2: aux / 100 − 273.15, else `null`) |
 
-  Other `0x0001` layouts and `0x8801` (the H5179's 9-byte form) are not matched: `0x0001` is shared by unrelated devices, so only the `01 01` + 6-byte plausible form above counts.
+  Other `0x0001` layouts and `0x8801` (the H5179's 9-byte form) are not matched: `0x0001` is shared by unrelated devices, so only the `01 01` + 6- or 8-byte plausible form above counts. The GV5171 names itself without a `_` (`GV5171` + 4 hex digits); the model is its first 6 characters.
 - **Victron "Instant Readout"** (`victron_ble` 0.9.3 `parse_container`/`decrypt`): after the
   company id, `0x10 0x00` (a product advertisement — any other prefix is ignored, not even a seen
   row), model id u16 LE, readout type u8, iv u16 LE, then the **key-check byte** (= `key[0]`) and the
