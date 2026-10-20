@@ -214,6 +214,23 @@ per-feature screens) from the same BLE-owning process — no extra connection, n
 To enable it under systemd, append `--web 8080` to the unit's `ExecStart` and restart
 (`sudo systemctl daemon-reload && sudo systemctl restart calictl`).
 
+### Satellite mode (`--no-ble`)
+
+When only the ESP32 satellite talks to the camper unit, run the daemon without BLE. `serve
+--no-ble` never opens a BLE connection (no session, no poll, no pairing, no commands); the web UI,
+MQTT and InfluxDB keep running on the last stored state. The web UI shows a "🛰 Satellite mode"
+pill ("🛰 Satellit-Modus" in German) instead of an offline banner. Set it with a drop-in
+(`sudo systemctl edit calictl`); the empty `ExecStart=` line clears the unit's own command:
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/home/<user>/solix-env/bin/python -m calictl serve --web 8088 --no-ble
+```
+
+Use the same interpreter path as the installed unit (`systemctl cat calictl`), then
+`sudo systemctl restart calictl`. Remove the drop-in to return to BLE mode.
+
 ### Remote access over Tailscale (HTTPS)
 
 The web UI is plain HTTP and unauthenticated, so it must stay on a trusted network. To reach it

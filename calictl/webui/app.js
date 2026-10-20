@@ -45,7 +45,7 @@
  * @property {boolean} online               van currently reachable
  * @property {boolean} [paired]             false when no unit is bonded yet (Task 5's `_meta.paired`)
  * @property {boolean} read_only            daemon rejects control writes
- * @property {'off'|'connecting'|'up'|'degraded'|'asleep'} session   persistent BLE session state
+ * @property {'off'|'connecting'|'up'|'degraded'|'asleep'|'satellite'} session   persistent BLE session state ('satellite' = serve --no-ble)
  * @property {'off'|'auto'|'release'} session_mode                    activity-scoped vs user-disconnected
  * @property {{enabled:boolean, armed:boolean, notice:?{ts:number,msg:string}}} [auto_camper] auto-camper toggle + notice
  * @property {Record<string, any>} [firmware]   firmware baseline/drift snapshot (calictl.firmware)
@@ -1078,10 +1078,12 @@ let stateAt = 0;                                        // ms: STATE (its _meta.
 const connEl = /** @type {HTMLElement} */ (document.getElementById("conn"));
 let connKey = "";
 
-/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"} */
+/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"|"satellite"} */
 function linkState() {
   if (waitingSince != null && Date.now() - waitingSince >= UNREACHABLE_MS) return "unreachable";
   const m = STATE._meta;
+  // serve --no-ble: this Pi never opens BLE, the ESP satellite talks to the unit (no offline banner)
+  if (m && m.session === "satellite" && !m.restored) return "satellite";
   // a snapshot, nothing yet, or no FRESH answer (a tab back after hours: its STATE is hours old;
   // a normal blip's gap is ~2 s)
   if (lastAnswerAt == null || (m && m.restored)
@@ -1101,7 +1103,8 @@ function backendName() {
 /** @type {Record<string, [string, string]>} */
 const LINK_PILL = { live: ["live", "ok"], asleep: ["offline", "warn"], never: ["offline", "warn"],
   unpaired: ["not paired", ""],
-  connecting: ["connecting…", ""], unreachable: ["unreachable", "error"] };
+  connecting: ["connecting…", ""], unreachable: ["unreachable", "error"],
+  satellite: ["🛰 Satellite mode", ""] };
 
 // Paint the pill + the persistent #conn banner (outside #app: a hung poll never reaches render(),
 // the 2 s tick still lands here). #conn is a role=status region: its text is replaced only when the
@@ -1450,7 +1453,7 @@ function clockText(epochSec) {
 function sessionToggle() {
   const m = /** @type {Meta} */ (STATE._meta || {});
   const mode = m.session_mode, st = m.session;
-  if (mode == null || mode === "off") return null;      // persistent session disabled -> no toggle
+  if (mode == null || mode === "off" || st === "satellite") return null;   // no persistent session / no BLE here -> no toggle
   let spec, action;
   if (mode === "release") { spec = { cls: "", text: "🔌 Disconnected" }; action = "connect"; }
   else if (st === "up") { spec = { cls: "ok", text: "🟢 Live · fast" }; action = "disconnect"; }
@@ -1994,7 +1997,7 @@ const SAT_CLOCK = { synced: "synced (SNTP) · boot {boot}", waiting: "not synced
 // The camper unit's connection, in linkState()'s words (the pill + banner): online / asleep / not paired
 /** @type {Record<string, string>} */
 const LINK_WORD = { live: "online", asleep: "asleep", never: "asleep", unpaired: "not paired",
-  connecting: "connecting…", unreachable: "unreachable" };
+  connecting: "connecting…", unreachable: "unreachable", satellite: "🛰 Satellite mode" };
 
 /** A Device-status card: its heading names the device (UX review 3.2: one card per device).
  * @param {string} title @returns {HTMLElement} */

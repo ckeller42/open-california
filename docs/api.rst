@@ -20,6 +20,9 @@ Daemon state
 .. automethod:: calictl.serve.Server._pull_lighting_config
 .. automethod:: calictl.serve.Server._forget_unit_state
 .. automethod:: calictl.serve.Server._poll_nap
+.. automethod:: calictl.serve.Server.__init__
+.. autofunction:: tests.test_serve_no_ble.test_no_ble_never_polls_or_supervises
+.. autofunction:: tests.e2e.test_link_state.test_serve_no_ble_shows_satellite_pill_and_no_banner
 .. autofunction:: calictl.serve.interpret_frames
 .. autofunction:: calictl.serve.guard_water
 
