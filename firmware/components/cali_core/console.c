@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cali_ble_exp.h"
 #include "cali_control.h"
 #include "cali_json.h"
 #include "cali_pi_wake.h"
@@ -255,7 +256,24 @@ static int num_arg(const char *arg, unsigned lo, unsigned hi, unsigned *out) {
 static void ble_cmd(char *sub) {
     char *op = strtok(sub, " \t"), *arg = op ? strtok(NULL, " \t") : NULL;
     if (op == NULL) {
-        cali_log("ble: mode=%s probing=%d", cali_session_mode_name(cali_session_mode()), cali_session_probing());
+        char j[256];
+        cali_json_t js;
+        cali_json_begin(&js, j, sizeof j);
+        cali_json_key(&js, "ble");
+        cali_ble_exp_json(&js);
+        cali_log("ble: %s", cali_json_end(&js) < 0 ? "?" : j);
+    } else if (strcmp(op, "exp") == 0 && arg != NULL && strcmp(arg, "off") == 0) {
+        cali_ble_exp_stop();
+    } else if (strcmp(op, "exp") == 0 && arg != NULL) {
+        char *win = strtok(NULL, " \t"), *end;
+        int from = 22, to = 6, n = 0;
+        unsigned long min = strtoul(arg, &end, 10);
+        if (*end != 0 || (win != NULL && (sscanf(win, "%d-%d%n", &from, &to, &n) != 2 || win[n] != 0))) min = 0;
+        int rc = cali_ble_exp_start(min > 720 ? 0 : (unsigned)min, from, to);
+        if (rc == -1)
+            cali_log("ble-exp: refused (no time)");
+        else if (rc != 0)
+            cali_log("usage: ble exp <1-720 min> [HH-HH] | ble exp off");
     } else if (strcmp(op, "mode") == 0 && arg != NULL) {
         int m = strcmp(arg, "hold") == 0    ? CALI_BLE_HOLD
                 : strcmp(arg, "quiet") == 0 ? CALI_BLE_QUIET
@@ -268,7 +286,7 @@ static void ble_cmd(char *sub) {
     } else if (strcmp(op, "probe") == 0) {
         if (cali_session_probe() != 0) cali_log("ble: probe refused");
     } else {
-        cali_log("usage: ble [mode hold|quiet|off | probe]");
+        cali_log("usage: ble [mode hold|quiet|off | probe | exp <min> [HH-HH] | exp off]");
     }
 }
 

@@ -39,6 +39,7 @@
 #include "cali_diag.h"
 #include "cali_net_host.h"
 #include "cali_pi_wake.h"
+#include "cali_ble_exp.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_sensors.h"
@@ -113,6 +114,7 @@ static void tick_cb(struct ble_npl_event *ev) {
     cali_sensors_tick(now, cali_ble_nimble_transport(), cali_exp_sensors(), cali_runner_in_flow());
     cali_ac_tick(now);
     cali_pw_tick(now);
+    cali_ble_exp_tick(now);
     if (s_http) {
         cali_net_host_poll(now);        /* WiFi events -> the runner's sink */
         cali_wifi_run_tick(now);

@@ -25,6 +25,7 @@ DEVICE_KEYS = frozenset(
         "battery",
         "auto_camper",
         "pi_wake",
+        "ble",
         "display",
         "ux",
         "experimental",

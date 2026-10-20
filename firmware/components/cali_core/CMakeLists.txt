@@ -2,7 +2,7 @@
 # captive DNS, web endpoints, OTA state machine, boot counter + SNTP/unit clock, SD log core, control twin + sequencer,
 # auto camper (decide twin + controller), external BLE sensors. No NimBLE/ESP headers
 # (test/ is host-only).
-idf_component_register(SRCS "pairing_sm.c" "runner.c" "session.c" "console.c" "snapshot.c" "status.c" "json.c" "wifi_sm.c" "wifi_run.c" "http_core.c" "captive_dns.c" "web.c" "ota.c" "time.c" "sdlog.c" "diag.c" "display_model.c" "display_cfg.c" "battery.c" "sensors.c" "control.c" "control_run.c" "auto_camper.c" "auto_camper_run.c" "pi_wake.c" "ble_exp.c"
+idf_component_register(SRCS "pairing_sm.c" "runner.c" "session.c" "console.c" "snapshot.c" "status.c" "json.c" "wifi_sm.c" "wifi_run.c" "http_core.c" "captive_dns.c" "web.c" "ota.c" "time.c" "sdlog.c" "diag.c" "display_model.c" "display_cfg.c" "battery.c" "sensors.c" "control.c" "control_run.c" "auto_camper.c" "auto_camper_run.c" "pi_wake.c" "ble_exp.c" "ble_exp_run.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "../../web"
                        REQUIRES csrc

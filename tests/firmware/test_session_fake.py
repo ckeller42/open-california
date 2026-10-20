@@ -116,6 +116,9 @@ def fake(tmp_path_factory):
             str(CORE / "runner.c"),
             str(CORE / "sensors.c"),  # runner.c hands sensor adverts to it
             str(CORE / "pairing_sm.c"),
+            str(CORE / "ble_exp.c"),
+            str(CORE / "ble_exp_run.c"),
+            str(CORE / "time.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(ROOT / "csrc" / "ports.c"),
             str(CORE / "wifi_run.c"),
@@ -2197,9 +2200,12 @@ _RECONNECT = ["CONNECTED", "ENC_OK", "DISCOVERED 0"]
 
 
 def test_quiet_mode_stops_the_heartbeat_but_keeps_the_link(fake):
-    """.. test:: quiet holds the link without 1003
-    :id: T_FW_BLE_QUIET
-    :links: R_FW_BLE_MODE"""
+    """BLE modes: quiet holds the link without 1003.
+
+    .. test:: quiet holds the link without 1003
+       :id: T_FW_BLE_QUIET
+       :links: R_FW_BLE_MODE
+    """
     out = run(
         fake,
         "diaghook",
@@ -2215,9 +2221,12 @@ def test_quiet_mode_stops_the_heartbeat_but_keeps_the_link(fake):
 
 
 def test_off_mode_drops_the_link_and_never_reconnects(fake):
-    """.. test:: off releases the link for good
-    :id: T_FW_BLE_OFF
-    :links: R_FW_BLE_MODE"""
+    """BLE modes: off releases the link for good.
+
+    .. test:: off releases the link for good
+       :id: T_FW_BLE_OFF
+       :links: R_FW_BLE_MODE
+    """
     out = run(
         fake,
         "diaghook",
@@ -2234,9 +2243,12 @@ def test_off_mode_drops_the_link_and_never_reconnects(fake):
 
 
 def test_probe_from_off_connects_reads_all_then_disconnects(fake):
-    """.. test:: probe = one connect, one read-all, one disconnect
-    :id: T_FW_BLE_PROBE
-    :links: R_FW_BLE_PROBE"""
+    """BLE modes: probe = one connect, one read-all, one disconnect.
+
+    .. test:: probe = one connect, one read-all, one disconnect
+       :id: T_FW_BLE_PROBE
+       :links: R_FW_BLE_PROBE
+    """
     t0 = T + 1000
     out = run(
         fake,
@@ -2261,9 +2273,12 @@ def test_probe_from_off_connects_reads_all_then_disconnects(fake):
 
 
 def test_probe_that_cannot_connect_logs_fail_and_stays_off(fake):
-    """.. test:: a sleeping unit = probe fail, no retry
-    :id: T_FW_BLE_PROBE_FAIL
-    :links: R_FW_BLE_PROBE"""
+    """BLE modes: a sleeping unit = probe fail, no retry.
+
+    .. test:: a sleeping unit = probe fail, no retry
+       :id: T_FW_BLE_PROBE_FAIL
+       :links: R_FW_BLE_PROBE
+    """
     t0 = T + 1000
     out = run(
         fake,
@@ -2283,9 +2298,12 @@ def test_probe_that_cannot_connect_logs_fail_and_stays_off(fake):
 
 
 def test_command_path_connect_now_forces_hold(fake):
-    """.. test:: a command always gets a link
-    :id: T_FW_BLE_CMD_HOLD
-    :links: R_FW_BLE_MODE"""
+    """BLE modes: a command always gets a link.
+
+    .. test:: a command always gets a link
+       :id: T_FW_BLE_CMD_HOLD
+       :links: R_FW_BLE_MODE
+    """
     out = run(
         fake,
         "diaghook",
@@ -2302,9 +2320,12 @@ def test_command_path_connect_now_forces_hold(fake):
 
 
 def test_quiet_probe_runs_the_heartbeat_only_through_its_warm_up(fake):
-    """.. test:: quiet probe heartbeat window
-    :id: T_FW_BLE_QUIET_PROBE
-    :links: R_FW_BLE_PROBE"""
+    """BLE modes: quiet probe heartbeat window.
+
+    .. test:: quiet probe heartbeat window
+       :id: T_FW_BLE_QUIET_PROBE
+       :links: R_FW_BLE_PROBE
+    """
     t0 = T + 1000
     out = run(
         fake,
@@ -2323,9 +2344,12 @@ def test_quiet_probe_runs_the_heartbeat_only_through_its_warm_up(fake):
 
 
 def test_boot_in_off_does_not_connect_and_a_new_bond_comes_up_in_hold(fake):
-    """.. test:: pairing resets to hold
-    :id: T_FW_BLE_PAIR_HOLD
-    :links: R_FW_BLE_MODE"""
+    """BLE modes: pairing resets to hold.
+
+    .. test:: pairing resets to hold
+       :id: T_FW_BLE_PAIR_HOLD
+       :links: R_FW_BLE_MODE
+    """
     out = run(fake, "diaghook", *PAIRED, *READ_ALL, "> ble mode off", "DISCONNECTED 531", "boot")
     assert calls(after(out, "LOG session: ble mode off (console)"), "connect_bonded") == []
     out2 = run(fake, "diaghook", "> ble mode off", *PAIRED)
@@ -2334,9 +2358,12 @@ def test_boot_in_off_does_not_connect_and_a_new_bond_comes_up_in_hold(fake):
 
 
 def test_probe_waits_for_an_outstanding_water_reread(fake):
-    """.. test:: no overlapping ATT reads
-    :id: T_FW_BLE_PROBE_REREAD
-    :links: R_FW_BLE_PROBE"""
+    """BLE modes: no overlapping ATT reads.
+
+    .. test:: no overlapping ATT reads
+       :id: T_FW_BLE_PROBE_REREAD
+       :links: R_FW_BLE_PROBE
+    """
     t0 = T + 30000  # the water re-read is due
     pre = [*PAIRED, *READ_ALL, "tick %d" % t0, "> ble probe"]
     wait = ["tick %d" % t for t in range(t0 + 100, t0 + 3000, 100)]
@@ -2352,9 +2379,12 @@ def test_probe_waits_for_an_outstanding_water_reread(fake):
 
 
 def test_stop_during_a_probe_ends_it(fake):
-    """.. test:: forget mid-probe clears the probe
-    :id: T_FW_BLE_PROBE_STOP
-    :links: R_FW_BLE_PROBE"""
+    """BLE modes: forget mid-probe clears the probe.
+
+    .. test:: forget mid-probe clears the probe
+       :id: T_FW_BLE_PROBE_STOP
+       :links: R_FW_BLE_PROBE
+    """
     t0 = T + 1000
     out = run(
         fake,
@@ -2368,4 +2398,29 @@ def test_stop_during_a_probe_ends_it(fake):
         "> ble",
     )
     assert {"ev": "evt", "kind": "probe", "ok": False, "mode": "quiet", "reason": "stop"} in _diag(out)
-    assert "LOG ble: mode=quiet probing=0" in out
+    assert 'LOG ble: {"ble":{"mode":"quiet","probing":false,"exp":null}}' in out
+
+
+def test_console_ble_exp_without_time_is_refused(fake):
+    """``ble exp`` needs a wall clock (SNTP or the unit's): without one it is refused, the mode stays.
+
+    .. test:: no time, no BLE experiment
+       :id: T_FW_BLE_EXP_NOTIME
+       :links: R_FW_BLE_EXP
+    """
+    out = run(fake, *PAIRED, *READ_ALL, "> ble exp 120 22-06", "tick %d" % (T + 100), "> ble")
+    assert "LOG ble-exp: refused (no time)" in out
+    assert out[-1] == 'LOG ble: {"ble":{"mode":"hold","probing":false,"exp":null}}'
+
+
+@pytest.mark.parametrize(
+    "line", ["> ble exp 0", "> ble exp 721", "> ble exp 60 25-06", "> ble exp 60 22", "> ble exp x"]
+)
+def test_console_ble_exp_bad_args_print_usage(fake, line):
+    """A bad phase length or window prints the usage, also without a clock.
+
+    .. test:: ble exp argument check
+       :id: T_FW_BLE_EXP_USAGE
+       :links: R_FW_BLE_EXP
+    """
+    assert run(fake, line)[-1] == "LOG usage: ble exp <1-720 min> [HH-HH] | ble exp off"

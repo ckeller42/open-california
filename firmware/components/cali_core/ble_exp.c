@@ -1,8 +1,6 @@
 /* ble_exp.c — the BLE power experiment's schedule: hold -> quiet -> off, a probe at each phase end,
- * interrupted by activity. Pure C99; ble_exp_run.c feeds it and acts on its output.
- *
- * .. req:: BLE experiment scheduler
- *    :id: R_FW_BLE_EXP
+ * interrupted by activity (R_FW_BLE_EXP, docs/firmware.md). Pure C99; ble_exp_run.c feeds it and acts
+ * on its output.
  */
 #include <string.h>
 
@@ -69,8 +67,10 @@ cali_bx_out_t cali_bx_step(cali_bx_t *x, uint64_t now, int hour, int cur, int bu
         o.probe = 1;
         return o;
     }
-    if (x->probing && !busy) {
+    if (x->probing && !busy) {   /* the probe ended; a mode forced meanwhile (a command) = aborted */
         o.done_mode = x->want;
+        o.aborted = cur != x->want;
+        if (o.aborted && cur != CALI_BLE_HOLD) o.set_mode = CALI_BLE_HOLD;
         x->want = -1;
         x->probing = 0;
         x->phase = (x->phase + 1) % 3;

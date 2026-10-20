@@ -16,7 +16,8 @@
  *     WRITTEN <hex char> <status>            (a control write() completed; 0 = ACKed)
  *   harness:
  *     > <console line>     cali_console_line(<console line>)
- *     tick <now_ms>        cali_runner_tick + cali_session_tick
+ *     tick <now_ms>        cali_runner_tick + cali_session_tick + cali_ble_exp_tick (ble_exp_run.c is
+ *                          real; time.c has no clock source here, so "ble exp" is refused)
  *     boot                 cali_session_boot + console "status" (what host_main does on sync)
  *     bond 0|1             what has_bond() answers (default 0)
  *     ident <addr>         the bonded identity identity() answers while bonded (default FAKE_IDENTITY)
@@ -56,6 +57,7 @@
 #include <string.h>
 
 #include "cali_console.h"
+#include "cali_ble_exp.h"
 #include "cali_diag.h"
 #include "cali_pi_wake.h"
 #include "cali_platform.h"
@@ -367,6 +369,7 @@ int main(void) {
             uint64_t now = strtoull(a1, NULL, 10);
             cali_runner_tick(now);
             cali_session_tick(now);
+            cali_ble_exp_tick(now);
             cali_wifi_run_tick(now);
         } else if (strcmp(word, "wifi_boot") == 0) {
             cali_wifi_run_init(&FAKE_NET);

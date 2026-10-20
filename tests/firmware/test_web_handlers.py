@@ -96,6 +96,8 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "auto_camper.c"),
             str(CORE / "auto_camper_run.c"),
             str(CORE / "pi_wake.c"),
+            str(CORE / "ble_exp.c"),
+            str(CORE / "ble_exp_run.c"),
             str(CORE / "display_cfg.c"),
             str(CORE / "battery.c"),
             str(CORE / "sensors.c"),
@@ -274,6 +276,7 @@ EXPECTED_DEVICE_TAIL = (
     '"auto_camper":{"enabled":true,"state":"idle"},'
     '"pi_wake":{"enabled":true,"last_s":null,"reason":null,"halt_after_min":30,"halt_soc_pct":30,'
     '"halt_in_s":1795,"halted":false,"halt_last_s":null,"halt_reason":null,"batt_low":false},'
+    '"ble":{"mode":"hold","probing":false,"exp":null},'
     '"display":{"state":null,"lux":null,"prox":null,"motion":null,"brightness_pct":null,"sensor":null,'
     '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0,"dfs":null,"pm":null},'
     '"ux":{"enabled":true},'
@@ -2414,3 +2417,114 @@ def test_api_log_a_failed_sd_read_is_503(web_cli, tmp_path):
     resps, _ = drive(web_cli, [("sdlog %s 10" % log).encode(), req("GET", "/api/log")])
     # a buffer below CALI_SDLOG_PAGE_MIN cannot hold a page: the SD read fails -> 503 sd_read
     assert resps[0].status == 503 and resps[0].json() == {"ok": False, "error": "sd_read"}
+
+
+# ---- /api/ble: the BLE link mode, the probe and the night experiment (R_FW_BLE_EXP) ------------------
+
+BLE_IDLE = {"mode": "hold", "probing": False, "exp": None}
+# 2026-10-20 21:00 UTC = 23:00 in Berlin (CEST): inside the default 22-06 window
+NIGHT_MS = 1792530000000
+
+
+@pytest.mark.parametrize(
+    "body, calls",
+    [
+        ('{"mode":"quiet"}', ["CALL session_set_mode quiet api"]),
+        ('{"mode":"off"}', ["CALL session_set_mode off api"]),
+        ('{"mode":"hold"}', ["CALL session_set_mode hold api"]),
+        ('{"probe":true}', ["CALL session_probe"]),
+        ('{"probe":false}', []),
+        ('{"exp_min":0}', []),
+    ],
+)
+def test_api_ble_post(web_cli, body, calls):
+    """POST /api/ble sets the session's mode or starts a probe and answers the new device.ble.
+
+    .. test:: POST /api/ble sets the BLE mode, starts a probe
+       :id: T_FW_BLE_API
+       :links: R_FW_BLE_EXP
+    """
+    resps, other = drive(web_cli, [*(s.encode() for s in STATION), req("POST", "/api/ble", body)])
+    assert resps[-1].status == 200
+    assert [ln for ln in other if ln.startswith("CALL session_")] == calls
+    assert resps[-1].json()["mode"] == {"quiet": "quiet", "off": "off"}.get(body[9:-2], "hold")
+
+
+@pytest.mark.parametrize(
+    "setup, method, body, status, error",
+    [
+        (STATION, "PUT", "{}", 405, "method"),
+        (STATION, "POST", '{"mode":"nap"}', 400, "bad_value"),
+        (STATION, "POST", '{"x":1}', 400, "bad_json"),
+        (STATION, "POST", "{}", 400, "bad_json"),
+        (STATION, "POST", "", 400, "bad_json"),
+        (STATION, "POST", '{"mode":"off"', 400, "bad_json"),
+        (STATION, "POST", '{"mode":"off"}x', 400, "bad_json"),
+        (STATION, "POST", '{"exp_min":-1}', 400, "bad_json"),
+        (STATION, "POST", '{"exp_min":120,"from":22,"to":6}', 409, "no_time"),
+        (STATION + ["ntp %d" % NIGHT_MS], "POST", '{"exp_min":721}', 400, "bad_value"),
+        (STATION + ["ntp %d" % NIGHT_MS], "POST", '{"exp_min":60,"to":24}', 400, "bad_value"),
+        (["wifi setup_ap"], "POST", '{"mode":"off"}', 403, "setup_mode"),
+    ],
+)
+def test_api_ble_errors(web_cli, setup, method, body, status, error):
+    """A bad POST /api/ble changes nothing: no session call.
+
+    .. test:: POST /api/ble errors: method, bad JSON, bad value, no time, setup mode
+       :id: T_FW_BLE_API_ERRORS
+       :links: R_FW_BLE_EXP
+    """
+    r, other = one(web_cli, method, "/api/ble", body, setup=setup)
+    assert (r.status, r.json()["error"]) == (status, error)
+    assert [ln for ln in other if ln.startswith("CALL session_")] == []
+
+
+def test_api_ble_get_and_state_carry_device_ble(web_cli):
+    """GET /api/ble and /api/state's device.ble are one object (cali_ble_exp_json).
+
+    .. test:: GET /api/ble = /api/state device.ble
+       :id: T_FW_BLE_API_GET
+       :links: R_FW_BLE_EXP
+    """
+    resps, _ = drive(
+        web_cli, [*(s.encode() for s in STATION), req("GET", "/api/ble"), req("GET", "/api/state")]
+    )
+    assert resps[-2].json() == BLE_IDLE
+    assert resps[-1].json()["device"]["ble"] == BLE_IDLE
+
+
+def test_api_ble_experiment_runs_and_a_viewer_cuts_the_phase(web_cli):
+    """With a clock the experiment starts; the tick starts the hold phase; a GET /api/state (a viewer)
+    cuts it short and the scheduler holds for 10 min; {"exp_min":0} ends it (back to hold).
+
+    .. test:: POST /api/ble runs the experiment, a viewer interrupts it, exp_min 0 stops it
+       :id: T_FW_BLE_API_EXP
+       :links: R_FW_BLE_EXP
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"ntp %d" % NIGHT_MS,
+            b"now 1000",
+            req("POST", "/api/ble", '{"exp_min":120}'),
+            b"bxtick",
+            b"now 61000",
+            req("GET", "/api/ble"),
+            req("GET", "/api/state"),
+            b"bxtick",
+            req("GET", "/api/ble"),
+            req("POST", "/api/ble", '{"exp_min":0}'),
+        ],
+    )
+    exp = {"on": True, "phase_min": 120, "from": 22, "to": 6}
+    assert resps[0].json() == dict(BLE_IDLE, exp=dict(exp, phase=None, remaining_ms=None))
+    assert resps[1].json() == dict(BLE_IDLE, exp=dict(exp, phase="hold", remaining_ms=120 * 60000 - 60000))
+    ble = resps[2].json()["device"]["ble"]  # the fake clock moves while a request polls
+    assert (
+        ble["exp"]["phase"] == "hold"
+        and 0 <= resps[1].json()["exp"]["remaining_ms"] - ble["exp"]["remaining_ms"] < 1000
+    )
+    assert resps[3].json() == dict(BLE_IDLE, exp=dict(exp, phase=None, remaining_ms=None))  # cut short
+    assert resps[4].json() == BLE_IDLE
+    assert [ln for ln in other if ln.startswith("CALL session_")] == ["CALL session_set_mode hold exp_off"]

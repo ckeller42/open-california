@@ -9,7 +9,7 @@
  *   {"ev":"diag","heap_free":…,"heap_min":…,"psram_free":…,"cpu_pct":…,"stack_min":{"owner":…,…},
  *    "wifi_rssi":…,"ble_rssi":…,"link_up":true,"uptime_s":…}                 (app_main, every 60 s)
  *   {"ev":"evt","kind":"<kind>",…}   boot | link_up | link_down | wifi_up | wifi_down | net | cmd |
- *                                    ota | auto_camper | sd | ble_mode | probe | panic | touch (cali_diag_touch, #346) | display (the display-wake PR:
+ *                                    ota | auto_camper | sd | ble_mode | probe | ble_exp | ble_phase | panic | touch (cali_diag_touch, #346) | display (the display-wake PR:
  *                                    cali_diag_evt("display", "\"state\":\"on\",\"src\":\"tap\""))
  *   {"ev":"perf","route":"/api/state","status":200,"bytes":4711,"ms":100}   every HTTP response
  *   {"ev":"perf","char":"1602","op":"read","ms":84}                         BLE ops, sampled

@@ -224,8 +224,11 @@ def test_ntp_wins_over_the_unit_clock(time_cli, tmp_path):
     ],
 )
 def test_berlin_hour(time_cli, tmp_path, utc, hour):
-    """.. test:: Berlin local hour
-    :id: T_FW_TIME_BERLIN_HOUR
-    :links: R_FW_BLE_EXP"""
+    """``cali_time_berlin_hour``: the Europe/Berlin local hour of an epoch, CET/CEST by the EU rule.
+
+    .. test:: Berlin local hour
+       :id: T_FW_TIME_BERLIN_HOUR
+       :links: R_FW_BLE_EXP
+    """
     ms = int(datetime.fromisoformat(utc.replace("Z", "+00:00")).timestamp() * 1000)
     assert run(time_cli, tmp_path, "berlinhour %d" % ms) == ["BH %d" % hour]
