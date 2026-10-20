@@ -11,6 +11,7 @@
  *     DISCONNECTED [reason]                  (default 8, a generic loss; 19 or 531 = the unit's
  *                                             remote-terminate, the parked kick — cali_session.h)
  *     DISCOVERED [status] | HEARTBEAT <status>
+ *     UNIT_ADV                               (the bonded unit's own advert; cali_ble_exp_init hooked it)
  *     READ <hex char> <status> [hex data]    (default data 0102)
  *     NOTIFY <hex char> <hex data>
  *     WRITTEN <hex char> <status>            (a control write() completed; 0 = ACKed)
@@ -321,6 +322,7 @@ int main(void) {
     setvbuf(stdout, NULL, _IOLBF, 0);
     cali_console_on_quit = quit;
     cali_console_init(&FAKE);
+    cali_ble_exp_init();
 
     while (fgets(line, sizeof line, stdin)) {
         char a1[32] = "", a2[32] = "", a3[256] = "";
@@ -370,6 +372,7 @@ int main(void) {
         else if (strcmp(word, "DISCONNECTED") == 0)
             deliver(CALI_TEV_DISCONNECTED, a1[0] ? (int)strtol(a1, NULL, 0) : 8, 0, NULL, 0);
         else if (strcmp(word, "DISCOVERED") == 0) deliver(CALI_TEV_DISCOVERED, n1, 0, NULL, 0);
+        else if (strcmp(word, "UNIT_ADV") == 0) deliver(CALI_TEV_UNIT_ADV, 0, 0, NULL, 0);
         else if (strcmp(word, "HEARTBEAT") == 0) deliver(CALI_TEV_HEARTBEAT, n1, 0x1003, NULL, 0);
         else if (strcmp(word, "READ") == 0) {
             len = unhex(a3[0] ? a3 : "0102", data, sizeof data);

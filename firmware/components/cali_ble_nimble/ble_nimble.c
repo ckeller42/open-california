@@ -454,10 +454,22 @@ static int auth_failure(int status) {
     return status == BLE_HS_HCI_ERR(BLE_ERR_AUTH_FAIL) || status == BLE_HS_HCI_ERR(BLE_ERR_PINKEY_MISSING);
 }
 
-/* A window's report with manufacturer data -> CALI_TEV_ADV (rssi + name: not emit()'s shape). */
+static int first_bond(ble_addr_t *out);
+static int is_peer(const ble_addr_t *a, const ble_addr_t *peer);
+
+/* A window's report: the unit's own advert -> CALI_TEV_UNIT_ADV (no payload); else one with
+ * manufacturer data -> CALI_TEV_ADV (rssi + name: not emit()'s shape). The unit = the selected bond
+ * only (first_bond: what identity() reports and connect_bonded targets), never another stored bond — a
+ * pairing that failed verification can leave one behind (no keep_only_bond), and its adverts would be
+ * a false sighting. */
 static void adv_event(const struct ble_gap_disc_desc *d) {
     struct ble_hs_adv_fields f;
     cali_tevent_t e;
+    ble_addr_t id;
+    if (first_bond(&id) == 0 && is_peer(&d->addr, &id)) {   /* R_FW_BLE_EXP: no address leaves here */
+        emit(CALI_TEV_UNIT_ADV, 0, 0, NULL, 0, NULL);
+        return;
+    }
     if (ble_hs_adv_parse_fields(&f, d->data, d->length_data) != 0 || f.mfg_data == NULL || f.mfg_data_len < 2) return;
     memset(&e, 0, sizeof e);
     e.ev = CALI_TEV_ADV;
@@ -747,27 +759,29 @@ static int rpa_matches(const uint8_t irk[16], const ble_addr_t *a) {
     return out[13] == a->val[2] && out[14] == a->val[1] && out[15] == a->val[0];
 }
 
-/* The found unit is one a bond is for: its identity in *id. Matched against EVERY stored bond — by
- * identity (a controller that resolved the RPA in the scan reports the identity typed 2/3 =
- * PUBLIC_ID/RANDOM_ID, while the bond is stored typed 0/1: compared type-agnostically) or by its RPA
- * resolving with that bond's IRK. A unit no bond is for (issue #255: a second camper) is paired as
- * before. */
-static int found_is_bonded(ble_addr_t *id) {
-    ble_addr_t peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)], found = s_found_addr;
-    int n = 0;
+/* Address a is the bonded peer `peer` (stored identity): by identity (a controller that resolved the
+ * RPA in the scan reports the identity typed 2/3 = PUBLIC_ID/RANDOM_ID, while the bond is stored typed
+ * 0/1: compared type-agnostically) or by its RPA resolving with that bond's IRK. */
+static int is_peer(const ble_addr_t *a, const ble_addr_t *peer) {
+    struct ble_store_key_sec key;
+    struct ble_store_value_sec val;
+    ble_addr_t found = *a;
     if (found.type == BLE_ADDR_PUBLIC_ID) found.type = BLE_ADDR_PUBLIC;
     else if (found.type == BLE_ADDR_RANDOM_ID) found.type = BLE_ADDR_RANDOM;
+    if (ble_addr_cmp(peer, &found) == 0) return 1;
+    memset(&key, 0, sizeof key);
+    key.peer_addr = *peer;
+    return ble_store_read_peer_sec(&key, &val) == 0 && val.irk_present && rpa_matches(val.irk, a);
+}
+
+/* The found unit is one a bond is for: its identity in *id. Matched against EVERY stored bond (is_peer).
+ * A unit no bond is for (issue #255: a second camper) is paired as before. */
+static int is_bonded(const ble_addr_t *a, ble_addr_t *id) {
+    ble_addr_t peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
+    int n = 0;
     if (ble_store_util_bonded_peers(peers, &n, MYNEWT_VAL(BLE_STORE_MAX_BONDS)) != 0) return 0;
     for (int i = 0; i < n; i++) {
-        struct ble_store_key_sec key;
-        struct ble_store_value_sec val;
-        if (ble_addr_cmp(&peers[i], &found) == 0) {
-            *id = peers[i];
-            return 1;
-        }
-        memset(&key, 0, sizeof key);
-        key.peer_addr = peers[i];
-        if (ble_store_read_peer_sec(&key, &val) == 0 && val.irk_present && rpa_matches(val.irk, &s_found_addr)) {
+        if (is_peer(a, &peers[i])) {
             *id = peers[i];
             return 1;
         }
@@ -780,7 +794,7 @@ static int found_is_bonded(ble_addr_t *id) {
 static int t_connect_found(void) {
     ble_addr_t id;
     if (!s_found) return BLE_HS_ENOENT;
-    if (found_is_bonded(&id)) {
+    if (is_bonded(&s_found_addr, &id)) {
         cali_log("pair: the unit found is our bonded peer, connecting by its identity");
         return connect_to(&id, 0);
     }

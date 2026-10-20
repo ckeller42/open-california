@@ -908,12 +908,7 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
     cali_json_t j;
     cali_json_begin(&j, s_json, sizeof s_json);   /* the top level is device.ble's object */
-    cali_json_key(&j, "mode");
-    cali_json_str(&j, cali_session_mode_name(cali_session_mode()));
-    cali_json_key(&j, "probing");
-    cali_json_bool(&j, cali_session_probing());
-    cali_json_key(&j, "exp");
-    cali_ble_exp_exp_json(&j);
+    cali_ble_exp_fields(&j);
     finish_json(&j, resp);
 }
 

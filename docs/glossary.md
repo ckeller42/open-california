@@ -80,6 +80,12 @@ BLE probe
   One fresh read-all on request (connecting first when `off`), then back to the {term}`BLE mode`;
   the power experiment takes one at the end of each phase. See {doc}`firmware` ("BLE modes").
 
+Sleep indicator
+Unit advert sighting
+  Whether the satellite's sensor scan windows still see the bonded unit's own advert (matched by
+  address, never logged): gone for 3 windows with the link down = the unit is likely asleep; back in
+  `quiet`/`off` then = it woke (door, ignition). Needs `sensors on`. See {doc}`firmware` (`R_FW_BLE_EXP`).
+
 Latch
 Latched
   The load holds after the heartbeat stops. Arming is one-shot, not a dead-man switch.

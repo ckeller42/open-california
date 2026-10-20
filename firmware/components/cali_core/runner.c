@@ -12,6 +12,7 @@
 
 void (*cali_runner_on_state)(const cali_pair_state_t *s, const char *address);
 void (*cali_runner_on_other)(const cali_tevent_t *e);
+void (*cali_runner_on_unit_adv)(uint64_t now_ms);
 
 static const cali_transport_t *s_t;
 static cali_pair_state_t s_ps;
@@ -134,6 +135,10 @@ static int map_event(const cali_tevent_t *e, uint32_t *arg) {
 static void sink(const cali_tevent_t *e, void *ctx) {
     (void)ctx;
     uint32_t arg;
+    if (e->ev == CALI_TEV_UNIT_ADV) {   /* the unit's own advert: the BLE experiment's (ble_exp_run.c) */
+        if (cali_runner_on_unit_adv) cali_runner_on_unit_adv(s_now_ms);
+        return;
+    }
     if (e->ev == CALI_TEV_ADV) {   /* sensor adverts: never the SM's or the session's */
         cali_sensors_on_adv(e, s_now_ms);
         return;

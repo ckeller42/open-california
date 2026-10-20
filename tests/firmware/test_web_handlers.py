@@ -276,7 +276,7 @@ EXPECTED_DEVICE_TAIL = (
     '"auto_camper":{"enabled":true,"state":"idle"},'
     '"pi_wake":{"enabled":true,"last_s":null,"reason":null,"halt_after_min":30,"halt_soc_pct":30,'
     '"halt_in_s":1795,"halted":false,"halt_last_s":null,"halt_reason":null,"batt_low":false},'
-    '"ble":{"mode":"hold","probing":false,"exp":null},'
+    '"ble":{"mode":"hold","probing":false,"exp":null,"unit_adv_seen_ms_ago":null},'
     '"display":{"state":null,"lux":null,"prox":null,"motion":null,"brightness_pct":null,"sensor":null,'
     '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0,"dfs":null,"pm":null},'
     '"ux":{"enabled":true},'
@@ -2421,7 +2421,7 @@ def test_api_log_a_failed_sd_read_is_503(web_cli, tmp_path):
 
 # ---- /api/ble: the BLE link mode, the probe and the night experiment (R_FW_BLE_EXP) ------------------
 
-BLE_IDLE = {"mode": "hold", "probing": False, "exp": None}
+BLE_IDLE = {"mode": "hold", "probing": False, "exp": None, "unit_adv_seen_ms_ago": None}
 # 2026-10-20 21:00 UTC = 23:00 in Berlin (CEST): inside the default 22-06 window
 NIGHT_MS = 1792530000000
 

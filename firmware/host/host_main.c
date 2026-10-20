@@ -212,6 +212,7 @@ int main(int argc, char **argv) {
     ble_hci_sock_set_device(port);
     cali_ac_init();
     cali_pw_init();
+    cali_ble_exp_init();   /* the unit's advert -> the BLE experiment (R_FW_BLE_EXP) */
     cali_log("exp: sensors %s", cali_exp_sensors() ? "on" : "off");   /* R_FW_EXPERIMENTAL */
     cali_sensors_init();
     cali_diag_sink = rec_line;

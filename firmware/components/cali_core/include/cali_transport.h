@@ -34,9 +34,12 @@ typedef enum {
     CALI_TEV_WRITTEN,       /* a write() completed; char_short set; status 0 = ACKed by the unit.
                                May arrive inside the write() call (a request the stack fails at
                                once); never for a write() that returned nonzero */
-    CALI_TEV_ADV            /* a passive scan window saw an advert with manufacturer data: data/len =
+    CALI_TEV_ADV,           /* a passive scan window saw an advert with manufacturer data: data/len =
                                the mfg AD payload (company id first, little-endian), addr, rssi, name
                                set; status = addr type (0 public, 1 random) */
+    CALI_TEV_UNIT_ADV       /* a passive scan window saw the bonded unit's own advert (its address
+                               resolved to the bond's identity); no payload — nothing address-like
+                               leaves the transport (R_FW_BLE_EXP: the sleep indicator) */
 } cali_tev_t;
 
 /* data points into transport memory valid only for the duration of the sink call: copy it. */
