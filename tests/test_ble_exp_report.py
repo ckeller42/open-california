@@ -63,3 +63,20 @@ def test_normalize():
     assert out[1][2] == 13.2 and out[2][2] == {"power": True}
     # explicit alias overrides the type pick
     assert [d for _, k, d in normalize(done, _Replay(), "other") if k == "volt"] == [12.0]
+
+
+def test_hold_phase_span_comes_from_dur_ms():
+    """A hold phase logs no ``ble_mode`` at its start (the mode already is hold): its span is the
+    firmware's ``dur_ms``, not the log's first record.
+
+    .. test:: report: the phase span from ble_phase dur_ms
+       :id: T_BLE_EXP_REPORT_DUR
+       :links: R_BLE_EXP_REPORT
+    """
+    ev = [
+        (0, "volt", 13.0),  # an earlier record: the old fallback start
+        (H, "probe", {"ok": True, "mode": "hold"}),
+        (2 * H, "ble_phase", {"mode": "hold", "aborted": False, "dur_ms": 30 * 60_000}),
+    ]
+    (row,) = phases(ev)
+    assert row["minutes"] == 30

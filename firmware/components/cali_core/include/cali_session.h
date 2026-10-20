@@ -86,7 +86,7 @@ void cali_session_connect_now(void);
 
 enum { CALI_BLE_HOLD, CALI_BLE_QUIET, CALI_BLE_OFF };
 /* Owner task. hold = today; quiet = link held, the 1003 heartbeat only while a read-all warms up or
- * reads; off = no link and no reconnect. `why` goes into evt ble_mode. 0, or -1 for a bad mode. */
+ * reads, or a control command is in flight (cali_ctl_busy); off = no link and no reconnect. `why` goes into evt ble_mode. 0, or -1 for a bad mode. */
 int cali_session_set_mode(int mode, const char *why);
 int cali_session_mode(void);
 /* One fresh read-all now (connects first when off; the heartbeat runs through its warm-up), then

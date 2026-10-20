@@ -2477,7 +2477,7 @@ def test_ignition_in_quiet_aborts_the_phase_back_to_hold(fake):
     """The experiment's quiet phase: the van's ignition (cali_ac_ignition) on an up link counts as
     activity — the phase ends aborted and the mode returns to hold.
 
-    .. test:: ignition during the quiet phase aborts it
+    .. test:: ignition during the quiet phase aborts it, and holds while it stays on
        :id: T_FW_BLE_EXP_IGNITION
        :links: R_FW_BLE_EXP
     """
@@ -2497,12 +2497,13 @@ def test_ignition_in_quiet_aborts_the_phase_back_to_hold(fake):
         "tick %d" % (q + 100),
         "ign 1",
         "tick %d" % (q + 200),
+        "tick %d" % (q + 200 + 10 * 60000 + 100),  # still driving past the 10-min hold: no next phase
     )
     ev = [e for e in _diag(out) if e["ev"] == "evt" and e["kind"] in ("ble_phase", "ble_mode")]
     assert ev == [
-        {"ev": "evt", "kind": "ble_phase", "mode": "hold", "aborted": False},
+        {"ev": "evt", "kind": "ble_phase", "mode": "hold", "aborted": False, "dur_ms": p + WARM + 100 - t},
         {"ev": "evt", "kind": "ble_mode", "mode": "quiet", "why": "exp"},
-        {"ev": "evt", "kind": "ble_phase", "mode": "quiet", "aborted": True},
+        {"ev": "evt", "kind": "ble_phase", "mode": "quiet", "aborted": True, "dur_ms": 200},
         {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "exp_abort"},
     ]
 
@@ -2544,3 +2545,57 @@ def test_a_refused_phase_probe_is_logged(fake):
     out = run(fake, CLOCK, "diaghook", "> ble exp 1 00-00", "tick 1000", "tick 61000")
     assert "LOG ble-exp: probe refused" in out
     assert {"ev": "evt", "kind": "probe", "ok": False, "mode": "hold", "reason": "refused"} in _diag(out)
+
+
+def test_stop_or_restart_mid_phase_logs_the_phase_aborted(fake):
+    """``ble exp off`` or a new ``ble exp`` while a phase runs logs that phase (aborted, its span) first.
+
+    .. test:: a stopped or restarted experiment keeps its running phase in the log
+       :id: T_FW_BLE_EXP_STOP_PHASE
+       :links: R_FW_BLE_EXP
+    """
+    out = run(
+        fake,
+        CLOCK,
+        "diaghook",
+        "> ble exp 5 00-00",
+        "tick 1000",  # hold starts
+        "tick 4000",
+        "> ble exp 2 00-00",  # restart mid-phase
+        "tick 5000",  # hold starts again
+        "tick 9000",
+        "> ble exp off",
+    )
+    ev = [e for e in _diag(out) if e["ev"] == "evt" and e["kind"] in ("ble_phase", "ble_exp")]
+    assert ev == [
+        {"ev": "evt", "kind": "ble_exp", "on": True, "phase_min": 5, "from": 0, "to": 0},
+        {"ev": "evt", "kind": "ble_phase", "mode": "hold", "aborted": True, "dur_ms": 3000},
+        {"ev": "evt", "kind": "ble_exp", "on": True, "phase_min": 2, "from": 0, "to": 0},
+        {"ev": "evt", "kind": "ble_phase", "mode": "hold", "aborted": True, "dur_ms": 4000},
+        {"ev": "evt", "kind": "ble_exp", "on": False},
+    ]
+
+
+def test_mode_change_mid_command_keeps_the_heartbeat(fake):
+    """A lighting command is a frame + a commit; ``quiet`` set between them must not stop the 1003
+    heartbeat before the commit (the sequencer checks ready only at submit).
+
+    .. test:: a control command in flight keeps its heartbeat through a mode change
+       :id: T_FW_BLE_QUIET_MID_COMMAND
+       :links: R_FW_BLE_MODE
+    """
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "> set lighting kitchen 5",
+        "tick %d" % t,
+        "WRITTEN 1501 0",
+        "> ble mode quiet",
+        *["tick %d" % u for u in range(t + TICK, t + FOLLOW + 2 * TICK, TICK)],
+        "WRITTEN 1501 0",
+    )
+    w = writes(out)
+    assert w == want_writes("lighting", "kitchen", "5")
+    between = out[out.index(w[0]) : out.index(w[1])]
+    assert calls(between, "write_heartbeat")

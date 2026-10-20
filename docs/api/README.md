@@ -37,5 +37,5 @@ The satellite serves the same envelope plus its own settings endpoints (contract
 | POST | `/api/pi_wake` | Wake the halted Raspberry Pi: GPIO9 low 200 ms (`{}` or no body; 409 `busy` while a pulse runs; station mode only) |
 | POST | `/api/pi_halt` | Shut the Raspberry Pi down: GPIO8 low 500 ms (`{}` or no body; 409 `busy` while either line is low; station mode only) |
 | GET | `/api/ble` | The BLE link mode, the probe and the night experiment: `{"mode":"hold"\|"quiet"\|"off","probing":<bool>,"exp":null\|{…}}` (= `/api/state` `device.ble`) |
-| POST | `/api/ble` | `{"mode":"hold"\|"quiet"\|"off"}`, `{"probe":true}`, `{"exp_min":1..720,"from"?:0..23,"to"?:0..23}` or `{"exp_min":0}`; answers `device.ble`; 409 `no_time` (no wall clock), 409 `busy` (probe running); station mode only |
+| POST | `/api/ble` | `{"mode":"hold"\|"quiet"\|"off"}`, `{"probe":true}`, `{"exp_min":1..720,"from"?:0..23,"to"?:0..23}` or `{"exp_min":0}`; answers `device.ble`; 409 `no_time` (no wall clock), 409 `busy` (a probe already runs, or no bond); station mode only |
 | POST | `/api/pi_wake_setting` | Any non-empty subset of `{"enabled":<bool>,"halt_after_min":0..1440,"halt_soc_pct":0..100}`: wake on the ignition edge (default on), shut down after parking (default 30 min, 0 off), the battery guard (default 30 %, 0 off) |

@@ -289,7 +289,9 @@ int cali_session_mode(void) { return s_mode; }
 int cali_session_probing(void) { return s_probe; }
 
 /* quiet: the 1003 heartbeat only while a read-all warms up / reads (values refresh), or a probe runs */
-static int hb_wanted(void) { return s_mode == CALI_BLE_HOLD || s_warming || s_reading || s_probe; }
+static int hb_wanted(void) {   /* + a control command in flight keeps its heartbeat (mode change mid-command) */
+    return s_mode == CALI_BLE_HOLD || s_warming || s_reading || s_probe || cali_ctl_busy();
+}
 
 static void probe_end(int ok, const char *reason) {
     s_probe = 0;

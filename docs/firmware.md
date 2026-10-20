@@ -762,9 +762,9 @@ IP and no user-typed value is ever recorded.
 | `evt` `panic` | right after `boot`, when the previous boot panicked (`R_FW_PANIC_CAPTURE`, below) | `task` (the task running on the panicking core), `reason` (the exception, or abort()/assert's details; <= 47 chars), `bt` (up to 16 backtrace PCs, innermost first, space-separated bare hex) |
 | `evt` `link_up` | link encrypted (session.c) | `reconnect_ms` (down -> up; `null` for the first link of a boot), `attempts` (`connect_bonded` calls since) |
 | `evt` `link_down` | an up link went | `reason` (`disconnected`/`connect_fail`/`enc_fail`/`heartbeat`/`discover`/`connect_timeout`/`enc_timeout`/`ble_off`/`stop`), `status` (the transport status: NimBLE, HCI = 0x200 + code, e.g. 531 = 0x13), `dur_ms` |
-| `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why` (`console`/`command`/`pairing`/ the caller's reason) |
+| `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why`: `console` (`ble mode`), `api` (`POST /api/ble`), `command` (a control command in `quiet`/`off`), `pairing`, `exp` (an experiment phase starts), `exp_abort` (a phase cut short), `exp_off` (`ble exp off`) |
 | `evt` `ble_exp` | the BLE experiment started / stopped (ble_exp_run.c, `R_FW_BLE_EXP`) | `on` (bool); on start also `phase_min`, `from`, `to` (Berlin local hours) |
-| `evt` `ble_phase` | an experiment phase ended | `mode` (the phase: `hold`/`quiet`/`off`), `aborted` (bool: cut short by a viewer, a mode change from outside — a command in `quiet`/`off`, the console, `/api/ble`, also during the probe —, the ignition in `quiet`, or the window's end; `false` = ran its length, probe done) |
+| `evt` `ble_phase` | an experiment phase ended (also: stopped or restarted mid-phase) | `mode` (the phase: `hold`/`quiet`/`off`), `aborted` (bool: cut short by a viewer, a mode change from outside — a command in `quiet`/`off`, the console, `/api/ble`, also during the probe —, the ignition on an up link, the window's end, `ble exp off` or a new `ble exp`; `false` = ran its length, probe done), `dur_ms` (the phase's span: a `hold` phase logs no `ble_mode` at its start) |
 | `evt` `probe` | a probe ended (or the experiment's phase-end probe was refused: `ok` false, `reason` `refused`) | `ok` (bool), `mode` (the mode it returns to), `reason` (`read_all` on success, else the failure: `connect_timeout`/`connect_fail`/`enc_timeout`/`enc_fail`/`disconnected`/`discover`/`heartbeat`) |
 | `evt` `wifi_up` / `wifi_down` | station online / lost (wifi_run.c) | `rssi`, `ip_changed` (bool, never the address) / `reason` `lost`, `rssi`, `dur_ms` |
 | `evt` `net` | a failed join | `err` `join`, `reason` (`not_found`/`auth`/`other`) |
@@ -885,7 +885,8 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
 
    The session runs in one of three modes (``cali_session_set_mode``; console ``ble mode
    hold|quiet|off``). ``hold`` is the default: link held, 1003 heartbeat every 600 ms. ``quiet``:
-   link held, the heartbeat runs only while a read-all warms up or reads. ``off``: no link and no
+   link held, the heartbeat runs only while a read-all warms up or reads, or a control command is in
+   flight (a switch to ``quiet`` mid-command keeps it to the last frame). ``off``: no link and no
    reconnect (a drop is not retried, boot does not connect). Only ``hold`` is ready for a control
    write (``cali_session_ready``): a command in ``quiet`` or ``off`` (``cali_session_connect_now``)
    switches back to ``hold`` (``why`` ``command``) and answers ``not_connected``; the client's retry
@@ -913,13 +914,16 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    long, with a probe at the end of every phase; outside the window the mode is ``hold``. Without a
    wall clock it is refused (``no_time``). A viewer (``GET /api/state``), a mode change from outside
    (a control command in ``quiet`` or ``off``, ``ble mode``, ``/api/ble``, pairing — also while the
-   phase-end probe runs) or, in ``quiet`` on an up link, the van's ignition (``cali_ac_ignition``)
+   phase-end probe runs) or, on an up link, the van's ignition (terminal 15, ``cali_ac_ignition``)
    ends the running phase as ``aborted`` and returns to ``hold``; the cycle then holds 10 min
-   (``CALI_BX_IDLE_MS``, renewed by every further viewer poll or ignition tick) and goes on with the
-   next phase. A wake in ``off`` (the unit advertising again) is not detected yet. Each phase end
-   logs ``evt ble_phase``, start/stop ``evt ble_exp``; a refused phase-end probe logs ``evt probe``
-   with ``ok:false``, reason ``refused``. ``ble exp off`` (``{"exp_min":0}``) ends it in ``hold``; a
-   reboot ends it too (not persisted).
+   (``CALI_BX_IDLE_MS``, renewed by every further viewer poll and every tick with the ignition on, so a
+   night drive never reaches the next phase) and goes on with the next phase. A wake in ``off`` (the
+   unit advertising again) is not detected yet. Each phase end logs ``evt ble_phase`` with its
+   ``dur_ms``, start/stop ``evt ble_exp``; stopping or restarting mid-phase logs that phase
+   ``aborted`` first; a refused phase-end probe logs ``evt probe`` with ``ok:false``, reason
+   ``refused``. ``ble exp off`` (``{"exp_min":0}``) ends it in ``hold``; a reboot ends it too (not
+   persisted). ``tools/esplab/soak_report.py`` polls ``/api/state`` and so counts as a viewer: do not
+   run it during an experiment night.
 ```
 
 ## Pi wake (`R_FW_PI_WAKE`)
