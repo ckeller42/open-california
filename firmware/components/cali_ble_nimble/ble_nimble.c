@@ -454,10 +454,18 @@ static int auth_failure(int status) {
     return status == BLE_HS_HCI_ERR(BLE_ERR_AUTH_FAIL) || status == BLE_HS_HCI_ERR(BLE_ERR_PINKEY_MISSING);
 }
 
-/* A window's report with manufacturer data -> CALI_TEV_ADV (rssi + name: not emit()'s shape). */
+static int is_bonded(const ble_addr_t *a, ble_addr_t *id);
+
+/* A window's report: the bonded unit's own advert -> CALI_TEV_UNIT_ADV (no payload); else one with
+ * manufacturer data -> CALI_TEV_ADV (rssi + name: not emit()'s shape). */
 static void adv_event(const struct ble_gap_disc_desc *d) {
     struct ble_hs_adv_fields f;
     cali_tevent_t e;
+    ble_addr_t id;
+    if (is_bonded(&d->addr, &id)) {   /* the unit's own advert (R_FW_BLE_EXP): no address leaves here */
+        emit(CALI_TEV_UNIT_ADV, 0, 0, NULL, 0, NULL);
+        return;
+    }
     if (ble_hs_adv_parse_fields(&f, d->data, d->length_data) != 0 || f.mfg_data == NULL || f.mfg_data_len < 2) return;
     memset(&e, 0, sizeof e);
     e.ev = CALI_TEV_ADV;
@@ -747,13 +755,14 @@ static int rpa_matches(const uint8_t irk[16], const ble_addr_t *a) {
     return out[13] == a->val[2] && out[14] == a->val[1] && out[15] == a->val[0];
 }
 
-/* The found unit is one a bond is for: its identity in *id. Matched against EVERY stored bond — by
+/* Address a (the found unit; a scan window's advert) is one a bond is for: its identity in *id.
+ * Matched against EVERY stored bond — by
  * identity (a controller that resolved the RPA in the scan reports the identity typed 2/3 =
  * PUBLIC_ID/RANDOM_ID, while the bond is stored typed 0/1: compared type-agnostically) or by its RPA
  * resolving with that bond's IRK. A unit no bond is for (issue #255: a second camper) is paired as
  * before. */
-static int found_is_bonded(ble_addr_t *id) {
-    ble_addr_t peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)], found = s_found_addr;
+static int is_bonded(const ble_addr_t *a, ble_addr_t *id) {
+    ble_addr_t peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)], found = *a;
     int n = 0;
     if (found.type == BLE_ADDR_PUBLIC_ID) found.type = BLE_ADDR_PUBLIC;
     else if (found.type == BLE_ADDR_RANDOM_ID) found.type = BLE_ADDR_RANDOM;
@@ -767,7 +776,7 @@ static int found_is_bonded(ble_addr_t *id) {
         }
         memset(&key, 0, sizeof key);
         key.peer_addr = peers[i];
-        if (ble_store_read_peer_sec(&key, &val) == 0 && val.irk_present && rpa_matches(val.irk, &s_found_addr)) {
+        if (ble_store_read_peer_sec(&key, &val) == 0 && val.irk_present && rpa_matches(val.irk, a)) {
             *id = peers[i];
             return 1;
         }
@@ -780,7 +789,7 @@ static int found_is_bonded(ble_addr_t *id) {
 static int t_connect_found(void) {
     ble_addr_t id;
     if (!s_found) return BLE_HS_ENOENT;
-    if (found_is_bonded(&id)) {
+    if (is_bonded(&s_found_addr, &id)) {
         cali_log("pair: the unit found is our bonded peer, connecting by its identity");
         return connect_to(&id, 0);
     }

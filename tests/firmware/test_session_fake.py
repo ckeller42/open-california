@@ -2398,7 +2398,7 @@ def test_stop_during_a_probe_ends_it(fake):
         "> ble",
     )
     assert {"ev": "evt", "kind": "probe", "ok": False, "mode": "quiet", "reason": "stop"} in _diag(out)
-    assert 'LOG ble: {"ble":{"mode":"quiet","probing":false,"exp":null}}' in out
+    assert 'LOG ble: {"ble":{"mode":"quiet","probing":false,"exp":null,"unit_adv_seen_ms_ago":null}}' in out
 
 
 def test_console_ble_exp_without_time_is_refused(fake):
@@ -2410,7 +2410,9 @@ def test_console_ble_exp_without_time_is_refused(fake):
     """
     out = run(fake, *PAIRED, *READ_ALL, "> ble exp 120 22-06", "tick %d" % (T + 100), "> ble")
     assert "LOG ble-exp: refused (no time)" in out
-    assert out[-1] == 'LOG ble: {"ble":{"mode":"hold","probing":false,"exp":null}}'
+    assert (
+        out[-1] == 'LOG ble: {"ble":{"mode":"hold","probing":false,"exp":null,"unit_adv_seen_ms_ago":null}}'
+    )
 
 
 @pytest.mark.parametrize(
@@ -2506,6 +2508,64 @@ def test_ignition_in_quiet_aborts_the_phase_back_to_hold(fake):
         {"ev": "evt", "kind": "ble_phase", "mode": "quiet", "aborted": True, "dur_ms": 200},
         {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "exp_abort"},
     ]
+
+
+def test_unit_advert_reappearing_in_quiet_aborts_the_phase(fake):
+    """The unit's advert (UNIT_ADV): the first sighting and a sighting after a gone logged in another
+    mode are logged only; a reappearance after a gone logged in this quiet phase is a wake — activity,
+    the phase ends aborted and the mode returns to hold. ``ble`` shows when the advert was last seen.
+
+    .. test:: the unit's advert reappearing in quiet wakes the experiment back to hold
+       :id: T_FW_BLE_EXP_ADV_WAKE
+       :links: R_FW_BLE_EXP
+    """
+    gone = 180000  # CALI_BX_GONE_MS (test_ble_exp checks it against the sensor scan period)
+    t = T + 100
+    p = t + 5 * 60000  # 5-min hold phase ends -> probe (gone logged: no sighting since the start)
+    q = p + WARM + 200  # quiet starts
+    out = run(
+        fake,
+        *PAIRED,
+        *READ_ALL,
+        CLOCK,
+        "diaghook",
+        "> ble exp 5 00-00",
+        "tick %d" % t,
+        *_probe_done(p),
+        "tick %d" % q,
+        "UNIT_ADV",  # seen after a gone logged in hold: logged, no wake
+        "tick %d" % (q + 100),
+        "> ble",
+        "tick %d" % (q + 100 + gone),  # gone (in quiet)
+        "tick %d" % (q + 200 + gone),
+        "UNIT_ADV",  # reappears: the unit woke
+        "tick %d" % (q + 300 + gone),
+    )
+    ev = [e for e in _diag(out) if e["ev"] == "evt" and e["kind"] in ("unit_adv", "ble_phase", "ble_mode")]
+    assert ev == [
+        {"ev": "evt", "kind": "unit_adv", "seen": False},
+        {"ev": "evt", "kind": "ble_phase", "mode": "hold", "aborted": False, "dur_ms": p + WARM + 100 - t},
+        {"ev": "evt", "kind": "ble_mode", "mode": "quiet", "why": "exp"},
+        {"ev": "evt", "kind": "unit_adv", "seen": True},
+        {"ev": "evt", "kind": "unit_adv", "seen": False},
+        {"ev": "evt", "kind": "unit_adv", "seen": True},
+        {"ev": "evt", "kind": "ble_phase", "mode": "quiet", "aborted": True, "dur_ms": gone + 300},
+        {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "exp_abort"},
+    ]
+    status = next(ln for ln in out if ln.startswith("LOG ble: "))
+    assert '"unit_adv_seen_ms_ago":100' in status
+
+
+def test_unit_advert_is_not_logged_without_the_experiment(fake):
+    """No experiment: the unit's advert logs no evt (``ble`` still shows the last sighting).
+
+    .. test:: the unit's advert outside the experiment: no evt
+       :id: T_FW_BLE_EXP_ADV_OFF
+       :links: R_FW_BLE_EXP
+    """
+    out = run(fake, "diaghook", "tick 1000", "UNIT_ADV", "tick 400000", "> ble")
+    assert not [e for e in _diag(out) if e.get("kind") == "unit_adv"]
+    assert '"unit_adv_seen_ms_ago":399000' in out[-1]
 
 
 def test_ignition_off_in_quiet_keeps_the_phase(fake):

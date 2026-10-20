@@ -7,15 +7,18 @@
  *     FOUND | CONNECTED | CONNECT_FAIL [status] | PASSKEY_REQ | ENC_OK | ENC_FAIL [status]
  *     DISCONNECTED [reason] | READ <hex char> <status> | NOTIFY <hex char> | DISCOVERED [status]
  *     ADV                (a sensor window's advert)
+ *     UNIT_ADV           (the bonded unit's own advert)
  *   console-side commands:
  *     pair | passkey N | forget | tick <now_ms>
  *     fail <call>        the next call of that transport function returns -1
+ *     nohook             cali_runner_on_unit_adv = NULL (its default)
  * stdout:
  *   CALL <name> [arg]    each transport ACTION the runner makes (numbers decimal); the queries
  *                        set_sink/has_bond/identity are not printed
  *   STATE <json>         each cali_runner_on_state, keys state/attempts/error/address
  *   OTHER <ev> <char> <status>   each event forwarded to cali_runner_on_other
  *   SENSADV <addr> <now_ms>      each ADV the runner hands to cali_sensors_on_adv (stubbed here)
+ *   UNITADV <now_ms>             each UNIT_ADV the runner hands to cali_runner_on_unit_adv
  *   WINDOW <ms>                  scan_window (never called by the runner)
  */
 #include <stdio.h>
@@ -72,6 +75,8 @@ void cali_sensors_on_adv(const cali_tevent_t *e, uint64_t now_ms) {
     printf("SENSADV %s %llu\n", e->addr, (unsigned long long)now_ms);
 }
 
+static void on_unit_adv(uint64_t now_ms) { printf("UNITADV %llu\n", (unsigned long long)now_ms); }
+
 static const cali_transport_t FAKE = {
     f_set_sink, f_start_scan, f_stop_scan, f_connect_found, f_connect_bonded, f_pair,
     f_inject_passkey, f_discover, f_read, f_subscribe, f_write_heartbeat, f_disconnect,
@@ -117,6 +122,7 @@ int main(void) {
     setvbuf(stdout, NULL, _IOLBF, 0);
     cali_runner_on_state = on_state;
     cali_runner_on_other = on_other;
+    cali_runner_on_unit_adv = on_unit_adv;
     cali_runner_init(&FAKE);
 
     while (fgets(line, sizeof line, stdin)) {
@@ -135,6 +141,8 @@ int main(void) {
         else if (strcmp(word, "NOTIFY") == 0) deliver(CALI_TEV_NOTIFY, 0, (uint16_t)strtoul(a1, NULL, 16));
         else if (strcmp(word, "DISCOVERED") == 0) deliver(CALI_TEV_DISCOVERED, n1, 0);
         else if (strcmp(word, "ADV") == 0) deliver(CALI_TEV_ADV, 1, 0);
+        else if (strcmp(word, "UNIT_ADV") == 0) deliver(CALI_TEV_UNIT_ADV, 0, 0);
+        else if (strcmp(word, "nohook") == 0) cali_runner_on_unit_adv = NULL;
         else if (strcmp(word, "pair") == 0) cali_runner_start();
         else if (strcmp(word, "passkey") == 0) cali_runner_passkey((uint32_t)strtoul(a1, NULL, 10));
         else if (strcmp(word, "forget") == 0) cali_runner_forget();

@@ -9,7 +9,8 @@ Usage: ``python3 tools/esplab/ble_exp_report.py --url http://calictl-esp.local [
    :status: open
 
    Per ``ble_phase`` record: mode, aborted, minutes, minutes the unit's advert was seen
-   (``unit_adv``; seen at phase start unless an earlier record said otherwise), the last energy
+   (``unit_adv``; at phase start the last earlier record's ``seen``, none = unknown = not counted —
+   the firmware starts each experiment unknown and logs the first sighting), the last energy
    reading after the last ok ``probe`` (``None`` + ``probe`` ``fail`` when it failed), the
    battery-sense voltage slope (least squares, mV/h) and the last cooler / air-heater state.
    Voltage comes from the first ``ext`` record of type ``victron_battery`` (its ``battery_voltage``),
@@ -75,7 +76,7 @@ def phases(events):
         if d.get("dur_ms") is not None:  # the firmware's own span (a hold start logs no ble_mode)
             start = end - int(d["dur_ms"])
         prev_end = end
-        seen = next((x.get("seen") for t, k, x in reversed(before) if k == "unit_adv" and t < start), True)
+        seen = next((x.get("seen") for t, k, x in reversed(before) if k == "unit_adv" and t < start), False)
         adv, cur = 0, start
         for t, k, x in ev[:i]:
             if k == "unit_adv" and start <= t:

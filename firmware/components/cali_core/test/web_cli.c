@@ -174,6 +174,7 @@ int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]) { (void)live; 
 
 /* the BLE link modes (/api/ble, device.ble) */
 static int s_ble_mode, s_probing;
+void (*cali_runner_on_unit_adv)(uint64_t now_ms);   /* runner.c's hook (not linked); ble_exp_run.c sets it */
 int cali_session_mode(void) { return s_ble_mode; }
 int cali_session_probing(void) { return s_probing; }
 const char *cali_session_mode_name(int m) {

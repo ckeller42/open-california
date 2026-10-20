@@ -204,6 +204,20 @@ def test_sensor_adverts_go_to_the_sensors_never_the_sm_or_the_session(fake):
     assert not any(line.startswith("OTHER") for line in out)
 
 
+def test_unit_advert_goes_to_its_hook_never_the_sensors(fake):
+    """R_FW_BLE_EXP: the bonded unit's own advert (UNIT_ADV, no payload) reaches
+    cali_runner_on_unit_adv at the latest tick's now_ms — never cali_sensors_on_adv, the SM or on_other.
+
+    .. test:: the unit's advert goes to the experiment's hook only
+       :id: T_FW_BLE_EXP_ADV_ROUTE
+       :links: R_FW_BLE_EXP
+    """
+    out = run(fake, "tick 1500", "pair", "UNIT_ADV", "tick 1600", "UNIT_ADV")
+    assert [ln for ln in out if ln.startswith("UNITADV")] == ["UNITADV 1500", "UNITADV 1600"]
+    assert not any(ln.startswith(("SENSADV", "OTHER", "CALL connect")) for ln in out)
+    assert run(fake, "nohook", "UNIT_ADV") == []  # no hook (NULL): dropped
+
+
 def test_forget_removes_the_bond_then_idles(fake):
     out = run(fake, *HAPPY, "forget")
     assert out[-3:] == ["CALL remove_bond", st("resetting"), st("idle")]

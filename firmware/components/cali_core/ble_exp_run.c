@@ -7,6 +7,7 @@
 #include "cali_diag.h"
 #include "cali_json.h"
 #include "cali_platform.h"
+#include "cali_runner.h"
 #include "cali_session.h"
 #include "cali_time.h"
 
@@ -14,6 +15,10 @@ static cali_bx_t s_bx;
 static unsigned s_min;
 static uint64_t s_phase_at;   /* now_ms the running phase started (evt ble_phase dur_ms) */
 static uint64_t s_tick_at;    /* the last tick's now_ms: the clock of a stop between ticks */
+static int s_adv_any;         /* the unit's advert was seen since boot (device.ble.unit_adv_seen_ms_ago) */
+static uint64_t s_adv_at;     /* ... at this now_ms */
+static int s_adv_mode = -1;   /* the session mode the gone below was armed in */
+static int s_adv_armed;       /* a gone was logged in s_adv_mode: a reappearance there is a wake */
 
 static void phase_evt(int mode, int aborted, uint64_t now_ms) {
     cali_diag_evt("ble_phase", "\"mode\":\"%s\",\"aborted\":%s,\"dur_ms\":%llu", cali_session_mode_name(mode),
@@ -48,14 +53,46 @@ void cali_ble_exp_stop(void) {
 
 void cali_ble_exp_activity(uint64_t now_ms) { cali_bx_activity(&s_bx, now_ms); }
 
+/* The unit's advert sighting (1 seen / -1 gone from cali_bx_seen): log it; a reappearance in quiet/off
+ * after a gone logged in that same mode = the unit woke (door, ignition) = activity. Only a gone in the
+ * current mode arms it: while we hold the link the unit does not advertise, so the gone logged in hold
+ * and the adverts that follow our own disconnect (hold -> off) are no wake. */
+static void adv_transition(int t, uint64_t now_ms) {
+    int mode = cali_session_mode();
+    if (mode != s_adv_mode) {
+        s_adv_mode = mode;
+        s_adv_armed = 0;
+    }
+    if (t < 0) {
+        s_adv_armed = 1;
+        cali_diag_evt("unit_adv", "\"seen\":false");
+    } else if (t > 0) {
+        cali_diag_evt("unit_adv", "\"seen\":true");
+        if (s_adv_armed && (mode == CALI_BLE_QUIET || mode == CALI_BLE_OFF)) {
+            cali_log("ble-exp: the unit's advert is back: wake");
+            cali_bx_activity(&s_bx, now_ms);
+        }
+        s_adv_armed = 0;
+    }
+}
+
+static void on_unit_adv(uint64_t now_ms) {
+    s_adv_any = 1;
+    s_adv_at = now_ms;
+    adv_transition(cali_bx_seen(&s_bx, now_ms, 1), now_ms);
+}
+
+void cali_ble_exp_init(void) { cali_runner_on_unit_adv = on_unit_adv; }
+
 void cali_ble_exp_tick(uint64_t now_ms) {
     int64_t ts;
     s_tick_at = now_ms;
     if (!s_bx.on) return;
     int hour = cali_time_ts(&ts) == CALI_TSRC_NONE ? -1 : cali_time_berlin_hour(ts);
     /* the van's ignition (terminal 15) on an up link: like a viewer, every tick while it is on, so a
-     * night drive never reaches the next phase (off: the unit's advert, Task 4) */
+     * night drive never reaches the next phase (off: the unit's advert, adv_transition) */
     if (cali_session_link_up() && cali_ac_ignition() == 1) cali_bx_activity(&s_bx, now_ms);
+    adv_transition(cali_bx_seen(&s_bx, now_ms, 0), now_ms);   /* the gone check; off: the advert's wake */
     cali_bx_out_t o = cali_bx_step(&s_bx, now_ms, hour, cali_session_mode(), cali_session_probing());
     if (o.done_mode >= 0) phase_evt(o.done_mode, o.aborted, now_ms);
     if (o.started >= 0) s_phase_at = now_ms;
@@ -67,7 +104,8 @@ void cali_ble_exp_tick(uint64_t now_ms) {
     }
 }
 
-void cali_ble_exp_exp_json(cali_json_t *j) {
+/* the "exp" value: null, or {"on","phase_min","from","to","phase","remaining_ms"} */
+static void exp_json(cali_json_t *j) {
     if (!s_bx.on) {
         cali_json_null(j);
         return;
@@ -90,13 +128,20 @@ void cali_ble_exp_exp_json(cali_json_t *j) {
     cali_json_obj_end(j);
 }
 
-void cali_ble_exp_json(cali_json_t *j) {
-    cali_json_obj_begin(j);
+void cali_ble_exp_fields(cali_json_t *j) {
     cali_json_key(j, "mode");
     cali_json_str(j, cali_session_mode_name(cali_session_mode()));
     cali_json_key(j, "probing");
     cali_json_bool(j, cali_session_probing());
     cali_json_key(j, "exp");
-    cali_ble_exp_exp_json(j);
+    exp_json(j);
+    cali_json_key(j, "unit_adv_seen_ms_ago");   /* the tick clock: the sighting's stamp is the runner's */
+    if (!s_adv_any) cali_json_null(j);
+    else cali_json_int(j, (long long)(s_tick_at > s_adv_at ? s_tick_at - s_adv_at : 0));
+}
+
+void cali_ble_exp_json(cali_json_t *j) {
+    cali_json_obj_begin(j);
+    cali_ble_exp_fields(j);
     cali_json_obj_end(j);
 }

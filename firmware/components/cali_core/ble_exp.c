@@ -79,3 +79,24 @@ cali_bx_out_t cali_bx_step(cali_bx_t *x, uint64_t now, int hour, int cur, int bu
     }
     return o;
 }
+
+int cali_bx_seen(cali_bx_t *x, uint64_t now, int seen_now) {
+    if (!x->on) return 0;
+    if (seen_now) {
+        int was = x->adv;
+        x->adv = 1;
+        x->adv_ms = now;
+        x->adv_clock = 1;
+        return was != 1;
+    }
+    if (!x->adv_clock) {   /* unknown: the gone clock starts at the first check */
+        x->adv_clock = 1;
+        x->adv_ms = now;
+        return 0;
+    }
+    if (x->adv != -1 && now - x->adv_ms >= CALI_BX_GONE_MS) {
+        x->adv = -1;
+        return -1;
+    }
+    return 0;
+}

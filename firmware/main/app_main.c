@@ -567,6 +567,7 @@ void app_main(void) {
     cali_session_on_io = cali_sdlog_io;   /* unit frames -> the unit clock + the SD log (R_FW_SD_LOG) */
     cali_ac_init();           /* the auto-camper toggle + restore debt (R_FW_AUTO_CAMPER) */
     cali_pw_init();           /* GPIO9 open drain, released; the wake-on-ignition toggle (R_FW_PI_WAKE) */
+    cali_ble_exp_init();      /* the unit's advert -> the BLE experiment (R_FW_BLE_EXP) */
     cali_log("exp: sensors %s", cali_exp_sensors() ? "on" : "off");   /* R_FW_EXPERIMENTAL, test_qemu_boot.py */
     cali_sensors_init();      /* the configured sensor list (NVS sens_list, R_FW_SENSORS) */
 

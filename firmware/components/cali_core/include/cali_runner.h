@@ -10,7 +10,8 @@
  *   itself emits no ENC_CHANGE, only a drop, or nothing — then PAIR_TIMEOUT_S[pairing] ends it),
  *   EV_VERIFY_FAIL (verifying). In waiting_passkey the SM has no EV_PAIR_FAIL transition (Python
  *   parity), so ENC_FAIL/DISCONNECTED there are consumed and the passkey timeout ends the flow.
- * ADV (a sensor window's advert) goes to cali_sensors_on_adv at the latest tick's now_ms. Every
+ * ADV (a sensor window's advert) goes to cali_sensors_on_adv at the latest tick's now_ms; UNIT_ADV
+ * (the bonded unit's own advert) to cali_runner_on_unit_adv, likewise. Every
  * other event (NOTIFY, DISCOVERED, other READs, anything outside a flow) goes to
  * cali_runner_on_other (the session, Task 6).
  *
@@ -59,6 +60,10 @@ extern void (*cali_runner_on_state)(const cali_pair_state_t *s, const char *addr
 /* Receives every transport event the runner does not consume (see the mapping above), with the
  * event's data still valid. NULL hook = dropped. */
 extern void (*cali_runner_on_other)(const cali_tevent_t *e);
+
+/* Receives CALI_TEV_UNIT_ADV (the bonded unit's own advert) at the latest tick's now_ms; never the SM,
+ * the session or the sensors. NULL hook = dropped; cali_ble_exp_init() sets it (R_FW_BLE_EXP). */
+extern void (*cali_runner_on_unit_adv)(uint64_t now_ms);
 
 #ifdef __cplusplus
 }

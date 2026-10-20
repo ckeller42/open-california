@@ -37,7 +37,7 @@
  *                                                -- cali_pi_wake.h (R_FW_PI_WAKE, R_FW_PI_HALT); last_s = s since the last pulse
  *                                  "ble":{"mode":"hold"|"quiet"|"off","probing":<bool>,"exp":null|{"on":true,
  *                                         "phase_min","from","to","phase":"hold"|"quiet"|"off"|null,
- *                                         "remaining_ms":<int>|null}},
+ *                                         "remaining_ms":<int>|null},"unit_adv_seen_ms_ago":<int>|null},
  *                                                -- cali_ble_exp.h (R_FW_BLE_MODE, R_FW_BLE_EXP); a GET of
  *                                                /api/state is a viewer: it holds the experiment
  *                                  "display":{"state":"on"|"dim"|"off","lux","prox","motion","brightness_pct",

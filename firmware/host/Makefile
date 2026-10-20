@@ -218,7 +218,8 @@ ble_exp.o: $(COMPONENTS)/cali_core/ble_exp.c $(CORE_H)/cali_ble_exp.h $(CORE_H)/
 	$(CC) -c $(CFLAGS) -o $@ $<
 # ... and its glue on the owner tick: /api/ble, console "ble exp" (tests/firmware/test_web_handlers.py).
 ble_exp_run.o: $(COMPONENTS)/cali_core/ble_exp_run.c $(CORE_H)/cali_ble_exp.h $(CORE_H)/cali_json.h $(CORE_H)/cali_auto_camper.h \
-		$(CORE_H)/cali_diag.h $(CORE_H)/cali_session.h $(CORE_H)/cali_time.h $(COMPONENTS)/platform/include/cali_platform.h
+		$(CORE_H)/cali_diag.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CORE_H)/cali_session.h $(CORE_H)/cali_time.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The boot counter + SNTP state + unit clock (R_FW_TIME): device.time. The host has no SNTP and no

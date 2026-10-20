@@ -5,6 +5,7 @@
  *   act <now_ms>                       cali_bx_activity
  *   step <now_ms> <hour> <mode> <busy> cali_bx_step -> "OUT set=<n> probe=<0|1> done=<n> aborted=<0|1> started=<n>"
  *   win <hour> <from> <to>             cali_bx_in_window -> "WIN <0|1>"
+ *   seen <now_ms> <0|1>                cali_bx_seen -> "SEEN <-1|0|1>"
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,6 +31,8 @@ int main(void) {
             cali_bx_out_t o = cali_bx_step(&x, (uint64_t)now, a, b, c);
             printf("OUT set=%d probe=%d done=%d aborted=%d started=%d\n", o.set_mode, o.probe, o.done_mode, o.aborted,
                    o.started);
+        } else if (sscanf(line, "seen %lld %d", &now, &a) == 2) {
+            printf("SEEN %d\n", cali_bx_seen(&x, (uint64_t)now, a));
         } else if (sscanf(line, "win %d %d %d", &a, &b, &d) == 3) {
             printf("WIN %d\n", cali_bx_in_window(a, b, d));
         } else {

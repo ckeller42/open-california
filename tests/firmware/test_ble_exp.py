@@ -3,6 +3,7 @@ phase end, interrupted by activity. Pure C99, driven through ``test/ble_exp_cli.
 docs/firmware.md.
 """
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -189,3 +190,61 @@ def test_quiet_forced_off_during_the_probe_aborts_back_to_hold(cli):
     )
     assert o[-2] == "OUT set=0 probe=0 done=1 aborted=1 started=-1"
     assert o[-1] == "OUT set=-1 probe=0 done=-1 aborted=0 started=-1"
+
+
+def _gone_ms():
+    """CALI_BX_GONE_MS from the header; it must stay 3 x the sensor scan period (sensors.c)."""
+    gone = int(re.search(r"#define CALI_BX_GONE_MS (\d+)u", (CORE / "include/cali_ble_exp.h").read_text())[1])
+    period = int(re.search(r"#define SENS_PERIOD_MS (\d+)u", (CORE / "sensors.c").read_text())[1])
+    assert gone == 3 * period
+    return gone
+
+
+def test_unit_adv_transitions_only(cli):
+    """The unit's advert sighting: only the transitions report (1 seen, -1 gone after CALI_BX_GONE_MS).
+
+    .. test:: BLE experiment: unit advert sighting transitions
+       :id: T_FW_BLE_EXP_ADV
+       :links: R_FW_BLE_EXP
+    """
+    G = _gone_ms()
+    out = run(
+        cli,
+        "start 60 0 0",
+        "seen 0 1",
+        "seen 1000 1",
+        f"seen {G + 999} 0",
+        f"seen {G + 1000} 0",
+        f"seen {G + 2000} 1",
+    )
+    assert [ln for ln in out if ln.startswith("SEEN")] == ["SEEN 1", "SEEN 0", "SEEN 0", "SEEN -1", "SEEN 1"]
+
+
+def test_unit_adv_unknown_at_start_goes_gone_without_a_sighting(cli):
+    """At the experiment's start the state is unknown: no sighting for CALI_BX_GONE_MS from the first
+    check is a gone (so a later sighting is a reappearance); off, nothing is reported.
+
+    .. test:: BLE experiment: unit advert unknown at start, gone without a sighting
+       :id: T_FW_BLE_EXP_ADV_UNKNOWN
+       :links: R_FW_BLE_EXP
+    """
+    G = _gone_ms()
+    out = run(
+        cli,
+        "seen 0 1",
+        "start 60 0 0",
+        "seen 5 0",
+        f"seen {G + 4} 0",
+        f"seen {G + 5} 0",
+        f"seen {G + 6} 0",
+        "stop",
+        f"seen {G + 7} 1",
+    )
+    assert [ln for ln in out if ln.startswith("SEEN")] == [
+        "SEEN 0",
+        "SEEN 0",
+        "SEEN 0",
+        "SEEN -1",
+        "SEEN 0",
+        "SEEN 0",
+    ]
