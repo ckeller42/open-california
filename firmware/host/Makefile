@@ -67,7 +67,7 @@ COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o
 	sensors.o json.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o pi_wake.o
+CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o pi_wake.o ble_exp.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
@@ -211,6 +211,10 @@ auto_camper_run.o: $(COMPONENTS)/cali_core/auto_camper_run.c $(CORE_H)/cali_auto
 pi_wake.o: $(COMPONENTS)/cali_core/pi_wake.c $(CORE_H)/cali_pi_wake.h $(CORE_H)/cali_auto_camper.h \
 		$(CORE_H)/cali_json.h $(CORE_H)/cali_diag.h $(CORE_H)/cali_session.h $(COMPONENTS)/platform/include/cali_platform.h \
 		$(CSRC)/codec.h $(CSRC)/codec_chars.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The BLE power experiment's pure scheduler (R_FW_BLE_EXP).
+ble_exp.o: $(COMPONENTS)/cali_core/ble_exp.c $(CORE_H)/cali_ble_exp.h $(CORE_H)/cali_session.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The boot counter + SNTP state + unit clock (R_FW_TIME): device.time. The host has no SNTP and no

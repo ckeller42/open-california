@@ -10,6 +10,7 @@
  *   ts            "TS <epoch ms> ntp|unit" | "TS none"
  *   vehicle <hex> cali_time_on_vehicle(the 1004 frame)
  *   utc Y M D h m s   cali_time_unit_utc -> "UTC <epoch ms>" | "UTC none"
+ *   berlinhour <ms>   cali_time_berlin_hour -> "BH <h>"
  *   sleep <ms>    let the uptime clock run
  *   json          "JSON <the device.time object>"
  * cali_log prints "LOG <text>".
@@ -63,6 +64,8 @@ int main(int argc, char **argv) {
                 printf("UTC %lld\n", (long long)ms);
             else
                 printf("UTC none\n");
+        } else if (strncmp(line, "berlinhour ", 11) == 0) {
+            printf("BH %d\n", cali_time_berlin_hour(strtoll(line + 11, NULL, 10)));
         } else if (strncmp(line, "sleep ", 6) == 0) {
             long ms = strtol(line + 6, NULL, 10);
             struct timespec d = {ms / 1000, (ms % 1000) * 1000000L};

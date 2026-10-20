@@ -59,6 +59,8 @@ void cali_time_on_vehicle(const uint8_t *frame, size_t len);
  * is no valid date (day 0 included) or falls in the ambiguous hour. The March gap hour (02:xx, no
  * such local time) maps as CET, the same instant as 03:xx CEST. */
 int cali_time_unit_utc(int year, int month, int day, int hour, int min, int sec, int64_t *out_ms);
+/* Europe/Berlin local hour 0-23 of an epoch ms UTC (the CALI_TIME_UNIT_TZ rule). */
+int cali_time_berlin_hour(int64_t epoch_ms);
 /* The best timestamp now: CALI_TSRC_NTP / CALI_TSRC_UNIT and *out = epoch ms, or CALI_TSRC_NONE. */
 int cali_time_ts(int64_t *out);
 /* The device.time object (a value: call cali_json_key first). */

@@ -121,3 +121,14 @@ void cali_time_json(cali_json_t *j) {
     cali_json_int(j, (long long)cali_uptime_ms());
     cali_json_obj_end(j);
 }
+
+int cali_time_berlin_hour(int64_t epoch_ms) {
+    int64_t s = epoch_ms / 1000;
+    int y = (int)(1970 + s / 31556952);
+    while (days_from_civil(y + 1, 1, 1) * 86400 <= s) y++;
+    while (days_from_civil(y, 1, 1) * 86400 > s) y--;
+    int64_t on = days_from_civil(y, 3, last_sunday(y, 3)) * 86400 + 3600;   /* 01:00 UTC */
+    int64_t off = days_from_civil(y, 10, last_sunday(y, 10)) * 86400 + 3600;
+    int64_t l = s + (s >= on && s < off ? 7200 : 3600);
+    return (int)((l % 86400 + 86400) % 86400 / 3600);
+}

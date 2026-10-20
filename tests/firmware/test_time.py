@@ -209,3 +209,23 @@ def test_ntp_wins_over_the_unit_clock(time_cli, tmp_path):
     assert [src for _, src in ts_lines(out)] == ["unit", "ntp"]
     assert ts_lines(out)[1][0] == "1789639127412"
     assert [o["source"] for o in times(out)] == ["unit", "sntp"]
+
+
+@pytest.mark.parametrize(
+    "utc, hour",
+    [
+        ("2026-10-19T20:30:00Z", 22),  # CEST
+        ("2026-12-01T21:00:00Z", 22),  # CET
+        ("2026-03-29T00:59:59Z", 1),  # last CET second
+        ("2026-03-29T01:00:00Z", 3),  # CEST starts
+        ("2026-10-25T00:59:59Z", 2),  # last CEST second
+        ("2026-10-25T01:00:00Z", 2),  # CET again (02:00 local, second time)
+        ("2026-12-31T23:30:00Z", 0),  # year wrap
+    ],
+)
+def test_berlin_hour(time_cli, tmp_path, utc, hour):
+    """.. test:: Berlin local hour
+    :id: T_FW_TIME_BERLIN_HOUR
+    :links: R_FW_BLE_EXP"""
+    ms = int(datetime.fromisoformat(utc.replace("Z", "+00:00")).timestamp() * 1000)
+    assert run(time_cli, tmp_path, "berlinhour %d" % ms) == ["BH %d" % hour]
