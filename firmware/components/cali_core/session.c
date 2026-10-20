@@ -514,12 +514,13 @@ void cali_session_boot(void) {
 }
 
 void cali_session_on_bonded(void) {
+    (void)cali_session_set_mode(CALI_BLE_HOLD, "pairing");   /* before s_active: only logs, no connect */
     s_active = 1;
-    (void)cali_session_set_mode(CALI_BLE_HOLD, "pairing");
     link_up();
 }
 
 void cali_session_stop(void) {
+    if (s_probe) probe_end(0, "stop");
     s_active = 0;
     s_reconnect_pending = 0;
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
@@ -543,7 +544,7 @@ void cali_session_tick(uint64_t now_ms) {
             return;
         }
     }
-    if (s_link == LINK_UP && s_warming && now_ms >= s_warm_until) start_reads();
+    if (s_link == LINK_UP && s_warming && !s_rereading && now_ms >= s_warm_until) start_reads();
     /* Re-read water on calictl's poll cadence: a latch served at connect is corrected on the link. */
     if (s_link == LINK_UP && s_snapped && !s_reading && !s_warming && !s_rereading && now_ms >= s_water_next) {
         s_water_next = now_ms + CALI_SESSION_WATER_REREAD_MS;

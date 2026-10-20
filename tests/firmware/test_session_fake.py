@@ -2254,7 +2254,9 @@ def test_probe_from_off_connects_reads_all_then_disconnects(fake):
     tail = after(out, "LOG session: ble mode off (console)")
     assert len(calls(tail, "connect_bonded")) == 1
     assert len(calls(tail, "write_heartbeat")) >= 1  # the warm-up heartbeat ran
-    assert calls(tail, "disconnect")[-1] == "CALL disconnect"
+    done = after(out, "LOG session: probe ok (read_all)")
+    assert calls(done, "disconnect") == ["CALL disconnect"]  # the probe's own disconnect
+    assert any(e.get("kind") == "link_down" and e["reason"] == "ble_off" for e in _diag(done))
     assert {"ev": "evt", "kind": "probe", "ok": True, "mode": "off", "reason": "read_all"} in _diag(out)
 
 
@@ -2328,3 +2330,42 @@ def test_boot_in_off_does_not_connect_and_a_new_bond_comes_up_in_hold(fake):
     assert calls(after(out, "LOG session: ble mode off (console)"), "connect_bonded") == []
     out2 = run(fake, "diaghook", "> ble mode off", *PAIRED)
     assert {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "pairing"} in _diag(out2)
+    assert calls(after(out2, "LOG session: ble mode hold (pairing)"), "connect_bonded") == []
+
+
+def test_probe_waits_for_an_outstanding_water_reread(fake):
+    """.. test:: no overlapping ATT reads
+    :id: T_FW_BLE_PROBE_REREAD
+    :links: R_FW_BLE_PROBE"""
+    t0 = T + 30000  # the water re-read is due
+    pre = [*PAIRED, *READ_ALL, "tick %d" % t0, "> ble probe"]
+    wait = ["tick %d" % t for t in range(t0 + 100, t0 + 3000, 100)]
+
+    def reads(*script):
+        out = run(fake, *pre, *script)
+        return [line for line in out if line.startswith("CALL read")]
+
+    base = len(reads())  # the first read-all plus the water re-read
+    assert reads(*wait)[base:] == []  # warm-up over, the re-read unanswered: no read-all start
+    after_reply = reads(*wait, "READ 1302 0", "tick %d" % (t0 + 3100))[base:]
+    assert after_reply == ["CALL read %d" % CHARS[0]]
+
+
+def test_stop_during_a_probe_ends_it(fake):
+    """.. test:: forget mid-probe clears the probe
+    :id: T_FW_BLE_PROBE_STOP
+    :links: R_FW_BLE_PROBE"""
+    t0 = T + 1000
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode quiet",
+        "tick %d" % t0,
+        "> ble probe",
+        "> forget",
+        "> ble",
+    )
+    assert {"ev": "evt", "kind": "probe", "ok": False, "mode": "quiet", "reason": "stop"} in _diag(out)
+    assert "LOG ble: mode=quiet probing=0" in out
