@@ -2424,3 +2424,123 @@ def test_console_ble_exp_bad_args_print_usage(fake, line):
        :links: R_FW_BLE_EXP
     """
     assert run(fake, line)[-1] == "LOG usage: ble exp <1-720 min> [HH-HH] | ble exp off"
+
+
+CLOCK = "clock 1792530000000"  # SNTP synced (2026-10-20 21:00 UTC); the window 00-00 is all day anyway
+
+
+def test_command_in_quiet_goes_hold_and_writes_only_after_the_heartbeat_armed(fake):
+    """A command in ``quiet`` switches to ``hold`` (``why`` ``command``); the session is not ready until
+    the 1003 heartbeat has run CODEC_ARM_DELAY_MS again, so the write never goes out without it.
+
+    .. test:: a command in quiet re-arms the heartbeat before any control write
+       :id: T_FW_BLE_QUIET_COMMAND
+       :links: R_FW_BLE_MODE
+    """
+    frames = {0x1102: pack("cooler", Installed=1, State=0, Mode=4, Level=3)}
+    t0 = ARM + 100
+    out = run(
+        fake,
+        "diaghook",
+        *armed(frames),
+        "> ble mode quiet",
+        "tick %d" % t0,
+        "> set cooler power on",  # not ready: quiet -> hold, the heartbeat restarts
+        *["tick %d" % t for t in range(t0 + 100, t0 + ARM, 100)],
+        "> set cooler power on",  # t0 + ARM - 100: still arming
+        "tick %d" % (t0 + ARM),
+        "> set cooler power on",
+        "tick %d" % (t0 + ARM + 100),
+    )
+    assert {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "command"} in _diag(out)
+    q = after(out, "LOG session: ble mode quiet (console)")
+    assert out.count("LOG control: cooler/power not ready (no armed link or no state yet)") == 2
+    first = q.index(writes(q)[0])
+    assert writes(q) == want_writes("cooler", "power", "on", frames)
+    assert calls(q[:first], "write_heartbeat")  # the heartbeat is back before the write
+    assert q.index("LOG session: ble mode hold (command)") < q.index(calls(q, "write_heartbeat")[0])
+
+
+def _probe_done(at):
+    """The phase-end probe on an up link: warm-up, the read-all, the tick that sees it done."""
+    # the tick at ``at`` also starts the 30-s water re-read; the probe's read-all waits for it
+    return [
+        "tick %d" % at,
+        "READ 1302 0",
+        "tick %d" % (at + WARM),
+        *read_all()[2:],
+        "tick %d" % (at + WARM + 100),
+    ]
+
+
+def test_ignition_in_quiet_aborts_the_phase_back_to_hold(fake):
+    """The experiment's quiet phase: the van's ignition (cali_ac_ignition) on an up link counts as
+    activity — the phase ends aborted and the mode returns to hold.
+
+    .. test:: ignition during the quiet phase aborts it
+       :id: T_FW_BLE_EXP_IGNITION
+       :links: R_FW_BLE_EXP
+    """
+    t = T + 100
+    p = t + 60000  # 1-min hold phase ends -> probe
+    q = p + WARM + 200  # quiet starts
+    out = run(
+        fake,
+        *PAIRED,
+        *READ_ALL,
+        CLOCK,
+        "diaghook",
+        "> ble exp 1 00-00",
+        "tick %d" % t,
+        *_probe_done(p),
+        "tick %d" % q,
+        "tick %d" % (q + 100),
+        "ign 1",
+        "tick %d" % (q + 200),
+    )
+    ev = [e for e in _diag(out) if e["ev"] == "evt" and e["kind"] in ("ble_phase", "ble_mode")]
+    assert ev == [
+        {"ev": "evt", "kind": "ble_phase", "mode": "hold", "aborted": False},
+        {"ev": "evt", "kind": "ble_mode", "mode": "quiet", "why": "exp"},
+        {"ev": "evt", "kind": "ble_phase", "mode": "quiet", "aborted": True},
+        {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "exp_abort"},
+    ]
+
+
+def test_ignition_off_in_quiet_keeps_the_phase(fake):
+    """Ignition 0 in the quiet phase changes nothing: the phase runs on.
+
+    .. test:: no ignition, no interrupt
+       :id: T_FW_BLE_EXP_IGNITION_OFF
+       :links: R_FW_BLE_EXP
+    """
+    t = T + 100
+    p = t + 60000
+    q = p + WARM + 200
+    out = run(
+        fake,
+        *PAIRED,
+        *READ_ALL,
+        CLOCK,
+        "diaghook",
+        "> ble exp 1 00-00",
+        "tick %d" % t,
+        *_probe_done(p),
+        "tick %d" % q,
+        "ign 0",
+        "tick %d" % (q + 100),
+        "> ble",
+    )
+    assert '"phase":"quiet"' in out[-1]
+
+
+def test_a_refused_phase_probe_is_logged(fake):
+    """No bond: the phase-end probe is refused — LOG + an SD ``probe`` event with reason ``refused``.
+
+    .. test:: a refused experiment probe reaches the SD log
+       :id: T_FW_BLE_EXP_PROBE_REFUSED
+       :links: R_FW_BLE_EXP
+    """
+    out = run(fake, CLOCK, "diaghook", "> ble exp 1 00-00", "tick 1000", "tick 61000")
+    assert "LOG ble-exp: probe refused" in out
+    assert {"ev": "evt", "kind": "probe", "ok": False, "mode": "hold", "reason": "refused"} in _diag(out)

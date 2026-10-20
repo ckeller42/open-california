@@ -896,13 +896,15 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
         }
         if (bad || (skip_ws(&c), c.p != c.end) || !(seen & 7)) { SET_CONST(resp, 400, ERR_BAD_JSON); return; }
         if (mode == -2 || num[2] > 720 || num[3] > 23 || num[4] > 23) { SET_CONST(resp, 400, ERR_BAD_VALUE); return; }
+        /* cali_session_probe's own refusal, checked first: a 409 changes nothing */
+        if (probe && (!cali_session_active() || cali_session_probing())) { SET_CONST(resp, 409, ERR_BUSY); return; }
         if ((seen & 4) && num[2] == 0) cali_ble_exp_stop();
         else if ((seen & 4) && cali_ble_exp_start(num[2], (int)num[3], (int)num[4]) != 0) {
             SET_CONST(resp, 409, ERR_NO_TIME);   /* the args are checked above: only the clock is left */
             return;
         }
         if (mode >= 0) (void)cali_session_set_mode(mode, "api");
-        if (probe && cali_session_probe() != 0) { SET_CONST(resp, 409, ERR_BUSY); return; }
+        if (probe) (void)cali_session_probe();
     }
     cali_json_t j;
     cali_json_begin(&j, s_json, sizeof s_json);   /* the top level is device.ble's object */

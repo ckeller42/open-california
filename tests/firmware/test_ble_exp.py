@@ -120,8 +120,12 @@ def test_mode_changed_underneath_counts_as_abort(cli):
         f"step {2 * MIN + 3} 12 {Q} 0",
         f"step {2 * MIN + 4} 12 {Q} 0",
         f"step {2 * MIN + 5} 12 {H} 0",
+        f"step {2 * MIN + 5 + 10 * MIN - 1} 12 {H} 0",  # the outside change holds 10 min ...
+        f"step {2 * MIN + 5 + 10 * MIN} 12 {H} 0",  # ... then the next phase (hold)
     )
-    assert o[-1] == "OUT set=-1 probe=0 done=2 aborted=1 started=-1"
+    assert o[-3] == "OUT set=-1 probe=0 done=2 aborted=1 started=-1"
+    assert o[-2] == "OUT set=-1 probe=0 done=-1 aborted=0 started=-1"
+    assert o[-1] == "OUT set=-1 probe=0 done=-1 aborted=0 started=0"
 
 
 def test_window_close_ends_the_phase_and_returns_to_hold(cli):
@@ -155,9 +159,13 @@ def test_mode_forced_during_the_probe_counts_as_abort(cli):
         f"step {3 * MIN + 4} 12 {O} 0",  # off ends -> probe
         f"step {3 * MIN + 5} 12 {O} 1",  # probe runs
         f"step {3 * MIN + 6} 12 {H} 0",  # probe ended, but a command forced hold meanwhile
+        f"step {3 * MIN + 6 + 10 * MIN - 1} 12 {H} 0",  # held 10 min
+        f"step {3 * MIN + 6 + 10 * MIN} 12 {H} 0",
     )
-    assert o[-3] == "OUT set=-1 probe=1 done=-1 aborted=0 started=-1"
-    assert o[-1] == "OUT set=-1 probe=0 done=2 aborted=1 started=-1"
+    assert o[-5] == "OUT set=-1 probe=1 done=-1 aborted=0 started=-1"
+    assert o[-3] == "OUT set=-1 probe=0 done=2 aborted=1 started=-1"
+    assert o[-2] == "OUT set=-1 probe=0 done=-1 aborted=0 started=-1"
+    assert o[-1] == "OUT set=-1 probe=0 done=-1 aborted=0 started=0"
 
 
 def test_quiet_forced_off_during_the_probe_aborts_back_to_hold(cli):
@@ -177,5 +185,7 @@ def test_quiet_forced_off_during_the_probe_aborts_back_to_hold(cli):
         f"step {2 * MIN + 2} 12 {Q} 0",  # -> probe
         f"step {2 * MIN + 3} 12 {Q} 1",
         f"step {2 * MIN + 4} 12 {O} 0",  # forced off meanwhile
+        f"step {2 * MIN + 5} 12 {H} 0",  # still within the 10-min hold
     )
-    assert o[-1] == "OUT set=0 probe=0 done=1 aborted=1 started=-1"
+    assert o[-2] == "OUT set=0 probe=0 done=1 aborted=1 started=-1"
+    assert o[-1] == "OUT set=-1 probe=0 done=-1 aborted=0 started=-1"

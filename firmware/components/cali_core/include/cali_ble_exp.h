@@ -1,7 +1,9 @@
 /* cali_ble_exp.h — the BLE power experiment's schedule (R_FW_BLE_EXP): inside a nightly window run
- * the session modes hold -> quiet -> off, each for a phase, with a probe at each phase end; any
- * activity (viewer, command, wake) or an outside mode change cuts the phase short and returns to
- * hold for CALI_BX_IDLE_MS. Pure: step() returns what to do, the caller acts (ble_exp_run.c).
+ * the session modes hold -> quiet -> off, each for a phase, with a probe at each phase end. Activity
+ * (cali_bx_activity: a viewer; the ignition in quiet, ble_exp_run.c) or an outside mode change (a
+ * command in quiet/off -> hold, the console, /api/ble; also during the probe) cuts the phase short
+ * (aborted), returns to hold and holds CALI_BX_IDLE_MS before the next phase. A wake in off (adverts)
+ * is not wired yet. Pure: step() returns what to do, the caller acts (ble_exp_run.c).
  * The cali_bx_* half is C99, no platform, no session calls (the mode numbers are CALI_BLE_* from
  * cali_session.h); the cali_ble_exp_* half below is its glue (ble_exp_run.c).
  */

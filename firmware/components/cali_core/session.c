@@ -35,6 +35,7 @@ static uint64_t s_up_at;       /* now_ms the link came up (encrypted): the arm d
 static int s_hb_on;
 static uint32_t s_hb_ctr;
 static uint64_t s_hb_next;
+static uint64_t s_hb_since;    /* now_ms the heartbeat (re)started: link up, or quiet/off -> hold */
 
 static int s_reconnect_pending;
 static uint64_t s_reconnect_at;
@@ -341,6 +342,7 @@ static void link_up(void) {
     s_hb_on = 1;
     s_hb_ctr = CODEC_HEARTBEAT_START;
     s_hb_next = s_now;                                /* first beat on the next tick */
+    s_hb_since = s_now;
     s_warming = 0;
     s_reading = 0;
     s_snapped = 0;
@@ -584,6 +586,7 @@ int cali_session_set_mode(int mode, const char *why) {
     cali_log("session: ble mode %s (%s)", MODE_NAME[mode], why);
     cali_diag_evt("ble_mode", "\"mode\":\"%s\",\"why\":\"%s\"", MODE_NAME[mode], why);
     if (!s_active) return 0;
+    if (mode == CALI_BLE_HOLD) s_hb_since = s_now;   /* quiet -> hold: re-arm (cali_session_ready) */
     if (mode == CALI_BLE_OFF) {
         s_reconnect_pending = 0;
         if (s_link != LINK_DOWN && !s_probe) {
@@ -613,7 +616,7 @@ int cali_session_probe(void) {
 }
 
 void cali_session_connect_now(void) {
-    if (s_mode == CALI_BLE_OFF) (void)cali_session_set_mode(CALI_BLE_HOLD, "command");
+    if (s_mode != CALI_BLE_HOLD) (void)cali_session_set_mode(CALI_BLE_HOLD, "command");   /* writes need hold */
     if (s_active && s_link == LINK_DOWN && s_reconnect_pending) s_reconnect_at = s_now;
 }
 
@@ -626,7 +629,8 @@ int cali_session_active(void) { return s_active; }
 int cali_session_link_up(void) { return s_link == LINK_UP; }
 
 int cali_session_ready(void) {
-    return s_link == LINK_UP && s_snapped && s_now - s_up_at >= CODEC_ARM_DELAY_MS;
+    /* hold only: a write needs the 1003 heartbeat running CODEC_ARM_DELAY_MS before it (quiet has none) */
+    return s_link == LINK_UP && s_snapped && s_mode == CALI_BLE_HOLD && s_now - s_hb_since >= CODEC_ARM_DELAY_MS;
 }
 
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {

@@ -2444,7 +2444,9 @@ def test_api_ble_post(web_cli, body, calls):
        :id: T_FW_BLE_API
        :links: R_FW_BLE_EXP
     """
-    resps, other = drive(web_cli, [*(s.encode() for s in STATION), req("POST", "/api/ble", body)])
+    resps, other = drive(
+        web_cli, [*(s.encode() for s in STATION), b"active 1", req("POST", "/api/ble", body)]
+    )
     assert resps[-1].status == 200
     assert [ln for ln in other if ln.startswith("CALL session_")] == calls
     assert resps[-1].json()["mode"] == {"quiet": "quiet", "off": "off"}.get(body[9:-2], "hold")
@@ -2528,3 +2530,27 @@ def test_api_ble_experiment_runs_and_a_viewer_cuts_the_phase(web_cli):
     assert resps[3].json() == dict(BLE_IDLE, exp=dict(exp, phase=None, remaining_ms=None))  # cut short
     assert resps[4].json() == BLE_IDLE
     assert [ln for ln in other if ln.startswith("CALL session_")] == ["CALL session_set_mode hold exp_off"]
+
+
+def test_api_ble_a_refused_probe_changes_nothing(web_cli):
+    """``{"mode":…,"probe":true}`` while a probe runs (or with no bond) is 409 ``busy`` and sets no mode.
+
+    .. test:: POST /api/ble: a 409 probe applies no other key
+       :id: T_FW_BLE_API_PROBE_BUSY
+       :links: R_FW_BLE_EXP
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/ble", '{"mode":"off","probe":true}'),  # no bond (inactive)
+            b"active 1",
+            req("POST", "/api/ble", '{"probe":true}'),
+            req("POST", "/api/ble", '{"mode":"off","probe":true}'),  # a probe runs
+            req("GET", "/api/ble"),
+        ],
+    )
+    assert [r.status for r in resps] == [409, 200, 409, 200]
+    assert resps[0].json()["error"] == resps[2].json()["error"] == "busy"
+    assert [ln for ln in other if ln.startswith("CALL session_")] == ["CALL session_probe"]
+    assert resps[-1].json() == dict(BLE_IDLE, probing=True)

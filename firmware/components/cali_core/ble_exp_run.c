@@ -2,6 +2,7 @@
  * its output through the session (R_FW_BLE_EXP). Contract: include/cali_ble_exp.h. Proven by
  * tests/firmware/test_web_handlers.py (/api/ble) and test_session_fake.py (console "ble exp").
  */
+#include "cali_auto_camper.h"
 #include "cali_ble_exp.h"
 #include "cali_diag.h"
 #include "cali_json.h"
@@ -37,12 +38,19 @@ void cali_ble_exp_tick(uint64_t now_ms) {
     int64_t ts;
     if (!s_bx.on) return;
     int hour = cali_time_ts(&ts) == CALI_TSRC_NONE ? -1 : cali_time_berlin_hour(ts);
+    /* the van wakes (ignition / camping on) while quiet: like a viewer (off: the advert, Task 4) */
+    if (cali_session_mode() == CALI_BLE_QUIET && cali_session_link_up() && cali_ac_ignition() == 1)
+        cali_bx_activity(&s_bx, now_ms);
     cali_bx_out_t o = cali_bx_step(&s_bx, now_ms, hour, cali_session_mode(), cali_session_probing());
     if (o.done_mode >= 0)
         cali_diag_evt("ble_phase", "\"mode\":\"%s\",\"aborted\":%s", cali_session_mode_name(o.done_mode),
                       o.aborted ? "true" : "false");
     if (o.set_mode >= 0) (void)cali_session_set_mode(o.set_mode, o.aborted ? "exp_abort" : "exp");
-    if (o.probe && cali_session_probe() != 0) cali_log("ble-exp: probe refused");
+    if (o.probe && cali_session_probe() != 0) {
+        cali_log("ble-exp: probe refused");
+        cali_diag_evt("probe", "\"ok\":false,\"mode\":\"%s\",\"reason\":\"refused\"",
+                      cali_session_mode_name(cali_session_mode()));
+    }
 }
 
 void cali_ble_exp_exp_json(cali_json_t *j) {

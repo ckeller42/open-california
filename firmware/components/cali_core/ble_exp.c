@@ -45,6 +45,7 @@ cali_bx_out_t cali_bx_step(cali_bx_t *x, uint64_t now, int hour, int cur, int bu
     if (x->want >= 0 && (touched || !win || (cur != x->want && !x->probing))) { /* phase cut short */
         o.done_mode = x->want;
         o.aborted = 1;
+        if (!touched && win) x->idle_until = now + CALI_BX_IDLE_MS;   /* a command / manual mode: hold 10 min */
         x->want = -1;
         x->probing = 0;
         x->phase = (x->phase + 1) % 3;
@@ -70,6 +71,7 @@ cali_bx_out_t cali_bx_step(cali_bx_t *x, uint64_t now, int hour, int cur, int bu
     if (x->probing && !busy) {   /* the probe ended; a mode forced meanwhile (a command) = aborted */
         o.done_mode = x->want;
         o.aborted = cur != x->want;
+        if (o.aborted) x->idle_until = now + CALI_BX_IDLE_MS;
         if (o.aborted && cur != CALI_BLE_HOLD) o.set_mode = CALI_BLE_HOLD;
         x->want = -1;
         x->probing = 0;

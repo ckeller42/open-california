@@ -217,7 +217,7 @@ pi_wake.o: $(COMPONENTS)/cali_core/pi_wake.c $(CORE_H)/cali_pi_wake.h $(CORE_H)/
 ble_exp.o: $(COMPONENTS)/cali_core/ble_exp.c $(CORE_H)/cali_ble_exp.h $(CORE_H)/cali_json.h $(CORE_H)/cali_session.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 # ... and its glue on the owner tick: /api/ble, console "ble exp" (tests/firmware/test_web_handlers.py).
-ble_exp_run.o: $(COMPONENTS)/cali_core/ble_exp_run.c $(CORE_H)/cali_ble_exp.h $(CORE_H)/cali_json.h \
+ble_exp_run.o: $(COMPONENTS)/cali_core/ble_exp_run.c $(CORE_H)/cali_ble_exp.h $(CORE_H)/cali_json.h $(CORE_H)/cali_auto_camper.h \
 		$(CORE_H)/cali_diag.h $(CORE_H)/cali_session.h $(CORE_H)/cali_time.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 

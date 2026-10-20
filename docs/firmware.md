@@ -366,10 +366,12 @@ on the control allow-list`). No roof builder exists; the generator asserts `1401
 notifications. The old read-only guard (`-DCODEC_NO_ENCODE` + an `nm` check, `R_FW_READ_ONLY`) is
 retired — the C builders need `codec_encode`.
 
-**Arming and sequencing** (`R_FW_CONTROL_API`, `control_run.c`). The ESP session writes the `1003`
-heartbeat for the whole life of a link, so there is no per-write arm: a command is accepted when
-`cali_session_ready()` — link up, first read-all done, and the link up for at least
-`CODEC_ARM_DELAY_MS` (3000, from calictl's `ARM_DELAY_S`) — and the target function's state was read
+**Arming and sequencing** (`R_FW_CONTROL_API`, `control_run.c`). In BLE mode `hold` (the default,
+[BLE modes](#ble-modes-r_fw_ble_mode)) the ESP session writes the `1003` heartbeat for the whole life
+of a link, so there is no per-write arm: a command is accepted when `cali_session_ready()` — mode
+`hold`, link up, first read-all done, and the heartbeat running for at least `CODEC_ARM_DELAY_MS`
+(3000, from calictl's `ARM_DELAY_S`) since the link came up or since `quiet`/`off` turned back to
+`hold` — and the target function's state was read
 **on this link** (a frame from a previous link is kept for display but never trusted by a gate or a
 builder); otherwise `not_connected`. The gates read the latest frame, so a notification that flips a
 gating field is honoured by the very next command. One command at a time (`busy` otherwise, also
@@ -762,8 +764,8 @@ IP and no user-typed value is ever recorded.
 | `evt` `link_down` | an up link went | `reason` (`disconnected`/`connect_fail`/`enc_fail`/`heartbeat`/`discover`/`connect_timeout`/`enc_timeout`/`ble_off`/`stop`), `status` (the transport status: NimBLE, HCI = 0x200 + code, e.g. 531 = 0x13), `dur_ms` |
 | `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why` (`console`/`command`/`pairing`/ the caller's reason) |
 | `evt` `ble_exp` | the BLE experiment started / stopped (ble_exp_run.c, `R_FW_BLE_EXP`) | `on` (bool); on start also `phase_min`, `from`, `to` (Berlin local hours) |
-| `evt` `ble_phase` | an experiment phase ended | `mode` (the phase: `hold`/`quiet`/`off`), `aborted` (bool: cut short by a viewer, a mode change from outside — a command, the console, `/api/ble` — or the window's end; `false` = ran its length, probe done) |
-| `evt` `probe` | a probe ended | `ok` (bool), `mode` (the mode it returns to), `reason` (`read_all` on success, else the failure: `connect_timeout`/`connect_fail`/`enc_timeout`/`enc_fail`/`disconnected`/`discover`/`heartbeat`) |
+| `evt` `ble_phase` | an experiment phase ended | `mode` (the phase: `hold`/`quiet`/`off`), `aborted` (bool: cut short by a viewer, a mode change from outside — a command in `quiet`/`off`, the console, `/api/ble`, also during the probe —, the ignition in `quiet`, or the window's end; `false` = ran its length, probe done) |
+| `evt` `probe` | a probe ended (or the experiment's phase-end probe was refused: `ok` false, `reason` `refused`) | `ok` (bool), `mode` (the mode it returns to), `reason` (`read_all` on success, else the failure: `connect_timeout`/`connect_fail`/`enc_timeout`/`enc_fail`/`disconnected`/`discover`/`heartbeat`) |
 | `evt` `wifi_up` / `wifi_down` | station online / lost (wifi_run.c) | `rssi`, `ip_changed` (bool, never the address) / `reason` `lost`, `rssi`, `dur_ms` |
 | `evt` `net` | a failed join | `err` `join`, `reason` (`not_found`/`auth`/`other`) |
 | `evt` `cmd` | a control command ends (control_run.c) | `fn`, `what` (never the value), `result` (`ack`/`refused`/`elsewhere`/`bad_value`/`none`/`busy`/`not_ready`/`failed`/`timeout`/`unconfirmed`), `latency_ms` (0 = answered at once), `src` (`web`/`auto_camper`/`console`) |
@@ -884,10 +886,13 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    The session runs in one of three modes (``cali_session_set_mode``; console ``ble mode
    hold|quiet|off``). ``hold`` is the default: link held, 1003 heartbeat every 600 ms. ``quiet``:
    link held, the heartbeat runs only while a read-all warms up or reads. ``off``: no link and no
-   reconnect (a drop is not retried, boot does not connect). A control command that needs the link
-   (``cali_session_connect_now``) switches ``off`` back to ``hold`` (``why`` ``command``); a new
-   pairing starts in ``hold`` (``pairing``). Each change logs ``evt ble_mode``; dropping an up link
-   for ``off`` logs ``link_down`` with reason ``ble_off``.
+   reconnect (a drop is not retried, boot does not connect). Only ``hold`` is ready for a control
+   write (``cali_session_ready``): a command in ``quiet`` or ``off`` (``cali_session_connect_now``)
+   switches back to ``hold`` (``why`` ``command``) and answers ``not_connected``; the client's retry
+   is accepted once the heartbeat has run ``CODEC_ARM_DELAY_MS`` again (and, from ``off``, the link
+   is back and read). Outside ``hold`` the Pi wake sees the ignition as unknown and an auto-camper
+   restore waits. A new pairing starts in ``hold`` (``pairing``). Each change logs ``evt ble_mode``;
+   dropping an up link for ``off`` logs ``link_down`` with reason ``ble_off``.
 
 .. req:: BLE probe
    :id: R_FW_BLE_PROBE
@@ -897,6 +902,7 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    when the link is down, runs the heartbeat through the warm-up, reads every function, logs ``evt
    probe`` and returns to the mode (``off``: disconnect). A probe that cannot connect logs
    ``ok:false`` and is not retried. The probe writes nothing but the 1003 heartbeat.
+
 .. req:: BLE power experiment
    :id: R_FW_BLE_EXP
    :status: open
@@ -905,11 +911,15 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    the night experiment: inside the window (default 22-06, Europe/Berlin local time from SNTP or the
    unit's clock) it cycles the modes ``hold -> quiet -> off -> hold …``, each ``phase_min`` (1-720)
    long, with a probe at the end of every phase; outside the window the mode is ``hold``. Without a
-   wall clock it is refused (``no_time``). A viewer (``GET /api/state``) or a mode change from outside
-   (a control command, ``ble mode``, ``/api/ble``, pairing) ends the running phase as ``aborted`` and
-   returns to ``hold``; after a viewer the cycle waits 10 min (``CALI_BX_IDLE_MS``), then goes on with
-   the next phase. Each phase end logs ``evt ble_phase``, start/stop ``evt ble_exp``. ``ble exp off``
-   (``{"exp_min":0}``) ends it in ``hold``; a reboot ends it too (not persisted).
+   wall clock it is refused (``no_time``). A viewer (``GET /api/state``), a mode change from outside
+   (a control command in ``quiet`` or ``off``, ``ble mode``, ``/api/ble``, pairing — also while the
+   phase-end probe runs) or, in ``quiet`` on an up link, the van's ignition (``cali_ac_ignition``)
+   ends the running phase as ``aborted`` and returns to ``hold``; the cycle then holds 10 min
+   (``CALI_BX_IDLE_MS``, renewed by every further viewer poll or ignition tick) and goes on with the
+   next phase. A wake in ``off`` (the unit advertising again) is not detected yet. Each phase end
+   logs ``evt ble_phase``, start/stop ``evt ble_exp``; a refused phase-end probe logs ``evt probe``
+   with ``ok:false``, reason ``refused``. ``ble exp off`` (``{"exp_min":0}``) ends it in ``hold``; a
+   reboot ends it too (not persisted).
 ```
 
 ## Pi wake (`R_FW_PI_WAKE`)
