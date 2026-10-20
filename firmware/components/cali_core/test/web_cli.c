@@ -167,6 +167,26 @@ int cali_session_water_held(void) { return s_water_held; }
 uint64_t cali_session_water_good_ms(void) { return s_water_good; }
 int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]) { (void)live; (void)out; return 0; }
 
+/* the BLE link modes (web.c reaches these once /api/ble lands) */
+static int s_ble_mode, s_probing;
+int cali_session_mode(void) { return s_ble_mode; }
+int cali_session_probing(void) { return s_probing; }
+const char *cali_session_mode_name(int m) {
+    static const char *const N[] = {"hold", "quiet", "off"};
+    return m >= 0 && m <= 2 ? N[m] : "?";
+}
+int cali_session_set_mode(int m, const char *why) {
+    printf("CALL session_set_mode %s %s\n", cali_session_mode_name(m), why);
+    s_ble_mode = m;
+    return 0;
+}
+int cali_session_probe(void) {
+    printf("CALL session_probe\n");
+    if (s_probing) return -1;
+    s_probing = 1;
+    return 0;
+}
+
 /* ---- the fake runner + transport ---- */
 static cali_pair_state_t s_pair;
 const cali_pair_state_t *cali_runner_state(void) { return &s_pair; }

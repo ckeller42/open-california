@@ -252,6 +252,26 @@ static int num_arg(const char *arg, unsigned lo, unsigned hi, unsigned *out) {
     return *out >= lo && *out <= hi ? 0 : -1;
 }
 
+static void ble_cmd(char *sub) {
+    char *op = strtok(sub, " \t"), *arg = op ? strtok(NULL, " \t") : NULL;
+    if (op == NULL) {
+        cali_log("ble: mode=%s probing=%d", cali_session_mode_name(cali_session_mode()), cali_session_probing());
+    } else if (strcmp(op, "mode") == 0 && arg != NULL) {
+        int m = strcmp(arg, "hold") == 0    ? CALI_BLE_HOLD
+                : strcmp(arg, "quiet") == 0 ? CALI_BLE_QUIET
+                : strcmp(arg, "off") == 0   ? CALI_BLE_OFF
+                                            : -1;
+        if (m < 0)
+            cali_log("usage: ble mode hold|quiet|off");
+        else
+            (void)cali_session_set_mode(m, "console");
+    } else if (strcmp(op, "probe") == 0) {
+        if (cali_session_probe() != 0) cali_log("ble: probe refused");
+    } else {
+        cali_log("usage: ble [mode hold|quiet|off | probe]");
+    }
+}
+
 static void pi_cmd(char *sub) {
     char *op = strtok(sub, " \t"), *arg = op ? strtok(NULL, " \t") : NULL;
     char j[320];
@@ -347,6 +367,8 @@ void cali_console_line(const char *line) {
         wifi_cmd(cmd + 4);
     } else if (strncmp(cmd, "sensors", 7) == 0 && (cmd[7] == ' ' || cmd[7] == '\t' || cmd[7] == 0)) {
         sensors_cmd(cmd + 7);
+    } else if (strncmp(cmd, "ble", 3) == 0 && (cmd[3] == ' ' || cmd[3] == '\t' || cmd[3] == 0)) {
+        ble_cmd(cmd + 3);
     } else if (strncmp(cmd, "pi", 2) == 0 && (cmd[2] == ' ' || cmd[2] == '\t' || cmd[2] == 0)) {
         pi_cmd(cmd + 2);
     } else if (strncmp(cmd, "set", 3) == 0 && (cmd[3] == ' ' || cmd[3] == '\t' || cmd[3] == 0)) {

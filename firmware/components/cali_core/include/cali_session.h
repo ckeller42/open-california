@@ -84,6 +84,17 @@ void cali_session_tick(uint64_t now_ms);  /* heartbeat every CODEC_HEARTBEAT_PER
  * backoff delay becomes due on the next tick. No-op otherwise. */
 void cali_session_connect_now(void);
 
+enum { CALI_BLE_HOLD, CALI_BLE_QUIET, CALI_BLE_OFF };
+/* Owner task. hold = today; quiet = link held, the 1003 heartbeat only while a read-all warms up or
+ * reads; off = no link and no reconnect. `why` goes into evt ble_mode. 0, or -1 for a bad mode. */
+int cali_session_set_mode(int mode, const char *why);
+int cali_session_mode(void);
+/* One fresh read-all now (connects first when off; the heartbeat runs through its warm-up), then
+ * evt probe and back to the mode (off: disconnect). 0 started, -1 no bond / already probing. */
+int cali_session_probe(void);
+int cali_session_probing(void);
+const char *cali_session_mode_name(int mode);   /* "hold"/"quiet"/"off", "?" otherwise */
+
 /* 1 while the session holds a bond it keeps (or re-establishes) a link for — true through
  * reconnect backoff too, while no link exists. For the actual encrypted BLE link, see
  * cali_session_link_up(). */

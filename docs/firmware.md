@@ -757,7 +757,9 @@ IP and no user-typed value is ever recorded.
 | `evt` `boot` | once per boot, when the card takes it | `reset_reason` (`esp_reset_reason`: `poweron`/`sw`/`panic`/`task_wdt`/`int_wdt`/`brownout`/…), `fw`, `boot`, `prev_up_s` (the previous boot's last diag uptime, RTC no-init RAM: survives a reset, `null` after power-on) |
 | `evt` `panic` | right after `boot`, when the previous boot panicked (`R_FW_PANIC_CAPTURE`, below) | `task` (the task running on the panicking core), `reason` (the exception, or abort()/assert's details; <= 47 chars), `bt` (up to 16 backtrace PCs, innermost first, space-separated bare hex) |
 | `evt` `link_up` | link encrypted (session.c) | `reconnect_ms` (down -> up; `null` for the first link of a boot), `attempts` (`connect_bonded` calls since) |
-| `evt` `link_down` | an up link went | `reason` (`disconnected`/`connect_fail`/`enc_fail`/`heartbeat`/`discover`/`connect_timeout`/`enc_timeout`/`stop`), `status` (the transport status: NimBLE, HCI = 0x200 + code, e.g. 531 = 0x13), `dur_ms` |
+| `evt` `link_down` | an up link went | `reason` (`disconnected`/`connect_fail`/`enc_fail`/`heartbeat`/`discover`/`connect_timeout`/`enc_timeout`/`ble_off`/`stop`), `status` (the transport status: NimBLE, HCI = 0x200 + code, e.g. 531 = 0x13), `dur_ms` |
+| `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why` (`console`/`command`/`pairing`/ the caller's reason) |
+| `evt` `probe` | a probe ended | `ok` (bool), `mode` (the mode it returns to), `reason` (`read_all` on success, else the failure: `connect_timeout`/`connect_fail`/`enc_timeout`/`enc_fail`/`disconnected`/`discover`/`heartbeat`) |
 | `evt` `wifi_up` / `wifi_down` | station online / lost (wifi_run.c) | `rssi`, `ip_changed` (bool, never the address) / `reason` `lost`, `rssi`, `dur_ms` |
 | `evt` `net` | a failed join | `err` `join`, `reason` (`not_found`/`auth`/`other`) |
 | `evt` `cmd` | a control command ends (control_run.c) | `fn`, `what` (never the value), `result` (`ack`/`refused`/`elsewhere`/`bad_value`/`none`/`busy`/`not_ready`/`failed`/`timeout`/`unconfirmed`), `latency_ms` (0 = answered at once), `src` (`web`/`auto_camper`/`console`) |
@@ -867,6 +869,31 @@ firmware remembers what was on and turns it back on once you park.
 The step period is test-tunable on the host build only (`acstep <ms>`, cali-host's stdin).
 **Not yet proven on the van:** a real drive (the shed, the post-park lock — buspi's 2026-10-11
 journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
+
+## BLE modes (`R_FW_BLE_MODE`)
+
+```{eval-rst}
+.. req:: BLE link modes
+   :id: R_FW_BLE_MODE
+   :status: open
+
+   The session runs in one of three modes (``cali_session_set_mode``; console ``ble mode
+   hold|quiet|off``). ``hold`` is the default: link held, 1003 heartbeat every 600 ms. ``quiet``:
+   link held, the heartbeat runs only while a read-all warms up or reads. ``off``: no link and no
+   reconnect (a drop is not retried, boot does not connect). A control command that needs the link
+   (``cali_session_connect_now``) switches ``off`` back to ``hold`` (``why`` ``command``); a new
+   pairing starts in ``hold`` (``pairing``). Each change logs ``evt ble_mode``; dropping an up link
+   for ``off`` logs ``link_down`` with reason ``ble_off``.
+
+.. req:: BLE probe
+   :id: R_FW_BLE_PROBE
+   :status: open
+
+   ``cali_session_probe`` (console ``ble probe``) runs one fresh read-all now: it connects first
+   when the link is down, runs the heartbeat through the warm-up, reads every function, logs ``evt
+   probe`` and returns to the mode (``off``: disconnect). A probe that cannot connect logs
+   ``ok:false`` and is not retried. The probe writes nothing but the 1003 heartbeat.
+```
 
 ## Pi wake (`R_FW_PI_WAKE`)
 

@@ -35,6 +35,11 @@
  *   pi timer <min>  halt after parking, 0..1440 min (0 off; cali_ph_set_min)
  *   pi guard <pct>  the battery guard, 0..100 % (0 off; cali_ph_set_soc)
  *   pi status    "LOG pi-wake: {"pi_wake":<the /api/state device.pi_wake object>}"
+ *   ble          "LOG ble: mode=<hold|quiet|off> probing=<0|1>" (cali_session.h, R_FW_BLE_MODE)
+ *   ble mode hold|quiet|off   the BLE link mode ("LOG session: ble mode <m> (console)"): hold = link +
+ *                1003 heartbeat, quiet = link, heartbeat only through a read-all, off = no link
+ *   ble probe    one fresh read-all now (R_FW_BLE_PROBE), then back to the mode; "LOG ble: probe refused"
+ *                with no bond or a probe running
  *   Before the WiFi runtime booted (host without --http) every "wifi …" line only prints
  *   "LOG wifi: not enabled".
  * anything else -> "LOG unknown command: <first word>" ("wifi <subcommand>" for an unknown wifi

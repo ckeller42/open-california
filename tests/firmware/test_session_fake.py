@@ -2189,3 +2189,142 @@ def test_diag_events_link_cmd_wifi(fake):
         fake, "diaghook", "wifi_boot", "NET_AP_STARTED", "> wifi set minsel wrong-psk-99", "NET_FAILED 2"
     )
     assert _diag(typo) == [{"ev": "evt", "kind": "net", "err": "join", "reason": "auth"}]
+
+
+# ---- BLE link modes hold / quiet / off and the one-shot probe -----------------------------------
+
+_RECONNECT = ["CONNECTED", "ENC_OK", "DISCOVERED 0"]
+
+
+def test_quiet_mode_stops_the_heartbeat_but_keeps_the_link(fake):
+    """.. test:: quiet holds the link without 1003
+    :id: T_FW_BLE_QUIET
+    :links: R_FW_BLE_MODE"""
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode quiet",
+        *["tick %d" % t for t in range(T + 100, T + 5000, 100)],
+    )
+    tail = after(out, "LOG session: ble mode quiet (console)")
+    assert calls(tail, "write_heartbeat") == []
+    assert calls(tail, "disconnect") == []
+    assert {"ev": "evt", "kind": "ble_mode", "mode": "quiet", "why": "console"} in _diag(out)
+
+
+def test_off_mode_drops_the_link_and_never_reconnects(fake):
+    """.. test:: off releases the link for good
+    :id: T_FW_BLE_OFF
+    :links: R_FW_BLE_MODE"""
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode off",
+        "DISCONNECTED 531",
+        *["tick %d" % t for t in range(T + 100, T + 70000, 1000)],
+    )
+    tail = after(out, "LOG session: ble mode off (console)")
+    assert calls(tail, "disconnect") == ["CALL disconnect"]
+    assert calls(tail, "connect_bonded") == []
+    assert any(e.get("kind") == "link_down" and e["reason"] == "ble_off" for e in _diag(out))
+
+
+def test_probe_from_off_connects_reads_all_then_disconnects(fake):
+    """.. test:: probe = one connect, one read-all, one disconnect
+    :id: T_FW_BLE_PROBE
+    :links: R_FW_BLE_PROBE"""
+    t0 = T + 1000
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode off",
+        "DISCONNECTED 531",
+        "tick %d" % t0,
+        "> ble probe",
+        *_RECONNECT,
+        *read_all(t0 + 100),
+        *["tick %d" % t for t in range(t0 + 3000, t0 + 70000, 1000)],
+    )
+    tail = after(out, "LOG session: ble mode off (console)")
+    assert len(calls(tail, "connect_bonded")) == 1
+    assert len(calls(tail, "write_heartbeat")) >= 1  # the warm-up heartbeat ran
+    assert calls(tail, "disconnect")[-1] == "CALL disconnect"
+    assert {"ev": "evt", "kind": "probe", "ok": True, "mode": "off", "reason": "read_all"} in _diag(out)
+
+
+def test_probe_that_cannot_connect_logs_fail_and_stays_off(fake):
+    """.. test:: a sleeping unit = probe fail, no retry
+    :id: T_FW_BLE_PROBE_FAIL
+    :links: R_FW_BLE_PROBE"""
+    t0 = T + 1000
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode off",
+        "DISCONNECTED 531",
+        "tick %d" % t0,
+        "> ble probe",
+        *["tick %d" % t for t in range(t0 + 1000, t0 + 90000, 1000)],
+    )
+    assert {"ev": "evt", "kind": "probe", "ok": False, "mode": "off", "reason": "connect_timeout"} in _diag(
+        out
+    )
+    assert len(calls(after(out, "LOG session: ble mode off (console)"), "connect_bonded")) == 1
+
+
+def test_command_path_connect_now_forces_hold(fake):
+    """.. test:: a command always gets a link
+    :id: T_FW_BLE_CMD_HOLD
+    :links: R_FW_BLE_MODE"""
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode off",
+        "DISCONNECTED 531",
+        "tick %d" % (T + 1000),
+        "submit - cooler power 1",
+        "tick %d" % (T + 1100),
+    )
+    assert {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "command"} in _diag(out)
+    assert "CALL connect_bonded" in after(out, "LOG session: ble mode hold (command)")
+
+
+def test_quiet_probe_runs_the_heartbeat_only_through_its_warm_up(fake):
+    """.. test:: quiet probe heartbeat window
+    :id: T_FW_BLE_QUIET_PROBE
+    :links: R_FW_BLE_PROBE"""
+    t0 = T + 1000
+    out = run(
+        fake,
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode quiet",
+        "tick %d" % t0,
+        "> ble probe",
+        *["tick %d" % t for t in range(t0 + 100, t0 + 2100, 100)],
+        *["READ %x 0" % c for c in CHARS],
+        *["tick %d" % t for t in range(t0 + 2200, t0 + 8000, 100)],
+    )
+    hb = calls(after(out, "LOG session: ble mode quiet (console)"), "write_heartbeat")
+    assert 2 <= len(hb) <= 5  # ~2 s of 600 ms heartbeats, then silence
+    assert calls(after(out, "LOG session: probe ok (read_all)"), "write_heartbeat") == []
+
+
+def test_boot_in_off_does_not_connect_and_a_new_bond_comes_up_in_hold(fake):
+    """.. test:: pairing resets to hold
+    :id: T_FW_BLE_PAIR_HOLD
+    :links: R_FW_BLE_MODE"""
+    out = run(fake, "diaghook", *PAIRED, *READ_ALL, "> ble mode off", "DISCONNECTED 531", "boot")
+    assert calls(after(out, "LOG session: ble mode off (console)"), "connect_bonded") == []
+    out2 = run(fake, "diaghook", "> ble mode off", *PAIRED)
+    assert {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "pairing"} in _diag(out2)
