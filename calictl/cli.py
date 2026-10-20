@@ -238,6 +238,11 @@ def build_parser():
     sv = sub.add_parser("serve", help="unified daemon: one BLE owner -> InfluxDB + MQTT + commands")
     sv.add_argument("--interval", type=float, default=30.0)
     sv.add_argument("--no-influx", action="store_true", help="skip InfluxDB writes")
+    sv.add_argument(
+        "--no-ble",
+        action="store_true",
+        help="satellite mode: never open BLE (the ESP talks to the unit); web/MQTT/Influx keep running",
+    )
     sv.add_argument("--dry-run", action="store_true", help="print discovery + one poll, no broker/InfluxDB")
     sv.add_argument(
         "--web",
@@ -293,7 +298,12 @@ def main(argv=None):
         if args.dry_run:
             asyncio.run(serve.dry_run(args.addr))
         else:
-            srv = serve.Server(args.addr, interval=args.interval, influx_enabled=not args.no_influx)
+            srv = serve.Server(
+                args.addr,
+                interval=args.interval,
+                influx_enabled=not args.no_influx,
+                ble_enabled=not args.no_ble,
+            )
             srv._web_port = args.web
             # SAFE DEFAULT: read-only. Writes require an explicit opt-in (flag or env), so a stray
             # deploy never actuates the vehicle by accident.

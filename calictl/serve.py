@@ -165,15 +165,25 @@ class ServeBackend:
         scheduled onto it with `asyncio.run_coroutine_threadsafe`.
     :param read_only: when true, `calictl.web` rejects command POSTs before
         `command()` is ever called (enforced by `web.py`, mirrored here for
-        callers that check the attribute directly).
+        callers that check the attribute directly). Also forced true when the server runs with
+        ``ble_enabled=False`` (satellite mode).
     """
 
     def __init__(self, server, loop, read_only=False):
         self._s = server
         self._loop = loop
-        self.read_only = read_only
+        self._read_only_flag = read_only
         # UX telemetry (R_UX_TELEMETRY): on unless CALICTL_UX=0; the web UI reads it as _meta.ux
         self.ux_enabled = os.environ.get("CALICTL_UX", "1") != "0"
+
+    @property
+    def read_only(self):
+        """Read-only when writes are off OR in satellite mode (no BLE: web takes its 405 path)."""
+        return self._read_only_flag or not self._s._ble_enabled
+
+    @read_only.setter
+    def read_only(self, v):
+        self._read_only_flag = v
 
     def state(self):
         """Interpreted state for every function in the poll cache (no BLE read), plus a `_meta`
@@ -215,16 +225,19 @@ class ServeBackend:
             online = session_state == "up"
         else:
             online = bool(age is not None and age < self._s.interval * 3 + 30)
+        satellite = not self._s._ble_enabled
         out["_meta"] = {
             "last_seen": ts,
             "age_s": round(age) if age is not None else None,
             "online": online,
             "paired": bool(getattr(getattr(self._s, "dev", None), "paired", True)),
             "read_only": bool(self.read_only),
-            "session": session_state if persistent else "off",
+            "session": "satellite" if satellite else (session_state if persistent else "off"),
             # "auto" (activity-scoped) or "release" (user tapped Disconnect) — lets the UI show
             # "Disconnected" distinctly from "Van asleep".
-            "session_mode": (sup.mode if sup is not None else "auto") if persistent else "off",
+            "session_mode": (sup.mode if sup is not None else "auto")
+            if persistent and not satellite
+            else "off",
             # Auto camper mode: the toggle, whether it's actively re-asserting, and a one-time
             # give-up/stand-down notice the web UI shows as a toast.
             "auto_camper": self._s._autocamper.snapshot(),
@@ -371,7 +384,20 @@ async def dry_run(addr=None):
 
 
 class Server:
-    def __init__(self, addr=None, *, interval=30.0, influx_enabled=True):
+    def __init__(self, addr=None, *, interval=30.0, influx_enabled=True, ble_enabled=True):
+        """
+        .. req:: serve --no-ble (satellite mode)
+           :id: R_SERVE_NO_BLE
+
+           With ``ble_enabled=False`` the daemon never opens BLE: no supervisor, no poll, and the
+           web backend is read-only. The web UI serves the cached last state, MQTT publishes
+           availability only (state is published by the poll), and InfluxDB is filled by
+           ``calictl-esp-ingest`` from the ESP SD log. ``_meta.session`` is ``"satellite"`` so the
+           web UI shows the satellite pill instead of an offline banner.
+           A ``SessionSupervisor`` is still constructed (``ServeBackend`` and ``_record_outcome``
+           read it) but never supervised; constructing it opens no BLE.
+        """
+        self._ble_enabled = ble_enabled
         self.funcs = protocol.load()
         overrides.apply(self.funcs)
         self.dev = CamperDevice(addr) if addr else CamperDevice()
@@ -583,6 +609,8 @@ class Server:
     async def set_session_mode(self, action):
         """Explicit Connect/Disconnect from the web UI (the connection toggle). Delegates to the
         supervisor and returns the mode + current session state for the UI."""
+        if not self._ble_enabled:  # satellite mode: no session to connect or release
+            return {"ok": False, "mode": "off", "session": "satellite"}
         return await self._sessions.set_mode(action)
 
     def _nudge_session(self):
@@ -670,6 +698,8 @@ class Server:
             wizard UI can render the new step straight off the `POST` response without an extra
             round-trip.
         """
+        if not self._ble_enabled:  # satellite mode: BLE and the bond stay untouched, every action
+            return self.pairing_snapshot()
         if action == "start":
             self._ensure_pairing_runner()
             assert self._pairing is not None  # _ensure_pairing_runner() just set it
@@ -933,6 +963,9 @@ class Server:
             can't be built, or a cold-cache read failure). The MQTT command
             path ignores this; `ServeBackend.command` surfaces it to the web UI.
         """
+        if not self._ble_enabled:  # satellite mode: BLE stays closed (the ESP actuates)
+            log.warning("satellite mode: refusing command %s/%s" % (function, what))
+            return None
         # on_command is called after run() initializes _ble
         assert self._ble is not None
         from . import control  # lazy
@@ -1058,7 +1091,7 @@ class Server:
         :param action: ``"view"`` or ``"leave"``.
         :returns: ``{"ok": bool, "viewing": bool}``.
         """
-        if self._read_only or "roof" not in self.funcs:
+        if self._read_only or not self._ble_enabled or "roof" not in self.funcs:
             return {"ok": False, "viewing": False}
         if self._roof_view_wake is None:
             self._roof_view_wake = asyncio.Event()
@@ -1319,6 +1352,36 @@ class Server:
         )
         return httpd
 
+    async def _main_loop(self):
+        """The daemon's forever-loop: supervise the persistent session and poll. In satellite mode
+        (``--no-ble``) it only idles, so the sinks and web UI run while BLE stays closed."""
+        if not self._ble_enabled:
+            log.info("serve: satellite mode (--no-ble): no BLE poll, no session")
+            while True:
+                await asyncio.sleep(3600)
+        if self._persistent:
+            asyncio.ensure_future(self._sessions.supervise())
+        while True:
+            try:
+                if self._persistent and self._sessions.session_state == "connecting":
+                    await asyncio.sleep(2)  # supervisor is mid-connect; don't race it cold
+                    continue
+                states = await self.poll()
+                log.debug("polled %d functions" % len(states))
+                self._record_outcome("ok")
+            except ConnectionUnavailable as e:
+                log.warning("poll skipped: %s" % e)
+                # van unreachable: "asleep" once the supervisor's backoff hit the cap (deep
+                # sleep), else a transient connection loss while it may still be awake.
+                self._record_outcome("asleep" if self._sessions.session_state == "asleep" else "ble_error", e)
+            except Exception as e:
+                log.exception("poll error:")
+                self._record_outcome("error", e)
+            # Fast-poll burst after an engine start is owned by the observer (poll_interval
+            # returns the short cadence while a burst window is active, else self.interval);
+            # a watched UI on a held session shortens it further (_poll_nap).
+            await self._nap()
+
     def run(self):
         """Blocking daemon: connect MQTT (+ optional InfluxDB), then poll→fan-out
         on a timer while servicing HA commands from the MQTT network thread."""
@@ -1328,7 +1391,7 @@ class Server:
         self._ble = asyncio.Lock()  # serve is hci0's single BLE owner; created on this loop
         # Hand the loop-created shared lock to the session supervisor (which also creates its own
         # loop-bound wake event in attach()). Both must be born on THIS loop, hence not in __init__.
-        self._sessions.attach(self._ble)
+        self._sessions.attach(self._ble)  # inert state only (a lock + event): opens no BLE
 
         # --- MQTT (Home Assistant) — optional; a missing broker must not stop polling+web ---
         self._mqtt = self._maybe_start_mqtt(loop)
@@ -1351,34 +1414,8 @@ class Server:
         # --- web UI (replica app, embedded) — optional; must never crash the daemon ---
         self._httpd = self._maybe_start_web(loop)
 
-        async def _forever():
-            if self._persistent:
-                asyncio.ensure_future(self._sessions.supervise())
-            while True:
-                try:
-                    if self._persistent and self._sessions.session_state == "connecting":
-                        await asyncio.sleep(2)  # supervisor is mid-connect; don't race it cold
-                        continue
-                    states = await self.poll()
-                    log.debug("polled %d functions" % len(states))
-                    self._record_outcome("ok")
-                except ConnectionUnavailable as e:
-                    log.warning("poll skipped: %s" % e)
-                    # van unreachable: "asleep" once the supervisor's backoff hit the cap (deep
-                    # sleep), else a transient connection loss while it may still be awake.
-                    self._record_outcome(
-                        "asleep" if self._sessions.session_state == "asleep" else "ble_error", e
-                    )
-                except Exception as e:
-                    log.exception("poll error:")
-                    self._record_outcome("error", e)
-                # Fast-poll burst after an engine start is owned by the observer (poll_interval
-                # returns the short cadence while a burst window is active, else self.interval);
-                # a watched UI on a held session shortens it further (_poll_nap).
-                await self._nap()
-
         try:
-            loop.run_until_complete(_forever())
+            loop.run_until_complete(self._main_loop())
         finally:
             if self._mqtt is not None:
                 info = self._mqtt.publish(mqtt.availability_topic(), "offline", retain=True)

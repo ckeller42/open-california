@@ -386,6 +386,8 @@ window.STRINGS_DE = {
 
   // --- session pill --------------------------------------------------------------------------
   "🔌 Disconnected": "🔌 Getrennt",
+  "🛰 Satellite mode": "🛰 Satellit-Modus",
+  "🛰 Satellite mode — Pi data from {clock} ({ago}).": "🛰 Satellit-Modus — Pi-Daten von {clock} ({ago}).",
   "🟢 Live · fast": "🟢 Live · schnell",
   "🟡 Connecting": "🟡 Verbindung wird aufgebaut",
   "⚪ Asleep — tap to wake": "⚪ Ruhezustand — zum Aufwecken tippen",
