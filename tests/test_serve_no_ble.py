@@ -58,3 +58,29 @@ def test_no_ble_refuses_every_ble_entry_point():
         assert srv._pairing is None  # no runner was created
 
     asyncio.run(go())
+
+
+def test_no_ble_backend_is_read_only_and_web_refuses_commands():
+    import json
+    import urllib.error
+    import urllib.request
+
+    from calictl import web
+
+    srv = serve.Server(None, influx_enabled=False, ble_enabled=False)
+    be = serve.ServeBackend(srv, loop=None, read_only=False)  # writes enabled, still refused
+    assert be.read_only is True
+    httpd = web.serve_http(be, serve._WEBUI_DIR, "127.0.0.1", 0)
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:%d/api/command" % httpd.server_address[1],
+            json.dumps({"function": "cooler", "what": "power", "value": "on"}).encode(),
+            {"Content-Type": "application/json"},
+        )
+        try:
+            urllib.request.urlopen(req)
+            raise AssertionError("expected 405")
+        except urllib.error.HTTPError as e:
+            assert e.code == 405 and json.loads(e.read())["error"] == "read_only"
+    finally:
+        httpd.shutdown()

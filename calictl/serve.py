@@ -171,9 +171,18 @@ class ServeBackend:
     def __init__(self, server, loop, read_only=False):
         self._s = server
         self._loop = loop
-        self.read_only = read_only
+        self._read_only_flag = read_only
         # UX telemetry (R_UX_TELEMETRY): on unless CALICTL_UX=0; the web UI reads it as _meta.ux
         self.ux_enabled = os.environ.get("CALICTL_UX", "1") != "0"
+
+    @property
+    def read_only(self):
+        """Read-only when writes are off OR in satellite mode (no BLE: web takes its 405 path)."""
+        return self._read_only_flag or not self._s._ble_enabled
+
+    @read_only.setter
+    def read_only(self, v):
+        self._read_only_flag = v
 
     def state(self):
         """Interpreted state for every function in the poll cache (no BLE read), plus a `_meta`
@@ -379,9 +388,11 @@ class Server:
         .. req:: serve --no-ble (satellite mode)
            :id: R_SERVE_NO_BLE
 
-           With ``ble_enabled=False`` the daemon never opens BLE: no supervisor, no poll. The web,
-           MQTT and Influx sinks keep running on the replayed last state, and ``_meta.session`` is
-           ``"satellite"`` so the web UI shows the satellite pill instead of an offline banner.
+           With ``ble_enabled=False`` the daemon never opens BLE: no supervisor, no poll, and the
+           web backend is read-only. The web UI serves the cached last state, MQTT publishes
+           availability only (state is published by the poll), and InfluxDB is filled by
+           ``calictl-esp-ingest`` from the ESP SD log. ``_meta.session`` is ``"satellite"`` so the
+           web UI shows the satellite pill instead of an offline banner.
         """
         self._ble_enabled = ble_enabled
         self.funcs = protocol.load()

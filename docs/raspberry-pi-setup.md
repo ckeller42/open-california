@@ -217,8 +217,9 @@ To enable it under systemd, append `--web 8080` to the unit's `ExecStart` and re
 ### Satellite mode (`--no-ble`)
 
 When only the ESP32 satellite talks to the camper unit, run the daemon without BLE. `serve
---no-ble` never opens a BLE connection (no session, no poll, no pairing, no commands); the web UI,
-MQTT and InfluxDB keep running on the last stored state. The web UI shows a "🛰 Satellite mode"
+--no-ble` never opens a BLE connection (no session, no poll, no pairing, no commands). The web UI
+serves the cached last state (read-only), MQTT publishes availability only, and InfluxDB is
+filled by `calictl-esp-ingest` from the ESP SD log. The web UI shows a "🛰 Satellite mode"
 pill ("🛰 Satellit-Modus" in German) instead of an offline banner. Set it with a drop-in
 (`sudo systemctl edit calictl`); the empty `ExecStart=` line clears the unit's own command:
 
