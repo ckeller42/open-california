@@ -883,7 +883,7 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    :id: R_FW_BLE_MODE
    :status: open
 
-   The session runs in one of three modes (``cali_session_set_mode``; console ``ble mode
+   The session runs in one of three :term:`BLE modes <BLE mode>` (``cali_session_set_mode``; console ``ble mode
    hold|quiet|off``). ``hold`` is the default: link held, 1003 heartbeat every 600 ms. ``quiet``:
    link held, the heartbeat runs only while a read-all warms up or reads, or a control command is in
    flight (a switch to ``quiet`` mid-command keeps it to the last frame). ``off``: no link and no
@@ -899,7 +899,7 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    :id: R_FW_BLE_PROBE
    :status: open
 
-   ``cali_session_probe`` (console ``ble probe``) runs one fresh read-all now: it connects first
+   ``cali_session_probe`` (console ``ble probe``, a :term:`Probe`) runs one fresh read-all now: it connects first
    when the link is down, runs the heartbeat through the warm-up, reads every function, logs ``evt
    probe`` and returns to the mode (``off``: disconnect). A probe that cannot connect logs
    ``ok:false`` and is not retried. The probe writes nothing but the 1003 heartbeat.
