@@ -276,10 +276,13 @@ def test_an_error_answer_is_no_answer(backend):
 
 
 @pytest.mark.parametrize(
-    "locale,pill",
-    [("en-US", "🛰 Satellite mode"), ("de-DE", "🛰 Satellit-Modus")],
+    "locale,pill,banner",
+    [
+        ("en-US", "🛰 Satellite mode", "🛰 Satellite mode — Pi data from"),
+        ("de-DE", "🛰 Satellit-Modus", "🛰 Satellit-Modus — Pi-Daten von"),
+    ],
 )
-def test_serve_no_ble_shows_satellite_pill_and_no_banner(backend, locale, pill):
+def test_serve_no_ble_shows_satellite_pill_and_no_banner(backend, locale, pill, banner):
     """``serve --no-ble`` (``_meta.session == "satellite"``): the pill says so, no offline banner,
     no session toggle, even though the unit is not "online".
 
@@ -290,6 +293,6 @@ def test_serve_no_ble_shows_satellite_pill_and_no_banner(backend, locale, pill):
     backend.st["_meta"].update(online=False, session="satellite", session_mode="off")
     with _page(backend, locale=locale) as pg:
         expect(pg.locator("#status")).to_have_text(pill)
-        expect(_conn(pg)).to_be_empty()
+        expect(pg.locator("#conn.satellite")).to_contain_text(banner)  # the frozen cache's age
         assert pg.locator(".offline").count() == 0
         assert pg.locator(".session-pill").count() == 0

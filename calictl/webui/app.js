@@ -1124,6 +1124,9 @@ function paintLink() {
     vars.since = clockText(/** @type {number} */ (lastAnswerAt ?? waitingSince) / 1000);
     tmpl = clock ? "⚠ {name} not reachable since {since}. Last data {clock} ({ago})."
       : "⚠ {name} not reachable since {since}.";
+  } else if (s === "satellite") {
+    cls = "satellite";   // neutral, not the offline warning: the age of the frozen Pi cache, never shown as live
+    tmpl = clock ? "🛰 Satellite mode — Pi data from {clock} ({ago})." : "";
   } else if (s === "connecting") {
     cls += " connecting";
     tmpl = clock ? "Connecting… Last data {clock} ({ago})." : "Connecting…";

@@ -165,7 +165,8 @@ class ServeBackend:
         scheduled onto it with `asyncio.run_coroutine_threadsafe`.
     :param read_only: when true, `calictl.web` rejects command POSTs before
         `command()` is ever called (enforced by `web.py`, mirrored here for
-        callers that check the attribute directly).
+        callers that check the attribute directly). Also forced true when the server runs with
+        ``ble_enabled=False`` (satellite mode).
     """
 
     def __init__(self, server, loop, read_only=False):
@@ -393,6 +394,8 @@ class Server:
            availability only (state is published by the poll), and InfluxDB is filled by
            ``calictl-esp-ingest`` from the ESP SD log. ``_meta.session`` is ``"satellite"`` so the
            web UI shows the satellite pill instead of an offline banner.
+           A ``SessionSupervisor`` is still constructed (``ServeBackend`` and ``_record_outcome``
+           read it) but never supervised; constructing it opens no BLE.
         """
         self._ble_enabled = ble_enabled
         self.funcs = protocol.load()
@@ -695,7 +698,7 @@ class Server:
             wizard UI can render the new step straight off the `POST` response without an extra
             round-trip.
         """
-        if action == "start" and not self._ble_enabled:  # satellite mode: BLE stays closed
+        if not self._ble_enabled:  # satellite mode: BLE and the bond stay untouched, every action
             return self.pairing_snapshot()
         if action == "start":
             self._ensure_pairing_runner()

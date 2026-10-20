@@ -11,6 +11,7 @@ def test_no_ble_never_polls_or_supervises(monkeypatch):
        :id: T_SERVE_NO_BLE
        :links: R_SERVE_NO_BLE
     """
+    monkeypatch.delitem(sys.modules, "bleak", raising=False)  # older tests leave a stub behind
     srv = serve.Server(None, influx_enabled=False, ble_enabled=False)
 
     async def boom(*a, **k):
@@ -46,16 +47,21 @@ def test_cli_flag(monkeypatch):
     assert seen["ble"] is True
 
 
-def test_no_ble_refuses_every_ble_entry_point():
+def test_no_ble_refuses_every_ble_entry_point(tmp_path):
     srv = serve.Server(None, influx_enabled=False, ble_enabled=False)
     srv._read_only = False
+    cache = tmp_path / "last_state.json"
+    cache.write_text("{}")
+    srv._state_cache = str(cache)
 
     async def go():
         assert await srv.on_command("cooler", "power", "on") is None
         assert (await srv.roof_view("view"))["ok"] is False
         assert (await srv.set_session_mode("connect"))["ok"] is False
-        await srv.pairing_command("start", None)
+        for action, value in (("start", None), ("reset", None), ("passkey", "123456"), ("cancel", None)):
+            await srv.pairing_command(action, value)
         assert srv._pairing is None  # no runner was created
+        assert cache.read_text() == "{}"  # reset did not forget the unit state
 
     asyncio.run(go())
 
