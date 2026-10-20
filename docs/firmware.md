@@ -765,7 +765,7 @@ IP and no user-typed value is ever recorded.
 | `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why`: `console` (`ble mode`), `api` (`POST /api/ble`), `command` (a control command in `quiet`/`off`), `pairing`, `exp` (an experiment phase starts), `exp_abort` (a phase cut short), `exp_off` (`ble exp off`) |
 | `evt` `ble_exp` | the BLE experiment started / stopped (ble_exp_run.c, `R_FW_BLE_EXP`) | `on` (bool); on start also `phase_min`, `from`, `to` (Berlin local hours) |
 | `evt` `ble_phase` | an experiment phase ended (also: stopped or restarted mid-phase) | `mode` (the phase: `hold`/`quiet`/`off`), `aborted` (bool: cut short by a viewer, a mode change from outside — a command in `quiet`/`off`, the console, `/api/ble`, also during the probe —, the ignition on an up link, the window's end, `ble exp off` or a new `ble exp`; `false` = ran its length, probe done), `dur_ms` (the phase's span: a `hold` phase logs no `ble_mode` at its start) |
-| `evt` `unit_adv` | the bonded unit's own advert, while an experiment runs (ble_exp_run.c, `R_FW_BLE_EXP`): first seen in a sensor window, or gone (no sighting for `CALI_BX_GONE_MS` = 3 sensor scan periods, 3 min) | `seen` (bool; never the address) |
+| `evt` `unit_adv` | the bonded unit's own advert, while an experiment runs (ble_exp_run.c, `R_FW_BLE_EXP`): first seen in a sensor window, or gone (no sighting for `CALI_BX_GONE_MS` = 3 sensor scan periods + one window, 185 s) | `seen` (bool; never the address) |
 | `evt` `probe` | a probe ended (or the experiment's phase-end probe was refused: `ok` false, `reason` `refused`) | `ok` (bool), `mode` (the mode it returns to), `reason` (`read_all` on success, else the failure: `connect_timeout`/`connect_fail`/`enc_timeout`/`enc_fail`/`disconnected`/`discover`/`heartbeat`) |
 | `evt` `wifi_up` / `wifi_down` | station online / lost (wifi_run.c) | `rssi`, `ip_changed` (bool, never the address) / `reason` `lost`, `rssi`, `dur_ms` |
 | `evt` `net` | a failed join | `err` `join`, `reason` (`not_found`/`auth`/`other`) |
@@ -922,11 +922,13 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    the sleep indicator: a sensor window (``sensors on`` only — no window runs otherwise) that sees an
    advert whose address is the bond's identity (resolved by the controller, or an RPA resolving with
    the bond's IRK) logs ``evt unit_adv`` ``seen:true`` on the first sighting, ``seen:false`` after
-   ``CALI_BX_GONE_MS`` (3 scan periods) without one (also from the start, when never seen). A
-   reappearance in ``quiet`` or ``off`` after a ``seen:false`` logged in that same mode is a wake
-   (door, ignition) and counts as activity; the first sighting, and the adverts that follow our own
-   disconnect (the gone was logged in ``hold``, where the held link keeps the unit from advertising),
-   are not. Each phase end logs ``evt ble_phase`` with its
+   ``CALI_BX_GONE_MS`` (3 scan periods + one window, 185 s) without one (also from the start, when
+   never seen). A reappearance in ``quiet`` or ``off`` after a ``seen:false`` logged in that same mode
+   **with the link down** is a wake (door, ignition) and counts as activity. The first sighting is not,
+   and neither is a sighting after a gone logged with the link up: the unit is assumed (not yet
+   checked on the van) not to advertise while connected, so such a gone is the held link's silence,
+   and the adverts after the link drops (our ``hold -> off`` disconnect, the unit dropping a ``quiet``
+   link) are no wake. Each phase end logs ``evt ble_phase`` with its
    ``dur_ms``, start/stop ``evt ble_exp``; stopping or restarting mid-phase logs that phase
    ``aborted`` first; a refused phase-end probe logs ``evt probe`` with ``ok:false``, reason
    ``refused``. ``ble exp off`` (``{"exp_min":0}``) ends it in ``hold``; a reboot ends it too (not
@@ -940,7 +942,9 @@ reported typed 2/3) or its RPA resolving with the bond's IRK, against the stored
 the transport (`CALI_TEV_UNIT_ADV` has no payload, `evt unit_adv` carries only `seen`). The host tier
 proves it against the Bumble fake's RPA (`T_FW_BLE_EXP_ADV_E2E`); whether the real unit's adverts reach a
 sensor window at all is open — check `device.ble.unit_adv_seen_ms_ago` near the van with `sensors on`
-and the link in `off`. If they never match, the fallback is the advertised local name (`VWCAMPER…`),
+and the link in `off`. Also open: does the unit advertise while connected? The wake rule assumes it does
+not (a gone logged with the link up arms no wake); if it does, a `hold`/`quiet` gone means a sleeping
+unit and the rule can arm on it too. If they never match, the fallback is the advertised local name (`VWCAMPER…`),
 which is not unique: a second California on the same campsite would read as "our unit is awake" (a
 false wake, a lost `off` phase), so the name match would need the address check kept as the primary.
 

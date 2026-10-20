@@ -2510,21 +2510,16 @@ def test_ignition_in_quiet_aborts_the_phase_back_to_hold(fake):
     ]
 
 
-def test_unit_advert_reappearing_in_quiet_aborts_the_phase(fake):
-    """The unit's advert (UNIT_ADV): the first sighting and a sighting after a gone logged in another
-    mode are logged only; a reappearance after a gone logged in this quiet phase is a wake — activity,
-    the phase ends aborted and the mode returns to hold. ``ble`` shows when the advert was last seen.
+GONE = 185000  # CALI_BX_GONE_MS (test_ble_exp checks it against the sensor scan period + window)
 
-    .. test:: the unit's advert reappearing in quiet wakes the experiment back to hold
-       :id: T_FW_BLE_EXP_ADV_WAKE
-       :links: R_FW_BLE_EXP
-    """
-    gone = 180000  # CALI_BX_GONE_MS (test_ble_exp checks it against the sensor scan period)
+
+def _to_quiet():
+    """Paired + read, a 5-min experiment: the hold phase (its gone is logged at the phase end: no
+    sighting since the start, the link up), its probe, then the quiet phase starts at ``q``."""
     t = T + 100
-    p = t + 5 * 60000  # 5-min hold phase ends -> probe (gone logged: no sighting since the start)
-    q = p + WARM + 200  # quiet starts
-    out = run(
-        fake,
+    p = t + 5 * 60000
+    q = p + WARM + 200
+    script = [
         *PAIRED,
         *READ_ALL,
         CLOCK,
@@ -2533,27 +2528,74 @@ def test_unit_advert_reappearing_in_quiet_aborts_the_phase(fake):
         "tick %d" % t,
         *_probe_done(p),
         "tick %d" % q,
-        "UNIT_ADV",  # seen after a gone logged in hold: logged, no wake
+    ]
+    return script, t, p, q
+
+
+def _adv_evts(out):
+    return [e for e in _diag(out) if e["ev"] == "evt" and e["kind"] in ("unit_adv", "ble_phase", "ble_mode")]
+
+
+def test_unit_advert_reappearing_after_a_link_down_gone_aborts_quiet(fake):
+    """The unit's advert (UNIT_ADV) in quiet: the unit drops the link and is never reconnected; the
+    first sighting after that is logged only (the gone before it was logged in hold, link up); a gone
+    logged with the link down, then a sighting = the unit woke — activity, the phase ends aborted and
+    the mode returns to hold. ``ble`` shows when the advert was last seen.
+
+    .. test:: the unit's advert reappearing in quiet after a link-down gone wakes the experiment
+       :id: T_FW_BLE_EXP_ADV_WAKE
+       :links: R_FW_BLE_EXP
+    """
+    script, t, p, q = _to_quiet()
+    out = run(
+        fake,
+        *script,
+        "DISCONNECTED",  # the unit drops the quiet link; the reconnect never completes
+        "UNIT_ADV",  # seen: logged, no wake (the gone was logged in hold)
         "tick %d" % (q + 100),
         "> ble",
-        "tick %d" % (q + 100 + gone),  # gone (in quiet)
-        "tick %d" % (q + 200 + gone),
+        "tick %d" % (q + 100 + GONE),  # gone, link down: armed
+        "tick %d" % (q + 200 + GONE),
         "UNIT_ADV",  # reappears: the unit woke
-        "tick %d" % (q + 300 + gone),
+        "tick %d" % (q + 300 + GONE),
     )
-    ev = [e for e in _diag(out) if e["ev"] == "evt" and e["kind"] in ("unit_adv", "ble_phase", "ble_mode")]
-    assert ev == [
+    assert _adv_evts(out) == [
         {"ev": "evt", "kind": "unit_adv", "seen": False},
         {"ev": "evt", "kind": "ble_phase", "mode": "hold", "aborted": False, "dur_ms": p + WARM + 100 - t},
         {"ev": "evt", "kind": "ble_mode", "mode": "quiet", "why": "exp"},
         {"ev": "evt", "kind": "unit_adv", "seen": True},
         {"ev": "evt", "kind": "unit_adv", "seen": False},
         {"ev": "evt", "kind": "unit_adv", "seen": True},
-        {"ev": "evt", "kind": "ble_phase", "mode": "quiet", "aborted": True, "dur_ms": gone + 300},
+        {"ev": "evt", "kind": "ble_phase", "mode": "quiet", "aborted": True, "dur_ms": GONE + 300},
         {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "exp_abort"},
     ]
     status = next(ln for ln in out if ln.startswith("LOG ble: "))
     assert '"unit_adv_seen_ms_ago":100' in status
+
+
+def test_unit_advert_after_a_link_up_gone_is_no_wake(fake):
+    """In quiet with the link held, a gone is the held link's silence, not sleep: the next sighting
+    (the unit dropping the link) is logged and the phase runs on.
+
+    .. test:: a gone logged with the link up arms no wake
+       :id: T_FW_BLE_EXP_ADV_HELD
+       :links: R_FW_BLE_EXP
+    """
+    script, _, _, q = _to_quiet()
+    out = run(
+        fake,
+        *script,
+        "UNIT_ADV",
+        "tick %d" % (q + 100),
+        "tick %d" % (q + 100 + GONE),  # gone, link up: not armed
+        "UNIT_ADV",
+        "tick %d" % (q + 200 + GONE),
+        "> ble",
+    )
+    ev = _adv_evts(out)
+    assert [e["seen"] for e in ev if e["kind"] == "unit_adv"] == [False, True, False, True]
+    assert not [e for e in ev if e["kind"] == "ble_phase" and e["mode"] == "quiet"]
+    assert '"phase":"quiet"' in out[-1]
 
 
 def test_unit_advert_is_not_logged_without_the_experiment(fake):

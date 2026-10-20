@@ -4,7 +4,7 @@
  * command in quiet/off -> hold, the console, /api/ble; also during the probe) cuts the phase short
  * (aborted), returns to hold and holds CALI_BX_IDLE_MS before the next phase. The unit's own advert
  * (cali_bx_seen, the sleep indicator): gone after CALI_BX_GONE_MS without a sighting; a reappearance in
- * quiet/off after a gone logged in that mode is a wake = activity (ble_exp_run.c).
+ * quiet/off after a gone logged in that mode with the link down is a wake = activity (ble_exp_run.c).
  * Pure: step() returns what to do, the caller acts (ble_exp_run.c).
  * The cali_bx_* half is C99, no platform, no session calls (the mode numbers are CALI_BLE_* from
  * cali_session.h); the cali_ble_exp_* half below is its glue (ble_exp_run.c).
@@ -21,9 +21,10 @@ extern "C" {
 #endif
 
 #define CALI_BX_IDLE_MS 600000u /* after a viewer / command / wake: hold this long, then go on */
-/* the unit's advert is gone after this long without a sighting: 3 x SENS_PERIOD_MS (sensors.c, 60 s —
- * the unit is only seen in a sensor scan window; test_ble_exp.py checks the ratio) */
-#define CALI_BX_GONE_MS 180000u
+/* the unit's advert is gone after this long without a sighting: 3 x SENS_PERIOD_MS + SENS_WINDOW_MS
+ * (sensors.c, 60 s + 5 s — the unit is only seen in a sensor scan window, so the third missed window has
+ * ended before it counts; test_ble_exp.py checks the sum) */
+#define CALI_BX_GONE_MS 185000u
 
 typedef struct {
     int on, from_h, to_h;

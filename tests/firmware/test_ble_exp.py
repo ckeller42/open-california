@@ -193,10 +193,12 @@ def test_quiet_forced_off_during_the_probe_aborts_back_to_hold(cli):
 
 
 def _gone_ms():
-    """CALI_BX_GONE_MS from the header; it must stay 3 x the sensor scan period (sensors.c)."""
+    """CALI_BX_GONE_MS from the header; it must stay 3 sensor scan periods + one window (sensors.c)."""
     gone = int(re.search(r"#define CALI_BX_GONE_MS (\d+)u", (CORE / "include/cali_ble_exp.h").read_text())[1])
-    period = int(re.search(r"#define SENS_PERIOD_MS (\d+)u", (CORE / "sensors.c").read_text())[1])
-    assert gone == 3 * period
+    sens = (CORE / "sensors.c").read_text()
+    period = int(re.search(r"#define SENS_PERIOD_MS (\d+)u", sens)[1])
+    window = int(re.search(r"#define SENS_WINDOW_MS (\d+)u", sens)[1])
+    assert gone == 3 * period + window
     return gone
 
 

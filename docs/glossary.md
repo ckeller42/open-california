@@ -83,8 +83,8 @@ BLE probe
 Sleep indicator
 Unit advert sighting
   Whether the satellite's sensor scan windows still see the bonded unit's own advert (matched by
-  address, never logged): gone for 3 windows = the unit is likely asleep; back in `quiet`/`off` = it
-  woke (door, ignition). Needs `sensors on`. See {doc}`firmware` (`R_FW_BLE_EXP`).
+  address, never logged): gone for 3 windows with the link down = the unit is likely asleep; back in
+  `quiet`/`off` then = it woke (door, ignition). Needs `sensors on`. See {doc}`firmware` (`R_FW_BLE_EXP`).
 
 Latch
 Latched

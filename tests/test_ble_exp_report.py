@@ -49,6 +49,28 @@ def test_unit_adv_unknown_before_the_first_record_is_not_seen():
     assert row["adv_minutes"] == 30
 
 
+def test_unit_adv_resets_to_unknown_at_each_experiment_start():
+    """A ``ble_exp`` on record resets the advert state to unknown: the previous run's ``seen:true``
+    does not carry over.
+
+    .. test:: report: an experiment start resets the advert state
+       :id: T_BLE_EXP_REPORT_ADV_RESET
+       :links: R_BLE_EXP_REPORT
+    """
+    ev = [
+        (-2 * H, "unit_adv", {"seen": True}),
+        (-1, "ble_exp", {"on": True, "phase_min": 60}),
+        (0, "ble_mode", {"mode": "off", "why": "exp"}),
+        (20 * 60_000, "ble_exp", {"on": True, "phase_min": 60}),  # a restart mid-phase
+        (H, "ble_phase", {"mode": "off", "aborted": True}),
+    ]
+    (row,) = phases(ev)
+    assert row["adv_minutes"] == 0
+    ev[3] = (20 * 60_000, "unit_adv", {"seen": True})
+    (row,) = phases(ev)
+    assert row["adv_minutes"] == 40
+
+
 def test_failed_probe_and_sparse_volt():
     ev = [
         (0, "ble_mode", {"mode": "off", "why": "exp"}),

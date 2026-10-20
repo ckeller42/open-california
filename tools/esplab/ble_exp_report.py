@@ -9,8 +9,9 @@ Usage: ``python3 tools/esplab/ble_exp_report.py --url http://calictl-esp.local [
    :status: open
 
    Per ``ble_phase`` record: mode, aborted, minutes, minutes the unit's advert was seen
-   (``unit_adv``; at phase start the last earlier record's ``seen``, none = unknown = not counted —
-   the firmware starts each experiment unknown and logs the first sighting), the last energy
+   (``unit_adv``; at phase start the last earlier record's ``seen``; none, or a ``ble_exp`` start
+   after it = unknown = not counted — the firmware starts each experiment unknown and logs the first
+   sighting), the last energy
    reading after the last ok ``probe`` (``None`` + ``probe`` ``fail`` when it failed), the
    battery-sense voltage slope (least squares, mV/h) and the last cooler / air-heater state.
    Voltage comes from the first ``ext`` record of type ``victron_battery`` (its ``battery_voltage``),
@@ -23,7 +24,17 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
-EVT_KINDS = ("ble_mode", "ble_phase", "probe", "unit_adv")
+EVT_KINDS = ("ble_mode", "ble_phase", "probe", "unit_adv", "ble_exp")
+
+
+def _adv_state(kind, d):
+    """The advert state a record sets: ``unit_adv`` its ``seen``; an experiment start (``ble_exp``
+    on) unknown = False (the firmware starts each run unknown); None = no change."""
+    if kind == "unit_adv":
+        return bool(d.get("seen"))
+    if kind == "ble_exp" and d.get("on"):
+        return False
+    return None
 
 
 def _slope_mv_h(pts):
@@ -76,12 +87,15 @@ def phases(events):
         if d.get("dur_ms") is not None:  # the firmware's own span (a hold start logs no ble_mode)
             start = end - int(d["dur_ms"])
         prev_end = end
-        seen = next((x.get("seen") for t, k, x in reversed(before) if k == "unit_adv" and t < start), False)
+        seen = next(
+            (_adv_state(k, x) for t, k, x in reversed(before) if _adv_state(k, x) is not None and t < start),
+            False,
+        )
         adv, cur = 0, start
         for t, k, x in ev[:i]:
-            if k == "unit_adv" and start <= t:
+            if _adv_state(k, x) is not None and start <= t:
                 adv += (t - cur) if seen else 0
-                cur, seen = t, bool(x.get("seen"))
+                cur, seen = t, _adv_state(k, x)
         adv += (end - cur) if seen else 0
         inph = [e for e in before if e[0] >= start]
         probes = [e for e in inph if e[1] == "probe"]

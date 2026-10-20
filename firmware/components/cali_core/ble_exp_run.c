@@ -36,6 +36,8 @@ int cali_ble_exp_start(unsigned phase_min, int from_h, int to_h) {
     if (cali_time_ts(&ts) == CALI_TSRC_NONE) return -1;
     end_running_phase();
     cali_bx_start(&s_bx, phase_min, from_h, to_h);
+    s_adv_mode = -1;   /* the advert state starts unknown: no wake armed from an earlier run */
+    s_adv_armed = 0;
     s_min = phase_min;
     cali_log("ble-exp: on, %u min phases, %02d-%02d", phase_min, from_h, to_h);
     cali_diag_evt("ble_exp", "\"on\":true,\"phase_min\":%u,\"from\":%d,\"to\":%d", phase_min, from_h, to_h);
@@ -54,9 +56,10 @@ void cali_ble_exp_stop(void) {
 void cali_ble_exp_activity(uint64_t now_ms) { cali_bx_activity(&s_bx, now_ms); }
 
 /* The unit's advert sighting (1 seen / -1 gone from cali_bx_seen): log it; a reappearance in quiet/off
- * after a gone logged in that same mode = the unit woke (door, ignition) = activity. Only a gone in the
- * current mode arms it: while we hold the link the unit does not advertise, so the gone logged in hold
- * and the adverts that follow our own disconnect (hold -> off) are no wake. */
+ * after a gone logged in that same mode WITH THE LINK DOWN = the unit woke (door, ignition) = activity.
+ * A gone with the link up is not sleep: the unit is assumed (not yet checked on the van) not to advertise
+ * while connected, so that gone is our held link's silence, and the adverts after the link drops (our
+ * hold -> off disconnect, the unit dropping a quiet link) are no wake. A mode change disarms. */
 static void adv_transition(int t, uint64_t now_ms) {
     int mode = cali_session_mode();
     if (mode != s_adv_mode) {
@@ -64,7 +67,7 @@ static void adv_transition(int t, uint64_t now_ms) {
         s_adv_armed = 0;
     }
     if (t < 0) {
-        s_adv_armed = 1;
+        s_adv_armed = !cali_session_link_up();
         cali_diag_evt("unit_adv", "\"seen\":false");
     } else if (t > 0) {
         cali_diag_evt("unit_adv", "\"seen\":true");
