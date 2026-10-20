@@ -1,6 +1,7 @@
 /* web_cli.c — line-protocol driver for tests/firmware/test_web_handlers.py ONLY; not part of the ESP
  * build. Links web.c + http_core.c + captive_dns.c (for cali_captive_is_probe) + json.c + snapshot.c
- * + ota.c + time.c + auto_camper.c + auto_camper_run.c (never ticked here) + pi_wake.c + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
+ * + ota.c + time.c + auto_camper.c + auto_camper_run.c (never ticked here) + pi_wake.c + ble_exp.c +
+ * ble_exp_run.c + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
  * frames, the runner state, a transport (has_bond/identity), an in-memory kv store, the clock, the
  * log, cali_fw_version ("test"), the WiFi runtime (cali_wifi_run.h) and the control sequencer
  * (cali_ctl_submit).
@@ -38,6 +39,8 @@
  *   acinit           cali_ac_init (the toggle + debt from the kv store, as at boot)
  *   pwinit           cali_pw_init (the Pi-wake toggle from the kv store, as at boot)
  *   ign <-1|0|1>     cali_pw_step(<ignition>, the clock): the Pi wake's edge rule (R_FW_PI_WAKE)
+ *   ntp <epoch_ms>   SNTP synced at this (fixed) wall clock: cali_time_ts answers it (R_FW_BLE_EXP)
+ *   bxtick           cali_ble_exp_tick(the clock): one step of the BLE experiment
  *   pwtick           cali_pw_tick(the clock): ends a pulse that is due (the session is never ready here,
  *                    so its step sees the ignition unknown)
  *   energy <hex>     the session also holds this energy frame (the Pi halt's battery guard, R_FW_PI_HALT)
@@ -73,6 +76,8 @@
 #include "cali_control.h"
 #include "cali_ota.h"
 #include "cali_pi_wake.h"
+#include "cali_ble_exp.h"
+#include "cali_time.h"
 #include "cali_platform.h"
 #include "cali_sdlog.h"
 #include "cali_runner.h"
@@ -167,6 +172,26 @@ int cali_session_water_held(void) { return s_water_held; }
 uint64_t cali_session_water_good_ms(void) { return s_water_good; }
 int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]) { (void)live; (void)out; return 0; }
 
+/* the BLE link modes (/api/ble, device.ble) */
+static int s_ble_mode, s_probing;
+int cali_session_mode(void) { return s_ble_mode; }
+int cali_session_probing(void) { return s_probing; }
+const char *cali_session_mode_name(int m) {
+    static const char *const N[] = {"hold", "quiet", "off"};
+    return m >= 0 && m <= 2 ? N[m] : "?";
+}
+int cali_session_set_mode(int m, const char *why) {
+    printf("CALL session_set_mode %s %s\n", cali_session_mode_name(m), why);
+    s_ble_mode = m;
+    return 0;
+}
+int cali_session_probe(void) {
+    printf("CALL session_probe\n");
+    if (s_probing) return -1;
+    s_probing = 1;
+    return 0;
+}
+
 /* ---- the fake runner + transport ---- */
 static cali_pair_state_t s_pair;
 const cali_pair_state_t *cali_runner_state(void) { return &s_pair; }
@@ -211,6 +236,8 @@ int cali_kv_get(const char *key, void *buf, size_t *len) {
     return CALI_KV_MISSING;
 }
 uint64_t cali_uptime_ms(void) { return s_now; }
+static int64_t s_epoch_ms;   /* "ntp": the SNTP wall clock (fixed) */
+static int64_t fake_epoch(void) { return s_epoch_ms; }
 const char *cali_fw_version(void) { return "test"; }
 void cali_pi_wake_line(int low) { printf("CALL gpio9 %s\n", low ? "low" : "released"); }
 void cali_pi_halt_line(int low) { printf("CALL gpio8 %s\n", low ? "low" : "released"); }
@@ -401,6 +428,12 @@ int main(void) {
         else if (strcmp(w, "pwinit") == 0) cali_pw_init();
         else if (strcmp(w, "ign") == 0) cali_pw_step((int)v, s_now);
         else if (strcmp(w, "pwtick") == 0) cali_pw_tick(s_now);
+        else if (strcmp(w, "bxtick") == 0) cali_ble_exp_tick(s_now);
+        else if (strcmp(w, "ntp") == 0 && sscanf(a1, "%llu", &ms) == 1) {
+            s_epoch_ms = (int64_t)ms;
+            cali_time_source(fake_epoch);
+            cali_time_synced();
+        }
         else if (strcmp(w, "phhalt") == 0) printf("PHHALT %d\n", cali_ph_halt("manual"));
         else if (strcmp(w, "battlow") == 0)
             printf("BATTLOW %d\n", cali_pw_batt_low(v, strtol(a2, NULL, 10), strtol(a3, NULL, 10), (int)strtol(a4, NULL, 10)));

@@ -72,6 +72,8 @@ def phases(events):
         )
         if start is None:
             start = ev[0][0]
+        if d.get("dur_ms") is not None:  # the firmware's own span (a hold start logs no ble_mode)
+            start = end - int(d["dur_ms"])
         prev_end = end
         seen = next((x.get("seen") for t, k, x in reversed(before) if k == "unit_adv" and t < start), True)
         adv, cur = 0, start

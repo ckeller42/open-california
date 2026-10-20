@@ -35,6 +35,7 @@ static uint64_t s_up_at;       /* now_ms the link came up (encrypted): the arm d
 static int s_hb_on;
 static uint32_t s_hb_ctr;
 static uint64_t s_hb_next;
+static uint64_t s_hb_since;    /* now_ms the heartbeat (re)started: link up, or quiet/off -> hold */
 
 static int s_reconnect_pending;
 static uint64_t s_reconnect_at;
@@ -47,6 +48,10 @@ static size_t s_read_idx;
 static int s_snapped;          /* this link's first read-all completed */
 static int s_rereading;        /* the periodic water re-read is outstanding */
 static uint64_t s_water_next;  /* now_ms of the next water re-read */
+
+static int s_mode = CALI_BLE_HOLD;
+static int s_probe;            /* 1 = a probe waits for its read-all */
+static const char *const MODE_NAME[] = {"hold", "quiet", "off"};
 
 #define WATER_CHAR 0x1302u
 #define WATER_GOOD_KEY "water_good"   /* persisted last-plausible 1302 frame (<=15 chars, NVS) */
@@ -277,8 +282,33 @@ static void link_clear(void) {
     s_rereading = 0;
 }
 
+const char *cali_session_mode_name(int m) { return m >= CALI_BLE_HOLD && m <= CALI_BLE_OFF ? MODE_NAME[m] : "?"; }
+
+int cali_session_mode(void) { return s_mode; }
+
+int cali_session_probing(void) { return s_probe; }
+
+/* quiet: the 1003 heartbeat only while a read-all warms up / reads (values refresh), or a probe runs */
+static int hb_wanted(void) {   /* + a control command in flight keeps its heartbeat (mode change mid-command) */
+    return s_mode == CALI_BLE_HOLD || s_warming || s_reading || s_probe || cali_ctl_busy();
+}
+
+static void probe_end(int ok, const char *reason) {
+    s_probe = 0;
+    cali_log("session: probe %s (%s)", ok ? "ok" : "fail", reason);
+    cali_diag_evt("probe", "\"ok\":%s,\"mode\":\"%s\",\"reason\":\"%s\"", ok ? "true" : "false",
+                  MODE_NAME[s_mode], reason);
+    if (ok && s_mode == CALI_BLE_OFF && s_link != LINK_DOWN) {
+        s_why = "ble_off";
+        s_why_st = 0;
+        (void)s_t->disconnect();
+        link_clear();
+    }
+}
+
 static void schedule_reconnect(void) {
     if (!s_active) return;
+    if (s_mode == CALI_BLE_OFF) return;               /* off: no link and no reconnect */
     if (!s_t->has_bond()) {                           /* bond gone (forget): nothing to reconnect to */
         s_active = 0;
         return;
@@ -293,6 +323,7 @@ static void schedule_reconnect(void) {
  * link_down event's reason (a transport status, else 0). */
 static void link_lost(const char *why, int status) {
     int was = s_link;
+    if (s_probe) probe_end(0, why);
     s_why = why;
     s_why_st = status;
     link_clear();
@@ -313,6 +344,7 @@ static void link_up(void) {
     s_hb_on = 1;
     s_hb_ctr = CODEC_HEARTBEAT_START;
     s_hb_next = s_now;                                /* first beat on the next tick */
+    s_hb_since = s_now;
     s_warming = 0;
     s_reading = 0;
     s_snapped = 0;
@@ -339,6 +371,7 @@ static void read_next(void) {
     s_snapped = 1;
     s_water_next = s_now + CALI_SESSION_WATER_REREAD_MS;
     cali_console_snapshot(s_now);
+    if (s_probe) probe_end(1, "read_all");
 }
 
 static void on_discovered(int status) {
@@ -473,6 +506,7 @@ static void connect_now(void) {
         s_connect_started = s_now;
     } else {
         cali_log("session: connect_bonded failed %d", rc);
+        if (s_probe) probe_end(0, "connect_fail");
         schedule_reconnect();
     }
 }
@@ -480,15 +514,17 @@ static void connect_now(void) {
 void cali_session_boot(void) {
     if (!s_t->has_bond()) return;
     s_active = 1;
-    connect_now();
+    if (s_mode != CALI_BLE_OFF) connect_now();
 }
 
 void cali_session_on_bonded(void) {
+    (void)cali_session_set_mode(CALI_BLE_HOLD, "pairing");   /* before s_active: only logs, no connect */
     s_active = 1;
     link_up();
 }
 
 void cali_session_stop(void) {
+    if (s_probe) probe_end(0, "stop");
     s_active = 0;
     s_reconnect_pending = 0;
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
@@ -501,7 +537,7 @@ void cali_session_tick(uint64_t now_ms) {
     s_now = now_ms;
     cali_ctl_tick(now_ms);   /* the control sequencer runs on the session's tick, even with no link */
     if (!s_active) return;
-    if (s_link == LINK_UP && s_hb_on && now_ms >= s_hb_next) {
+    if (s_link == LINK_UP && s_hb_on && hb_wanted() && now_ms >= s_hb_next) {
         uint32_t n = s_hb_ctr++;
         s_hb_next = now_ms - s_hb_next >= CODEC_HEARTBEAT_PERIOD_MS ? now_ms + CODEC_HEARTBEAT_PERIOD_MS
                                                                      : s_hb_next + CODEC_HEARTBEAT_PERIOD_MS;
@@ -512,9 +548,9 @@ void cali_session_tick(uint64_t now_ms) {
             return;
         }
     }
-    if (s_link == LINK_UP && s_warming && now_ms >= s_warm_until) start_reads();
+    if (s_link == LINK_UP && s_warming && !s_rereading && now_ms >= s_warm_until) start_reads();
     /* Re-read water on calictl's poll cadence: a latch served at connect is corrected on the link. */
-    if (s_link == LINK_UP && s_snapped && !s_reading && !s_rereading && now_ms >= s_water_next) {
+    if (s_link == LINK_UP && s_snapped && !s_reading && !s_warming && !s_rereading && now_ms >= s_water_next) {
         s_water_next = now_ms + CALI_SESSION_WATER_REREAD_MS;
         int rc = s_t->read(WATER_CHAR);
         if (rc == 0)
@@ -545,7 +581,44 @@ void cali_session_tick(uint64_t now_ms) {
     }
 }
 
+int cali_session_set_mode(int mode, const char *why) {
+    if (mode < CALI_BLE_HOLD || mode > CALI_BLE_OFF) return -1;
+    if (mode == s_mode) return 0;
+    s_mode = mode;
+    cali_log("session: ble mode %s (%s)", MODE_NAME[mode], why);
+    cali_diag_evt("ble_mode", "\"mode\":\"%s\",\"why\":\"%s\"", MODE_NAME[mode], why);
+    if (!s_active) return 0;
+    if (mode == CALI_BLE_HOLD) s_hb_since = s_now;   /* quiet -> hold: re-arm (cali_session_ready) */
+    if (mode == CALI_BLE_OFF) {
+        s_reconnect_pending = 0;
+        if (s_link != LINK_DOWN && !s_probe) {
+            s_why = "ble_off";
+            s_why_st = 0;
+            (void)s_t->disconnect();
+            link_clear();
+        }
+    } else if (s_link == LINK_DOWN && !s_reconnect_pending) {
+        s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
+        connect_now();
+    }
+    return 0;
+}
+
+int cali_session_probe(void) {
+    if (!s_active || s_probe) return -1;
+    s_probe = 1;
+    if (s_link == LINK_DOWN) {
+        s_reconnect_pending = 0;
+        connect_now();                                   /* link_up -> discover -> warm-up -> read-all */
+    } else if (s_link == LINK_UP && s_snapped && !s_reading && !s_warming) {
+        s_warming = 1;
+        s_warm_until = s_now + CODEC_HEARTBEAT_WARMUP_MS;   /* the tick then runs start_reads() */
+    }                                                    /* else: the read-all in flight is the probe */
+    return 0;
+}
+
 void cali_session_connect_now(void) {
+    if (s_mode != CALI_BLE_HOLD) (void)cali_session_set_mode(CALI_BLE_HOLD, "command");   /* writes need hold */
     if (s_active && s_link == LINK_DOWN && s_reconnect_pending) s_reconnect_at = s_now;
 }
 
@@ -558,7 +631,8 @@ int cali_session_active(void) { return s_active; }
 int cali_session_link_up(void) { return s_link == LINK_UP; }
 
 int cali_session_ready(void) {
-    return s_link == LINK_UP && s_snapped && s_now - s_up_at >= CODEC_ARM_DELAY_MS;
+    /* hold only: a write needs the 1003 heartbeat running CODEC_ARM_DELAY_MS before it (quiet has none) */
+    return s_link == LINK_UP && s_snapped && s_mode == CALI_BLE_HOLD && s_now - s_hb_since >= CODEC_ARM_DELAY_MS;
 }
 
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {

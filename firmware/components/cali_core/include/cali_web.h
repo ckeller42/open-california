@@ -35,6 +35,11 @@
  *                                             "halt_in_s":<int>|null,"halted":<bool>,"halt_last_s":<int>|null,
  *                                             "halt_reason":"timer"|"battery"|"manual"|null,"batt_low":<bool>},
  *                                                -- cali_pi_wake.h (R_FW_PI_WAKE, R_FW_PI_HALT); last_s = s since the last pulse
+ *                                  "ble":{"mode":"hold"|"quiet"|"off","probing":<bool>,"exp":null|{"on":true,
+ *                                         "phase_min","from","to","phase":"hold"|"quiet"|"off"|null,
+ *                                         "remaining_ms":<int>|null}},
+ *                                                -- cali_ble_exp.h (R_FW_BLE_MODE, R_FW_BLE_EXP); a GET of
+ *                                                /api/state is a viewer: it holds the experiment
  *                                  "display":{"state":"on"|"dim"|"off","lux","prox","motion","brightness_pct",
  *                                             "sensor":"ok"|"absent"|"error","auto":<bool>,
  *                                             "prox_wake":<bool>,"motion_wake":<bool>,"min","max","offset",
@@ -151,6 +156,13 @@
  *   POST /api/pi_halt  {} or no body (R_FW_PI_HALT): cali_ph_halt("manual"), GPIO8 low 500 ms -> 200
  *                     {"ok":true}; 409 busy (either Pi line low); station mode only (403 setup_mode),
  *                     400 bad_json (any other body), 405 for another method.
+ *   GET  /api/ble     200 the device.ble object above (R_FW_BLE_EXP)
+ *   POST /api/ble     any of {"mode":"hold"|"quiet"|"off"}, {"probe":true}, {"exp_min":1..720,"from"?:0..23,
+ *                     "to"?:0..23} (the night experiment, window default 22-06), {"exp_min":0} (stop), each
+ *                     key once -> 200 device.ble; station mode only (403 setup_mode), 400 bad_json (unknown or
+ *                     repeated key, wrong type, none of mode/probe/exp_min), 400 bad_value (out of range),
+ *                     409 no_time (exp_min without a wall clock, nothing applied), 409 busy (probe refused),
+ *                     405 for another method.
  *   POST /api/pi_wake_setting  a non-empty subset of {"enabled":<bool>,"halt_after_min":0..1440,
  *                     "halt_soc_pct":0..100}, each key once (R_FW_PI_WAKE, R_FW_PI_HALT): wake on ignition,
  *                     the halt timer and battery guard -> 200 {"ok":true,"pi_wake":<bool>,"halt_after_min":n,

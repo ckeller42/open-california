@@ -10,6 +10,7 @@
 
 #include "cali_auto_camper.h"
 #include "cali_battery.h"
+#include "cali_ble_exp.h"
 #include "cali_captive.h"
 #include "cali_control.h"
 #include "cali_display_model.h"
@@ -59,6 +60,7 @@ static const char ERR_SETUP_MODE[] = "{\"ok\":false,\"error\":\"setup_mode\"}";
 static const char ERR_BAD_VALUE[] = "{\"ok\":false,\"error\":\"bad_value\"}";
 static const char ERR_BAD_ACTION[] = "{\"ok\":false,\"error\":\"bad_action\"}";
 static const char ERR_BUSY[] = "{\"ok\":false,\"error\":\"busy\"}";
+static const char ERR_NO_TIME[] = "{\"ok\":false,\"error\":\"no_time\"}";   /* /api/ble: no wall clock */
 static const char ERR_OTA_UNAVAILABLE[] = "{\"ok\":false,\"error\":\"ota_unavailable\"}";
 static const char ERR_DISABLED[] = "{\"ok\":false,\"error\":\"disabled\"}";   /* /api/sensors, flag off */
 static const char OVERFLOW_BODY[] = "response too large";
@@ -186,6 +188,7 @@ static void res_json(cali_json_t *j) {
 static void api_state(cali_http_resp_t *resp) {
     cali_json_t j;
     cali_status_t st;
+    cali_ble_exp_activity(cali_uptime_ms());   /* a viewer: the experiment holds (R_FW_BLE_EXP) */
     cali_status_get(&st, s_t, cali_uptime_ms());
 
     cali_json_begin(&j, s_json, sizeof s_json);
@@ -245,6 +248,8 @@ static void api_state(cali_http_resp_t *resp) {
     cali_ac_json(&j);
     cali_json_key(&j, "pi_wake");   /* wake the halted Pi over GPIO9 (R_FW_PI_WAKE) */
     cali_pw_json(&j);
+    cali_json_key(&j, "ble");   /* the BLE link mode + the night experiment (R_FW_BLE_MODE, R_FW_BLE_EXP) */
+    cali_ble_exp_json(&j);
     cali_json_key(&j, "display");   /* screen state + settings (R_FW_DISPLAY_WAKE) */
     cali_display_json(&j);
     cali_json_key(&j, "ux");   /* the web UI's usage beacons (R_UX_TELEMETRY) */
@@ -854,6 +859,64 @@ static void api_pi_halt(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
+/* ---- GET /api/ble = device.ble; POST /api/ble (R_FW_BLE_MODE, R_FW_BLE_EXP), station mode only:
+ * {"mode":"hold|quiet|off"}, {"probe":true}, {"exp_min":1..720,"from"?:0..23,"to"?:0..23} (window
+ * default 22-06), {"exp_min":0} (stop) — keys combinable, each at most once; answers device.ble ---- */
+static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    if (strcmp(req->method, "GET") != 0) {
+        static const char *const KEYS[5] = {"mode", "probe", "exp_min", "from", "to"};
+        cursor_t c = {req->body, req->body + req->body_len};
+        unsigned num[5] = {0, 0, 0, 22, 6};
+        int seen = 0, mode = -1, probe = 0, bad = expect(&c, '{') != 0;
+        if (strcmp(req->method, "POST") != 0) { SET_CONST(resp, 405, ERR_METHOD); return; }
+        if (wifi_mode() != CALI_WIFI_MODE_STATION) { SET_CONST(resp, 403, ERR_SETUP_MODE); return; }
+        while (!bad) {
+            char key[16], val[8];
+            size_t klen, vlen;
+            int i;
+            if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) { bad = 1; break; }
+            for (i = 0; i < 5 && strcmp(key, KEYS[i]) != 0; i++) {}
+            if (i == 5 || (seen & (1 << i))) { bad = 1; break; }
+            seen |= 1 << i;
+            if (i == 0) {
+                if (parse_str(&c, val, sizeof val, &vlen) != 0) { bad = 1; break; }
+                mode = vlen >= sizeof val ? -2
+                       : strcmp(val, "hold") == 0  ? CALI_BLE_HOLD
+                       : strcmp(val, "quiet") == 0 ? CALI_BLE_QUIET
+                       : strcmp(val, "off") == 0   ? CALI_BLE_OFF
+                                                   : -2;
+            } else if ((i == 1 ? parse_bool(&c, &probe) : parse_uint(&c, &num[i])) != 0) {
+                bad = 1;
+                break;
+            }
+            skip_ws(&c);
+            if (c.p < c.end && *c.p == ',') { c.p++; continue; }
+            if (expect(&c, '}') != 0) bad = 1;
+            break;
+        }
+        if (bad || (skip_ws(&c), c.p != c.end) || !(seen & 7)) { SET_CONST(resp, 400, ERR_BAD_JSON); return; }
+        if (mode == -2 || num[2] > 720 || num[3] > 23 || num[4] > 23) { SET_CONST(resp, 400, ERR_BAD_VALUE); return; }
+        /* cali_session_probe's own refusal, checked first: a 409 changes nothing */
+        if (probe && (!cali_session_active() || cali_session_probing())) { SET_CONST(resp, 409, ERR_BUSY); return; }
+        if ((seen & 4) && num[2] == 0) cali_ble_exp_stop();
+        else if ((seen & 4) && cali_ble_exp_start(num[2], (int)num[3], (int)num[4]) != 0) {
+            SET_CONST(resp, 409, ERR_NO_TIME);   /* the args are checked above: only the clock is left */
+            return;
+        }
+        if (mode >= 0) (void)cali_session_set_mode(mode, "api");
+        if (probe) (void)cali_session_probe();
+    }
+    cali_json_t j;
+    cali_json_begin(&j, s_json, sizeof s_json);   /* the top level is device.ble's object */
+    cali_json_key(&j, "mode");
+    cali_json_str(&j, cali_session_mode_name(cali_session_mode()));
+    cali_json_key(&j, "probing");
+    cali_json_bool(&j, cali_session_probing());
+    cali_json_key(&j, "exp");
+    cali_ble_exp_exp_json(&j);
+    finish_json(&j, resp);
+}
+
 /* {"enabled"?:<bool>,"halt_after_min"?:0..1440,"halt_soc_pct"?:0..100}, at least one, each once:
  * *on / *min / *soc = the value or -1 when absent. 0 ok, -1 bad JSON, -2 a number out of range. */
 static int parse_pi_setting(const char *body, size_t body_len, int *on, int *min, int *soc) {
@@ -1396,6 +1459,10 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/pi_halt") == 0) {
         api_pi_halt(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/ble") == 0) {
+        api_ble(req, resp);
         return 1;
     }
     if (strcmp(req->path, "/api/pi_wake_setting") == 0) {

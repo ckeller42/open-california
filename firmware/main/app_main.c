@@ -91,6 +91,7 @@
 
 #include "cali_auto_camper.h"
 #include "cali_pi_wake.h"
+#include "cali_ble_exp.h"
 #include "cali_ble_nimble.h"
 #include "cali_captive.h"
 #include "cali_console.h"
@@ -329,6 +330,7 @@ static void do_work(void) {
         cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
         cali_ac_tick(now);            /* auto camper (R_FW_AUTO_CAMPER): restore camping after park */
         cali_pw_tick(now);            /* Pi wake (R_FW_PI_WAKE): ends a pulse; GPIO9 low on the ignition edge */
+        cali_ble_exp_tick(now);       /* the BLE power experiment (R_FW_BLE_EXP): phase modes + probes */
         diag_tick(now);               /* R_FW_DIAG_LOG: boot event, the minute's diag record */
         if (s_wifi) {
             cali_net_esp_poll(now);   /* WiFi events -> the runner's sink */

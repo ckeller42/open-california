@@ -80,9 +80,20 @@ void cali_session_on_bonded(void);        /* runner -> session: discover, subscr
 void cali_session_stop(void);
 void cali_session_tick(uint64_t now_ms);  /* heartbeat every CODEC_HEARTBEAT_PERIOD_MS, reconnect backoff */
 
-/* A control command found no armed link (control_run.c's NOT_READY): a reconnect waiting out its
- * backoff delay becomes due on the next tick. No-op otherwise. */
+/* A control command found no armed link (control_run.c's NOT_READY): a mode other than hold switches
+ * to hold ("command"); a reconnect waiting out its backoff delay becomes due on the next tick. */
 void cali_session_connect_now(void);
+
+enum { CALI_BLE_HOLD, CALI_BLE_QUIET, CALI_BLE_OFF };
+/* Owner task. hold = today; quiet = link held, the 1003 heartbeat only while a read-all warms up or
+ * reads, or a control command is in flight (cali_ctl_busy); off = no link and no reconnect. `why` goes into evt ble_mode. 0, or -1 for a bad mode. */
+int cali_session_set_mode(int mode, const char *why);
+int cali_session_mode(void);
+/* One fresh read-all now (connects first when off; the heartbeat runs through its warm-up), then
+ * evt probe and back to the mode (off: disconnect). 0 started, -1 no bond / already probing. */
+int cali_session_probe(void);
+int cali_session_probing(void);
+const char *cali_session_mode_name(int mode);   /* "hold"/"quiet"/"off", "?" otherwise */
 
 /* 1 while the session holds a bond it keeps (or re-establishes) a link for — true through
  * reconnect backoff too, while no link exists. For the actual encrypted BLE link, see
@@ -94,9 +105,9 @@ int cali_session_active(void);
  * /api/state's device.link.up reports (T_FW_WEB_HANDLERS). */
 int cali_session_link_up(void);
 
-/* 1 when a control write may go out: the link is up, its first read-all finished, and it has been
- * up (heartbeat ticking) for CODEC_ARM_DELAY_MS — calictl.device's ARM_DELAY_S, here once per link
- * instead of per write. */
+/* 1 when a control write may go out: mode hold, the link is up, its first read-all finished, and the
+ * heartbeat has ticked for CODEC_ARM_DELAY_MS since the link came up or quiet/off went back to hold —
+ * calictl.device's ARM_DELAY_S, here once per link (or mode return) instead of per write. */
 int cali_session_ready(void);
 
 /* The stored frame of CODEC_CHARS[i] (i < CODEC_NCHARS): 1 and *frame, *len set, or 0 when that

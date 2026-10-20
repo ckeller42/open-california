@@ -272,6 +272,8 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_auto_camper_parity
 .. automodule:: tests.firmware.test_auto_camper_e2e
 .. automodule:: tests.firmware.test_pi_wake_e2e
+.. automodule:: tests.firmware.test_ble_exp
+.. automodule:: tests.firmware.test_ble_mode_e2e
 .. automodule:: tests.firmware.test_battery
 .. automodule:: tests.firmware.test_sensors
 .. automodule:: tests.firmware.test_sensors_parity

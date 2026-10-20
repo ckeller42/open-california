@@ -16,7 +16,8 @@
  *     WRITTEN <hex char> <status>            (a control write() completed; 0 = ACKed)
  *   harness:
  *     > <console line>     cali_console_line(<console line>)
- *     tick <now_ms>        cali_runner_tick + cali_session_tick
+ *     tick <now_ms>        cali_runner_tick + cali_session_tick + cali_ble_exp_tick (ble_exp_run.c is
+ *                          real; time.c has no clock source until "clock")
  *     boot                 cali_session_boot + console "status" (what host_main does on sync)
  *     bond 0|1             what has_bond() answers (default 0)
  *     ident <addr>         the bonded identity identity() answers while bonded (default FAKE_IDENTITY)
@@ -27,6 +28,8 @@
  *     syncwritten <status> the next write() delivers its WRITTEN <status> inside the call (as the
  *                          NimBLE transport does for an ATT request it cannot start)
  *     iohook               from now on, print "IO <what> <hex char> <hex data>" per cali_session_on_io call
+ *     clock <epoch_ms>     SNTP synced at this fixed wall clock (time.c): "ble exp" then runs
+ *     ign <-1|0|1>         what cali_ac_ignition() answers (stubbed; ble_exp_run.c's quiet wake)
  *     diaghook             from now on, print "DIAG {<body>}" per diagnostics record (cali_diag_sink)
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
  *     watergood            print "WATERGOOD <cali_session_water_held()> <cali_session_water_good_ms()>"
@@ -56,7 +59,9 @@
 #include <string.h>
 
 #include "cali_console.h"
+#include "cali_ble_exp.h"
 #include "cali_diag.h"
+#include "cali_time.h"
 #include "cali_pi_wake.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
@@ -205,6 +210,10 @@ int cali_exp_sensors_set(int on) { (void)on; return -1; }
 uint64_t cali_uptime_ms(void) { return 0; }
 /* ... and its "pi" commands these (pi_wake.c: tests/firmware/test_web_handlers.py) */
 int cali_pw_pulse(const char *reason, uint32_t ms) { (void)reason; (void)ms; return -1; }
+static int s_ign = -1;   /* "ign": what the auto-camper's ignition reading answers (ble_exp_run.c reads it) */
+int cali_ac_ignition(void) { return s_ign; }
+static int64_t s_clock;  /* "clock": the SNTP wall clock (time.c, fixed) */
+static int64_t fake_clock(void) { return s_clock; }
 int cali_pw_wake(const char *reason) { (void)reason; return -1; }
 int cali_pw_enabled(void) { return 0; }
 int cali_ph_pulse(const char *reason, uint32_t ms) { (void)reason; (void)ms; return -1; }
@@ -326,6 +335,16 @@ int main(void) {
             cali_session_on_io = print_io;
             continue;
         }
+        if (strncmp(line, "ign ", 4) == 0) {
+            s_ign = atoi(line + 4);
+            continue;
+        }
+        if (strncmp(line, "clock ", 6) == 0) {
+            s_clock = (int64_t)strtoll(line + 6, NULL, 10);
+            cali_time_source(fake_clock);
+            cali_time_synced();
+            continue;
+        }
         if (strcmp(line, "diaghook") == 0) {
             cali_diag_sink = print_diag;
             continue;
@@ -367,6 +386,7 @@ int main(void) {
             uint64_t now = strtoull(a1, NULL, 10);
             cali_runner_tick(now);
             cali_session_tick(now);
+            cali_ble_exp_tick(now);
             cali_wifi_run_tick(now);
         } else if (strcmp(word, "wifi_boot") == 0) {
             cali_wifi_run_init(&FAKE_NET);

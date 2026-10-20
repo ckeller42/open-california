@@ -67,6 +67,19 @@ Armed
   The +1 liveness counter (4-byte big-endian) on char `1003`, about every 0.6 s. A control write
   is accepted only while it ticks. See {doc}`protocol-sequences`.
 
+BLE mode
+Hold mode
+BLE quiet mode
+Off mode
+  The satellite's BLE link mode: `hold` keeps the link and the 1003 heartbeat; `quiet` keeps the
+  link, with the heartbeat only during a read-all or a command; `off` keeps no link and does not
+  reconnect. Not the cooler's {term}`Quiet mode`. See {doc}`firmware` ("BLE modes").
+
+Probe
+BLE probe
+  One fresh read-all on request (connecting first when `off`), then back to the {term}`BLE mode`;
+  the power experiment takes one at the end of each phase. See {doc}`firmware` ("BLE modes").
+
 Latch
 Latched
   The load holds after the heartbeat stops. Arming is one-shot, not a dead-man switch.

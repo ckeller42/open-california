@@ -116,6 +116,9 @@ def fake(tmp_path_factory):
             str(CORE / "runner.c"),
             str(CORE / "sensors.c"),  # runner.c hands sensor adverts to it
             str(CORE / "pairing_sm.c"),
+            str(CORE / "ble_exp.c"),
+            str(CORE / "ble_exp_run.c"),
+            str(CORE / "time.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(ROOT / "csrc" / "ports.c"),
             str(CORE / "wifi_run.c"),
@@ -2189,3 +2192,410 @@ def test_diag_events_link_cmd_wifi(fake):
         fake, "diaghook", "wifi_boot", "NET_AP_STARTED", "> wifi set minsel wrong-psk-99", "NET_FAILED 2"
     )
     assert _diag(typo) == [{"ev": "evt", "kind": "net", "err": "join", "reason": "auth"}]
+
+
+# ---- BLE link modes hold / quiet / off and the one-shot probe -----------------------------------
+
+_RECONNECT = ["CONNECTED", "ENC_OK", "DISCOVERED 0"]
+
+
+def test_quiet_mode_stops_the_heartbeat_but_keeps_the_link(fake):
+    """BLE modes: quiet holds the link without 1003.
+
+    .. test:: quiet holds the link without 1003
+       :id: T_FW_BLE_QUIET
+       :links: R_FW_BLE_MODE
+    """
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode quiet",
+        *["tick %d" % t for t in range(T + 100, T + 5000, 100)],
+    )
+    tail = after(out, "LOG session: ble mode quiet (console)")
+    assert calls(tail, "write_heartbeat") == []
+    assert calls(tail, "disconnect") == []
+    assert {"ev": "evt", "kind": "ble_mode", "mode": "quiet", "why": "console"} in _diag(out)
+
+
+def test_off_mode_drops_the_link_and_never_reconnects(fake):
+    """BLE modes: off releases the link for good.
+
+    .. test:: off releases the link for good
+       :id: T_FW_BLE_OFF
+       :links: R_FW_BLE_MODE
+    """
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode off",
+        "DISCONNECTED 531",
+        *["tick %d" % t for t in range(T + 100, T + 70000, 1000)],
+    )
+    tail = after(out, "LOG session: ble mode off (console)")
+    assert calls(tail, "disconnect") == ["CALL disconnect"]
+    assert calls(tail, "connect_bonded") == []
+    assert any(e.get("kind") == "link_down" and e["reason"] == "ble_off" for e in _diag(out))
+
+
+def test_probe_from_off_connects_reads_all_then_disconnects(fake):
+    """BLE modes: probe = one connect, one read-all, one disconnect.
+
+    .. test:: probe = one connect, one read-all, one disconnect
+       :id: T_FW_BLE_PROBE
+       :links: R_FW_BLE_PROBE
+    """
+    t0 = T + 1000
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode off",
+        "DISCONNECTED 531",
+        "tick %d" % t0,
+        "> ble probe",
+        *_RECONNECT,
+        *read_all(t0 + 100),
+        *["tick %d" % t for t in range(t0 + 3000, t0 + 70000, 1000)],
+    )
+    tail = after(out, "LOG session: ble mode off (console)")
+    assert len(calls(tail, "connect_bonded")) == 1
+    assert len(calls(tail, "write_heartbeat")) >= 1  # the warm-up heartbeat ran
+    done = after(out, "LOG session: probe ok (read_all)")
+    assert calls(done, "disconnect") == ["CALL disconnect"]  # the probe's own disconnect
+    assert any(e.get("kind") == "link_down" and e["reason"] == "ble_off" for e in _diag(done))
+    assert {"ev": "evt", "kind": "probe", "ok": True, "mode": "off", "reason": "read_all"} in _diag(out)
+
+
+def test_probe_that_cannot_connect_logs_fail_and_stays_off(fake):
+    """BLE modes: a sleeping unit = probe fail, no retry.
+
+    .. test:: a sleeping unit = probe fail, no retry
+       :id: T_FW_BLE_PROBE_FAIL
+       :links: R_FW_BLE_PROBE
+    """
+    t0 = T + 1000
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode off",
+        "DISCONNECTED 531",
+        "tick %d" % t0,
+        "> ble probe",
+        *["tick %d" % t for t in range(t0 + 1000, t0 + 90000, 1000)],
+    )
+    assert {"ev": "evt", "kind": "probe", "ok": False, "mode": "off", "reason": "connect_timeout"} in _diag(
+        out
+    )
+    assert len(calls(after(out, "LOG session: ble mode off (console)"), "connect_bonded")) == 1
+
+
+def test_command_path_connect_now_forces_hold(fake):
+    """BLE modes: a command always gets a link.
+
+    .. test:: a command always gets a link
+       :id: T_FW_BLE_CMD_HOLD
+       :links: R_FW_BLE_MODE
+    """
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode off",
+        "DISCONNECTED 531",
+        "tick %d" % (T + 1000),
+        "submit - cooler power 1",
+        "tick %d" % (T + 1100),
+    )
+    assert {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "command"} in _diag(out)
+    assert "CALL connect_bonded" in after(out, "LOG session: ble mode hold (command)")
+
+
+def test_quiet_probe_runs_the_heartbeat_only_through_its_warm_up(fake):
+    """BLE modes: quiet probe heartbeat window.
+
+    .. test:: quiet probe heartbeat window
+       :id: T_FW_BLE_QUIET_PROBE
+       :links: R_FW_BLE_PROBE
+    """
+    t0 = T + 1000
+    out = run(
+        fake,
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode quiet",
+        "tick %d" % t0,
+        "> ble probe",
+        *["tick %d" % t for t in range(t0 + 100, t0 + 2100, 100)],
+        *["READ %x 0" % c for c in CHARS],
+        *["tick %d" % t for t in range(t0 + 2200, t0 + 8000, 100)],
+    )
+    hb = calls(after(out, "LOG session: ble mode quiet (console)"), "write_heartbeat")
+    assert 2 <= len(hb) <= 5  # ~2 s of 600 ms heartbeats, then silence
+    assert calls(after(out, "LOG session: probe ok (read_all)"), "write_heartbeat") == []
+
+
+def test_boot_in_off_does_not_connect_and_a_new_bond_comes_up_in_hold(fake):
+    """BLE modes: pairing resets to hold.
+
+    .. test:: pairing resets to hold
+       :id: T_FW_BLE_PAIR_HOLD
+       :links: R_FW_BLE_MODE
+    """
+    out = run(fake, "diaghook", *PAIRED, *READ_ALL, "> ble mode off", "DISCONNECTED 531", "boot")
+    assert calls(after(out, "LOG session: ble mode off (console)"), "connect_bonded") == []
+    out2 = run(fake, "diaghook", "> ble mode off", *PAIRED)
+    assert {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "pairing"} in _diag(out2)
+    assert calls(after(out2, "LOG session: ble mode hold (pairing)"), "connect_bonded") == []
+
+
+def test_probe_waits_for_an_outstanding_water_reread(fake):
+    """BLE modes: no overlapping ATT reads.
+
+    .. test:: no overlapping ATT reads
+       :id: T_FW_BLE_PROBE_REREAD
+       :links: R_FW_BLE_PROBE
+    """
+    t0 = T + 30000  # the water re-read is due
+    pre = [*PAIRED, *READ_ALL, "tick %d" % t0, "> ble probe"]
+    wait = ["tick %d" % t for t in range(t0 + 100, t0 + 3000, 100)]
+
+    def reads(*script):
+        out = run(fake, *pre, *script)
+        return [line for line in out if line.startswith("CALL read")]
+
+    base = len(reads())  # the first read-all plus the water re-read
+    assert reads(*wait)[base:] == []  # warm-up over, the re-read unanswered: no read-all start
+    after_reply = reads(*wait, "READ 1302 0", "tick %d" % (t0 + 3100))[base:]
+    assert after_reply == ["CALL read %d" % CHARS[0]]
+
+
+def test_stop_during_a_probe_ends_it(fake):
+    """BLE modes: forget mid-probe clears the probe.
+
+    .. test:: forget mid-probe clears the probe
+       :id: T_FW_BLE_PROBE_STOP
+       :links: R_FW_BLE_PROBE
+    """
+    t0 = T + 1000
+    out = run(
+        fake,
+        "diaghook",
+        *PAIRED,
+        *READ_ALL,
+        "> ble mode quiet",
+        "tick %d" % t0,
+        "> ble probe",
+        "> forget",
+        "> ble",
+    )
+    assert {"ev": "evt", "kind": "probe", "ok": False, "mode": "quiet", "reason": "stop"} in _diag(out)
+    assert 'LOG ble: {"ble":{"mode":"quiet","probing":false,"exp":null}}' in out
+
+
+def test_console_ble_exp_without_time_is_refused(fake):
+    """``ble exp`` needs a wall clock (SNTP or the unit's): without one it is refused, the mode stays.
+
+    .. test:: no time, no BLE experiment
+       :id: T_FW_BLE_EXP_NOTIME
+       :links: R_FW_BLE_EXP
+    """
+    out = run(fake, *PAIRED, *READ_ALL, "> ble exp 120 22-06", "tick %d" % (T + 100), "> ble")
+    assert "LOG ble-exp: refused (no time)" in out
+    assert out[-1] == 'LOG ble: {"ble":{"mode":"hold","probing":false,"exp":null}}'
+
+
+@pytest.mark.parametrize(
+    "line", ["> ble exp 0", "> ble exp 721", "> ble exp 60 25-06", "> ble exp 60 22", "> ble exp x"]
+)
+def test_console_ble_exp_bad_args_print_usage(fake, line):
+    """A bad phase length or window prints the usage, also without a clock.
+
+    .. test:: ble exp argument check
+       :id: T_FW_BLE_EXP_USAGE
+       :links: R_FW_BLE_EXP
+    """
+    assert run(fake, line)[-1] == "LOG usage: ble exp <1-720 min> [HH-HH] | ble exp off"
+
+
+CLOCK = "clock 1792530000000"  # SNTP synced (2026-10-20 21:00 UTC); the window 00-00 is all day anyway
+
+
+def test_command_in_quiet_goes_hold_and_writes_only_after_the_heartbeat_armed(fake):
+    """A command in ``quiet`` switches to ``hold`` (``why`` ``command``); the session is not ready until
+    the 1003 heartbeat has run CODEC_ARM_DELAY_MS again, so the write never goes out without it.
+
+    .. test:: a command in quiet re-arms the heartbeat before any control write
+       :id: T_FW_BLE_QUIET_COMMAND
+       :links: R_FW_BLE_MODE
+    """
+    frames = {0x1102: pack("cooler", Installed=1, State=0, Mode=4, Level=3)}
+    t0 = ARM + 100
+    out = run(
+        fake,
+        "diaghook",
+        *armed(frames),
+        "> ble mode quiet",
+        "tick %d" % t0,
+        "> set cooler power on",  # not ready: quiet -> hold, the heartbeat restarts
+        *["tick %d" % t for t in range(t0 + 100, t0 + ARM, 100)],
+        "> set cooler power on",  # t0 + ARM - 100: still arming
+        "tick %d" % (t0 + ARM),
+        "> set cooler power on",
+        "tick %d" % (t0 + ARM + 100),
+    )
+    assert {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "command"} in _diag(out)
+    q = after(out, "LOG session: ble mode quiet (console)")
+    assert out.count("LOG control: cooler/power not ready (no armed link or no state yet)") == 2
+    first = q.index(writes(q)[0])
+    assert writes(q) == want_writes("cooler", "power", "on", frames)
+    assert calls(q[:first], "write_heartbeat")  # the heartbeat is back before the write
+    assert q.index("LOG session: ble mode hold (command)") < q.index(calls(q, "write_heartbeat")[0])
+
+
+def _probe_done(at):
+    """The phase-end probe on an up link: warm-up, the read-all, the tick that sees it done."""
+    # the tick at ``at`` also starts the 30-s water re-read; the probe's read-all waits for it
+    return [
+        "tick %d" % at,
+        "READ 1302 0",
+        "tick %d" % (at + WARM),
+        *read_all()[2:],
+        "tick %d" % (at + WARM + 100),
+    ]
+
+
+def test_ignition_in_quiet_aborts_the_phase_back_to_hold(fake):
+    """The experiment's quiet phase: the van's ignition (cali_ac_ignition) on an up link counts as
+    activity — the phase ends aborted and the mode returns to hold.
+
+    .. test:: ignition during the quiet phase aborts it, and holds while it stays on
+       :id: T_FW_BLE_EXP_IGNITION
+       :links: R_FW_BLE_EXP
+    """
+    t = T + 100
+    p = t + 60000  # 1-min hold phase ends -> probe
+    q = p + WARM + 200  # quiet starts
+    out = run(
+        fake,
+        *PAIRED,
+        *READ_ALL,
+        CLOCK,
+        "diaghook",
+        "> ble exp 1 00-00",
+        "tick %d" % t,
+        *_probe_done(p),
+        "tick %d" % q,
+        "tick %d" % (q + 100),
+        "ign 1",
+        "tick %d" % (q + 200),
+        "tick %d" % (q + 200 + 10 * 60000 + 100),  # still driving past the 10-min hold: no next phase
+    )
+    ev = [e for e in _diag(out) if e["ev"] == "evt" and e["kind"] in ("ble_phase", "ble_mode")]
+    assert ev == [
+        {"ev": "evt", "kind": "ble_phase", "mode": "hold", "aborted": False, "dur_ms": p + WARM + 100 - t},
+        {"ev": "evt", "kind": "ble_mode", "mode": "quiet", "why": "exp"},
+        {"ev": "evt", "kind": "ble_phase", "mode": "quiet", "aborted": True, "dur_ms": 200},
+        {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "exp_abort"},
+    ]
+
+
+def test_ignition_off_in_quiet_keeps_the_phase(fake):
+    """Ignition 0 in the quiet phase changes nothing: the phase runs on.
+
+    .. test:: no ignition, no interrupt
+       :id: T_FW_BLE_EXP_IGNITION_OFF
+       :links: R_FW_BLE_EXP
+    """
+    t = T + 100
+    p = t + 60000
+    q = p + WARM + 200
+    out = run(
+        fake,
+        *PAIRED,
+        *READ_ALL,
+        CLOCK,
+        "diaghook",
+        "> ble exp 1 00-00",
+        "tick %d" % t,
+        *_probe_done(p),
+        "tick %d" % q,
+        "ign 0",
+        "tick %d" % (q + 100),
+        "> ble",
+    )
+    assert '"phase":"quiet"' in out[-1]
+
+
+def test_a_refused_phase_probe_is_logged(fake):
+    """No bond: the phase-end probe is refused — LOG + an SD ``probe`` event with reason ``refused``.
+
+    .. test:: a refused experiment probe reaches the SD log
+       :id: T_FW_BLE_EXP_PROBE_REFUSED
+       :links: R_FW_BLE_EXP
+    """
+    out = run(fake, CLOCK, "diaghook", "> ble exp 1 00-00", "tick 1000", "tick 61000")
+    assert "LOG ble-exp: probe refused" in out
+    assert {"ev": "evt", "kind": "probe", "ok": False, "mode": "hold", "reason": "refused"} in _diag(out)
+
+
+def test_stop_or_restart_mid_phase_logs_the_phase_aborted(fake):
+    """``ble exp off`` or a new ``ble exp`` while a phase runs logs that phase (aborted, its span) first.
+
+    .. test:: a stopped or restarted experiment keeps its running phase in the log
+       :id: T_FW_BLE_EXP_STOP_PHASE
+       :links: R_FW_BLE_EXP
+    """
+    out = run(
+        fake,
+        CLOCK,
+        "diaghook",
+        "> ble exp 5 00-00",
+        "tick 1000",  # hold starts
+        "tick 4000",
+        "> ble exp 2 00-00",  # restart mid-phase
+        "tick 5000",  # hold starts again
+        "tick 9000",
+        "> ble exp off",
+    )
+    ev = [e for e in _diag(out) if e["ev"] == "evt" and e["kind"] in ("ble_phase", "ble_exp")]
+    assert ev == [
+        {"ev": "evt", "kind": "ble_exp", "on": True, "phase_min": 5, "from": 0, "to": 0},
+        {"ev": "evt", "kind": "ble_phase", "mode": "hold", "aborted": True, "dur_ms": 3000},
+        {"ev": "evt", "kind": "ble_exp", "on": True, "phase_min": 2, "from": 0, "to": 0},
+        {"ev": "evt", "kind": "ble_phase", "mode": "hold", "aborted": True, "dur_ms": 4000},
+        {"ev": "evt", "kind": "ble_exp", "on": False},
+    ]
+
+
+def test_mode_change_mid_command_keeps_the_heartbeat(fake):
+    """A lighting command is a frame + a commit; ``quiet`` set between them must not stop the 1003
+    heartbeat before the commit (the sequencer checks ready only at submit).
+
+    .. test:: a control command in flight keeps its heartbeat through a mode change
+       :id: T_FW_BLE_QUIET_MID_COMMAND
+       :links: R_FW_BLE_MODE
+    """
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "> set lighting kitchen 5",
+        "tick %d" % t,
+        "WRITTEN 1501 0",
+        "> ble mode quiet",
+        *["tick %d" % u for u in range(t + TICK, t + FOLLOW + 2 * TICK, TICK)],
+        "WRITTEN 1501 0",
+    )
+    w = writes(out)
+    assert w == want_writes("lighting", "kitchen", "5")
+    between = out[out.index(w[0]) : out.index(w[1])]
+    assert calls(between, "write_heartbeat")
