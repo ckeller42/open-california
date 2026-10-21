@@ -2,7 +2,8 @@
 """BLE power experiment report: one row per phase from the ESP's SD log (``R_BLE_EXP_REPORT``).
 
 Usage: ``python3 tools/esplab/ble_exp_report.py --url http://calictl-esp.local [--since SEQ]
-[--volt-alias ALIAS]``.
+[--volt-alias ALIAS]``. ``SEQ`` must lie before the experiment's ``ble_exp`` start record, or the
+advert state is unknown and ``adv_minutes`` reads 0.
 
 .. req:: BLE experiment report
    :id: R_BLE_EXP_REPORT
@@ -11,8 +12,9 @@ Usage: ``python3 tools/esplab/ble_exp_report.py --url http://calictl-esp.local [
    Per ``ble_phase`` record: mode, aborted, minutes, minutes the unit's advert was seen
    (``unit_adv``; at phase start the last earlier record's ``seen``; none, or a ``ble_exp`` start
    after it = unknown = not counted — the firmware starts each experiment unknown and logs the first
-   sighting), the last energy
-   reading after the last ok ``probe`` (``None`` + ``probe`` ``fail`` when it failed), the
+   sighting), the phase's last energy
+   reading (the probe's read-all logs it just before the ``probe`` record; ``None`` + ``probe``
+   ``fail`` when the probe failed), the
    battery-sense voltage slope (least squares, mV/h) and the last cooler / air-heater state.
    Voltage comes from the first ``ext`` record of type ``victron_battery`` (its ``battery_voltage``),
    or the alias given with ``--volt-alias``.
@@ -100,10 +102,9 @@ def phases(events):
         inph = [e for e in before if e[0] >= start]
         probes = [e for e in inph if e[1] == "probe"]
         probe = None if not probes else ("ok" if probes[-1][2].get("ok") else "fail")
-        floor = next((t for t, k, x in reversed(probes) if x.get("ok")), start)
         en = {}
-        if probe != "fail":
-            en = next((x for t, k, x in reversed(inph) if k == "energy" and t >= floor), {})
+        if probe != "fail":  # the probe's read-all logs its energy just BEFORE the probe evt
+            en = next((x for t, k, x in reversed(inph) if k == "energy"), {})
 
         rows.append(
             {

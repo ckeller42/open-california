@@ -18,8 +18,9 @@ def test_phases_rows():
         (H, "volt", 13.15),
         (10 * 60_000, "unit_adv", {"seen": False}),
         (40 * 60_000, "unit_adv", {"seen": True}),
-        (2 * H - 5_000, "probe", {"ok": True, "mode": "quiet"}),
-        (2 * H - 4_000, "energy", {"batt2_current": -0.4, "soc2_pct": 40, "batt2_v": 13.1}),
+        # live order: the probe's read-all logs its energy ~1.5 s BEFORE the probe evt
+        (2 * H - 5_000, "energy", {"batt2_current": -0.4, "soc2_pct": 40, "batt2_v": 13.1}),
+        (2 * H - 4_000, "probe", {"ok": True, "mode": "quiet"}),
         (2 * H - 3_000, "cooler", {"power": False}),
         (2 * H, "ble_phase", {"mode": "quiet", "aborted": False}),
     ]
