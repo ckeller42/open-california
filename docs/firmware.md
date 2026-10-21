@@ -925,10 +925,10 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    ``CALI_BX_GONE_MS`` (3 scan periods + one window, 185 s) without one (also from the start, when
    never seen). A reappearance in ``quiet`` or ``off`` after a ``seen:false`` logged in that same mode
    **with the link down** is a wake (door, ignition) and counts as activity. The first sighting is not,
-   and neither is a sighting after a gone logged with the link up: the unit is assumed (not yet
-   checked on the van) not to advertise while connected, so such a gone is the held link's silence,
-   and the adverts after the link drops (our ``hold -> off`` disconnect, the unit dropping a ``quiet``
-   link) are no wake. Each phase end logs ``evt ble_phase`` with its
+   and neither is a sighting after a gone logged with the link up (a guard: the unit DOES advertise
+   while connected — seen on the van 2026-10-20/21 — so a gone with the link up is not a sleep),
+   nor the adverts after the link drops (our ``hold -> off`` disconnect, the unit dropping a ``quiet``
+   link). Each phase end logs ``evt ble_phase`` with its
    ``dur_ms``, start/stop ``evt ble_exp``; stopping or restarting mid-phase logs that phase
    ``aborted`` first; a refused phase-end probe logs ``evt probe`` with ``ok:false``, reason
    ``refused``. ``ble exp off`` (``{"exp_min":0}``) ends it in ``hold``; a reboot ends it too (not
