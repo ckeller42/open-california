@@ -2,8 +2,8 @@
 """BLE power experiment report: one row per phase from the ESP's SD log (``R_BLE_EXP_REPORT``).
 
 Usage: ``python3 tools/esplab/ble_exp_report.py --url http://calictl-esp.local [--since SEQ]
-[--volt-alias ALIAS]``. ``SEQ`` must lie before the experiment's ``ble_exp`` start record, or the
-advert state is unknown and ``adv_minutes`` reads 0.
+[--volt-alias ALIAS]``. ``SEQ`` should lie before the experiment's ``ble_exp`` start record: after it the
+advert state is unknown (not counted) until the next ``unit_adv`` record.
 
 .. req:: BLE experiment report
    :id: R_BLE_EXP_REPORT
