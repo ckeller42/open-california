@@ -8,15 +8,15 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
-## 2026-10-21 — a held BLE link does not keep the unit awake (BLE power experiment, closed)
+## 2026-10-21 — no measurable BLE-link effect on the parked unit (BLE power experiment, closed)
 
 DEVICE 2026-10-20/21 (ESP `R_FW_BLE_EXP`, report `tools/esplab/ble_exp_report.py`). Question: does
 the ESP's permanent link (1003 heartbeat ~0.6 s) stop the parked unit from sleeping or raise its draw?
 
-- Night 1 (2-h phases hold / quiet / off / hold, 22–06): the unit advertised **every minute of every
-  phase**, the off-phase probe connected at the first attempt; second-battery current −0.3 A in all
+- Night 1 (2-h phases hold / quiet / off / hold, 22–06): no advert gap ≥ 185 s (`CALI_BX_GONE_MS`, no
+  `unit_adv seen:false`) in any phase, the off-phase probe connected at the first attempt; second-battery current −0.3 A in all
   phases (the unit's reading lags ~6 min, so the probe after 2 h off still shows the off state).
-- Day 2 (8 h off, 14:24–22:24, no link): advertised 480/480 min, probe −0.2 A (solar MPPT charging
+- Day 2 (8 h off, 14:24–22:24, no link): no advert gap ≥ 185 s either, probe −0.2 A (solar MPPT charging
   that day — not comparable to night 1).
 - The unit **advertises while connected** (the experiment's "not advertising while connected"
   assumption was wrong; `docs/firmware.md` corrected).
