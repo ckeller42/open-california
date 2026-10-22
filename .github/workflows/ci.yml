@@ -251,7 +251,7 @@ jobs:
     # No setup-python on purpose: the VM boots off the runner's root filesystem and runs the SYSTEM
     # python3, so vm.sh installs the rig's deps (bumble, bleak, dbus-fast) for that interpreter.
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30   # ~14 min (2026-10-22 morning); >20 on slow runners the same evening
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -261,7 +261,7 @@ jobs:
 
   firmware-host-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30   # ~19 min on main (2026-10-11) + the auto-camper host tier; a hang must not burn 6 h
+    timeout-minutes: 50   # ~28 min of tests (2026-10-22) + install/Chromium (0.5–18 min on a slow mirror); a hang must not burn 6 h
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
