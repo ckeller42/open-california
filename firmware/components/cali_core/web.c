@@ -1427,6 +1427,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     /* the calictl web UI (R_FW_SHARED_UI) in every mode: over the setup hotspot it opens on WiFi setup
      * by itself; /app = the same (the manifest's start_url, old links) */
     if (get && (strcmp(req->path, "/") == 0 || strcmp(req->path, "/app") == 0)) {
+        cali_ble_exp_activity(cali_uptime_ms());   /* a viewer opens the page: reconnect now (R_FW_BLE_IDLE) */
         set_static(resp, HTML_TYPE, WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN, NO_CACHE);
         resp->content_encoding = "gzip";
         return 1;

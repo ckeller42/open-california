@@ -6,7 +6,7 @@
    ``firmware/components/cali_core/session.c`` keeps the bonded link: after the runner reaches
    bonded (or a boot with a stored bond reconnects and re-encrypts) it discovers, subscribes every
    notifying state char, lets the heartbeat run ``CODEC_HEARTBEAT_WARMUP_MS`` (calictl's
-   ``HEARTBEAT_WARMUP_S``), reads every ``CODEC_CHARS`` function in order, and prints one
+   ``HEARTBEAT_WARMUP_S``), reads every ``CODEC_CHARS`` function (``READS`` order), and prints one
    ``SNAP`` of the ``codec_decode`` of each stored frame. Read completions and notifications both
    replace that function's whole frame, so the LAST frame to arrive wins (the app's order: it
    subscribes, then reads; one decoder for both, decompile 2026-10-07 — as ``calictl.device.read_all``,
@@ -59,6 +59,24 @@ CHARS = [
     0x1004,
     0x1302,
 ]  # csrc/codec_chars.h CODEC_CHARS order
+# the read-all order (session.c READ_FIRST, R_FW_SESSION): the home screen's functions first, then the
+# rest in CODEC_CHARS order
+READS = [
+    0x1602,
+    0x1302,
+    0x1102,
+    0x1202,
+    0x1004,
+    0x1502,
+    0x1702,
+    0x1001,
+    0xF001,
+    0x2102,
+    0x1402,
+    0x2002,
+    0x1902,
+    0x1802,
+]
 FNS = [
     "airheater",
     "campingmode",
@@ -156,7 +174,7 @@ def read_all(at=0, reads=None):
     """DISCOVERED at session time ``at`` (the last tick), the tick that ends the heartbeat warm-up,
     then the READ completions (default: every function, status 0, data 0102)."""
     return ["DISCOVERED 0", "tick %d" % (at + WARM)] + (
-        reads if reads is not None else ["READ %x 0" % c for c in CHARS]
+        reads if reads is not None else ["READ %x 0" % c for c in READS]
     )
 
 
@@ -181,7 +199,7 @@ def test_bonded_discovers_subscribes_then_reads_every_function_in_order(fake):
     rest = after(out, 'STATE {"state":"bonded","attempts":0,"error":null,"address":"%s"}' % IDENTITY)
     assert rest[0] == "CALL discover"
     assert rest[1:15] == ["CALL subscribe %d" % c for c in CHARS]
-    assert [line for line in rest if line.startswith("CALL read")] == ["CALL read %d" % c for c in CHARS]
+    assert [line for line in rest if line.startswith("CALL read")] == ["CALL read %d" % c for c in READS]
     assert len(snaps(out)) == 1 and out[-1].startswith("SNAP ")  # one SNAP, after the last read
 
 
@@ -193,11 +211,11 @@ def test_io_hook_sees_every_unit_frame_and_link_change(fake):
        :id: T_FW_SD_LOG_TAP
        :links: R_FW_SD_LOG
     """
-    reads = ["READ %x %d" % (c, 14 if c == 0x1602 else 0) for c in CHARS]  # energy's read fails
+    reads = ["READ %x %d" % (c, 14 if c == 0x1602 else 0) for c in READS]  # energy's read fails
     out = run(fake, "iohook", *PAIRED, *read_all(reads=reads), "NOTIFY 1302 01", "DISCONNECTED")
     io = [line for line in out if line.startswith("IO ")]
     assert io[0] == "IO 2 0 "  # up
-    assert io[1:-2] == ["IO 1 %x 0102" % c for c in CHARS if c != 0x1602]  # reads, raw
+    assert io[1:-2] == ["IO 1 %x 0102" % c for c in READS if c != 0x1602]  # reads, raw
     assert io[-2:] == ["IO 0 1302 01", "IO 3 0 "]  # the 1 L latch as sent (held, not served), down
 
 
@@ -215,7 +233,7 @@ def test_short_frame_and_failed_read(fake):
     funcs = protocol.load()
     overrides.apply(funcs)
     script = read_all(
-        reads=["READ %x %d%s" % (c, 14 if c == 0x1602 else 0, " ff" if c == 0x1102 else "") for c in CHARS]
+        reads=["READ %x %d%s" % (c, 14 if c == 0x1602 else 0, " ff" if c == 0x1102 else "") for c in READS]
     )
     snap = snaps(run(fake, *PAIRED, *script))[0]
     assert "energy" not in snap["fn"]  # read failed: absent
@@ -252,7 +270,7 @@ def test_read_all_waits_the_heartbeat_warm_up(fake):
     assert len(beats) >= WARM // PERIOD  # the liveness is running
     out = run(fake, *PAIRED, "DISCOVERED 0", *warming, "tick %d" % WARM)
     rest = after(out, "CALL subscribe %d" % CHARS[-1])
-    first_read = rest.index("CALL read %d" % CHARS[0])
+    first_read = rest.index("CALL read %d" % READS[0])
     assert calls(rest[:first_read], "write_heartbeat") == beats  # beats, then the reads
 
 
@@ -281,7 +299,7 @@ def test_read_after_the_subscribe_push_wins(fake):
        :id: T_FW_SESSION_PUSH_BEATS_LATCH
        :links: R_FW_SESSION
     """
-    reads = ["READ %x 0%s" % (c, " " + LIVE_WATER if c == 0x1302 else "") for c in CHARS]
+    reads = ["READ %x 0%s" % (c, " " + LIVE_WATER if c == 0x1302 else "") for c in READS]
     out = run(
         fake,
         *PAIRED,
@@ -293,7 +311,7 @@ def test_read_after_the_subscribe_push_wins(fake):
         "NOTIFY 1302 " + LIVE_WATER,
     )
     rest = after(out, "CALL subscribe %d" % CHARS[-1])
-    assert [line for line in rest if line.startswith("CALL read")] == ["CALL read %d" % c for c in CHARS]
+    assert [line for line in rest if line.startswith("CALL read")] == ["CALL read %d" % c for c in READS]
     first, last = snaps(out)
     assert "water" not in first["fn"]  # cold start: the read's 17 L is a candidate, not yet shown
     got, f = _water(last)
@@ -306,7 +324,7 @@ def test_push_while_its_read_is_outstanding_then_the_read_wins(fake):
     last, so it wins (no frame is privileged over another — only arrival order counts)."""
     funcs = protocol.load()
     overrides.apply(funcs)
-    reads = ["READ %x 0" % c for c in CHARS]
+    reads = ["READ %x 0" % c for c in READS]
     i = CHARS.index(0x1102)
     out = run(fake, *PAIRED, *read_all(reads=reads[:i] + ["NOTIFY 1102 aabbccdd"] + reads[i:]))
     (snap,) = snaps(out)
@@ -340,9 +358,9 @@ def test_water_is_re_read_periodically_while_the_link_is_up(fake):
        :id: T_FW_SESSION_WATER_REREAD
        :links: R_FW_SESSION
     """
-    stale = ["READ %x 0%s" % (c, " " + STALE_WATER if c == 0x1302 else "") for c in CHARS]
+    stale = ["READ %x 0%s" % (c, " " + STALE_WATER if c == 0x1302 else "") for c in READS]
     early = run(fake, *PAIRED, *read_all(reads=stale), "tick %d" % (T + REREAD - 100))
-    assert calls(after(early, "CALL read %d" % 0x1302), "read") == []  # not before the period
+    assert calls(after(early, "CALL read %d" % READS[-1]), "read") == []  # not before the period
     out = run(
         fake,
         *PAIRED,
@@ -351,7 +369,7 @@ def test_water_is_re_read_periodically_while_the_link_is_up(fake):
         "tick %d" % (T + REREAD),
         "READ 1302 0 " + LIVE_WATER,
     )
-    rest = after(out, "CALL read %d" % 0x1302)  # the read-all's own water read
+    rest = after(out, "CALL read %d" % READS[-1])  # after the read-all (its own water read is 2nd)
     assert calls(rest, "read") == ["CALL read %d" % 0x1302]  # the periodic re-read
     assert "water" not in snaps(out)[-1]["fn"]  # one read of a new level: not adopted yet
     confirmed = [
@@ -382,7 +400,7 @@ REFILL_WATER = "03141d010016"  # fresh 20, waste 0 (a rise)      -> adopted
 def _served_water(fake, *extra):
     """SNAP the water frame after a read-all whose 1302 read returns PLAUSIBLE_WATER (the persisted
     baseline, so adopted at once), then ``extra``."""
-    reads = ["READ %x 0%s" % (c, " " + PLAUSIBLE_WATER if c == 0x1302 else "") for c in CHARS]
+    reads = ["READ %x 0%s" % (c, " " + PLAUSIBLE_WATER if c == 0x1302 else "") for c in READS]
     out = run(
         fake, "kvsethex water_good " + PLAUSIBLE_WATER, "reinit", *PAIRED, *read_all(reads=reads), *extra
     )
@@ -430,7 +448,7 @@ def test_water_plausible_reading_is_persisted(fake):
        :id: T_FW_SESSION_WATER_PERSIST
        :links: R_FW_SESSION
     """
-    reads = ["READ %x 0%s" % (c, " " + PLAUSIBLE_WATER if c == 0x1302 else "") for c in CHARS]
+    reads = ["READ %x 0%s" % (c, " " + PLAUSIBLE_WATER if c == 0x1302 else "") for c in READS]
     settled = ["tick %d" % (T + SETTLE), "NOTIFY 1302 " + PLAUSIBLE_WATER]
     out = run(fake, *PAIRED, *read_all(reads=reads), *settled, "kvhex water_good")
     assert ("KV water_good " + PLAUSIBLE_WATER) in out  # persisted, hex-for-hex
@@ -439,7 +457,7 @@ def test_water_plausible_reading_is_persisted(fake):
 def test_water_baseline_restored_from_nvs_rejects_a_latch_on_boot(fake):
     """A fresh boot (new process) pre-seeded with a persisted baseline still rejects the parked
     latch on the very first read — the reboot-while-parked case serve.py's ``_water_good`` covers."""
-    latch_reads = ["READ %x 0%s" % (c, " " + LATCH_WATER if c == 0x1302 else "") for c in CHARS]
+    latch_reads = ["READ %x 0%s" % (c, " " + LATCH_WATER if c == 0x1302 else "") for c in READS]
     out = run(
         fake,
         "kvsethex water_good " + PLAUSIBLE_WATER,  # NVS as if written by a previous boot
@@ -454,7 +472,7 @@ def test_water_baseline_restored_from_nvs_rejects_a_latch_on_boot(fake):
 def test_water_baseline_time_is_this_boot_only(fake):
     """``cali_session_water_good_ms`` (``/api/state`` ``device.water_held_age_ms``) is the session
     time a real read adopted/confirmed the baseline; an NVS-restored baseline has none (0)."""
-    latch_reads = ["READ %x 0%s" % (c, " " + LATCH_WATER if c == 0x1302 else "") for c in CHARS]
+    latch_reads = ["READ %x 0%s" % (c, " " + LATCH_WATER if c == 0x1302 else "") for c in READS]
     boot = ["kvsethex water_good " + PLAUSIBLE_WATER, "reinit", *PAIRED]
     assert "WATERGOOD 1 0" in run(fake, *boot, *read_all(reads=latch_reads), "watergood")  # held, no time
     _, _, out = _served_water(fake, "NOTIFY 1302 " + LATCH_WATER, "tick %d" % (T + 100), "watergood")
@@ -477,7 +495,7 @@ def test_water_real_drop_with_grey_zero_is_served_and_becomes_the_baseline(fake)
        :id: T_FW_SESSION_WATER_LATCH_FLOOR
        :links: R_FW_SESSION
     """
-    reads = ["READ %x 0%s" % (c, " " + APP_CAPTURE_WATER if c == 0x1302 else "") for c in CHARS]
+    reads = ["READ %x 0%s" % (c, " " + APP_CAPTURE_WATER if c == 0x1302 else "") for c in READS]
     out = run(
         fake,
         "kvsethex water_good " + SEED_WATER,  # 22 L baseline from an earlier boot
@@ -524,7 +542,7 @@ def test_water_ramp_debounce_matches_the_parity_vectors(fake):
     funcs = protocol.load()
     overrides.apply(funcs)
     vectors = json.loads((ROOT / "tests" / "vectors" / "freshness.json").read_text())["sequences"]
-    reads = ["READ %x %d" % (c, 1 if c == 0x1302 else 0) for c in CHARS]  # water read fails: no frame
+    reads = ["READ %x %d" % (c, 1 if c == 0x1302 else 0) for c in READS]  # water read fails: no frame
     for seq in vectors:
         good = seq["good"]
         boot = ["kvsethex water_good " + _water_frame(good), "reinit"] if good else []
@@ -737,7 +755,7 @@ def test_link_drop_mid_read_all_reconnects_and_reads_afresh(fake):
     fresh = out[reconnect:]
     assert fresh[1] == "CALL discover"
     assert [line for line in fresh if line.startswith("CALL read")] == [
-        "CALL read %d" % c for c in CHARS
+        "CALL read %d" % c for c in READS
     ]  # the whole read-all again, from the start
     assert len(snaps(fresh)) == 1 and fresh[-1].startswith("SNAP ")
 
@@ -770,7 +788,7 @@ def test_snap_line_bytes_are_pinned(fake):
     """The console ``SNAP`` line, byte for byte, for a fixed frame set: only cooler read (one byte,
     so only the fields inside it), every other read failed. Pins the emitter (``snapshot.c``) and
     the line framing together — key order, no whitespace, the ``t`` of the read-all's last tick."""
-    reads = ["READ %x %s" % (c, "0 01" if c == 0x1102 else "14") for c in CHARS]
+    reads = ["READ %x %s" % (c, "0 01" if c == 0x1102 else "14") for c in READS]
     out = run(fake, *PAIRED, *read_all(reads=reads))
     assert [line for line in out if line.startswith("SNAP ")] == [
         'SNAP {"t":%d,"fn":{"cooler":{"Error":0,"NightTimerSet":0,"Installed":0,"TimerElapsed":0,'
@@ -1387,7 +1405,7 @@ def armed(frames=None, reads=None):
     """Bonded, read-all served ``frames`` ({state char: hex}; others the default 0102), and the tick
     that ends the arm delay (the link came up at session time 0)."""
     frames = frames or {}
-    reads = reads or ["READ %x 0%s" % (c, " " + frames[c] if c in frames else "") for c in CHARS]
+    reads = reads or ["READ %x 0%s" % (c, " " + frames[c] if c in frames else "") for c in READS]
     return [*PAIRED, *read_all(reads=reads), "tick %d" % ARM]
 
 
@@ -1421,7 +1439,7 @@ def test_control_waits_for_an_armed_link(fake):
 
 
 def test_control_waits_for_the_first_read_all(fake):
-    reads = ["READ %x 0" % c for c in CHARS[:5]]  # the arm delay passes with the read-all unfinished
+    reads = ["READ %x 0" % c for c in READS[:5]]  # the arm delay passes with the read-all unfinished
     out = run(
         fake,
         *PAIRED,
@@ -1434,7 +1452,7 @@ def test_control_waits_for_the_first_read_all(fake):
 
 
 def test_control_needs_the_target_state(fake):
-    reads = ["READ %x %d" % (c, 14 if c == 0x1102 else 0) for c in CHARS]  # the cooler read failed
+    reads = ["READ %x %d" % (c, 14 if c == 0x1102 else 0) for c in READS]  # the cooler read failed
     out = run(fake, *armed(reads=reads), "> set cooler power on", "tick %d" % (ARM + 100))
     assert "LOG control: cooler/power not ready (no armed link or no state yet)" in out and not writes(out)
 
@@ -1718,7 +1736,7 @@ def test_control_never_gates_on_the_previous_links_frame(fake):
     """A frame read on an earlier link is not this link's state: when the new link's read of it
     fails, the command is not ready — never built on the stale frame."""
     frames = {0x1102: pack("cooler", Installed=1, State=0, Mode=4, Level=3)}
-    reads = ["READ %x %d" % (c, 14 if c == 0x1102 else 0) for c in CHARS]  # link 2: cooler read fails
+    reads = ["READ %x %d" % (c, 14 if c == 0x1102 else 0) for c in READS]  # link 2: cooler read fails
     up = ARM + 1200
     out = run(
         fake,
@@ -2064,7 +2082,7 @@ def test_wakeup_after_a_reconnect_pulls_again(fake):
 
 def _relink_lighting_unread(at):
     """A new link at session time ``at`` whose read-all has no lighting frame (its read fails)."""
-    reads = ["READ %x %d" % (c, 14 if c == 0x1502 else 0) for c in CHARS]
+    reads = ["READ %x %d" % (c, 14 if c == 0x1502 else 0) for c in READS]
     return ["CONNECTED", "ENC_OK", *read_all(at=at, reads=reads)]
 
 
@@ -2089,7 +2107,7 @@ def test_another_units_state_is_never_shown_after_forget_or_a_new_bond(fake):
         "DISCONNECTED",
         *["tick %d" % (t + d) for d in range(0, 3000, 100)],
         *PAIRED,
-        *read_all(at=t + 3000, reads=["READ %x %d" % (c, 14 if c == 0x1502 else 0) for c in CHARS]),
+        *read_all(at=t + 3000, reads=["READ %x %d" % (c, 14 if c == 0x1502 else 0) for c in READS]),
     )
     assert 'STATE {"state":"idle","attempts":0,"error":null,"address":null}' in forgot
     assert "lighting" not in snaps(forgot)[-1]["fn"]
@@ -2107,7 +2125,7 @@ def test_a_lighting_config_frame_keeps_the_stored_lamps(fake):
     funcs = protocol.load()
     overrides.apply(funcs)
     zones = "090400000000000000050000d07ddddd"  # a zone SET's last ramp frame (PN 9, Mode 4)
-    reads = ["READ %x 0%s" % (c, " " + zones if c == 0x1502 else "") for c in CHARS]
+    reads = ["READ %x 0%s" % (c, " " + zones if c == 0x1502 else "") for c in READS]
     activated = "011000000000000000030000d00ddd"  # SET_PROFILE favourite 1 (15 bytes: the fake's %31s)
     out = run(
         fake,
@@ -2335,7 +2353,7 @@ def test_quiet_probe_runs_the_heartbeat_only_through_its_warm_up(fake):
         "tick %d" % t0,
         "> ble probe",
         *["tick %d" % t for t in range(t0 + 100, t0 + 2100, 100)],
-        *["READ %x 0" % c for c in CHARS],
+        *["READ %x 0" % c for c in READS],
         *["tick %d" % t for t in range(t0 + 2200, t0 + 8000, 100)],
     )
     hb = calls(after(out, "LOG session: ble mode quiet (console)"), "write_heartbeat")
@@ -2375,7 +2393,7 @@ def test_probe_waits_for_an_outstanding_water_reread(fake):
     base = len(reads())  # the first read-all plus the water re-read
     assert reads(*wait)[base:] == []  # warm-up over, the re-read unanswered: no read-all start
     after_reply = reads(*wait, "READ 1302 0", "tick %d" % (t0 + 3100))[base:]
-    assert after_reply == ["CALL read %d" % CHARS[0]]
+    assert after_reply == ["CALL read %d" % READS[0]]
 
 
 def test_stop_during_a_probe_ends_it(fake):
