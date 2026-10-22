@@ -1494,6 +1494,14 @@ the ordinary 1 s→60 s backoff, like calictl's supervisor. A held link without 
 with the heartbeat off, 2026-10-10) — the `1003` heartbeat arms writes, it does not keep the link
 alive.
 
+The backoff resets to 1 s only when a lost link had held for `CALI_SESSION_STABLE_MS` (60 s), not
+at link-up. With the camping master off the unit ends every link ~1–31 s after it comes up (87
+drops in 30 min, 2026-10-22, see the evidence ledger); a reset at link-up kept those reconnects at
+1 s. Now each short link doubles the delay up to 60 s (`T_FW_SESSION_SHORT_LINK_BACKOFF`). A command
+still reconnects at once (`cali_session_connect_now` makes a pending reconnect due). A page open in
+`hold` waits out the delay (≤ 60 s); one that moves an idle-policy session from `off` to `hold`
+connects at once (the mode change clears the pending reconnect and resets the backoff).
+
 ## Network watch items (board only)
 
 The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait for the CoreS3:

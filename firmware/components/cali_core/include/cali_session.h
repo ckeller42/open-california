@@ -56,6 +56,10 @@ extern "C" {
 
 #define CALI_SESSION_BACKOFF_MIN_MS 1000u
 #define CALI_SESSION_BACKOFF_MAX_MS 60000u
+/* A link must hold this long before its loss resets the backoff to the minimum. With camping off
+ * the unit ends each link ~1-31 s after it comes up (2026-10-22: 87 drops in 30 min); a reset at
+ * link-up kept those reconnects at 1 s. */
+#define CALI_SESSION_STABLE_MS 60000u
 #define CALI_SESSION_ENC_TIMEOUT_MS 15000u
 /* Twice the NimBLE transport's own 10 s connect timeout: this watchdog only fires when the
  * transport's verdict (CONNECTED / CONNECT_FAIL) got lost, never races it. */
