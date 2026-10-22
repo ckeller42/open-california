@@ -160,9 +160,10 @@
  *   GET  /api/ble     200 the device.ble object above (R_FW_BLE_EXP)
  *   POST /api/ble     any of {"mode":"hold"|"quiet"|"off"}, {"probe":true}, {"exp_min":1..720,"from"?:0..23,
  *                     "to"?:0..23} (the night experiment, window default 22-06), {"exp_min":0} (stop),
- *                     {"idle_min":0..60} (the idle policy, stored; R_FW_BLE_IDLE), each key once -> 200
+ *                     {"idle_min":0..60} (the idle policy, stored; R_FW_BLE_IDLE), {"warm_ms":0..5000} (the
+ *                     read pass's warm-up, not stored; R_FW_BLE_WARM), each key once -> 200
  *                     device.ble; station mode only (403 setup_mode), 400 bad_json (unknown or repeated key,
- *                     wrong type, none of mode/probe/exp_min/idle_min), 400 bad_value (out of range), 409
+ *                     wrong type, none of mode/probe/exp_min/idle_min/warm_ms), 400 bad_value (out of range), 409
  *                     no_time (exp_min without a wall clock, nothing applied), 409 busy (probe refused), 500
  *                     store (idle_min not stored), 405 for another method.
  *   POST /api/pi_wake_setting  a non-empty subset of {"enabled":<bool>,"halt_after_min":0..1440,

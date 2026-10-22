@@ -17,6 +17,7 @@
  *     WRITTEN <hex char> <status>            (a control write() completed; 0 = ACKed)
  *   harness:
  *     > <console line>     cali_console_line(<console line>)
+ *     warm <ms>            cali_session_set_warm_ms (the warm-up knob, R_FW_BLE_WARM)
  *     tick <now_ms>        cali_runner_tick + cali_session_tick + cali_ble_exp_tick (ble_exp_run.c is
  *                          real; time.c has no clock source until "clock")
  *     boot                 cali_session_boot + console "status" (what host_main does on sync)
@@ -385,6 +386,8 @@ int main(void) {
         } else if (strcmp(word, "NOTIFY") == 0) {
             len = unhex(a2, data, sizeof data);
             deliver(CALI_TEV_NOTIFY, 0, (uint16_t)strtoul(a1, NULL, 16), data, len);
+        } else if (strcmp(word, "warm") == 0) {
+            cali_session_set_warm_ms((uint32_t)strtoul(a1, NULL, 10));
         } else if (strcmp(word, "tick") == 0) {
             uint64_t now = strtoull(a1, NULL, 10);
             cali_runner_tick(now);

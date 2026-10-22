@@ -861,13 +861,14 @@ static void api_pi_halt(const cali_http_req_t *req, cali_http_resp_t *resp) {
 
 /* ---- GET /api/ble = device.ble; POST /api/ble (R_FW_BLE_MODE, R_FW_BLE_EXP), station mode only:
  * {"mode":"hold|quiet|off"}, {"probe":true}, {"exp_min":1..720,"from"?:0..23,"to"?:0..23} (window
- * default 22-06), {"exp_min":0} (stop), {"idle_min":0..60} (the idle policy, stored: R_FW_BLE_IDLE) —
+ * default 22-06), {"exp_min":0} (stop), {"idle_min":0..60} (the idle policy, stored: R_FW_BLE_IDLE),
+ * {"warm_ms":0..5000} (the read pass's heartbeat warm-up, not stored: R_FW_BLE_WARM) —
  * keys combinable, each at most once; answers device.ble ---- */
 static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
     if (strcmp(req->method, "GET") != 0) {
-        static const char *const KEYS[6] = {"mode", "probe", "exp_min", "from", "to", "idle_min"};
+        static const char *const KEYS[7] = {"mode", "probe", "exp_min", "from", "to", "idle_min", "warm_ms"};
         cursor_t c = {req->body, req->body + req->body_len};
-        unsigned num[6] = {0, 0, 0, 22, 6, 0};
+        unsigned num[7] = {0, 0, 0, 22, 6, 0, 0};
         int seen = 0, mode = -1, probe = 0, bad = expect(&c, '{') != 0;
         if (strcmp(req->method, "POST") != 0) { SET_CONST(resp, 405, ERR_METHOD); return; }
         if (wifi_mode() != CALI_WIFI_MODE_STATION) { SET_CONST(resp, 403, ERR_SETUP_MODE); return; }
@@ -876,8 +877,8 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
             size_t klen, vlen;
             int i;
             if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) { bad = 1; break; }
-            for (i = 0; i < 6 && strcmp(key, KEYS[i]) != 0; i++) {}
-            if (i == 6 || (seen & (1 << i))) { bad = 1; break; }
+            for (i = 0; i < 7 && strcmp(key, KEYS[i]) != 0; i++) {}
+            if (i == 7 || (seen & (1 << i))) { bad = 1; break; }
             seen |= 1 << i;
             if (i == 0) {
                 if (parse_str(&c, val, sizeof val, &vlen) != 0) { bad = 1; break; }
@@ -895,8 +896,8 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
             if (expect(&c, '}') != 0) bad = 1;
             break;
         }
-        if (bad || (skip_ws(&c), c.p != c.end) || !(seen & 39)) { SET_CONST(resp, 400, ERR_BAD_JSON); return; }
-        if (mode == -2 || num[2] > 720 || num[3] > 23 || num[4] > 23 || num[5] > CALI_BI_MAX_MIN) {
+        if (bad || (skip_ws(&c), c.p != c.end) || !(seen & 103)) { SET_CONST(resp, 400, ERR_BAD_JSON); return; }
+        if (mode == -2 || num[2] > 720 || num[3] > 23 || num[4] > 23 || num[5] > CALI_BI_MAX_MIN || num[6] > 5000) {
             SET_CONST(resp, 400, ERR_BAD_VALUE);
             return;
         }
@@ -908,6 +909,7 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
             return;
         }
         if ((seen & 32) && cali_ble_idle_set(num[5]) != 0) { SET_CONST(resp, 500, ERR_STORE); return; }
+        if (seen & 64) cali_session_set_warm_ms(num[6]);   /* the warm-up measurement knob, not stored (R_FW_BLE_WARM) */
         if (mode >= 0) (void)cali_session_set_mode(mode, "api");
         if (probe) (void)cali_session_probe();
     }

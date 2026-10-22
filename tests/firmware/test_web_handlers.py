@@ -2435,6 +2435,7 @@ NIGHT_MS = 1792530000000
         ('{"probe":true}', ["CALL session_probe"]),
         ('{"probe":false}', []),
         ('{"exp_min":0}', []),
+        ('{"warm_ms":0}', ["CALL session_set_warm_ms 0"]),
     ],
 )
 def test_api_ble_post(web_cli, body, calls):
@@ -2467,6 +2468,7 @@ def test_api_ble_post(web_cli, body, calls):
         (STATION + ["ntp %d" % NIGHT_MS], "POST", '{"exp_min":721}', 400, "bad_value"),
         (STATION + ["ntp %d" % NIGHT_MS], "POST", '{"exp_min":60,"to":24}', 400, "bad_value"),
         (STATION, "POST", '{"idle_min":61}', 400, "bad_value"),
+        (STATION, "POST", '{"warm_ms":5001}', 400, "bad_value"),
         (STATION + ["kvfail 1"], "POST", '{"idle_min":5}', 500, "store"),
         (["wifi setup_ap"], "POST", '{"mode":"off"}', 403, "setup_mode"),
     ],
