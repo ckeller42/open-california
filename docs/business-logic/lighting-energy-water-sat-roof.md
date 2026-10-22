@@ -394,7 +394,7 @@ value, "Two Batt" = second/auxiliary battery, "Emp"/"Lad" = installed-equipment 
   which stay frozen while it runs) and saturates at 255. A drop marks a **vehicle-side wake** that delivered
   fresh values. Parked, it dropped at ~2026-10-21 07:21 and ~10-22 02:42 (no ESP action at either time, ~19 h
   apart — likely the vehicle's own schedule) and **not** at the ESP's reconnects after 2 h and 8 h without a
-  link: a BLE connect to the camper unit does not wake the vehicle side.
+  link: no vehicle-side wake was observed at these two reconnects (two samples, not a general rule).
 - `tTwoBattRemainingh`/`min` ran smoothly through the experiment's link on/off switches (no step, the same
   ~0.29 min-per-minute decay with and without a link). The unit's averaging behind it is unknown.
 
