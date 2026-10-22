@@ -261,7 +261,7 @@ jobs:
 
   firmware-host-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30   # ~19 min on main (2026-10-11) + the auto-camper host tier; a hang must not burn 6 h
+    timeout-minutes: 45   # ~28 min of tests (2026-10-22) + install/Chromium (0.5–18 min on a slow mirror); a hang must not burn 6 h
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
