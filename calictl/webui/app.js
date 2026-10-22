@@ -53,7 +53,7 @@
  * @property {boolean} [restored]           set only by restoreLastState(): the saved offline snapshot shown until a live poll answers
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, experimental?: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number}, experimental?: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -2082,7 +2082,7 @@ function renderDeviceStatus() {
 // a typed password, an open confirm step or a sensor name must survive the 2 s poll, so a poll only
 // updates them in place (satUpdate). Their endpoints are the firmware's (web.c, firmware/docs):
 // GET/POST /api/wifi, /api/sensors; POST /api/auto_camper, /api/display, /api/ota, /api/ux_setting,
-// /api/experimental, /api/pi_wake, /api/pi_halt, /api/pi_wake_setting — reached through satFetch, never api() (which refuses them by design).
+// /api/experimental, /api/pi_wake, /api/pi_halt, /api/pi_wake_setting, /api/ble — reached through satFetch, never api() (which refuses them by design).
 const SAT_VIEWS = ["satsettings", "wifisetup"];
 /** @type {{view: string, lang: string, root: HTMLElement}|null} the open satellite screen's DOM */
 let satDom = null;
@@ -2186,6 +2186,12 @@ function buildSat(v) {
   satDom = { view: v, lang: LANG, root: root };   // sq() works from here on
   root.append(satWifiBox(), satPairBox());
   if (v !== "satsettings") return satDom;
+  const idle = h("select", { id: "ble-idle" });
+  for (const n of BLE_IDLE_MIN) idle.append(idleOpt(n));
+  idle.onchange = satBleIdle;
+  sq("pair").append(h("div", { class: "row", id: "ble-idle-row" }, h("label", { class: "lbl", for: "ble-idle" }, T("Connection")), idle),
+    h("p", { class: "note", id: "ble-idle-note" }, T("Between reads the satellite lets go of the unit; opening this app connects again within seconds.")),
+    satMsg("ble-msg"));
   const toggle = (/** @type {string} */ id, /** @type {string} */ path, /** @type {string} */ err, /** @type {string} */ key, /** @type {string} */ msgId) =>
     { sq(id + "-toggle").onclick = () => satToggle(path, id, err, key, msgId); };
   root.append(satCard("ac", T("Restore camping after you park"), satSwitchRow("ac"), satMsg("ac-msg")));
@@ -2253,6 +2259,10 @@ function satUpdate() {
     satRow("ac", [T(a.enabled ? "Auto camper on" : "Auto camper off"), a.state === "armed" ? T("⟳ will restore on park") : "",
       a.state === "restoring" ? T("⟳ restoring …") : ""], a.enabled, st);
   }
+  const ble = s.ble, idleKnown = !!ble && ble.idle_min !== undefined;
+  sq("ble-idle-row").hidden = !idleKnown || !st;
+  sq("ble-idle-note").hidden = !idleKnown || !st || !(ble && ble.idle_min);
+  if (ble && idleKnown) satPiSelectSet("ble-idle", ble.idle_min);
   sq("pw").hidden = !s.pi_wake;
   if (s.pi_wake) {
     const p = s.pi_wake;
@@ -2327,13 +2337,30 @@ function satPiSelect(id, label, vals) {
   return h("div", { class: "row", id: id + "-row" }, h("label", { class: "lbl", for: id }, T(label)), sel);
 }
 
+// The unit link's idle policy (R_FW_BLE_IDLE): 0 = always connected, else a read every n min while nobody watches
+const BLE_IDLE_MIN = [0, 2, 5, 15, 30];
+/** @param {number} n */
+const idleOpt = (n) => h("option", { value: String(n) }, !n ? T("Always connected") : tf("Read every {n} min", { n: n }));
+
+/** POST {"idle_min": n} to /api/ble; a refusal puts the shown value back. */
+async function satBleIdle() {
+  const sel = /** @type {HTMLSelectElement} */ (sq("ble-idle")), msg = sq("ble-msg");
+  msg.textContent = "";
+  ux({ type: "control", fn: "satellite", control: "idle_min" });
+  let ok = false;
+  try { ok = (await satFetch("/api/ble", { idle_min: Number(sel.value) })).status === 200; } catch (e) { /* ok stays false */ }
+  if (!ok) { msg.textContent = T("Couldn't change the connection"); sel.value = sel.dataset.v || ""; }
+  sel.blur();
+  await refreshState(true);
+}
+
 /** Select the current value (an option added for a value the list lacks; never while the owner picks).
  * @param {string} id @param {number|undefined} v */
 function satPiSelectSet(id, v) {
   const sel = /** @type {HTMLSelectElement} */ (sq(id));
   if (v === undefined || document.activeElement === sel) return;
   if (!Array.from(sel.options).some((o) => o.value === String(v)))
-    sel.append(piOpt(id, v));
+    sel.append(id === "ble-idle" ? idleOpt(v) : piOpt(id, v));
   sel.value = sel.dataset.v = String(v);
 }
 

@@ -470,6 +470,7 @@ function adaptSatellite(body, nowMs) {
       display: dev.display || null,   // R_FW_DISPLAY_WAKE
       auto_camper: dev.auto_camper || null,   // R_FW_AUTO_CAMPER, with its "restoring" state
       pi_wake: dev.pi_wake || null,   // R_FW_PI_WAKE: the Raspberry Pi box
+      ble: dev.ble || null,           // R_FW_BLE_IDLE: the unit link's idle policy (idle_min)
       experimental: !!(dev.experimental && dev.experimental.sensors),   // R_FW_EXPERIMENTAL
     },
   };

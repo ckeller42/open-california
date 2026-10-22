@@ -1,6 +1,7 @@
 /* ble_exp_run.c — runs the BLE experiment scheduler (ble_exp.c) on the owner task's tick and acts on
- * its output through the session (R_FW_BLE_EXP). Contract: include/cali_ble_exp.h. Proven by
- * tests/firmware/test_web_handlers.py (/api/ble) and test_session_fake.py (console "ble exp").
+ * its output through the session (R_FW_BLE_EXP), and the idle policy (ble_exp.c cali_bi_*, R_FW_BLE_IDLE)
+ * after it. Contract: include/cali_ble_exp.h. Proven by tests/firmware/test_web_handlers.py (/api/ble)
+ * and test_session_fake.py (console "ble exp").
  */
 #include "cali_auto_camper.h"
 #include "cali_ble_exp.h"
@@ -12,6 +13,7 @@
 #include "cali_time.h"
 
 static cali_bx_t s_bx;
+static cali_bi_t s_bi;   /* the idle policy (R_FW_BLE_IDLE) */
 static unsigned s_min;
 static uint64_t s_phase_at;   /* now_ms the running phase started (evt ble_phase dur_ms) */
 static uint64_t s_tick_at;    /* the last tick's now_ms: the clock of a stop between ticks */
@@ -53,7 +55,21 @@ void cali_ble_exp_stop(void) {
     cali_diag_evt("ble_exp", "\"on\":false");
 }
 
-void cali_ble_exp_activity(uint64_t now_ms) { cali_bx_activity(&s_bx, now_ms); }
+void cali_ble_exp_activity(uint64_t now_ms) {
+    cali_bx_activity(&s_bx, now_ms);
+    cali_bi_activity(&s_bi);
+}
+
+unsigned cali_ble_idle_min(void) { return s_bi.probe_min; }
+
+int cali_ble_idle_set(unsigned min) {
+    uint8_t b = (uint8_t)min;
+    if (min > CALI_BI_MAX_MIN || cali_kv_set(CALI_BI_KEY, &b, 1) != 0) return -1;
+    cali_bi_set(&s_bi, min, cali_uptime_ms());
+    cali_log("ble-idle: %s", min ? "probe" : "hold");
+    cali_diag_evt("ble_idle", "\"probe_min\":%u", min);
+    return 0;
+}
 
 /* The unit's advert sighting (1 seen / -1 gone from cali_bx_seen): log it; a reappearance in quiet/off
  * after a gone logged in that same mode WITH THE LINK DOWN = the unit woke (door, ignition) = activity.
@@ -85,16 +101,39 @@ static void on_unit_adv(uint64_t now_ms) {
     adv_transition(cali_bx_seen(&s_bx, now_ms, 1), now_ms);
 }
 
-void cali_ble_exp_init(void) { cali_runner_on_unit_adv = on_unit_adv; }
+void cali_ble_exp_init(void) {
+    uint8_t b;
+    size_t n = 1;
+    unsigned min = 0;   /* missing = hold */
+    if (cali_kv_get(CALI_BI_KEY, &b, &n) == CALI_KV_OK && n == 1 && b <= CALI_BI_MAX_MIN) min = b;
+    cali_bi_set(&s_bi, min, cali_uptime_ms());
+    if (min) cali_log("ble-idle: probe every %u min", min);   /* hold (the default) logs nothing */
+    cali_runner_on_unit_adv = on_unit_adv;
+}
+
+static void exp_tick(uint64_t now_ms, int ign);
 
 void cali_ble_exp_tick(uint64_t now_ms) {
-    int64_t ts;
     s_tick_at = now_ms;
-    if (!s_bx.on) return;
+    /* the van's ignition (terminal 15) on an up link (also a probe's): activity, every tick while on */
+    int ign = cali_session_link_up() && cali_ac_ignition() == 1;
+    if (ign) cali_bi_activity(&s_bi);
+    if (s_bx.on) exp_tick(now_ms, ign);
+    cali_bi_out_t io = cali_bi_step(&s_bi, now_ms, cali_session_mode(), cali_session_probing(), s_bx.on);
+    if (io.set_mode >= 0) (void)cali_session_set_mode(io.set_mode, "idle");
+    if (io.probe && cali_session_active() && cali_session_probe() != 0) {
+        cali_log("ble-idle: probe refused");
+        cali_diag_evt("probe", "\"ok\":false,\"mode\":\"%s\",\"reason\":\"refused\"",
+                      cali_session_mode_name(cali_session_mode()));
+    }
+}
+
+static void exp_tick(uint64_t now_ms, int ign) {
+    int64_t ts;
     int hour = cali_time_ts(&ts) == CALI_TSRC_NONE ? -1 : cali_time_berlin_hour(ts);
-    /* the van's ignition (terminal 15) on an up link: like a viewer, every tick while it is on, so a
-     * night drive never reaches the next phase (off: the unit's advert, adv_transition) */
-    if (cali_session_link_up() && cali_ac_ignition() == 1) cali_bx_activity(&s_bx, now_ms);
+    /* the ignition: like a viewer, every tick while it is on, so a night drive never reaches the next
+     * phase (off: the unit's advert, adv_transition) */
+    if (ign) cali_bx_activity(&s_bx, now_ms);
     adv_transition(cali_bx_seen(&s_bx, now_ms, 0), now_ms);   /* the gone check; off: the advert's wake */
     cali_bx_out_t o = cali_bx_step(&s_bx, now_ms, hour, cali_session_mode(), cali_session_probing());
     if (o.done_mode >= 0) phase_evt(o.done_mode, o.aborted, now_ms);
@@ -138,6 +177,8 @@ void cali_ble_exp_fields(cali_json_t *j) {
     cali_json_bool(j, cali_session_probing());
     cali_json_key(j, "exp");
     exp_json(j);
+    cali_json_key(j, "idle_min");   /* the idle policy: 0 = hold, else a probe every n min (R_FW_BLE_IDLE) */
+    cali_json_int(j, s_bi.probe_min);
     cali_json_key(j, "unit_adv_seen_ms_ago");   /* the tick clock: the sighting's stamp is the runner's */
     if (!s_adv_any) cali_json_null(j);
     else cali_json_int(j, (long long)(s_tick_at > s_adv_at ? s_tick_at - s_adv_at : 0));

@@ -34,6 +34,7 @@ def test_quiet_stops_the_heartbeat_and_off_drops_the_link(host_fw, rec_unit, tmp
         "mode": "hold",
         "probing": False,
         "exp": None,
+        "idle_min": 0,
         "unit_adv_seen_ms_ago": None,
     }
 

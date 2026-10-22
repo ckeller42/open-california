@@ -764,6 +764,11 @@ window.STRINGS_DE = {
   "Couldn't shut down the Pi ({error})": "Pi konnte nicht heruntergefahren werden ({error})",
   "Shut down after parking": "Nach dem Parken herunterfahren",
   "Shut down at low battery": "Bei niedriger Batterie herunterfahren",
+  "Always connected": "Immer verbunden",
+  "Read every {n} min": "Alle {n} min lesen",
+  "Between reads the satellite lets go of the unit; opening this app connects again within seconds.":
+    "Zwischen den Lesevorgängen trennt der Satellit die Verbindung zur Einheit; beim Öffnen dieser App verbindet er sich in Sekunden neu.",
+  "Couldn't change the connection": "Verbindung konnte nicht geändert werden",
   "Shutdown in {n} min": "Herunterfahren in {n} min",
   "Shut down {n} min ago ({reason})": "Heruntergefahren vor {n} min ({reason})",
   "Battery low": "Batterie niedrig",

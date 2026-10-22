@@ -250,3 +250,101 @@ def test_unit_adv_unknown_at_start_goes_gone_without_a_sighting(cli):
         "SEEN 0",
         "SEEN 0",
     ]
+
+
+# ---- the idle policy (R_FW_BLE_IDLE): hold while active, else off + a probe every probe_min ----
+IDLE = 10 * MIN  # CALI_BX_IDLE_MS
+
+
+def isteps(cli, *lines):
+    return [x for x in run(cli, *lines) if x.startswith("IOUT")]
+
+
+def test_idle_policy_off_after_idle_then_a_probe_every_interval(cli):
+    """Hold for CALI_BX_IDLE_MS after the setting, then off; a probe every probe_min while off; a probe in
+    flight is never cut (no mode change while busy).
+
+    .. test:: BLE idle policy: off after idle, periodic probe
+       :id: T_FW_BLE_IDLE_PROBE
+       :links: R_FW_BLE_IDLE
+    """
+    o = isteps(
+        cli,
+        "iset 5 0",
+        f"istep 0 {H} 0 0",  # active: hold (already hold)
+        f"istep {IDLE} {H} 0 0",  # idle -> off
+        f"istep {IDLE + 1} {O} 0 0",  # off: no probe yet
+        f"istep {IDLE + 5 * MIN} {O} 0 0",  # 5 min -> probe
+        f"istep {IDLE + 5 * MIN + 100} {O} 1 0",  # probe busy -> nothing
+        f"istep {IDLE + 5 * MIN + 6000} {O} 0 0",  # probe done -> nothing
+        f"istep {IDLE + 10 * MIN} {O} 0 0",  # next probe
+    )
+    assert o == [
+        "IOUT set=-1 probe=0",
+        f"IOUT set={O} probe=0",
+        "IOUT set=-1 probe=0",
+        "IOUT set=-1 probe=1",
+        "IOUT set=-1 probe=0",
+        "IOUT set=-1 probe=0",
+        "IOUT set=-1 probe=1",
+    ]
+
+
+def test_idle_policy_activity_and_outside_mode_hold_ten_minutes(cli):
+    """A viewer / the ignition (activity) or a mode the policy did not set (a command forces hold) holds
+    for CALI_BX_IDLE_MS from then; activity during a probe holds once the probe ends.
+
+    .. test:: BLE idle policy: activity and commands hold
+       :id: T_FW_BLE_IDLE_ACTIVITY
+       :links: R_FW_BLE_IDLE
+    """
+    t = IDLE
+    o = isteps(
+        cli,
+        "iset 5 0",
+        f"istep {t} {H} 0 0",  # -> off
+        "iact",
+        f"istep {t + 1000} {O} 0 0",  # viewer -> hold
+        f"istep {t + 1000 + IDLE - 1} {H} 0 0",  # still active
+        f"istep {t + 1000 + IDLE} {H} 0 0",  # idle -> off
+        f"istep {t + 2 * IDLE} {H} 0 0",  # a command set hold -> outside change: stays hold
+        f"istep {t + 3 * IDLE - 1} {H} 0 0",
+        f"istep {t + 3 * IDLE} {H} 0 0",  # idle again -> off
+        "iact",
+        f"istep {t + 3 * IDLE + 100} {O} 1 0",  # activity during a probe: wait
+        f"istep {t + 3 * IDLE + 200} {O} 0 0",  # probe ended -> hold
+    )
+    assert o == [
+        f"IOUT set={O} probe=0",
+        f"IOUT set={H} probe=0",
+        "IOUT set=-1 probe=0",
+        f"IOUT set={O} probe=0",
+        "IOUT set=-1 probe=0",
+        "IOUT set=-1 probe=0",
+        f"IOUT set={O} probe=0",
+        "IOUT set=-1 probe=0",
+        f"IOUT set={H} probe=0",
+    ]
+
+
+def test_idle_policy_hold_setting_and_experiment_take_precedence(cli):
+    """probe_min 0 (the default) never changes the mode; a running experiment owns the session and the
+    policy holds CALI_BX_IDLE_MS after it ends.
+
+    .. test:: BLE idle policy: hold setting, experiment precedence
+       :id: T_FW_BLE_IDLE_OFF
+       :links: R_FW_BLE_IDLE
+    """
+    assert isteps(cli, "iset 0 0", f"istep {IDLE} {H} 0 0", f"istep {5 * IDLE} {O} 0 0") == [
+        "IOUT set=-1 probe=0",
+        "IOUT set=-1 probe=0",
+    ]
+    o = isteps(
+        cli,
+        "iset 5 0",
+        f"istep {IDLE} {Q} 0 1",  # experiment runs (quiet phase): hands off
+        f"istep {3 * IDLE} {O} 0 1",
+        f"istep {3 * IDLE + 1000} {H} 0 0",  # experiment ended (hold): active 10 min
+        f"istep {4 * IDLE} {H} 0 0",  # -> off
+    )
+    assert o == ["IOUT set=-1 probe=0", "IOUT set=-1 probe=0", "IOUT set=-1 probe=0", f"IOUT set={O} probe=0"]
