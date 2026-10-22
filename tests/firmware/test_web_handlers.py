@@ -2639,10 +2639,13 @@ def test_app_shell_load_is_a_viewer(web_cli):
         req("POST", "/api/ble", '{"idle_min":5}'),
     ]
     steps += [b"now 601100", b"bxtick"]  # idle -> off
-    for path in ("/api/ble", "/api/log?since=0&max=1", "/", "/app"):
+    for path in ("/api/ble", "/api/log?since=0&max=1", "/"):
         steps += [req("GET", path), b"bxtick"]
+    steps += [b"now 1202000", b"bxtick", req("GET", "/app"), b"bxtick"]  # idle again -> off, then /app
     _, other = drive(web_cli, steps)
     assert [ln for ln in other if ln.startswith("CALL session_")] == [
         "CALL session_set_mode off idle",
         "CALL session_set_mode hold idle",  # after GET /
+        "CALL session_set_mode off idle",
+        "CALL session_set_mode hold idle",  # after GET /app
     ]
