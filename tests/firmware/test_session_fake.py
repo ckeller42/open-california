@@ -613,7 +613,7 @@ def test_failed_heartbeat_completion_drops_and_reconnects(fake):
     assert rest[:1] == ["CALL disconnect"] and "CALL connect_bonded" in rest
 
 
-def test_backoff_doubles_to_60s_and_resets_once_encrypted(fake):
+def test_backoff_doubles_to_60s_and_resets_after_a_stable_link(fake):
     script = list(PAIRED) + READ_ALL + ["DISCONNECTED"]
     t, at = T, []
     for delay in (1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000):
@@ -627,11 +627,38 @@ def test_backoff_doubles_to_60s_and_resets_once_encrypted(fake):
         "LOG session: reconnect in %d ms" % d
         for d in (1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000, 60000)
     ]
-    # success resets the delay
+    # a link the unit ends at once keeps the delay; one that held CALI_SESSION_STABLE_MS resets it
     t += 60000
-    out = run(fake, *script, "tick %d" % t, "CONNECTED", "ENC_OK", "DISCONNECTED")
-    assert out[-1] == "LOG session: reconnect in 1000 ms"
+    up = [*script, "tick %d" % t, "CONNECTED", "ENC_OK"]
+    out = run(fake, *up, "DISCONNECTED")
+    assert out[-1] == "LOG session: reconnect in 60000 ms"
     assert "CALL discover" in after(out, "CALL connect_bonded")
+    out = run(fake, *up, "tick %d" % (t + 59999), "DISCONNECTED")
+    assert out[-1] == "LOG session: reconnect in 60000 ms"
+    out = run(fake, *up, "tick %d" % (t + 60000), "DISCONNECTED")
+    assert out[-1] == "LOG session: reconnect in 1000 ms"
+
+
+def test_unit_ending_each_link_soon_backs_off(fake):
+    """Camping master off (2026-10-22): the unit ends every link ~1-31 s after it comes up. Each such
+    loss doubles the delay instead of resetting it at link-up, so the reconnects back off to 60 s
+    rather than waking the unit every 1 s.
+
+    .. test:: Links the unit ends soon back the reconnects off
+       :id: T_FW_SESSION_SHORT_LINK_BACKOFF
+       :links: R_FW_SESSION
+    """
+    script = list(PAIRED) + READ_ALL + ["DISCONNECTED 531"]
+    t = T
+    for delay in (1000, 2000, 4000, 8000, 16000, 32000, 60000):
+        t += delay
+        script += ["tick %d" % t, "CONNECTED", "ENC_OK", "tick %d" % (t + 1300), "DISCONNECTED 531"]
+        t += 1300
+    out = run(fake, *script)
+    logs = [line for line in out if line.startswith("LOG session: reconnect in")]
+    assert logs == [
+        "LOG session: reconnect in %d ms" % d for d in (1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000)
+    ]
 
 
 def test_unit_hangup_after_read_all_takes_the_backoff(fake):

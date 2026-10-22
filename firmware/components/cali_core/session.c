@@ -272,6 +272,7 @@ static void link_clear(void) {
         io(CALI_SESSION_IO_DOWN, 0, NULL, 0);
         cali_diag_evt("link_down", "\"reason\":\"%s\",\"status\":%d,\"dur_ms\":%llu", s_why, s_why_st,
                       (unsigned long long)(s_now - s_up_at));
+        if (s_now - s_up_at >= CALI_SESSION_STABLE_MS) s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
         s_was_up = 1;
         s_down_at = s_now;
     }
@@ -342,8 +343,7 @@ static void link_up(void) {
     io(CALI_SESSION_IO_UP, 0, NULL, 0);
     s_link = LINK_UP;
     s_up_at = s_now;
-    s_reconnect_pending = 0;
-    s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
+    s_reconnect_pending = 0;   /* the backoff resets only once the link held (link_clear) */
     s_hb_on = 1;
     s_hb_ctr = CODEC_HEARTBEAT_START;
     s_hb_next = s_now;                                /* first beat on the next tick */
