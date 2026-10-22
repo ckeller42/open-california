@@ -387,6 +387,17 @@ unit serves unlocks ECO. **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.
 ("Land" = shore/landline power, "Pv" = photovoltaic/solar, "Dcdc" = DC-DC converter, "Afs" = raw AFS-scaled
 value, "Two Batt" = second/auxiliary battery, "Emp"/"Lad" = installed-equipment flags.)
 
+**Parked behaviour, LIVE-OBSERVED 2026-10-20…22** (ESP SD log, raw `1602` snaps decoded with
+`calictl.protocol`, BLE power experiment):
+
+- `AgeOneBattValuesMinutes` counts the age of the starter-battery values (`UOneBattBemAfs`/`IOneBattBemAfs`,
+  which stay frozen while it runs) and saturates at 255. A drop marks a **vehicle-side wake** that delivered
+  fresh values. Parked, it dropped at ~2026-10-21 07:21 and ~10-22 02:42 (no ESP action at either time, ~19 h
+  apart — likely the vehicle's own schedule) and **not** at the ESP's reconnects after 2 h and 8 h without a
+  link: no vehicle-side wake was observed at these two reconnects (two samples, not a general rule).
+- `tTwoBattRemainingh`/`min` ran smoothly through the experiment's link on/off switches (no step, the same
+  ~0.29 min-per-minute decay with and without a link). The unit's averaging behind it is unknown.
+
 Post-processing (`xf/a.java:328-390`, `xf/d.java`) derives UI values from the raw fields:
 
 - SOC (state of charge) percentages: raw value × 10 → percent (`xf/a.java:333-337`, fields A0/B0 → ×10).
