@@ -861,12 +861,13 @@ static void api_pi_halt(const cali_http_req_t *req, cali_http_resp_t *resp) {
 
 /* ---- GET /api/ble = device.ble; POST /api/ble (R_FW_BLE_MODE, R_FW_BLE_EXP), station mode only:
  * {"mode":"hold|quiet|off"}, {"probe":true}, {"exp_min":1..720,"from"?:0..23,"to"?:0..23} (window
- * default 22-06), {"exp_min":0} (stop) — keys combinable, each at most once; answers device.ble ---- */
+ * default 22-06), {"exp_min":0} (stop), {"idle_min":0..60} (the idle policy, stored: R_FW_BLE_IDLE) —
+ * keys combinable, each at most once; answers device.ble ---- */
 static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
     if (strcmp(req->method, "GET") != 0) {
-        static const char *const KEYS[5] = {"mode", "probe", "exp_min", "from", "to"};
+        static const char *const KEYS[6] = {"mode", "probe", "exp_min", "from", "to", "idle_min"};
         cursor_t c = {req->body, req->body + req->body_len};
-        unsigned num[5] = {0, 0, 0, 22, 6};
+        unsigned num[6] = {0, 0, 0, 22, 6, 0};
         int seen = 0, mode = -1, probe = 0, bad = expect(&c, '{') != 0;
         if (strcmp(req->method, "POST") != 0) { SET_CONST(resp, 405, ERR_METHOD); return; }
         if (wifi_mode() != CALI_WIFI_MODE_STATION) { SET_CONST(resp, 403, ERR_SETUP_MODE); return; }
@@ -875,8 +876,8 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
             size_t klen, vlen;
             int i;
             if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) { bad = 1; break; }
-            for (i = 0; i < 5 && strcmp(key, KEYS[i]) != 0; i++) {}
-            if (i == 5 || (seen & (1 << i))) { bad = 1; break; }
+            for (i = 0; i < 6 && strcmp(key, KEYS[i]) != 0; i++) {}
+            if (i == 6 || (seen & (1 << i))) { bad = 1; break; }
             seen |= 1 << i;
             if (i == 0) {
                 if (parse_str(&c, val, sizeof val, &vlen) != 0) { bad = 1; break; }
@@ -894,8 +895,11 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
             if (expect(&c, '}') != 0) bad = 1;
             break;
         }
-        if (bad || (skip_ws(&c), c.p != c.end) || !(seen & 7)) { SET_CONST(resp, 400, ERR_BAD_JSON); return; }
-        if (mode == -2 || num[2] > 720 || num[3] > 23 || num[4] > 23) { SET_CONST(resp, 400, ERR_BAD_VALUE); return; }
+        if (bad || (skip_ws(&c), c.p != c.end) || !(seen & 39)) { SET_CONST(resp, 400, ERR_BAD_JSON); return; }
+        if (mode == -2 || num[2] > 720 || num[3] > 23 || num[4] > 23 || num[5] > CALI_BI_MAX_MIN) {
+            SET_CONST(resp, 400, ERR_BAD_VALUE);
+            return;
+        }
         /* cali_session_probe's own refusal, checked first: a 409 changes nothing */
         if (probe && (!cali_session_active() || cali_session_probing())) { SET_CONST(resp, 409, ERR_BUSY); return; }
         if ((seen & 4) && num[2] == 0) cali_ble_exp_stop();
@@ -903,6 +907,7 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
             SET_CONST(resp, 409, ERR_NO_TIME);   /* the args are checked above: only the clock is left */
             return;
         }
+        if ((seen & 32) && cali_ble_idle_set(num[5]) != 0) { SET_CONST(resp, 500, ERR_STORE); return; }
         if (mode >= 0) (void)cali_session_set_mode(mode, "api");
         if (probe) (void)cali_session_probe();
     }

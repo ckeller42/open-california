@@ -8,6 +8,17 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-22 — ESP idle policy: optional "off + periodic probe", default stays hold
+
+Owner question: no permanent link, yet frequent data and a quick live connect when the GUI opens.
+Reassessed against the evidence: the unit serves several centrals at once (2026-10-10), so a held
+link blocks nobody; the experiment (2026-10-21) showed no sleep effect and no measurable draw
+(< 0.1 A, below that unknown without a shunt). The permanent link already gives notify-fast data and
+an instant GUI. Owner decision: build the policy anyway as a stored setting (`R_FW_BLE_IDLE`,
+`POST /api/ble {"idle_min":N}`, Satellite settings → *Connection*), **default hold**; 5 min is the
+suggested interval when switched on (data ≤ 5 min old, Pi wake / auto-camper ≤ 5 min late after
+ignition ON). It reuses the experiment's parts: modes, probe, viewer = activity, 10-min hold.
+
 ## 2026-10-21 — no measurable BLE-link effect on the parked unit (BLE power experiment, closed)
 
 DEVICE 2026-10-20/21 (ESP `R_FW_BLE_EXP`, report `tools/esplab/ble_exp_report.py`). Question: does

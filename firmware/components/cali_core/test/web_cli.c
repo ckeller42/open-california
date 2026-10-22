@@ -41,6 +41,7 @@
  *   ign <-1|0|1>     cali_pw_step(<ignition>, the clock): the Pi wake's edge rule (R_FW_PI_WAKE)
  *   ntp <epoch_ms>   SNTP synced at this (fixed) wall clock: cali_time_ts answers it (R_FW_BLE_EXP)
  *   bxtick           cali_ble_exp_tick(the clock): one step of the BLE experiment
+ *   bxinit           cali_ble_exp_init (the idle policy from the kv store, as at boot: R_FW_BLE_IDLE)
  *   pwtick           cali_pw_tick(the clock): ends a pulse that is due (the session is never ready here,
  *                    so its step sees the ignition unknown)
  *   energy <hex>     the session also holds this energy frame (the Pi halt's battery guard, R_FW_PI_HALT)
@@ -430,6 +431,7 @@ int main(void) {
         else if (strcmp(w, "ign") == 0) cali_pw_step((int)v, s_now);
         else if (strcmp(w, "pwtick") == 0) cali_pw_tick(s_now);
         else if (strcmp(w, "bxtick") == 0) cali_ble_exp_tick(s_now);
+        else if (strcmp(w, "bxinit") == 0) cali_ble_exp_init();
         else if (strcmp(w, "ntp") == 0 && sscanf(a1, "%llu", &ms) == 1) {
             s_epoch_ms = (int64_t)ms;
             cali_time_source(fake_epoch);

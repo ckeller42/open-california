@@ -2398,7 +2398,10 @@ def test_stop_during_a_probe_ends_it(fake):
         "> ble",
     )
     assert {"ev": "evt", "kind": "probe", "ok": False, "mode": "quiet", "reason": "stop"} in _diag(out)
-    assert 'LOG ble: {"ble":{"mode":"quiet","probing":false,"exp":null,"unit_adv_seen_ms_ago":null}}' in out
+    assert (
+        'LOG ble: {"ble":{"mode":"quiet","probing":false,"exp":null,"idle_min":0,"unit_adv_seen_ms_ago":null}}'
+        in out
+    )
 
 
 def test_console_ble_exp_without_time_is_refused(fake):
@@ -2411,7 +2414,8 @@ def test_console_ble_exp_without_time_is_refused(fake):
     out = run(fake, *PAIRED, *READ_ALL, "> ble exp 120 22-06", "tick %d" % (T + 100), "> ble")
     assert "LOG ble-exp: refused (no time)" in out
     assert (
-        out[-1] == 'LOG ble: {"ble":{"mode":"hold","probing":false,"exp":null,"unit_adv_seen_ms_ago":null}}'
+        out[-1]
+        == 'LOG ble: {"ble":{"mode":"hold","probing":false,"exp":null,"idle_min":0,"unit_adv_seen_ms_ago":null}}'
     )
 
 

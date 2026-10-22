@@ -227,8 +227,8 @@ with them on any build, a dirty local one included. A `GET` whose `If-None-Match
 | `POST /api/experimental` | `{"sensors":<bool>}` (exactly that object): Satellite settings' "Sensors (experimental)" switch (`R_FW_EXPERIMENTAL`) -> kv `exp_sensors` -> 200 `{"ok":true,"sensors":<bool>}`; applied at once, no reboot; `LOG exp: sensors on\|off`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
 | `GET /api/sensors` | `R_FW_SENSORS` ([External sensors](#external-sensors-experimental-r_fw_sensors)), every WiFi mode: 200 `{"configured":[{id,type,alias,last_seen_s,value,has_key}],"seen":[{id,type,model,rssi}],"scan":"ok"\|"paused"}` (`value` = the fields object while the last reading is < 10 min old, else `null`; `last_seen_s` `null` before the first reading) and a kick (a window soon). 404 `{"ok":false,"error":"disabled"}` while `exp_sensors` is off. |
 | `POST /api/sensors` | Exactly one of `{"add":<id>,"alias"?:"…","key"?:"<32 hex>"}`, `{"remove":<id>}`, `{"id":<id>,"alias":"…"}` (rename) — keys in any order, each once, ids 0–65535 -> 200 the `GET` body. 400 `bad_json` (not one of those shapes), `bad_alias` (not `[a-z0-9_-]{1,16}`, taken, or omitted for a type already configured), `bad_key` (not 32 hex digits), `key_mismatch`, `unknown_id` (not seen in the last 10 min for `add`; not configured for `remove`/rename), `full` (16); 500 `store`. Every WiFi mode (the setup hotspot too); 404 `disabled` while the flag is off. |
-| `GET /api/ble` | 200 the `device.ble` object `{"mode","probing","exp","unit_adv_seen_ms_ago"}` (`R_FW_BLE_EXP`, [BLE modes](#ble-modes-r_fw_ble_mode)). |
-| `POST /api/ble` | any of `{"mode":"hold"\|"quiet"\|"off"}`, `{"probe":true}`, `{"exp_min":1..720,"from"?:0..23,"to"?:0..23}` (the night experiment; window default 22-06 Berlin time), `{"exp_min":0}` (stop it, back to `hold`); keys combinable, each once -> 200 the new `device.ble`. Station mode only (403 `setup_mode`), 400 `bad_json` (an unknown or repeated key, a wrong type, none of `mode`/`probe`/`exp_min`), 400 `bad_value` (another mode, a number out of range), 409 `no_time` (`exp_min` without a wall clock: no SNTP and no unit clock; nothing applied), 409 `busy` (a probe already runs or no bond). |
+| `GET /api/ble` | 200 the `device.ble` object `{"mode","probing","exp","idle_min","unit_adv_seen_ms_ago"}` (`R_FW_BLE_EXP`, `R_FW_BLE_IDLE`, [BLE modes](#ble-modes-r_fw_ble_mode)). |
+| `POST /api/ble` | any of `{"mode":"hold"\|"quiet"\|"off"}`, `{"probe":true}`, `{"exp_min":1..720,"from"?:0..23,"to"?:0..23}` (the night experiment; window default 22-06 Berlin time), `{"exp_min":0}` (stop it, back to `hold`), `{"idle_min":0..60}` (the idle policy, stored in NVS: `R_FW_BLE_IDLE`); keys combinable, each once -> 200 the new `device.ble`. Station mode only (403 `setup_mode`), 400 `bad_json` (an unknown or repeated key, a wrong type, none of `mode`/`probe`/`exp_min`/`idle_min`), 400 `bad_value` (another mode, a number out of range), 409 `no_time` (`exp_min` without a wall clock: no SNTP and no unit clock; nothing applied), 409 `busy` (a probe already runs or no bond), 500 `store` (`idle_min` not stored). |
 | other method on `/api/state`, `/api/wifi`, `/api/command`, `/api/ota`, `/api/auto_camper`, `/api/pi_wake`, `/api/pi_halt`, `/api/ble` (GET/POST only), `/api/pi_wake_setting`, `/api/display`, `/api/ux`, `/api/ux_setting`, `/api/experimental`, `/api/sensors` or `/api/pairing` | 405 `{"ok":false,"error":"method"}` |
 | an OS captive-portal probe path (setup mode) | 302 `Location: http://192.168.4.1/` — `/generate_204`, `/gen_204` (Android), `/hotspot-detect.html`, `/library/test/success.html` (Apple), `/connecttest.txt`, `/ncsi.txt` (Windows), `/canonical.html`, `/success.txt` (Firefox) |
 | any other path | setup mode: 302 `Location: /`; station mode: 404 |
@@ -762,11 +762,12 @@ IP and no user-typed value is ever recorded.
 | `evt` `panic` | right after `boot`, when the previous boot panicked (`R_FW_PANIC_CAPTURE`, below) | `task` (the task running on the panicking core), `reason` (the exception, or abort()/assert's details; <= 47 chars), `bt` (up to 16 backtrace PCs, innermost first, space-separated bare hex) |
 | `evt` `link_up` | link encrypted (session.c) | `reconnect_ms` (down -> up; `null` for the first link of a boot), `attempts` (`connect_bonded` calls since) |
 | `evt` `link_down` | an up link went | `reason` (`disconnected`/`connect_fail`/`enc_fail`/`heartbeat`/`discover`/`connect_timeout`/`enc_timeout`/`ble_off`/`stop`), `status` (the transport status: NimBLE, HCI = 0x200 + code, e.g. 531 = 0x13), `dur_ms` |
-| `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why`: `console` (`ble mode`), `api` (`POST /api/ble`), `command` (a control command in `quiet`/`off`), `pairing`, `exp` (an experiment phase starts), `exp_abort` (a phase cut short), `exp_off` (`ble exp off`) |
+| `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why`: `console` (`ble mode`), `api` (`POST /api/ble`), `command` (a control command in `quiet`/`off`), `pairing`, `exp` (an experiment phase starts), `exp_abort` (a phase cut short), `exp_off` (`ble exp off`), `idle` (the idle policy, `R_FW_BLE_IDLE`) |
+| `evt` `ble_idle` | the idle policy was set (`POST /api/ble` `idle_min`; ble_exp_run.c, `R_FW_BLE_IDLE`) | `probe_min` (0 = hold) |
 | `evt` `ble_exp` | the BLE experiment started / stopped (ble_exp_run.c, `R_FW_BLE_EXP`) | `on` (bool); on start also `phase_min`, `from`, `to` (Berlin local hours) |
 | `evt` `ble_phase` | an experiment phase ended (also: stopped or restarted mid-phase) | `mode` (the phase: `hold`/`quiet`/`off`), `aborted` (bool: cut short by a viewer, a mode change from outside — a command in `quiet`/`off`, the console, `/api/ble`, also during the probe —, the ignition on an up link, the window's end, `ble exp off` or a new `ble exp`; `false` = ran its length, probe done), `dur_ms` (the phase's span: a `hold` phase logs no `ble_mode` at its start) |
 | `evt` `unit_adv` | the bonded unit's own advert, while an experiment runs (ble_exp_run.c, `R_FW_BLE_EXP`): first seen in a sensor window, or gone (no sighting for `CALI_BX_GONE_MS` = 3 sensor scan periods + one window, 185 s) | `seen` (bool; never the address) |
-| `evt` `probe` | a probe ended (or the experiment's phase-end probe was refused: `ok` false, `reason` `refused`) | `ok` (bool), `mode` (the mode it returns to), `reason` (`read_all` on success, else the failure: `connect_timeout`/`connect_fail`/`enc_timeout`/`enc_fail`/`disconnected`/`discover`/`heartbeat`) |
+| `evt` `probe` | a probe ended (or the experiment's phase-end / the idle policy's probe was refused: `ok` false, `reason` `refused`) | `ok` (bool), `mode` (the mode it returns to), `reason` (`read_all` on success, else the failure: `connect_timeout`/`connect_fail`/`enc_timeout`/`enc_fail`/`disconnected`/`discover`/`heartbeat`) |
 | `evt` `wifi_up` / `wifi_down` | station online / lost (wifi_run.c) | `rssi`, `ip_changed` (bool, never the address) / `reason` `lost`, `rssi`, `dur_ms` |
 | `evt` `net` | a failed join | `err` `join`, `reason` (`not_found`/`auth`/`other`) |
 | `evt` `cmd` | a control command ends (control_run.c) | `fn`, `what` (never the value), `result` (`ack`/`refused`/`elsewhere`/`bad_value`/`none`/`busy`/`not_ready`/`failed`/`timeout`/`unconfirmed`), `latency_ms` (0 = answered at once), `src` (`web`/`auto_camper`/`console`) |
@@ -934,6 +935,24 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    ``refused``. ``ble exp off`` (``{"exp_min":0}``) ends it in ``hold``; a reboot ends it too (not
    persisted). ``tools/esplab/soak_report.py`` polls ``/api/state`` and so counts as a viewer: do not
    run it during an experiment night.
+
+.. req:: BLE idle policy
+   :id: R_FW_BLE_IDLE
+   :status: open
+
+   ``POST /api/ble {"idle_min":N}`` (0-60, stored in NVS key ``ble_idle``, read at boot; missing = 0;
+   the Satellite settings' *Connection* select) sets how the session idles. ``0`` (the default) =
+   ``hold``: the link stays up. ``N`` > 0: the link is held while someone is active and dropped
+   otherwise — activity is a viewer (``GET /api/state``: the web UI polls it every 2 s), a mode the
+   policy did not set (a control command in ``off`` switches to ``hold``, ``ble mode``, ``/api/ble``),
+   the van's ignition (terminal 15) on an up link (also during a probe), or a new setting; after
+   ``CALI_BX_IDLE_MS`` (10 min) without one the mode goes ``off`` (``evt ble_mode`` ``why`` ``idle``),
+   and every ``N`` minutes while ``off`` a :term:`Probe` reads every function (``evt probe``; skipped
+   with no bond). Activity during a probe lets it finish, then ``hold``. A running experiment
+   (``R_FW_BLE_EXP``) owns the session; the policy waits and holds 10 min after it ends. Outside
+   ``hold`` the Pi wake and an auto-camper restore see the ignition only through a probe (``R_FW_BLE_MODE``),
+   so they react up to ``N`` minutes late; a GUI opened while ``off`` shows the last probe's data until
+   the reconnect (≈1 s) and the read-all (≈6 s) are done. Motivation: ``DECISIONS.md`` 2026-10-22.
 ```
 
 **Open item — the unit's advert match ({term}`Sleep indicator`, `R_FW_BLE_EXP`), not yet checked on the van.** `ble_nimble.c`

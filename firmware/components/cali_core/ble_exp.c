@@ -80,6 +80,40 @@ cali_bx_out_t cali_bx_step(cali_bx_t *x, uint64_t now, int hour, int cur, int bu
     return o;
 }
 
+void cali_bi_set(cali_bi_t *x, unsigned probe_min, uint64_t now) {
+    memset(x, 0, sizeof *x);
+    x->probe_min = probe_min;
+    x->want = -1;
+    x->idle_until = now + CALI_BX_IDLE_MS;
+}
+
+void cali_bi_activity(cali_bi_t *x) { x->touched = 1; }
+
+cali_bi_out_t cali_bi_step(cali_bi_t *x, uint64_t now, int cur, int busy, int exp_on) {
+    cali_bi_out_t o = {-1, 0};
+    int touched = x->touched;
+    x->touched = 0;
+    if (!x->probe_min) return o;
+    if (exp_on || touched || (x->want >= 0 && cur != x->want && !busy)) {   /* activity / an outside mode */
+        x->idle_until = now + CALI_BX_IDLE_MS;
+        if (exp_on) {
+            x->want = -1;
+            return o;
+        }
+    }
+    int want = now < x->idle_until ? CALI_BLE_HOLD : CALI_BLE_OFF;
+    if (want == CALI_BLE_OFF && x->want != CALI_BLE_OFF) x->next_probe = now + x->probe_min * 60000ull;
+    x->want = want;
+    if (busy) return o;   /* a probe runs: its mode stays until it ends */
+    if (cur != want) {
+        o.set_mode = want;
+    } else if (want == CALI_BLE_OFF && now >= x->next_probe) {
+        o.probe = 1;
+        x->next_probe = now + x->probe_min * 60000ull;
+    }
+    return o;
+}
+
 int cali_bx_seen(cali_bx_t *x, uint64_t now, int seen_now) {
     if (!x->on) return 0;
     if (seen_now) {

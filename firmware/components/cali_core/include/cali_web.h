@@ -37,9 +37,10 @@
  *                                                -- cali_pi_wake.h (R_FW_PI_WAKE, R_FW_PI_HALT); last_s = s since the last pulse
  *                                  "ble":{"mode":"hold"|"quiet"|"off","probing":<bool>,"exp":null|{"on":true,
  *                                         "phase_min","from","to","phase":"hold"|"quiet"|"off"|null,
- *                                         "remaining_ms":<int>|null},"unit_adv_seen_ms_ago":<int>|null},
- *                                                -- cali_ble_exp.h (R_FW_BLE_MODE, R_FW_BLE_EXP); a GET of
- *                                                /api/state is a viewer: it holds the experiment
+ *                                         "remaining_ms":<int>|null},"idle_min":0..60,"unit_adv_seen_ms_ago":<int>|null},
+ *                                                -- cali_ble_exp.h (R_FW_BLE_MODE, R_FW_BLE_EXP, R_FW_BLE_IDLE); a
+ *                                                GET of /api/state is a viewer: it holds the experiment and the
+ *                                                idle policy
  *                                  "display":{"state":"on"|"dim"|"off","lux","prox","motion","brightness_pct",
  *                                             "sensor":"ok"|"absent"|"error","auto":<bool>,
  *                                             "prox_wake":<bool>,"motion_wake":<bool>,"min","max","offset",
@@ -158,11 +159,12 @@
  *                     400 bad_json (any other body), 405 for another method.
  *   GET  /api/ble     200 the device.ble object above (R_FW_BLE_EXP)
  *   POST /api/ble     any of {"mode":"hold"|"quiet"|"off"}, {"probe":true}, {"exp_min":1..720,"from"?:0..23,
- *                     "to"?:0..23} (the night experiment, window default 22-06), {"exp_min":0} (stop), each
- *                     key once -> 200 device.ble; station mode only (403 setup_mode), 400 bad_json (unknown or
- *                     repeated key, wrong type, none of mode/probe/exp_min), 400 bad_value (out of range),
- *                     409 no_time (exp_min without a wall clock, nothing applied), 409 busy (probe refused),
- *                     405 for another method.
+ *                     "to"?:0..23} (the night experiment, window default 22-06), {"exp_min":0} (stop),
+ *                     {"idle_min":0..60} (the idle policy, stored; R_FW_BLE_IDLE), each key once -> 200
+ *                     device.ble; station mode only (403 setup_mode), 400 bad_json (unknown or repeated key,
+ *                     wrong type, none of mode/probe/exp_min/idle_min), 400 bad_value (out of range), 409
+ *                     no_time (exp_min without a wall clock, nothing applied), 409 busy (probe refused), 500
+ *                     store (idle_min not stored), 405 for another method.
  *   POST /api/pi_wake_setting  a non-empty subset of {"enabled":<bool>,"halt_after_min":0..1440,
  *                     "halt_soc_pct":0..100}, each key once (R_FW_PI_WAKE, R_FW_PI_HALT): wake on ignition,
  *                     the halt timer and battery guard -> 200 {"ok":true,"pi_wake":<bool>,"halt_after_min":n,

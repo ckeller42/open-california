@@ -276,7 +276,7 @@ EXPECTED_DEVICE_TAIL = (
     '"auto_camper":{"enabled":true,"state":"idle"},'
     '"pi_wake":{"enabled":true,"last_s":null,"reason":null,"halt_after_min":30,"halt_soc_pct":30,'
     '"halt_in_s":1795,"halted":false,"halt_last_s":null,"halt_reason":null,"batt_low":false},'
-    '"ble":{"mode":"hold","probing":false,"exp":null,"unit_adv_seen_ms_ago":null},'
+    '"ble":{"mode":"hold","probing":false,"exp":null,"idle_min":0,"unit_adv_seen_ms_ago":null},'
     '"display":{"state":null,"lux":null,"prox":null,"motion":null,"brightness_pct":null,"sensor":null,'
     '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0,"dfs":null,"pm":null},'
     '"ux":{"enabled":true},'
@@ -2421,7 +2421,7 @@ def test_api_log_a_failed_sd_read_is_503(web_cli, tmp_path):
 
 # ---- /api/ble: the BLE link mode, the probe and the night experiment (R_FW_BLE_EXP) ------------------
 
-BLE_IDLE = {"mode": "hold", "probing": False, "exp": None, "unit_adv_seen_ms_ago": None}
+BLE_IDLE = {"mode": "hold", "probing": False, "exp": None, "idle_min": 0, "unit_adv_seen_ms_ago": None}
 # 2026-10-20 21:00 UTC = 23:00 in Berlin (CEST): inside the default 22-06 window
 NIGHT_MS = 1792530000000
 
@@ -2466,6 +2466,8 @@ def test_api_ble_post(web_cli, body, calls):
         (STATION, "POST", '{"exp_min":120,"from":22,"to":6}', 409, "no_time"),
         (STATION + ["ntp %d" % NIGHT_MS], "POST", '{"exp_min":721}', 400, "bad_value"),
         (STATION + ["ntp %d" % NIGHT_MS], "POST", '{"exp_min":60,"to":24}', 400, "bad_value"),
+        (STATION, "POST", '{"idle_min":61}', 400, "bad_value"),
+        (STATION + ["kvfail 1"], "POST", '{"idle_min":5}', 500, "store"),
         (["wifi setup_ap"], "POST", '{"mode":"off"}', 403, "setup_mode"),
     ],
 )
@@ -2554,3 +2556,68 @@ def test_api_ble_a_refused_probe_changes_nothing(web_cli):
     assert resps[0].json()["error"] == resps[2].json()["error"] == "busy"
     assert [ln for ln in other if ln.startswith("CALL session_")] == ["CALL session_probe"]
     assert resps[-1].json() == dict(BLE_IDLE, probing=True)
+
+
+def test_api_ble_idle_min_zero_brings_the_link_back(web_cli):
+    """``{"idle_min":0}`` while the policy holds the link ``off`` switches back to ``hold`` (always
+    connected); with the link already in ``hold`` it changes no mode.
+
+    .. test:: POST /api/ble idle_min 0 restores hold
+       :id: T_FW_BLE_IDLE_ZERO
+       :links: R_FW_BLE_IDLE
+    """
+    _, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"active 1",
+            req("POST", "/api/ble", '{"idle_min":0}'),  # hold already: no call
+            b"now 1000",
+            req("POST", "/api/ble", '{"idle_min":5}'),
+            b"now 601100",
+            b"bxtick",  # -> off
+            req("POST", "/api/ble", '{"idle_min":0}'),
+        ],
+    )
+    assert [ln for ln in other if ln.startswith("CALL session_")] == [
+        "CALL session_set_mode off idle",
+        "CALL session_set_mode hold idle",
+    ]
+
+
+def test_api_ble_idle_policy_is_stored_and_drives_the_link(web_cli):
+    """``{"idle_min":5}`` stores the idle policy (kv ``ble_idle``, read back at boot); after 10 min
+    without activity the tick turns the link off, probes every 5 min, and a viewer brings hold back.
+
+    .. test:: POST /api/ble idle_min: stored, off after idle, periodic probe, a viewer holds
+       :id: T_FW_BLE_IDLE_API
+       :links: R_FW_BLE_IDLE
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"active 1",
+            b"now 1000",
+            req("POST", "/api/ble", '{"idle_min":5}'),
+            b"now 601100",  # the fake clock moved ~10 ms while the POST polled
+            b"bxtick",  # 10 min idle -> off
+            b"now 901100",
+            b"bxtick",  # 5 min off -> probe
+            req("GET", "/api/state"),  # a viewer (the probe still runs: wait)
+            b"bxtick",
+            b"bxinit",  # boot: the stored 5
+            req("GET", "/api/ble"),
+            b"kvhex ble_idle 00",
+            b"bxinit",  # boot: hold
+            req("GET", "/api/ble"),
+        ],
+    )
+    assert [r.status for r in resps] == [200, 200, 200, 200]
+    assert resps[0].json() == dict(BLE_IDLE, idle_min=5)
+    assert [ln for ln in other if ln.startswith("CALL session_")] == [
+        "CALL session_set_mode off idle",
+        "CALL session_probe",
+    ]
+    assert resps[-2].json() == dict(BLE_IDLE, mode="off", probing=True, idle_min=5)
+    assert resps[-1].json() == dict(BLE_IDLE, mode="off", probing=True)
