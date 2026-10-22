@@ -71,6 +71,11 @@ command (`DisplayRefresh` is an unrelated *energy* actuation bit).
 **On-device confirmation** (buspi): with a continuous, landing heartbeat the fresh-water read went
 **1 L → 11 L immediately and held for 64 s**, `hb_fail=0`, and **the link never dropped**.
 
+**CORRECTED 2026-10-22 (DEVICE, ESP `R_FW_BLE_WARM`):** a read needs no heartbeat warm-up. Over 15
+reconnects, a read pass at connect (no heartbeat yet) and one ~12 s later (heartbeat running) were
+byte-identical for every function except the unit clock's seconds. The heartbeat still arms writes;
+for reads the warm-up only costs time (ledger 2026-10-22).
+
 ## The fix
 
 `device.read_all` / `device.read` run the existing `_heartbeat(client, stop)` for the duration of
