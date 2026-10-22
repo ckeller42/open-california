@@ -2558,6 +2558,33 @@ def test_api_ble_a_refused_probe_changes_nothing(web_cli):
     assert resps[-1].json() == dict(BLE_IDLE, probing=True)
 
 
+def test_api_ble_idle_min_zero_brings_the_link_back(web_cli):
+    """``{"idle_min":0}`` while the policy holds the link ``off`` switches back to ``hold`` (always
+    connected); with the link already in ``hold`` it changes no mode.
+
+    .. test:: POST /api/ble idle_min 0 restores hold
+       :id: T_FW_BLE_IDLE_ZERO
+       :links: R_FW_BLE_IDLE
+    """
+    _, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"active 1",
+            req("POST", "/api/ble", '{"idle_min":0}'),  # hold already: no call
+            b"now 1000",
+            req("POST", "/api/ble", '{"idle_min":5}'),
+            b"now 601100",
+            b"bxtick",  # -> off
+            req("POST", "/api/ble", '{"idle_min":0}'),
+        ],
+    )
+    assert [ln for ln in other if ln.startswith("CALL session_")] == [
+        "CALL session_set_mode off idle",
+        "CALL session_set_mode hold idle",
+    ]
+
+
 def test_api_ble_idle_policy_is_stored_and_drives_the_link(web_cli):
     """``{"idle_min":5}`` stores the idle policy (kv ``ble_idle``, read back at boot); after 10 min
     without activity the tick turns the link off, probes every 5 min, and a viewer brings hold back.

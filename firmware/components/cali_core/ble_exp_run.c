@@ -66,6 +66,8 @@ int cali_ble_idle_set(unsigned min) {
     uint8_t b = (uint8_t)min;
     if (min > CALI_BI_MAX_MIN || cali_kv_set(CALI_BI_KEY, &b, 1) != 0) return -1;
     cali_bi_set(&s_bi, min, cali_uptime_ms());
+    /* always connected again: a link the policy dropped comes back (an experiment keeps its own mode) */
+    if (!min && !s_bx.on && cali_session_mode() != CALI_BLE_HOLD) (void)cali_session_set_mode(CALI_BLE_HOLD, "idle");
     cali_log("ble-idle: %s", min ? "probe" : "hold");
     cali_diag_evt("ble_idle", "\"probe_min\":%u", min);
     return 0;
