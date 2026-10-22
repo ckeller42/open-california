@@ -16,9 +16,9 @@
  * Link up (on_bonded, or ENC_OK on a reconnect): heartbeat write_heartbeat(counter++) every
  * CODEC_HEARTBEAT_PERIOD_MS starting at CODEC_HEARTBEAT_START (first beat on the next tick), and
  * discover(). DISCOVERED -> subscribe() every CODEC_CHARS entry (a char without NOTIFY is refused
- * by the transport and skipped), then — like calictl.device.read_all — let the heartbeat run for
- * CODEC_HEARTBEAT_WARMUP_MS (the first cali_session_tick at or past DISCOVERED + warm-up starts the
- * reads) and read() every function one at a time in CODEC_CHARS order; each READ (status 0)
+ * by the transport and skipped), then let the heartbeat run for the warm-up (default 0: the first
+ * cali_session_tick after DISCOVERED starts the reads; cali_session_set_warm_ms, R_FW_BLE_WARM) and
+ * read() every function one at a time (session.c READ_FIRST order); each READ (status 0)
  * replaces that function's frame, and so does a NOTIFY at any time: the LAST frame to arrive wins
  * (the app subscribes, then reads, one decoder for both — calictl R_READ_LAST_FRAME_WINS). After
  * the last read the session prints one SNAP (cali_console_snapshot); once the link's first read-all
@@ -92,7 +92,7 @@ int cali_session_mode(void);
 /* One fresh read-all now (connects first when off; the heartbeat runs through its warm-up), then
  * evt probe and back to the mode (off: disconnect). 0 started, -1 no bond / already probing. */
 int cali_session_probe(void);
-/* The heartbeat warm-up before the next read pass (default CODEC_HEARTBEAT_WARMUP_MS; not stored: a
+/* The heartbeat warm-up before the next read pass (default 0 — reads need none, R_FW_BLE_WARM; not stored: a
  * reboot restores it). A measurement knob (R_FW_BLE_WARM, POST /api/ble warm_ms). */
 void cali_session_set_warm_ms(uint32_t ms);
 int cali_session_probing(void);

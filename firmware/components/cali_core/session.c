@@ -45,8 +45,9 @@ static int s_warming;          /* discovered + subscribed, heartbeat running: re
 static uint64_t s_warm_until;
 static int s_reading;          /* read-all in progress: s_read_idx is outstanding */
 static size_t s_read_idx;
-/* the heartbeat warm-up before a read pass; a runtime knob for the warm-up measurement (R_FW_BLE_WARM) */
-static uint32_t s_warm_ms = CODEC_HEARTBEAT_WARMUP_MS;
+/* the heartbeat warm-up before a read pass: 0 since the 2026-10-22 measurement (a read at connect equals
+ * one after the heartbeat ran, R_FW_BLE_WARM); the knob stays for a re-check */
+static uint32_t s_warm_ms = 0;
 static int s_snapped;          /* this link's first read-all completed */
 static int s_rereading;        /* the periodic water re-read is outstanding */
 static uint64_t s_water_next;  /* now_ms of the next water re-read */
@@ -402,7 +403,7 @@ static void on_discovered(int status) {
     }
     for (size_t i = 0; i < CODEC_NCHARS; i++)
         (void)s_t->subscribe(CODEC_CHARS[i].state_short);   /* refused for a char without NOTIFY */
-    /* calictl.device.read_all: the heartbeat runs CODEC_HEARTBEAT_WARMUP_MS before the read pass
+    /* calictl.device.read_all: the heartbeat runs s_warm_ms (default 0; calictl's 2 s) before the read pass
      * ("let the liveness register + sensors refresh"); cali_session_tick starts the reads. */
     s_warming = 1;
     s_warm_until = s_now + s_warm_ms;
