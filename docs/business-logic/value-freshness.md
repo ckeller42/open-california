@@ -52,14 +52,15 @@ bug, a drain, or a sensor fault (`FreshWaterInfoPopUp = 0` = valid).
 
 ## Root cause (live-verified)
 
-The **`00001003` liveness heartbeat** — a +1 4-byte-BE counter — **arms writes and refreshes the
-re-read characteristics**, so a read returns a fresh value instead of a stale latch. (CORRECTED
+The **`00001003` liveness heartbeat** — a +1 4-byte-BE counter — **arms writes**. It does **not**
+refresh the read characteristics (DEVICE 2026-10-22, below): a read returns the unit's last latched
+value, and that value is as fresh as the subsystem's own measurement, heartbeat or not. (CORRECTED
 2026-10-10: it does NOT keep the link alive — buspi held a session >2 min with the heartbeat off, van
 parked, and was not dropped.) (It does NOT itself drive every subsystem's
 measurement — see the water note below, where the heartbeat was DISPROVEN as a water refresh; a
 subsystem re-measures only while it's powered/awake.) It is not only for actuation: the app ticks
-it **continuously (~0.7 s) the entire time it is connected**. A characteristic read returns the
-last latched value; without the heartbeat running, that value decays to a stale reading. (The
+it **continuously (~0.7 s) the entire time it is connected**. Read scheduling and value freshness
+do not depend on it. (The
 earlier "after ~15 s with no heartbeat the van drops the connection" was never measured cleanly and
 did not reproduce on 2026-10-10.)
 
@@ -68,23 +69,25 @@ writes a monotonic +1 counter to handle `0x001a` (= char `1003`) every ~0.76 s; 
 came back fresh (`030b1d…` = 11 L) from a **plain read** — no notification, no request/refresh
 command (`DisplayRefresh` is an unrelated *energy* actuation bit).
 
-**On-device confirmation** (buspi): with a continuous, landing heartbeat the fresh-water read went
-**1 L → 11 L immediately and held for 64 s**, `hb_fail=0`, and **the link never dropped**.
+**The old "confirmation"** (buspi): with a continuous, landing heartbeat the fresh-water read went
+**1 L → 11 L immediately and held for 64 s** — correlation, not cause (the water note below; the
+2026-10-22 measurement).
 
-**CORRECTED 2026-10-22 (DEVICE, ESP `R_FW_BLE_WARM`):** a read needs no heartbeat warm-up. Over 15
-reconnects, a read pass at connect (no heartbeat yet) and one ~12 s later (heartbeat running) were
-byte-identical for every function except the unit clock's seconds. The heartbeat still arms writes;
-for reads the warm-up only costs time (ledger 2026-10-22).
+**CORRECTED 2026-10-22 (DEVICE, ESP `R_FW_BLE_WARM`):** a read needs no heartbeat warm-up. 15
+reconnects were run; 14 had both passes in the parsed SD-log window (one cycle's second pass is
+missing there, so it is not counted). In all 14, a read pass at connect (no heartbeat yet) and one
+~12 s later (heartbeat running) were byte-identical for every function except the unit clock's
+seconds. The heartbeat still arms writes; for reads the warm-up only costs time (ledger 2026-10-22).
 
 ## The fix
 
 `device.read_all` / `device.read` run the existing `_heartbeat(client, stop)` for the duration of
-the read session (a short `HEARTBEAT_WARMUP_S` lets the measurement refresh first), then stop it
-and disconnect — all within the one session under the `serve` BLE lock. This both **freshens the
-values** and **fixes the mid-poll link drops**. Stdlib-only, no new transport. See
-`R_READ_HEARTBEAT_REFRESH` in `calictl/device.py` ← `T_READ_HEARTBEAT_REFRESH`
-(`tests/test_mock_integration.py`); the mock models "reads are stale until a heartbeat arms the
-session."
+the read session (a short `HEARTBEAT_WARMUP_S` first), then stop it and disconnect — all within the
+one session under the `serve` BLE lock. Historically credited with freshening the values; since
+2026-10-22 known not to (the warm-up is harmless but unneeded for reads; the ESP firmware sets
+its warm-up to 0). `R_READ_HEARTBEAT_REFRESH` in `calictl/device.py` ← `T_READ_HEARTBEAT_REFRESH`
+(`tests/test_mock_integration.py`) and the mock's "reads are stale until a heartbeat arms the
+session" model still encode the old belief — the real unit does not behave that way.
 
 ## The stale-latch guard on the ESP satellite (2026-10-09)
 
