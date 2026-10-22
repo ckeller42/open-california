@@ -25,6 +25,13 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
   padding-top: calc(.9rem + env(safe-area-inset-top));
   padding-left: calc(1rem + env(safe-area-inset-left));
   padding-right: calc(1rem + env(safe-area-inset-right)); }
+/* iOS 26+ home-screen app: the system blurs/fades a band just below the status bar (its scroll edge
+   effect) over our content; the title sat inside it (owner screenshot 2026-10-22, iPhone 17 Pro Max).
+   Push the header's content below that band — installed app only (a browser tab is unaffected).
+   ponytail: a fixed +1rem guess, tune it if the band reaches further on another iOS version. */
+@media (display-mode: standalone) {
+  #topbar { padding-top: calc(1.9rem + env(safe-area-inset-top)); }
+}
 #topbar h1 { font-size: 1.15rem; font-weight: 650; margin: 0; }
 /* the heading is focused programmatically on navigation (a11y); don't flash a ring for that,
    but keep it for genuine keyboard focus. */
@@ -164,6 +171,9 @@ label.row { cursor: pointer; }
   background: var(--bg); color: inherit; cursor: pointer; }
 .btn.danger { color: var(--danger); }   /* Device status: Unpair… */
 #pairing-card { scroll-margin-top: calc(env(safe-area-inset-top) + 4.5rem); }   /* clear the sticky topbar */
+@media (display-mode: standalone) {   /* the taller standalone topbar (see #topbar above); must follow the base rule */
+  #pairing-card { scroll-margin-top: calc(env(safe-area-inset-top) + 5.5rem); }
+}
 .btn:disabled { opacity: .5; cursor: not-allowed; }   /* unavailable (read-only / state-blocked) */
 .btn.pending { cursor: progress; }                     /* in-flight write */
 .warn { color: var(--error); font-size: .85rem; padding: .8rem 0 0; }
