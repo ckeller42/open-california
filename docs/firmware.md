@@ -75,9 +75,9 @@ Identical on the host build (stdin/stdout) and the device (UART/USB-Serial-JTAG 
   watch item below).
 
 The session's read-all follows `calictl.device.read_all`: subscribe every notifying {term}`state char <GATT characteristic>`,
-let the 1003 heartbeat run `CODEC_HEARTBEAT_WARMUP_MS` (generated from
-`calictl.device.HEARTBEAT_WARMUP_S`'s default, 2 s) so the liveness registers and sensors refresh,
-then read every function — the home screen's first (energy, water, cooler, camping mode, vehicle,
+start the 1003 heartbeat and — unlike calictl's 2 s `HEARTBEAT_WARMUP_S` — read at once (warm-up 0
+since 2026-10-22: a read at connect equals one after the heartbeat ran, `R_FW_BLE_WARM`),
+reading every function — the home screen's first (energy, water, cooler, camping mode, vehicle,
 lighting, air heater, general: `session.c` `READ_FIRST`, so a GUI opened on a dropped link fills in its main
 values first, `R_FW_BLE_IDLE`), then the rest in `CODEC_CHARS` order; each read's frame shows in
 `/api/state` as it arrives. A read completion and a notification both replace the
@@ -963,10 +963,11 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    :status: open
 
    ``POST /api/ble {"warm_ms":N}`` (0-5000) sets how long the 1003 heartbeat runs before the next
-   read pass (``cali_session_set_warm_ms``; default ``CODEC_HEARTBEAT_WARMUP_MS`` = 2000). Not stored:
-   a reboot restores the default. It exists to measure whether a read without the warm-up returns
-   stale values (a read at connect vs a read after the heartbeat ran, per function), which decides
-   whether a page opened on a dropped link (``R_FW_BLE_IDLE``) can skip ~2 s.
+   read pass (``cali_session_set_warm_ms``; default **0**). Not stored: a reboot restores the
+   default. Measured on the van 2026-10-22 (15 reconnects, 14 comparable): a read pass at connect
+   and one after the heartbeat ran were byte-identical for every function but the unit clock's
+   seconds, so the firmware reads at once (the old ``CODEC_HEARTBEAT_WARMUP_MS`` = 2000 cost
+   ~0.9 s on a page opened on a dropped link, ``R_FW_BLE_IDLE``); the knob stays for a re-check.
 ```
 
 **Open item — the unit's advert match ({term}`Sleep indicator`, `R_FW_BLE_EXP`), not yet checked on the van.** `ble_nimble.c`

@@ -256,33 +256,34 @@ def test_notify_replaces_the_whole_frame_and_snaps_only_after_read_all(fake):
 
 
 def test_read_all_waits_the_heartbeat_warm_up(fake):
-    """Like ``calictl.device.read_all``: after the subscribes the heartbeat runs for
-    ``CODEC_HEARTBEAT_WARMUP_MS`` before the first read — no read on any earlier tick.
+    """With a warm-up set (``warm 2000``, calictl's ``read_all`` default) the heartbeat runs that long
+    after the subscribes before the first read — no read on any earlier tick. The firmware default is
+    0 (``T_FW_BLE_WARM``).
 
     .. test:: The firmware read-all waits the heartbeat warm-up
        :id: T_FW_SESSION_WARMUP
        :links: R_FW_SESSION
     """
     warming = ["tick %d" % t for t in range(100, WARM, 100)]
-    out = run(fake, *PAIRED, "DISCOVERED 0", *warming)
+    out = run(fake, *PAIRED, "warm %d" % WARM, "DISCOVERED 0", *warming)
     assert not calls(after(out, "CALL discover"), "read"), out  # still warming up
     beats = calls(out, "write_heartbeat")
     assert len(beats) >= WARM // PERIOD  # the liveness is running
-    out = run(fake, *PAIRED, "DISCOVERED 0", *warming, "tick %d" % WARM)
+    out = run(fake, *PAIRED, "warm %d" % WARM, "DISCOVERED 0", *warming, "tick %d" % WARM)
     rest = after(out, "CALL subscribe %d" % CHARS[-1])
     first_read = rest.index("CALL read %d" % READS[0])
     assert calls(rest[:first_read], "write_heartbeat") == beats  # beats, then the reads
 
 
 def test_warm_ms_knob_sets_the_read_pass_warm_up(fake):
-    """``cali_session_set_warm_ms(0)`` (``POST /api/ble {"warm_ms":0}``) starts the read pass on the
-    first tick after the subscribes instead of after ``CODEC_HEARTBEAT_WARMUP_MS``.
+    """The default warm-up is 0 (measured unneeded 2026-10-22): the read pass starts on the first tick
+    after the subscribes; ``cali_session_set_warm_ms`` (``POST /api/ble {"warm_ms":N}``) sets another.
 
     .. test:: The warm-up knob shortens the read pass's warm-up
        :id: T_FW_BLE_WARM
        :links: R_FW_BLE_WARM
     """
-    out = run(fake, *PAIRED, "warm 0", "DISCOVERED 0", "tick 100")
+    out = run(fake, *PAIRED, "DISCOVERED 0", "tick 100")  # the default
     assert calls(after(out, "CALL subscribe %d" % CHARS[-1]), "read")[0] == "CALL read %d" % READS[0]
     out = run(fake, *PAIRED, "warm 500", "DISCOVERED 0", "tick 400")
     assert not calls(after(out, "CALL subscribe %d" % CHARS[-1]), "read")  # still warming up
