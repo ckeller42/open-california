@@ -77,7 +77,10 @@ Identical on the host build (stdin/stdout) and the device (UART/USB-Serial-JTAG 
 The session's read-all follows `calictl.device.read_all`: subscribe every notifying {term}`state char <GATT characteristic>`,
 let the 1003 heartbeat run `CODEC_HEARTBEAT_WARMUP_MS` (generated from
 `calictl.device.HEARTBEAT_WARMUP_S`'s default, 2 s) so the liveness registers and sensors refresh,
-then read every function in order. A read completion and a notification both replace the
+then read every function — the home screen's first (energy, water, cooler, camping mode, vehicle,
+lighting, air heater, general: `session.c` `READ_FIRST`, so a GUI opened on a dropped link fills in its main
+values first, `R_FW_BLE_IDLE`), then the rest in `CODEC_CHARS` order; each read's frame shows in
+`/api/state` as it arrives. A read completion and a notification both replace the
 function's frame, so the **last frame to arrive wins** — the app's order (it subscribes, then
 reads, and one decoder takes both; decompile 2026-10-07, calictl `R_READ_LAST_FRAME_WINS`). The
 old "a notification beats the read latch" rule (the session skipped the read of a pushed function)
@@ -914,7 +917,7 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    the night experiment: inside the window (default 22-06, Europe/Berlin local time from SNTP or the
    unit's clock) it cycles the modes ``hold -> quiet -> off -> hold …``, each ``phase_min`` (1-720)
    long, with a probe at the end of every phase; outside the window the mode is ``hold``. Without a
-   wall clock it is refused (``no_time``). A viewer (``GET /api/state``), a mode change from outside
+   wall clock it is refused (``no_time``). A viewer (``GET /api/state``, or the page load ``GET /`` / ``/app``), a mode change from outside
    (a control command in ``quiet`` or ``off``, ``ble mode``, ``/api/ble``, pairing — also while the
    phase-end probe runs) or, on an up link, the van's ignition (terminal 15, ``cali_ac_ignition``)
    ends the running phase as ``aborted`` and returns to ``hold``; the cycle then holds 10 min
@@ -943,7 +946,8 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    ``POST /api/ble {"idle_min":N}`` (0-60, stored in NVS key ``ble_idle``, read at boot; missing = 0;
    the Satellite settings' *Connection* select) sets how the session idles. ``0`` (the default) =
    ``hold``: the link stays up. ``N`` > 0: the link is held while someone is active and dropped
-   otherwise — activity is a viewer (``GET /api/state``: the web UI polls it every 2 s), a mode the
+   otherwise — activity is a viewer (the page load ``GET /`` or ``/app``, so the reconnect starts while the
+   page loads; ``GET /api/state``: the web UI polls it every 2 s; not ``/api/ble`` or ``/api/log``), a mode the
    policy did not set (a control command in ``off`` switches to ``hold``, ``ble mode``, ``/api/ble``),
    the van's ignition (terminal 15) on an up link (also during a probe), or a new setting; after
    ``CALI_BX_IDLE_MS`` (10 min) without one the mode goes ``off`` (``evt ble_mode`` ``why`` ``idle``),

@@ -85,7 +85,7 @@ void cali_ble_exp_init(void);   /* owner task, next to cali_pw_init: sets cali_r
 /* 0 started, -1 no wall clock (cali_time_ts NONE), -2 bad args (phase 1..720 min, hours 0..23). */
 int cali_ble_exp_start(unsigned phase_min, int from_h, int to_h);
 void cali_ble_exp_stop(void);                 /* no-op when off; else back to hold ("exp_off") */
-void cali_ble_exp_activity(uint64_t now_ms);  /* a viewer (GET /api/state): cut the phase, hold 10 min */
+void cali_ble_exp_activity(uint64_t now_ms);  /* a viewer (GET /, /app, /api/state): cut the phase, hold 10 min */
 #define CALI_BI_KEY "ble_idle"   /* kv, 1 byte: the idle policy's probe_min 0..CALI_BI_MAX_MIN; missing = 0 (hold) */
 unsigned cali_ble_idle_min(void);
 /* Store + apply the idle policy (0 = hold); 0 ok, -1 out of range or the store failed (nothing changed). */

@@ -360,11 +360,29 @@ static void link_up(void) {
     }
 }
 
+/* The read-all order: the home screen's functions first, so a GUI opened on a dropped link (the idle
+ * policy, R_FW_BLE_IDLE) fills in its main values first; then the rest in CODEC_CHARS order. */
+static const char *const READ_FIRST[] = {"energy", "water", "cooler", "campingmode", "vehicle", "lighting", "airheater", "general"};
+static size_t s_order[CODEC_NCHARS];   /* read pass position -> CODEC_CHARS index */
+static int s_order_built;
+
+static void build_order(void) {
+    size_t n = 0;
+    for (size_t f = 0; f < sizeof READ_FIRST / sizeof READ_FIRST[0]; f++)
+        for (size_t i = 0; i < CODEC_NCHARS; i++)
+            if (strcmp(CODEC_CHARS[i].function, READ_FIRST[f]) == 0) s_order[n++] = i;
+    for (size_t i = 0; i < CODEC_NCHARS; i++) {
+        size_t k = 0;
+        while (k < n && s_order[k] != i) k++;
+        if (k == n) s_order[n++] = i;
+    }
+}
+
 static void read_next(void) {
     while (s_read_idx < CODEC_NCHARS) {
-        int rc = s_t->read(CODEC_CHARS[s_read_idx].state_short);
+        int rc = s_t->read(CODEC_CHARS[s_order[s_read_idx]].state_short);
         if (rc == 0) return;                          /* READ comes back */
-        cali_log("session: read %s failed %d", CODEC_CHARS[s_read_idx].function, rc);
+        cali_log("session: read %s failed %d", CODEC_CHARS[s_order[s_read_idx]].function, rc);
         s_read_idx++;
     }
     s_reading = 0;
@@ -389,6 +407,10 @@ static void on_discovered(int status) {
 }
 
 static void start_reads(void) {
+    if (!s_order_built) {
+        build_order();
+        s_order_built = 1;
+    }
     s_warming = 0;
     s_reading = 1;
     s_read_idx = 0;
@@ -408,11 +430,11 @@ static void on_read(const cali_tevent_t *e) {
         }
         return;
     }
-    if (!s_reading || e->char_short != CODEC_CHARS[s_read_idx].state_short) return;
+    if (!s_reading || e->char_short != CODEC_CHARS[s_order[s_read_idx]].state_short) return;
     if (e->status == 0) {
-        store(s_read_idx, e->data, e->len);
+        store(s_order[s_read_idx], e->data, e->len);
     } else {
-        cali_log("session: read %s status %d", CODEC_CHARS[s_read_idx].function, e->status);
+        cali_log("session: read %s status %d", CODEC_CHARS[s_order[s_read_idx]].function, e->status);
     }
     s_read_idx++;
     read_next();

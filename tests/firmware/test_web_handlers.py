@@ -2621,3 +2621,28 @@ def test_api_ble_idle_policy_is_stored_and_drives_the_link(web_cli):
     ]
     assert resps[-2].json() == dict(BLE_IDLE, mode="off", probing=True, idle_min=5)
     assert resps[-1].json() == dict(BLE_IDLE, mode="off", probing=True)
+
+
+def test_app_shell_load_is_a_viewer(web_cli):
+    """Loading the web UI (``GET /`` or ``/app``) counts as a viewer like ``GET /api/state``: the idle
+    policy reconnects while the page still loads, before its first state poll (R_FW_BLE_IDLE).
+    ``/api/ble`` and ``/api/log`` (buspi's gap-fill) are not viewers.
+
+    .. test:: Loading the app shell holds the link
+       :id: T_FW_BLE_IDLE_APP_SHELL
+       :links: R_FW_BLE_IDLE
+    """
+    steps = [
+        *(s.encode() for s in STATION),
+        b"active 1",
+        b"now 1000",
+        req("POST", "/api/ble", '{"idle_min":5}'),
+    ]
+    steps += [b"now 601100", b"bxtick"]  # idle -> off
+    for path in ("/api/ble", "/api/log?since=0&max=1", "/", "/app"):
+        steps += [req("GET", path), b"bxtick"]
+    _, other = drive(web_cli, steps)
+    assert [ln for ln in other if ln.startswith("CALL session_")] == [
+        "CALL session_set_mode off idle",
+        "CALL session_set_mode hold idle",  # after GET /
+    ]
