@@ -45,6 +45,8 @@ static int s_warming;          /* discovered + subscribed, heartbeat running: re
 static uint64_t s_warm_until;
 static int s_reading;          /* read-all in progress: s_read_idx is outstanding */
 static size_t s_read_idx;
+/* the heartbeat warm-up before a read pass; a runtime knob for the warm-up measurement (R_FW_BLE_WARM) */
+static uint32_t s_warm_ms = CODEC_HEARTBEAT_WARMUP_MS;
 static int s_snapped;          /* this link's first read-all completed */
 static int s_rereading;        /* the periodic water re-read is outstanding */
 static uint64_t s_water_next;  /* now_ms of the next water re-read */
@@ -403,7 +405,7 @@ static void on_discovered(int status) {
     /* calictl.device.read_all: the heartbeat runs CODEC_HEARTBEAT_WARMUP_MS before the read pass
      * ("let the liveness register + sensors refresh"); cali_session_tick starts the reads. */
     s_warming = 1;
-    s_warm_until = s_now + CODEC_HEARTBEAT_WARMUP_MS;
+    s_warm_until = s_now + s_warm_ms;
 }
 
 static void start_reads(void) {
@@ -634,7 +636,7 @@ int cali_session_probe(void) {
         connect_now();                                   /* link_up -> discover -> warm-up -> read-all */
     } else if (s_link == LINK_UP && s_snapped && !s_reading && !s_warming) {
         s_warming = 1;
-        s_warm_until = s_now + CODEC_HEARTBEAT_WARMUP_MS;   /* the tick then runs start_reads() */
+        s_warm_until = s_now + s_warm_ms;   /* the tick then runs start_reads() */
     }                                                    /* else: the read-all in flight is the probe */
     return 0;
 }
@@ -651,6 +653,8 @@ uint64_t cali_session_water_good_ms(void) { return s_wg_at; }
 int cali_session_active(void) { return s_active; }
 
 int cali_session_link_up(void) { return s_link == LINK_UP; }
+
+void cali_session_set_warm_ms(uint32_t ms) { s_warm_ms = ms; }
 
 int cali_session_ready(void) {
     /* hold only: a write needs the 1003 heartbeat running CODEC_ARM_DELAY_MS before it (quiet has none) */

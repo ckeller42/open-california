@@ -92,6 +92,9 @@ int cali_session_mode(void);
 /* One fresh read-all now (connects first when off; the heartbeat runs through its warm-up), then
  * evt probe and back to the mode (off: disconnect). 0 started, -1 no bond / already probing. */
 int cali_session_probe(void);
+/* The heartbeat warm-up before the next read pass (default CODEC_HEARTBEAT_WARMUP_MS; not stored: a
+ * reboot restores it). A measurement knob (R_FW_BLE_WARM, POST /api/ble warm_ms). */
+void cali_session_set_warm_ms(uint32_t ms);
 int cali_session_probing(void);
 const char *cali_session_mode_name(int mode);   /* "hold"/"quiet"/"off", "?" otherwise */
 

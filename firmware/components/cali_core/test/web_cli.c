@@ -187,6 +187,7 @@ int cali_session_set_mode(int m, const char *why) {
     s_ble_mode = m;
     return 0;
 }
+void cali_session_set_warm_ms(uint32_t ms) { printf("CALL session_set_warm_ms %u\n", (unsigned)ms); }
 int cali_session_probe(void) {
     printf("CALL session_probe\n");
     if (s_probing) return -1;

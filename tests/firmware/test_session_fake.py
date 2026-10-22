@@ -274,6 +274,20 @@ def test_read_all_waits_the_heartbeat_warm_up(fake):
     assert calls(rest[:first_read], "write_heartbeat") == beats  # beats, then the reads
 
 
+def test_warm_ms_knob_sets_the_read_pass_warm_up(fake):
+    """``cali_session_set_warm_ms(0)`` (``POST /api/ble {"warm_ms":0}``) starts the read pass on the
+    first tick after the subscribes instead of after ``CODEC_HEARTBEAT_WARMUP_MS``.
+
+    .. test:: The warm-up knob shortens the read pass's warm-up
+       :id: T_FW_BLE_WARM
+       :links: R_FW_BLE_WARM
+    """
+    out = run(fake, *PAIRED, "warm 0", "DISCOVERED 0", "tick 100")
+    assert calls(after(out, "CALL subscribe %d" % CHARS[-1]), "read")[0] == "CALL read %d" % READS[0]
+    out = run(fake, *PAIRED, "warm 500", "DISCOVERED 0", "tick 400")
+    assert not calls(after(out, "CALL subscribe %d" % CHARS[-1]), "read")  # still warming up
+
+
 STALE_WATER = "03011d010016"  # FreshWaterLevel 1: a parked latch pushed on the subscribe
 LIVE_WATER = "03111d010016"  # FreshWaterLevel 17: what the read that follows returns
 REREAD = int(

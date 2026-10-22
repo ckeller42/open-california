@@ -231,7 +231,7 @@ with them on any build, a dirty local one included. A `GET` whose `If-None-Match
 | `GET /api/sensors` | `R_FW_SENSORS` ([External sensors](#external-sensors-experimental-r_fw_sensors)), every WiFi mode: 200 `{"configured":[{id,type,alias,last_seen_s,value,has_key}],"seen":[{id,type,model,rssi}],"scan":"ok"\|"paused"}` (`value` = the fields object while the last reading is < 10 min old, else `null`; `last_seen_s` `null` before the first reading) and a kick (a window soon). 404 `{"ok":false,"error":"disabled"}` while `exp_sensors` is off. |
 | `POST /api/sensors` | Exactly one of `{"add":<id>,"alias"?:"…","key"?:"<32 hex>"}`, `{"remove":<id>}`, `{"id":<id>,"alias":"…"}` (rename) — keys in any order, each once, ids 0–65535 -> 200 the `GET` body. 400 `bad_json` (not one of those shapes), `bad_alias` (not `[a-z0-9_-]{1,16}`, taken, or omitted for a type already configured), `bad_key` (not 32 hex digits), `key_mismatch`, `unknown_id` (not seen in the last 10 min for `add`; not configured for `remove`/rename), `full` (16); 500 `store`. Every WiFi mode (the setup hotspot too); 404 `disabled` while the flag is off. |
 | `GET /api/ble` | 200 the `device.ble` object `{"mode","probing","exp","idle_min","unit_adv_seen_ms_ago"}` (`R_FW_BLE_EXP`, `R_FW_BLE_IDLE`, [BLE modes](#ble-modes-r_fw_ble_mode)). |
-| `POST /api/ble` | any of `{"mode":"hold"\|"quiet"\|"off"}`, `{"probe":true}`, `{"exp_min":1..720,"from"?:0..23,"to"?:0..23}` (the night experiment; window default 22-06 Berlin time), `{"exp_min":0}` (stop it, back to `hold`), `{"idle_min":0..60}` (the idle policy, stored in NVS: `R_FW_BLE_IDLE`); keys combinable, each once -> 200 the new `device.ble`. Station mode only (403 `setup_mode`), 400 `bad_json` (an unknown or repeated key, a wrong type, none of `mode`/`probe`/`exp_min`/`idle_min`), 400 `bad_value` (another mode, a number out of range), 409 `no_time` (`exp_min` without a wall clock: no SNTP and no unit clock; nothing applied), 409 `busy` (a probe already runs or no bond), 500 `store` (`idle_min` not stored). |
+| `POST /api/ble` | any of `{"mode":"hold"\|"quiet"\|"off"}`, `{"probe":true}`, `{"exp_min":1..720,"from"?:0..23,"to"?:0..23}` (the night experiment; window default 22-06 Berlin time), `{"exp_min":0}` (stop it, back to `hold`), `{"idle_min":0..60}` (the idle policy, stored in NVS: `R_FW_BLE_IDLE`), `{"warm_ms":0..5000}` (the read pass's heartbeat warm-up, not stored: `R_FW_BLE_WARM`); keys combinable, each once -> 200 the new `device.ble`. Station mode only (403 `setup_mode`), 400 `bad_json` (an unknown or repeated key, a wrong type, none of `mode`/`probe`/`exp_min`/`idle_min`/`warm_ms`), 400 `bad_value` (another mode, a number out of range), 409 `no_time` (`exp_min` without a wall clock: no SNTP and no unit clock; nothing applied), 409 `busy` (a probe already runs or no bond), 500 `store` (`idle_min` not stored). |
 | other method on `/api/state`, `/api/wifi`, `/api/command`, `/api/ota`, `/api/auto_camper`, `/api/pi_wake`, `/api/pi_halt`, `/api/ble` (GET/POST only), `/api/pi_wake_setting`, `/api/display`, `/api/ux`, `/api/ux_setting`, `/api/experimental`, `/api/sensors` or `/api/pairing` | 405 `{"ok":false,"error":"method"}` |
 | an OS captive-portal probe path (setup mode) | 302 `Location: http://192.168.4.1/` — `/generate_204`, `/gen_204` (Android), `/hotspot-detect.html`, `/library/test/success.html` (Apple), `/connecttest.txt`, `/ncsi.txt` (Windows), `/canonical.html`, `/success.txt` (Firefox) |
 | any other path | setup mode: 302 `Location: /`; station mode: 404 |
@@ -957,6 +957,16 @@ journal needed 2 tries over ~1.5 min — and the ESP's link through the crank).
    ``hold`` the Pi wake and an auto-camper restore see the ignition only through a probe (``R_FW_BLE_MODE``),
    so they react up to ``N`` minutes late; a GUI opened while ``off`` shows the last probe's data until
    the reconnect (≈1 s) and the read-all (≈6 s) are done. Motivation: ``DECISIONS.md`` 2026-10-22.
+
+.. req:: BLE warm-up knob (measurement)
+   :id: R_FW_BLE_WARM
+   :status: open
+
+   ``POST /api/ble {"warm_ms":N}`` (0-5000) sets how long the 1003 heartbeat runs before the next
+   read pass (``cali_session_set_warm_ms``; default ``CODEC_HEARTBEAT_WARMUP_MS`` = 2000). Not stored:
+   a reboot restores the default. It exists to measure whether a read without the warm-up returns
+   stale values (a read at connect vs a read after the heartbeat ran, per function), which decides
+   whether a page opened on a dropped link (``R_FW_BLE_IDLE``) can skip ~2 s.
 ```
 
 **Open item — the unit's advert match ({term}`Sleep indicator`, `R_FW_BLE_EXP`), not yet checked on the van.** `ble_nimble.c`
