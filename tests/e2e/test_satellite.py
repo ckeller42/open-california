@@ -699,9 +699,48 @@ def test_firmware_answers_show_a_clear_message(stub, status, reply, locale, text
         _open(pg, "Kühlbox" if locale == "de-DE" else "Cooler")
         pg.get_by_role("switch", name="Refrigerator box").click()
         _wait_commands(pg, stub)
-        expect(pg.locator(".toast")).to_have_text(text)
+        # not_connected: the page retries for CMD_LINK_WAIT_MS (25 s) before it gives up
+        expect(pg.locator(".toast")).to_have_text(text, timeout=35000 if status == 503 else 5000)
         browser.close()
     assert not errors, errors
+
+
+def test_a_command_waits_for_the_link_instead_of_failing(stub):
+    """Camping off: the unit ends the link every 30 s, so a tap often lands while the satellite has
+    no armed link (503 not_connected). The page retries every 2 s (each try brings the link up) and
+    shows "Connecting…" meanwhile — not an error after one try."""
+
+    def link_comes_up(body):
+        if len(stub.commands) >= 3:
+            stub.command_status, stub.command_reply = 200, None
+
+    stub.command_status, stub.command_reply = 503, {"ok": False, "error": "not_connected"}
+    stub.on_command = link_comes_up
+    # the 503s are console errors ("Failed to load resource") by design: gate on page errors only
+    with sync_api.sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page()
+        errors = []
+        pg.on("pageerror", lambda e: errors.append(str(e)))
+        pg.goto(stub.base)
+        pg.wait_for_function(LIVE)
+        _open(pg, "Cooler")
+        pg.get_by_role("switch", name="Refrigerator box").click()
+        expect(pg.locator("#status")).to_have_text("Connecting…")
+        _wait_commands(pg, stub, 3)
+        expect(pg.locator(".toast")).to_be_visible(timeout=10000)  # after the 5 s state confirm
+        assert "Not connected" not in pg.locator(".toast").inner_text()
+        browser.close()
+    assert not errors, errors
+    assert len(stub.commands) == 3
+
+
+def test_fresh_data_with_the_link_down_is_not_live(stub, error_gated_page):
+    """The pill says "live" only while the satellite holds the unit link; fresh data with the link
+    down (between the unit's 30 s drops, camping off) shows connecting."""
+    stub.fixtures["satellite"]["/api/state"]["device"]["link"]["up"] = False
+    with error_gated_page(stub.base) as pg:
+        expect(pg.locator("#status")).to_have_text("connecting…")
 
 
 def _engine_or_skip(engine):

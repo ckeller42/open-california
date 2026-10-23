@@ -1498,9 +1498,16 @@ The backoff resets to 1 s only when a lost link had held for `CALI_SESSION_STABL
 at link-up. With the camping master off the unit ends every link ~1–31 s after it comes up (87
 drops in 30 min, 2026-10-22, see the evidence ledger); a reset at link-up kept those reconnects at
 1 s. Now each short link doubles the delay up to 60 s (`T_FW_SESSION_SHORT_LINK_BACKOFF`). A command
-still reconnects at once (`cali_session_connect_now` makes a pending reconnect due). A page open in
-`hold` waits out the delay (≤ 60 s); one that moves an idle-policy session from `off` to `hold`
-connects at once (the mode change clears the pending reconnect and resets the backoff).
+still reconnects as soon as it may (`cali_session_connect_now` makes a pending reconnect due). A page
+open in `hold` waits out the delay (≤ 60 s); one that moves an idle-policy session from `off` to
+`hold` connects at once (the mode change clears the pending reconnect and resets the backoff).
+
+No reconnect, backoff or a command's nudge, comes sooner than `CALI_SESSION_UNIT_COOLDOWN_MS` (7 s)
+after a link was lost (`T_FW_SESSION_UNIT_COOLDOWN`). With camping off the unit cuts every link that
+starts < 6 s after it ended the previous one, ~1.2 s in: 51 of 51 such links on 2026-10-22/23, 0 of
+47 later ones — the "~1 s" drops above. A command on a down link still answers `503 not_connected`;
+the web UI retries it every 2 s for up to 25 s (`CMD_LINK_WAIT_MS`) showing "Connecting…", and its
+status pill says "live" only while the satellite holds the link (`device.link.up`).
 
 The ~30.5 s drop with camping off is the unit's own timer, not a request the satellite leaves
 unanswered (2026-10-23, `btmon` on buspi's own BlueZ link, the satellite in `off`): with camping off

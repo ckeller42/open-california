@@ -60,6 +60,10 @@ extern "C" {
  * the unit ends each link ~1-31 s after it comes up (2026-10-22: 87 drops in 30 min); a reset at
  * link-up kept those reconnects at 1 s. */
 #define CALI_SESSION_STABLE_MS 60000u
+/* No reconnect sooner than this after a link was lost, backoff or a command's nudge alike. With
+ * camping off the unit cuts every link that starts < 6 s after it ended the previous one, ~1.2 s in
+ * (2026-10-22/23: 51 of 51 such links; 0 of 47 later ones). */
+#define CALI_SESSION_UNIT_COOLDOWN_MS 7000u
 #define CALI_SESSION_ENC_TIMEOUT_MS 15000u
 /* Twice the NimBLE transport's own 10 s connect timeout: this watchdog only fires when the
  * transport's verdict (CONNECTED / CONNECT_FAIL) got lost, never races it. */

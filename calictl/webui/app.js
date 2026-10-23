@@ -1044,6 +1044,9 @@ const CMD_ERRORS = {
   busy: "The satellite is still sending the previous command — try again in a moment",
   not_connected: "Not connected to the camper unit yet — try again in a few seconds",
 };
+// How long a command waits for the satellite's link (not_connected) before it gives up: the 7 s
+// reconnect cooldown + read-all (~7 s) + heartbeat arming (3 s), with margin.
+const CMD_LINK_WAIT_MS = 25000;
 
 /**
  * @param {string} msg
@@ -1088,6 +1091,8 @@ function linkState() {
   // a normal blip's gap is ~2 s)
   if (lastAnswerAt == null || (m && m.restored)
       || (waitingSince != null && waitingSince - lastAnswerAt > UNREACHABLE_MS)) return "connecting";
+  // satellite: fresh data but the unit link is down (camping off: the unit ends it every 30 s)
+  if (m && m.online && m.sat && !m.sat.link_up) return "connecting";
   if (!m || m.online) return "live";
   // no data ever and no unit paired: the cause is "not paired", not a sleeping van (M6)
   return m.last_seen ? "asleep" : m.paired === false ? "unpaired" : "never";
@@ -1266,14 +1271,23 @@ async function processQueue() {
   /** @type {Record<string, any>} */
   const body = { function: inflight.fn, what: inflight.what, value: inflight.value, confirm: true };
   if (inflight.fn === "lighting" && inflight.what === "wakeup") body.local_now = localNow();
-  try {
-    res = await api("/api/command", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    res = { ok: false, error: String(e) };
+  const until = Date.now() + CMD_LINK_WAIT_MS;
+  for (;;) {
+    try {
+      res = await api("/api/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      res = { ok: false, error: String(e) };
+    }
+    // The satellite answers not_connected while its link is down (each try also brings the link up):
+    // retry until it is ready, unless a newer value for this control is already queued.
+    const key = inflight.key;
+    if (!(res && res.error === "not_connected") || Date.now() >= until || queue.some((c) => c.key === key)) break;
+    setStatus("Connecting…", "busy");
+    await new Promise((r) => setTimeout(r, 2000));
   }
   const done = inflight;
   inflight = null;
