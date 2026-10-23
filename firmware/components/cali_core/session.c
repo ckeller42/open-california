@@ -151,21 +151,25 @@ static int index_of(uint16_t short_id) {
 }
 
 /* Fresh/waste tank LEVEL from a raw water frame. Returns 1 if FreshWaterLevel is present (sets
- * *fresh); has_waste/waste report WasteWaterLevel. Comparing the raw Level fields is equivalent to
+ * *fresh); has_waste/waste report WasteWaterLevel; *empty = the unit's measured-empty alarm
+ * (FreshWaterInfoPopUp 5, freshness.measured_empty). Comparing the raw Level fields is equivalent to
  * freshness.py's liters comparison here — the unit is stable and Level maps monotonically to
  * liters, and the guard only ever asks "did fresh drop?" / "did grey move?". */
 static int water_levels(const uint8_t *frame, size_t len, uint32_t *fresh, int *has_waste,
-                        uint32_t *waste) {
+                        uint32_t *waste, int *empty) {
     static codec_kv_t kv[CODEC_KV_MAX];   /* static: keep the 1 KB off the 8 KB host-task stack */
     const codec_func_t *wf = codec_func_by_name("water");
     int gotf = 0;
     *has_waste = 0;
+    *empty = 0;
     if (!wf) return 0;
     int n = codec_decode(wf, frame, len, kv);
     for (int k = 0; k < n; k++) {
         if (strcmp(kv[k].name, "FreshWaterLevel") == 0) {
             *fresh = kv[k].value;
             gotf = 1;
+        } else if (strcmp(kv[k].name, "FreshWaterInfoPopUp") == 0) {
+            *empty = kv[k].value == 5;
         } else if (strcmp(kv[k].name, "WasteWaterLevel") == 0) {
             *waste = kv[k].value;
             *has_waste = 1;
@@ -182,10 +186,11 @@ static fresh_pending_t s_wpend;
  * (the <= 1 L not-measuring latch + the 5 s measurement-ramp debounce), on the session clock. */
 static int water_settle(const uint8_t *data, size_t len) {
     uint32_t nf = 0, ng = 0, gf = 0, gg = 0;
-    int hng = 0, hgg = 0;
+    int hng = 0, hgg = 0, empty = 0, gempty = 0;
     uint8_t have = 0;
-    if (water_levels(data, len, &nf, &hng, &ng)) have |= FRESH_HAVE_NF;
-    if (s_wg.have && water_levels(s_wg.frame, s_wg.len, &gf, &hgg, &gg)) have |= FRESH_HAVE_PF;
+    if (water_levels(data, len, &nf, &hng, &ng, &empty)) have |= FRESH_HAVE_NF;
+    if (empty) have |= FRESH_NEW_EMPTY;
+    if (s_wg.have && water_levels(s_wg.frame, s_wg.len, &gf, &hgg, &gg, &gempty)) have |= FRESH_HAVE_PF;
     if (hng) have |= FRESH_HAVE_NG;
     if (hgg) have |= FRESH_HAVE_PG;
     return freshness_settle((int32_t)nf, (int32_t)gf, (int32_t)ng, (int32_t)gg, have, s_now,

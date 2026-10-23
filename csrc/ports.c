@@ -3,14 +3,15 @@
 
 /* Exact ladder of calictl/freshness.py:implausible_water_drop (fixed 2026-08-16:
  * grey compares with ==, not <= — any grey movement, rise OR fall, is live;
- * 2026-10-10: only a drop to <= FRESH_LATCH_MAX_L is a latch candidate). */
+ * 2026-10-10: only a drop to <= FRESH_LATCH_MAX_L is a latch candidate;
+ * 2026-10-23: a rise to it too, and never a frame with the measured-empty alarm). */
 int freshness_implausible_drop(int32_t nf, int32_t pf, int32_t ng, int32_t pg,
                                uint8_t have)
 {
-    if (!(have & FRESH_HAVE_NF) || !(have & FRESH_HAVE_PF))
-        return 0;                    /* missing fresh -> can't judge */
-    if (nf >= pf || nf > FRESH_LATCH_MAX_L)
-        return 0;                    /* not a drop, or not down to the latch -> live */
+    if (!(have & FRESH_HAVE_NF) || !(have & FRESH_HAVE_PF) || (have & FRESH_NEW_EMPTY))
+        return 0;                    /* missing fresh -> can't judge; the unit's empty alarm -> live */
+    if (nf == pf || nf > FRESH_LATCH_MAX_L)
+        return 0;                    /* unchanged, or not at the latch value -> live */
     if (!(have & FRESH_HAVE_NG) || !(have & FRESH_HAVE_PG))
         return 1;                    /* uncorroborated drop -> conservative latch */
     return ng == pg;                 /* grey EXACTLY frozen -> latch */
@@ -26,7 +27,7 @@ int freshness_settle(int32_t nf, int32_t pf, int32_t ng, int32_t pg, uint8_t hav
         return 1;                    /* no fresh level -> pass through */
     }
     if (!(have & FRESH_HAVE_PF)) {
-        if (nf <= FRESH_LATCH_MAX_L) {
+        if (nf <= FRESH_LATCH_MAX_L && !(have & FRESH_NEW_EMPTY)) {
             p->have = 0;
             return 0;                /* cold start on the 1 L latch: show nothing */
         }

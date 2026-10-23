@@ -252,6 +252,28 @@ A poll landing mid-ramp is not a measurement either: buspi read **16 L** at 08:5
 Whether to keep a guard at all, or show the raw value like the app does, is still the owner's call;
 this keeps the guard and makes it correct for the ramp.
 
+## 2026-10-23: the unit's empty alarm is a measurement; the latch rises too
+
+The owner emptied the fresh tank on 2026-10-19. The ESP SD log (raw `1302`, 10-18…10-23) separates
+the two `≤ 1 L` cases by the unit's own alarm field:
+
+| Frame | Fresh | `FreshWaterInfoPopUp` | Meaning | Reads |
+|---|---|---|---|---|
+| `53001d010016` | 0 L | 5 (empty) | measuring an empty tank | 9434 |
+| `03011d010016` | 1 L | 0 | not measuring | 1573 |
+
+`03001d…` (0 L, no alarm) appears only for an instant, right before the alarm frame. The guard
+looked at levels alone and failed twice: the not-measuring `1` arrived as a **rise** from 0 (only
+drops were checked), became the baseline, and then held every real `0` as "a drop to the latch" —
+a false 1 L with the empty alarm hidden for four days. Now:
+
+- a frame with the empty alarm (`FreshWaterInfoPopUp` 5) is always a measurement
+  (`freshness.measured_empty`; C: `FRESH_NEW_EMPTY`), also on a cold start;
+- a change to `≤ 1 L` in **either** direction with grey frozen is the latch
+  (`R_WATER_STALE_GUARD`; vectors `tests/vectors/freshness.json` v4).
+
+A real `1 L` with grey frozen is still held as the latch — no frame seen so far tells it apart.
+
 ## Water freshness — the settled conclusion (2026-08-19)
 
 Traced end-to-end. Water is READ-ONLY on char `1302` (no `1301` control char, `qg/b` never writes),
