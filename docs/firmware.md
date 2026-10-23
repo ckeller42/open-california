@@ -1502,6 +1502,17 @@ still reconnects at once (`cali_session_connect_now` makes a pending reconnect d
 `hold` waits out the delay (≤ 60 s); one that moves an idle-policy session from `off` to `hold`
 connects at once (the mode change clears the pending reconnect and resets the backoff).
 
+The ~30.5 s drop with camping off is the unit's own timer, not a request the satellite leaves
+unanswered (2026-10-23, `btmon` on buspi's own BlueZ link, the satellite in `off`): with camping off
+the unit ended an idle BlueZ link (discovery only, no heartbeat, no subscription) with HCI 0x13 at
+connect +31.4 s, encryption +30.7 s — the satellite's `link_up` counts from encryption, hence its
+30.4–30.8 s. With camping on the same idle link held 75 s. In both runs the only request the unit sent
+was the ATT MTU exchange, and BlueZ answered it (`Exchange MTU Response` in the capture) — so the
+BlueZ drop is no ATT transaction timeout, and the satellite, which answers the same request since #279
+(links held for hours with camping on), sees the same drop at the same time. Nothing to fix in the
+satellite; the backoff above is the handling. (This covers the drops of a held link; the ~1 s drops
+right after a reconnect are not explained by it.)
+
 ## Network watch items (board only)
 
 The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait for the CoreS3:
