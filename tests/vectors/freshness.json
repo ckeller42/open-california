@@ -1,6 +1,6 @@
 {
- "version": 3,
- "comment": "Sequence vectors for the water stale-latch guard (calictl/freshness.py). Values are liters; null = missing. expect: true = the parked latch (a fresh drop to <= WATER_LATCH_MAX_L = 1 L with grey exactly frozen or unknown; hold last plausible), false = live reading. sequences: the ramp debounce (calictl/freshness.py:settle_water, WATER_SETTLE_S = 5 s) — steps [t_ms, fresh, waste] from a starting baseline (null = cold start); expect 1 = adopt (the reading becomes the baseline), 0 = hold. The real unit ramps 1 -> real value in ~4 s when it starts measuring (BLE trace 2026-10-09).",
+ "version": 4,
+ "comment": "Sequence vectors for the water stale-latch guard (calictl/freshness.py). Values are liters; null = missing. expect: true = the parked latch (a fresh drop to <= WATER_LATCH_MAX_L = 1 L with grey exactly frozen or unknown; hold last plausible), false = live reading. sequences: the ramp debounce (calictl/freshness.py:settle_water, WATER_SETTLE_S = 5 s) — steps [t_ms, fresh, waste] from a starting baseline (null = cold start); expect 1 = adopt (the reading becomes the baseline), 0 = hold. The real unit ramps 1 -> real value in ~4 s when it starts measuring (BLE trace 2026-10-09). v4: optional \"empty\": true on a reading (a 5th step element 1 in sequences) = the frame carries FreshWaterInfoPopUp 5, the unit's measured-empty alarm, never the latch (freshness.measured_empty); and a RISE to <= 1 L with grey frozen is the latch too (2026-10-19: an emptied tank's 0 -> the not-measuring 1 became the baseline).",
  "cases": [
   {"id": "drop-to-latch-grey-frozen", "new": {"fresh": 1, "waste": 3}, "prev": {"fresh": 17, "waste": 3}, "expect": true},
   {"id": "drop-to-zero-grey-frozen", "new": {"fresh": 0, "waste": 0}, "prev": {"fresh": 22, "waste": 0}, "expect": true},
@@ -19,7 +19,11 @@
   {"id": "one-liter-step-latch", "new": {"fresh": 1, "waste": 5}, "prev": {"fresh": 2, "waste": 5}, "expect": true},
   {"id": "no-drop-grey-moving", "new": {"fresh": 17, "waste": 4}, "prev": {"fresh": 17, "waste": 3}, "expect": false},
   {"id": "rise-grey-missing", "new": {"fresh": 11, "waste": null}, "prev": {"fresh": 1, "waste": null}, "expect": false},
-  {"id": "zero-tanks-plausible", "new": {"fresh": 0, "waste": 0}, "prev": {"fresh": 0, "waste": 0}, "expect": false}
+  {"id": "zero-tanks-plausible", "new": {"fresh": 0, "waste": 0}, "prev": {"fresh": 0, "waste": 0}, "expect": false},
+  {"id": "field-2026-10-23-measured-empty-live", "new": {"fresh": 0, "waste": 0, "empty": true}, "prev": {"fresh": 1, "waste": 0}, "expect": false},
+  {"id": "measured-empty-after-full-tank-live", "new": {"fresh": 0, "waste": 0, "empty": true}, "prev": {"fresh": 14, "waste": 0}, "expect": false},
+  {"id": "field-2026-10-19-rise-to-latch-from-empty", "new": {"fresh": 1, "waste": 0}, "prev": {"fresh": 0, "waste": 0}, "expect": true},
+  {"id": "rise-to-latch-grey-moving-live", "new": {"fresh": 1, "waste": 3}, "prev": {"fresh": 0, "waste": 2}, "expect": false}
  ],
  "sequences": [
   {"id": "ramp-cold-start-only-real-value-adopted", "good": null,
@@ -47,6 +51,10 @@
   {"id": "cold-start-latch-then-settle", "good": null,
    "steps": [[0, 1, 0, 0], [30000, 17, 0, 0], [60000, 17, 0, 1], [90000, 1, 0, 0]]},
   {"id": "grey-unknown", "good": {"fresh": 20, "waste": null},
-   "steps": [[0, 1, null, 0], [1000, 18, null, 0], [6000, 18, null, 1], [7000, 18, 0, 0]]}
+   "steps": [[0, 1, null, 0], [1000, 18, null, 0], [6000, 18, null, 1], [7000, 18, 0, 0]]},
+  {"id": "field-2026-10-19-emptied-tank-then-latch", "good": {"fresh": 14, "waste": 0},
+   "steps": [[0, 0, 0, 0, 1], [30000, 0, 0, 1, 1], [60000, 1, 0, 0], [90000, 1, 0, 0], [120000, 0, 0, 1, 1]]},
+  {"id": "cold-start-measured-empty-shown", "good": null,
+   "steps": [[0, 0, 0, 0, 1], [30000, 0, 0, 1, 1], [60000, 1, 0, 0]]}
  ]
 }

@@ -45,12 +45,13 @@ def _liters(water: dict, tank: str):
 def implausible_water_drop(new: dict, prev: dict) -> bool:
     """True when ``new``'s fresh-water drop looks like the parked latch, not real usage.
 
-    The latch is a fresh DROP to <= ``WATER_LATCH_MAX_L`` (the observed 1 L latch) while the GREY
-    tank is EXACTLY frozen (the unit freezes both tanks when unpowered). A drop that stays above
-    the latch value is a live measurement, as is any grey movement — rise (usage) or fall (a
-    dump-station drain). A non-drop (refill / same / re-measure) is always plausible. Missing fresh
-    returns False (can't judge); a drop to the latch value we can't corroborate with grey is
-    treated as the latch (conservative).
+    The latch is a fresh CHANGE to <= ``WATER_LATCH_MAX_L`` (the observed 1 L latch) while the GREY
+    tank is EXACTLY frozen (the unit freezes both tanks when unpowered) — a drop, or a rise from an
+    emptied tank (0 -> the not-measuring 1, 2026-10-19: that rise became the baseline and then held
+    every real 0 for days). A change that ends above the latch value is a live measurement, as is
+    any grey movement — rise (usage) or fall (a dump-station drain) — and any frame carrying the
+    unit's own empty alarm (``measured_empty``). Missing fresh returns False (can't judge); a change
+    to the latch value we can't corroborate with grey is treated as the latch (conservative).
 
     :param new: freshly-interpreted water dict (``{"fresh":{"liters":..}, "waste":{"liters":..}}``).
     :param prev: the last plausible water dict to compare against.
@@ -61,16 +62,17 @@ def implausible_water_drop(new: dict, prev: dict) -> bool:
        :status: implemented
        :tags: water, freshness, ui
 
-       The daemon shall treat a fresh-water drop to at most ``WATER_LATCH_MAX_L`` (1 L, the
-       observed latch value) while the grey tank is EXACTLY frozen (or unknown) as the stale latch
-       and keep displaying the last plausible reading; any other reading — a drop that stays above
-       the latch value, or any grey movement (rise or fall) — is a live measurement, is shown, and
-       becomes the new baseline.
+       The daemon shall treat a fresh-water change (drop or rise) to at most ``WATER_LATCH_MAX_L``
+       (1 L, the observed latch value) while the grey tank is EXACTLY frozen (or unknown) as the
+       stale latch and keep displaying the last plausible reading; any other reading — a change
+       that ends above the latch value, any grey movement (rise or fall), or a frame with the
+       unit's fresh-water empty alarm (``FreshWaterInfoPopUp`` 5) — is a live measurement, is
+       shown, and becomes the new baseline.
     """
     nf, pf = _liters(new, "fresh"), _liters(prev, "fresh")
-    if nf is None or pf is None:
+    if nf is None or pf is None or measured_empty(new):
         return False
-    if nf >= pf or nf > WATER_LATCH_MAX_L:  # not a drop, or not down to the latch -> live
+    if nf == pf or nf > WATER_LATCH_MAX_L:  # unchanged, or not at the latch value -> live
         return False
     ng, pg = _liters(new, "waste"), _liters(prev, "waste")
     if ng is None or pg is None:
@@ -80,6 +82,16 @@ def implausible_water_drop(new: dict, prev: dict) -> bool:
     # `<=` here wedged the hold for a month after a real grey
     # dump: every genuine post-dump reading re-latched because
     # grey sat below the pre-dump baseline (fixed 2026-08-16).
+
+
+def measured_empty(water: dict) -> bool:
+    """True when the unit itself reports the fresh tank empty (``FreshWaterInfoPopUp`` 5).
+
+    The unit raises that alarm only from a real measurement: while not measuring it reports
+    ``1`` L with no alarm (ESP SD log 2026-10-18…23: 9434 reads of 0 L + alarm 5 while measuring an
+    emptied tank, 1573 of 1 L + no alarm while not measuring). So such a frame is never the latch.
+    """
+    return (water or {}).get("fresh_alert") == "empty"
 
 
 def _key(water: dict):
@@ -113,13 +125,14 @@ def settle_water(new: dict, good, pending, now: float, settle: float = WATER_SET
        The daemon shall adopt a fresh/grey water reading that differs from the baseline only after
        the same reading has been seen for ``WATER_SETTLE_S`` (the unit ramps 1 -> real value in
        ~4 s when it starts measuring); until then it keeps the baseline, flagged stale. With no
-       baseline, a level <= ``WATER_LATCH_MAX_L`` is not a measurement and nothing is shown.
+       baseline, a level <= ``WATER_LATCH_MAX_L`` without the unit's empty alarm is not a measurement
+       and nothing is shown.
     """
     nf = _liters(new, "fresh")
     if nf is None:
         return True, None
     if good is None or _liters(good, "fresh") is None:
-        if nf <= WATER_LATCH_MAX_L:
+        if nf <= WATER_LATCH_MAX_L and not measured_empty(new):
             return False, None  # cold start on the not-measuring 1 L: show nothing
     elif implausible_water_drop(new, good):
         return False, None

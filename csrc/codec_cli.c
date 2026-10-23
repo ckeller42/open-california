@@ -107,7 +107,7 @@ static void op_encode(void)
     putchar('\n');
 }
 
-/* F <nf|-> <pf|-> <ng|-> <pg|->  ('-' = missing liters value) */
+/* F <nf|-> <pf|-> <ng|-> <pg|-> [E]  ('-' = missing liters value; E = new frame has the empty alarm) */
 static void op_freshness(void)
 {
     int32_t v[4] = {0, 0, 0, 0};
@@ -123,10 +123,13 @@ static void op_freshness(void)
         v[i] = (int32_t)x;
         have |= (uint8_t)(1u << i);
     }
+    const char *e = strtok(NULL, " ");
+    if (e && strcmp(e, "E") == 0)
+        have |= FRESH_NEW_EMPTY;
     printf("OK %d\n", freshness_implausible_drop(v[0], v[1], v[2], v[3], have));
 }
 
-/* W reset | W <now_ms> <nf|-> <pf|-> <ng|-> <pg|->  (freshness_settle, FRESH_SETTLE_MS;
+/* W reset | W <now_ms> <nf|-> <pf|-> <ng|-> <pg|-> [E]  (freshness_settle, FRESH_SETTLE_MS;
  * the candidate persists across W lines until "W reset") */
 static void op_settle(void)
 {
@@ -152,6 +155,9 @@ static void op_settle(void)
         v[i] = (int32_t)x;
         have |= (uint8_t)(1u << i);
     }
+    tok = strtok(NULL, " ");
+    if (tok && strcmp(tok, "E") == 0)
+        have |= FRESH_NEW_EMPTY;
     printf("OK %d\n", freshness_settle(v[0], v[1], v[2], v[3], have, now, FRESH_SETTLE_MS, &pend));
 }
 

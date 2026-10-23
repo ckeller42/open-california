@@ -540,8 +540,13 @@ def test_water_real_drop_with_grey_zero_is_served_and_becomes_the_baseline(fake)
 
 
 def _water_frame(w):
-    """A 1302 frame for vector levels: 03 <fresh> 1d 01 <waste> 16 (waste None -> cut before it)."""
-    return "03%02x1d01" % w["fresh"] + ("" if w["waste"] is None else "%02x16" % w["waste"])
+    """A 1302 frame for vector levels: 03 <fresh> 1d 01 <waste> 16 (waste None -> cut before it;
+    "empty" -> 53: FreshWaterInfoPopUp 5, the unit's measured-empty alarm)."""
+    return (
+        ("53" if w.get("empty") else "03")
+        + "%02x1d01" % w["fresh"]
+        + ("" if w["waste"] is None else "%02x16" % w["waste"])
+    )
 
 
 def test_water_ramp_debounce_matches_the_parity_vectors(fake):
@@ -562,15 +567,16 @@ def test_water_ramp_debounce_matches_the_parity_vectors(fake):
         good = seq["good"]
         boot = ["kvsethex water_good " + _water_frame(good), "reinit"] if good else []
         steps = []
-        for t, fresh, waste, _ in seq["steps"]:
-            steps += ["tick %d" % (T + t), "NOTIFY 1302 " + _water_frame({"fresh": fresh, "waste": waste})]
+        for t, fresh, waste, _, *e in seq["steps"]:
+            w = {"fresh": fresh, "waste": waste, "empty": bool(e and e[0])}
+            steps += ["tick %d" % (T + t), "NOTIFY 1302 " + _water_frame(w)]
         shown = [
             sn["fn"].get("water") for sn in snaps(run(fake, *boot, *PAIRED, *read_all(reads=reads), *steps))
         ]
         want = []
-        for _t, fresh, waste, adopt in seq["steps"]:
+        for _t, fresh, waste, adopt, *e in seq["steps"]:
             if adopt:
-                good = {"fresh": fresh, "waste": waste}
+                good = {"fresh": fresh, "waste": waste, "empty": bool(e and e[0])}
             want.append(protocol.decode(funcs["water"], bytes.fromhex(_water_frame(good))) if good else None)
         assert shown[1:] == want, seq["id"]  # shown[0] = the read-all's SNAP
 
