@@ -1518,7 +1518,7 @@ was the ATT MTU exchange, and BlueZ answered it (`Exchange MTU Response` in the 
 BlueZ drop is no ATT transaction timeout, and the satellite, which answers the same request since #279
 (links held for hours with camping on), sees the same drop at the same time. Nothing to fix in the
 satellite; the backoff above is the handling. (This covers the drops of a held link; the ~1 s drops
-right after a reconnect are not explained by it.)
+right after a reconnect are the unit's 6 s reconnect cooldown, above.)
 
 ## Network watch items (board only)
 
