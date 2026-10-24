@@ -1044,9 +1044,10 @@ const CMD_ERRORS = {
   busy: "The satellite is still sending the previous command — try again in a moment",
   not_connected: "Not connected to the camper unit yet — try again in a few seconds",
 };
-// How long a command waits for the satellite's link (not_connected) before it gives up: the 7 s
-// reconnect cooldown + read-all (~7 s) + heartbeat arming (3 s), with margin.
-const CMD_LINK_WAIT_MS = 25000;
+// How long a command waits for the satellite's link (not_connected) before it gives up. Live with
+// camping off (2026-10-24): the rest of the 7 s reconnect cooldown + connect + GATT discovery (~6 s)
+// + the read pass took 14.5-22.9 s per tap, ~32 s when one connect attempt timed out (10 s).
+const CMD_LINK_WAIT_MS = 45000;
 
 /**
  * @param {string} msg

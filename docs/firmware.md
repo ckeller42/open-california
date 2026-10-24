@@ -1506,8 +1506,12 @@ No reconnect, backoff or a command's nudge, comes sooner than `CALI_SESSION_UNIT
 after a link was lost (`T_FW_SESSION_UNIT_COOLDOWN`). With camping off the unit cuts every link that
 starts < 6 s after it ended the previous one, ~1.2 s in: 51 of 51 such links on 2026-10-22/23, 0 of
 47 later ones — the "~1 s" drops above. A command on a down link still answers `503 not_connected`;
-the web UI retries it every 2 s for up to 25 s (`CMD_LINK_WAIT_MS`) showing "Connecting…", and its
-status pill says "live" only while the satellite holds the link (`device.link.up`).
+the web UI retries it every 2 s for up to 45 s (`CMD_LINK_WAIT_MS`) showing "Connecting…", and its
+status pill says "live" only while the satellite holds the link (`device.link.up`). Live with camping
+off (fw `eb21f31`, 2026-10-24), a tap ~3 s after a drop was accepted after 14.5, 19.4, 20.6 and
+22.9 s — the rest of the cooldown, the connect, GATT discovery (~6 s, every reconnect) and the read
+pass — and once after ~32 s, when one connect attempt ran into the transport's 10 s timeout; hence
+45 s. Caching the GATT handles across reconnects would save the ~6 s discovery.
 
 The ~30.5 s drop with camping off is the unit's own timer, not a request the satellite leaves
 unanswered (2026-10-23, `btmon` on buspi's own BlueZ link, the satellite in `off`): with camping off
