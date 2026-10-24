@@ -17,15 +17,30 @@ PATTERNS = {
 }
 
 # Reader pages that pass today. Add a page here once it passes.
+# Every reader page. Not here: glossary.md (it defines the marker terms the lab notes use) and the
+# generated contributor views frame-layouts/signal-matrix (they print raw dictionary/catalog values).
 CHECKED_PAGES = [
+    "docs/UI-DESIGN-RATIONALE.md",
     "docs/api.md",
+    "docs/architecture.md",
     "docs/building-the-docs.md",
+    "docs/cross-language-codec.md",
     "docs/features.md",
+    "docs/firmware.md",
+    "docs/hardware.md",
     "docs/howto-android-phone-lab.md",
     "docs/howto-esp-first-flash.md",
+    "docs/howto-esp-standalone.md",
+    "docs/howto-esp-wifi-setup.md",
     "docs/howto-pair-your-camper.md",
     "docs/index.md",
+    "docs/mock-unit-guide.md",
+    "docs/protocol-sequences.md",
+    "docs/protocol.md",
     "docs/protocol/README.md",
+    "docs/raspberry-pi-setup.md",
+    "docs/screenshots.md",
+    "docs/simulation-and-testing.md",
 ]
 
 
