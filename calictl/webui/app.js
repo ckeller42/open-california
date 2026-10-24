@@ -1094,8 +1094,9 @@ function linkState() {
       || (waitingSince != null && waitingSince - lastAnswerAt > UNREACHABLE_MS)) return "connecting";
   // satellite in power-save rest (R_UI_REST_CARD): the unit hung up with camping off; the data ages
   if (m && m.sat && m.sat.link_rest) return "rest";
-  // satellite: fresh data, but no link that takes commands yet (down, or up and still reading/arming)
-  if (m && m.online && m.sat && !m.sat.link_ready) return "connecting";
+  // satellite: fresh data, but no link that takes commands yet (down, or up and still reading/arming);
+  // a link that is up is connecting even when the shown data is old (right after Reconnect in rest)
+  if (m && m.sat && ((m.online && !m.sat.link_ready) || (m.sat.link_up && !m.sat.link_ready))) return "connecting";
   if (!m || m.online) return "live";
   // no data ever and no unit paired: the cause is "not paired", not a sleeping van (M6)
   return m.last_seen ? "asleep" : m.paired === false ? "unpaired" : "never";

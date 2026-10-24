@@ -746,6 +746,15 @@ def test_fresh_data_with_the_link_down_is_not_live(stub, error_gated_page):
         expect(pg.locator("#status")).to_have_text("connecting…")
 
 
+def test_a_link_coming_up_on_old_data_is_connecting_not_offline(stub, error_gated_page):
+    """Reconnect from the power-save rest: the link is up and still reading, and the data shown is
+    older than the offline threshold. The pill says connecting, never offline (live, 2026-10-24)."""
+    link = stub.fixtures["satellite"]["/api/state"]["device"]["link"]
+    link.update(up=True, ready=False, rest=False, last_snap_age_ms=120000)
+    with error_gated_page(stub.base) as pg:
+        expect(pg.locator("#status")).to_have_text("connecting…")
+
+
 def test_live_only_once_the_link_takes_commands(stub, error_gated_page):
     """An up link still reading or arming (``device.link.ready`` false) is not "live" yet: commands
     would answer not_connected. Live once ready. In mode quiet (no arming ever) the link alone."""
