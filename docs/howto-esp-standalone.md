@@ -6,9 +6,9 @@ The ESP32 "satellite" — the M5Stack {term}`CoreS3 <Satellite>` board that pair
 SD card, and buspi collects that log later to fill gaps in its own history. This page is for the
 everyday side: power, where to open it, updates, and what its status rows mean.
 
-> **Status.** Running on its own since 2026-10-11: an update from GitHub and the automatic
-> rollback were both tried on the board, its clock syncs over the internet, and the SD log works
-> on a 32 GB card. buspi's collector for the log is merged (#320; set-up in
+> **Status.** The satellite runs on its own: an update from GitHub and the automatic rollback
+> are both tested on the board, its clock syncs over the internet, and the SD log works on a
+> 32 GB card. buspi collects the log (set-up in
 > [the Pi setup](raspberry-pi-setup.md#esp-ingest-gap-fill)). The background is in
 > [ESP32 firmware → Running without buspi](firmware.md#running-without-buspi).
 
@@ -19,7 +19,7 @@ paired with the camper unit.
 ## Power it
 
 Give the satellite its own **5 V USB-C supply** in the van (a USB-C phone charger or a 12 V → USB-C
-socket adapter). It no longer needs a cable to the Pi.
+socket adapter). It needs no cable to the Pi.
 
 The satellite **cannot tell you how much power it uses** — its power chip has no current meter. If
 you want to know, put a small USB-C power meter between the supply and the board.
@@ -60,7 +60,7 @@ normal WiFi network with internet (not its own setup hotspot).
 
 You see these under **⋮ → Device status**, and on the **Satellite settings** page:
 
-- **Storage** — the SD card. *SD 28.1 of 29.7 GB free · log #1042* means the card works; the
+- **Storage** — the SD card. *SD 28.1 of 29.7 GB free · log #48211* means the card works; the
   number is the latest log entry, so it should go up while the camper unit is connected. *No SD
   card* means none is in (or it isn't detected — push it in again; the satellite checks every 5
   minutes). *SD card error* means a card is there but can't be used — reformat it as FAT32 on a
