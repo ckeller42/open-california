@@ -33,6 +33,7 @@
  *     clock <epoch_ms>     SNTP synced at this fixed wall clock (time.c): "ble exp" then runs
  *     ign <-1|0|1>         what cali_ac_ignition() answers (stubbed; ble_exp_run.c's quiet wake)
  *     diaghook             from now on, print "DIAG {<body>}" per diagnostics record (cali_diag_sink)
+ *     variant <fn> <car_variant>  print "HAS <fn> <car_variant> <cali_variant_has()>"
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
  *     watergood            print "WATERGOOD <cali_session_water_held()> <cali_session_water_good_ms()>"
  *     wifi_boot            cali_wifi_run_init(fake net) + cali_wifi_run_boot() (what host_main
@@ -461,6 +462,8 @@ int main(void) {
         else if (strcmp(word, "watergood") == 0)
             printf("WATERGOOD %d %llu\n", cali_session_water_held(),
                    (unsigned long long)cali_session_water_good_ms());
+        else if (strcmp(word, "variant") == 0)
+            printf("HAS %s %s %d\n", a1, a2, cali_variant_has(a1, (int)strtol(a2, NULL, 10)));
         else if (strcmp(word, "fail") == 0) snprintf(s_fail, sizeof s_fail, "%s", a1);
         else printf("UNKNOWN %s\n", word);
     }

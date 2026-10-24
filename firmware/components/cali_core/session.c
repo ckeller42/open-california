@@ -50,6 +50,9 @@ static size_t s_read_idx;
 static uint32_t s_warm_ms = 0;
 static int s_snapped;          /* this link's first read-all completed */
 static int s_rereading;        /* the periodic water re-read is outstanding */
+static int s_variant_pending;  /* the pre-subscribe 1004 read (CarVariant) is outstanding */
+static int s_vehicle_pre;      /* that read stored 1004: the link's first read pass skips it */
+static int s_link_variant = -1;   /* the CarVariant this link subscribed + reads for; -1 = every function */
 static uint64_t s_water_next;  /* now_ms of the next water re-read */
 
 static int s_mode = CALI_BLE_HOLD;
@@ -57,6 +60,7 @@ static int s_probe;            /* 1 = a probe waits for its read-all */
 static const char *const MODE_NAME[] = {"hold", "quiet", "off"};
 
 #define WATER_CHAR 0x1302u
+#define VEHICLE_CHAR 0x1004u   /* vehicle state: CarVariant (the variant gate) */
 #define WATER_GOOD_KEY "water_good"   /* persisted last-plausible 1302 frame (<=15 chars, NVS) */
 
 /* The last PLAUSIBLE water (1302) frame — the baseline the stale-latch guard holds onto, persisted
@@ -289,6 +293,8 @@ static void link_clear(void) {
     s_reading = 0;
     s_snapped = 0;
     s_rereading = 0;
+    s_variant_pending = 0;
+    s_vehicle_pre = 0;
 }
 
 const char *cali_session_mode_name(int m) { return m >= CALI_BLE_HOLD && m <= CALI_BLE_OFF ? MODE_NAME[m] : "?"; }
@@ -299,7 +305,7 @@ int cali_session_probing(void) { return s_probe; }
 
 /* quiet: the 1003 heartbeat only while a read-all warms up / reads (values refresh), or a probe runs */
 static int hb_wanted(void) {   /* + a control command in flight keeps its heartbeat (mode change mid-command) */
-    return s_mode == CALI_BLE_HOLD || s_warming || s_reading || s_probe || cali_ctl_busy();
+    return s_mode == CALI_BLE_HOLD || s_variant_pending || s_warming || s_reading || s_probe || cali_ctl_busy();
 }
 
 static void probe_end(int ok, const char *reason) {
@@ -359,6 +365,8 @@ static void link_up(void) {
     s_reading = 0;
     s_snapped = 0;
     s_rereading = 0;
+    s_variant_pending = 0;
+    s_vehicle_pre = 0;
     unit_check();
     for (size_t i = 0; i < CODEC_NCHARS; i++) s_fr[i].live = 0;   /* the last link's frames stay shown,
                                                                      never gated on */
@@ -388,18 +396,86 @@ static void build_order(void) {
     }
 }
 
+/* The app's per-variant gate (5.4.0 isSupportedForVariant, gg/o; docs/business-logic/
+ * protocol-alignment.md "Per-variant subscribe gate"): bit 0 = California T7, 1 = Grand California,
+ * 2 = California Next. A function not listed here is on every variant. */
+static const struct {
+    const char *fn;
+    unsigned mask;
+} VARIANT_GATE[] = {
+    {"roof", 1u},
+    {"satelliteantenna", 2u}, {"stairs", 2u}, {"livingroomheater", 2u}, {"roofaircondition", 2u},
+    {"energy", 3u}, {"water", 3u}, {"airheater", 3u}, {"cooler", 3u},
+};
+
+int cali_variant_has(const char *function, int car_variant) {
+    if (car_variant < 0) return 1;
+    if (car_variant > 2) car_variant = 0;   /* the app: any other CarVariant is a T7 */
+    for (size_t k = 0; k < sizeof VARIANT_GATE / sizeof VARIANT_GATE[0]; k++)
+        if (strcmp(VARIANT_GATE[k].fn, function) == 0) return (int)(VARIANT_GATE[k].mask >> car_variant & 1u);
+    return 1;
+}
+
+/* The CarVariant of the stored 1004 frame (this boot, this unit), -1 when there is none. */
+static int stored_variant(void) {
+    static codec_kv_t kv[CODEC_KV_MAX];   /* static: the 8 KB host-task stack */
+    int v = index_of(VEHICLE_CHAR);
+    if (v < 0 || !s_fr[v].have) return -1;
+    int n = codec_decode(codec_func_by_name("vehicle"), s_fr[v].frame, s_fr[v].len, kv);
+    for (int k = 0; k < n; k++)
+        if (strcmp(kv[k].name, "CarVariant") == 0) return (int)kv[k].value;
+    return -1;
+}
+
+/* 1 when this link's read pass reads CODEC_CHARS[i]: the variant has it, and it is not the 1004 the
+ * pre-subscribe read already stored for the link's first pass. */
+static int pass_reads(size_t i) {
+    if (s_vehicle_pre && CODEC_CHARS[i].state_short == VEHICLE_CHAR) return 0;
+    return cali_variant_has(CODEC_CHARS[i].function, s_link_variant);
+}
+
 static void read_next(void) {
     while (s_read_idx < CODEC_NCHARS) {
+        if (!pass_reads(s_order[s_read_idx])) {
+            s_read_idx++;
+            continue;
+        }
         int rc = s_t->read(CODEC_CHARS[s_order[s_read_idx]].state_short);
         if (rc == 0) return;                          /* READ comes back */
         cali_log("session: read %s failed %d", CODEC_CHARS[s_order[s_read_idx]].function, rc);
         s_read_idx++;
     }
     s_reading = 0;
+    s_vehicle_pre = 0;   /* a later pass on this link (a probe) reads 1004 again: leveling, RTC */
     s_snapped = 1;
     s_water_next = s_now + CALI_SESSION_WATER_REREAD_MS;
     cali_console_snapshot(s_now);
     if (s_probe) probe_end(1, "read_all");
+}
+
+/* Subscribe the chars the app subscribes for the stored variant (none known = every char), then warm
+ * up for the read pass. The app never CCCDs 1001 (general, read-only) or f001 (CAPTURE 2026-10-10). */
+static void subscribe_and_warm(void) {
+    int v = s_link_variant = stored_variant();
+    char skipped[160] = "";
+    size_t n = 0;
+    for (size_t i = 0; i < CODEC_NCHARS; i++) {
+        const char *fn = CODEC_CHARS[i].function;
+        if (!cali_variant_has(fn, v)) {
+            n += (size_t)snprintf(skipped + n, n < sizeof skipped ? sizeof skipped - n : 0, "%s%s", n ? ", " : "", fn);
+            continue;
+        }
+        if (strcmp(fn, "general") == 0 || strcmp(fn, "generalpurposesignals") == 0) continue;   /* read only */
+        (void)s_t->subscribe(CODEC_CHARS[i].state_short);   /* refused for a char without NOTIFY */
+    }
+    if (v < 0)
+        cali_log("session: variant unknown — subscribing and reading every function");
+    else if (n)
+        cali_log("session: variant %d — skipping %s", v, skipped);
+    /* calictl.device.read_all: the heartbeat runs s_warm_ms (default 0; calictl's 2 s) before the read pass
+     * ("let the liveness register + sensors refresh"); cali_session_tick starts the reads. */
+    s_warming = 1;
+    s_warm_until = s_now + s_warm_ms;
 }
 
 static void on_discovered(int status) {
@@ -408,12 +484,18 @@ static void on_discovered(int status) {
         link_lost("discover", status);
         return;
     }
-    for (size_t i = 0; i < CODEC_NCHARS; i++)
-        (void)s_t->subscribe(CODEC_CHARS[i].state_short);   /* refused for a char without NOTIFY */
-    /* calictl.device.read_all: the heartbeat runs s_warm_ms (default 0; calictl's 2 s) before the read pass
-     * ("let the liveness register + sensors refresh"); cali_session_tick starts the reads. */
-    s_warming = 1;
-    s_warm_until = s_now + s_warm_ms;
+    if (stored_variant() >= 0) {   /* a reconnect within this boot: the stored 1004 holds the variant */
+        subscribe_and_warm();
+        return;
+    }
+    /* the app's order: read 1004 (CarVariant) first, then subscribe what the variant has */
+    int rc = s_t->read(VEHICLE_CHAR);
+    if (rc == 0) {
+        s_variant_pending = 1;
+        return;
+    }
+    cali_log("session: read vehicle failed %d", rc);
+    subscribe_and_warm();   /* variant unknown: every char, never lose data to the gate */
 }
 
 static void start_reads(void) {
@@ -430,6 +512,17 @@ static void start_reads(void) {
 static void on_read(const cali_tevent_t *e) {
     int w;
     if (e->status == 0 && index_of(e->char_short) >= 0) io(CALI_SESSION_IO_READ, e->char_short, e->data, e->len);
+    if (s_variant_pending && e->char_short == VEHICLE_CHAR) {
+        s_variant_pending = 0;
+        if (e->status == 0) {
+            store((size_t)index_of(VEHICLE_CHAR), e->data, e->len);
+            s_vehicle_pre = 1;
+        } else {
+            cali_log("session: read vehicle status %d", e->status);
+        }
+        subscribe_and_warm();
+        return;
+    }
     if (s_rereading && e->char_short == WATER_CHAR && (w = index_of(WATER_CHAR)) >= 0) {
         s_rereading = 0;
         if (e->status == 0) {
