@@ -60,6 +60,7 @@ static const char ERR_SETUP_MODE[] = "{\"ok\":false,\"error\":\"setup_mode\"}";
 static const char ERR_BAD_VALUE[] = "{\"ok\":false,\"error\":\"bad_value\"}";
 static const char ERR_BAD_ACTION[] = "{\"ok\":false,\"error\":\"bad_action\"}";
 static const char ERR_BUSY[] = "{\"ok\":false,\"error\":\"busy\"}";
+static const char ERR_NOT_PAIRED[] = "{\"ok\":false,\"error\":\"not_paired\"}";   /* /api/ble connect */
 static const char ERR_NO_TIME[] = "{\"ok\":false,\"error\":\"no_time\"}";   /* /api/ble: no wall clock */
 static const char ERR_OTA_UNAVAILABLE[] = "{\"ok\":false,\"error\":\"ota_unavailable\"}";
 static const char ERR_DISABLED[] = "{\"ok\":false,\"error\":\"disabled\"}";   /* /api/sensors, flag off */
@@ -215,6 +216,12 @@ static void api_state(cali_http_resp_t *resp) {
     cali_json_obj_begin(&j);
     cali_json_key(&j, "up");
     cali_json_bool(&j, st.link_up);
+    cali_json_key(&j, "ready");
+    cali_json_bool(&j, st.link_ready);
+    cali_json_key(&j, "rest");   /* power-save rest: no reconnect until Connect / a command (R_FW_BLE_REST) */
+    cali_json_bool(&j, st.link_rest);
+    cali_json_key(&j, "rest_next_s");
+    if (st.rest_next_ms >= 0) cali_json_int(&j, (long long)((st.rest_next_ms + 999) / 1000)); else cali_json_null(&j);
     cali_json_key(&j, "last_snap_age_ms");
     if (st.snap_age_ms >= 0) cali_json_int(&j, (long long)st.snap_age_ms); else cali_json_null(&j);
     cali_json_obj_end(&j);
@@ -862,14 +869,17 @@ static void api_pi_halt(const cali_http_req_t *req, cali_http_resp_t *resp) {
 /* ---- GET /api/ble = device.ble; POST /api/ble (R_FW_BLE_MODE, R_FW_BLE_EXP), station mode only:
  * {"mode":"hold|quiet|off"}, {"probe":true}, {"exp_min":1..720,"from"?:0..23,"to"?:0..23} (window
  * default 22-06), {"exp_min":0} (stop), {"idle_min":0..60} (the idle policy, stored: R_FW_BLE_IDLE),
- * {"warm_ms":0..5000} (the read pass's heartbeat warm-up, not stored: R_FW_BLE_WARM) —
+ * {"warm_ms":0..5000} (the read pass's heartbeat warm-up, not stored: R_FW_BLE_WARM),
+ * {"rest_poll_min":0..240} (the power-save rest's read interval, stored: R_FW_BLE_REST),
+ * {"connect":true} (out of rest, reconnect now after the cooldown; 409 not_paired without a bond) —
  * keys combinable, each at most once; answers device.ble ---- */
 static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
     if (strcmp(req->method, "GET") != 0) {
-        static const char *const KEYS[7] = {"mode", "probe", "exp_min", "from", "to", "idle_min", "warm_ms"};
+        static const char *const KEYS[9] = {"mode", "probe", "exp_min", "from", "to", "idle_min", "warm_ms",
+                                            "rest_poll_min", "connect"};
         cursor_t c = {req->body, req->body + req->body_len};
-        unsigned num[7] = {0, 0, 0, 22, 6, 0, 0};
-        int seen = 0, mode = -1, probe = 0, bad = expect(&c, '{') != 0;
+        unsigned num[9] = {0, 0, 0, 22, 6, 0, 0, 0, 0};
+        int seen = 0, mode = -1, probe = 0, conn = 0, bad = expect(&c, '{') != 0;
         if (strcmp(req->method, "POST") != 0) { SET_CONST(resp, 405, ERR_METHOD); return; }
         if (wifi_mode() != CALI_WIFI_MODE_STATION) { SET_CONST(resp, 403, ERR_SETUP_MODE); return; }
         while (!bad) {
@@ -877,8 +887,8 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
             size_t klen, vlen;
             int i;
             if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) { bad = 1; break; }
-            for (i = 0; i < 7 && strcmp(key, KEYS[i]) != 0; i++) {}
-            if (i == 7 || (seen & (1 << i))) { bad = 1; break; }
+            for (i = 0; i < 9 && strcmp(key, KEYS[i]) != 0; i++) {}
+            if (i == 9 || (seen & (1 << i))) { bad = 1; break; }
             seen |= 1 << i;
             if (i == 0) {
                 if (parse_str(&c, val, sizeof val, &vlen) != 0) { bad = 1; break; }
@@ -887,7 +897,7 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
                        : strcmp(val, "quiet") == 0 ? CALI_BLE_QUIET
                        : strcmp(val, "off") == 0   ? CALI_BLE_OFF
                                                    : -2;
-            } else if ((i == 1 ? parse_bool(&c, &probe) : parse_uint(&c, &num[i])) != 0) {
+            } else if ((i == 1 ? parse_bool(&c, &probe) : i == 8 ? parse_bool(&c, &conn) : parse_uint(&c, &num[i])) != 0) {
                 bad = 1;
                 break;
             }
@@ -896,22 +906,26 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
             if (expect(&c, '}') != 0) bad = 1;
             break;
         }
-        if (bad || (skip_ws(&c), c.p != c.end) || !(seen & 103)) { SET_CONST(resp, 400, ERR_BAD_JSON); return; }
-        if (mode == -2 || num[2] > 720 || num[3] > 23 || num[4] > 23 || num[5] > CALI_BI_MAX_MIN || num[6] > 5000) {
+        if (bad || (skip_ws(&c), c.p != c.end) || !(seen & 487)) { SET_CONST(resp, 400, ERR_BAD_JSON); return; }
+        if (mode == -2 || num[2] > 720 || num[3] > 23 || num[4] > 23 || num[5] > CALI_BI_MAX_MIN || num[6] > 5000 ||
+            num[7] > CALI_SESSION_REST_POLL_MAX_MIN) {
             SET_CONST(resp, 400, ERR_BAD_VALUE);
             return;
         }
         /* cali_session_probe's own refusal, checked first: a 409 changes nothing */
         if (probe && (!cali_session_active() || cali_session_probing())) { SET_CONST(resp, 409, ERR_BUSY); return; }
+        if (conn && !(s_t && s_t->has_bond && s_t->has_bond())) { SET_CONST(resp, 409, ERR_NOT_PAIRED); return; }
         if ((seen & 4) && num[2] == 0) cali_ble_exp_stop();
         else if ((seen & 4) && cali_ble_exp_start(num[2], (int)num[3], (int)num[4]) != 0) {
             SET_CONST(resp, 409, ERR_NO_TIME);   /* the args are checked above: only the clock is left */
             return;
         }
         if ((seen & 32) && cali_ble_idle_set(num[5]) != 0) { SET_CONST(resp, 500, ERR_STORE); return; }
+        if ((seen & 128) && cali_ble_rest_set(num[7]) != 0) { SET_CONST(resp, 500, ERR_STORE); return; }
         if (seen & 64) cali_session_set_warm_ms(num[6]);   /* the warm-up measurement knob, not stored (R_FW_BLE_WARM) */
         if (mode >= 0) (void)cali_session_set_mode(mode, "api");
         if (probe) (void)cali_session_probe();
+        if (conn) (void)cali_session_connect();
     }
     cali_json_t j;
     cali_json_begin(&j, s_json, sizeof s_json);   /* the top level is device.ble's object */

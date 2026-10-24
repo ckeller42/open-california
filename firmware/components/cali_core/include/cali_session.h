@@ -33,10 +33,20 @@
  * connect_bonded() — a terminal event lost, e.g. a connect silently cancelled under a scan; field
  * night 2026-10-08, #264) -> disconnect() and connect_bonded() after 1 s, doubling to a 60 s cap;
  * the delay resets once a link is encrypted again. Without a stored bond the session goes
- * inactive instead. A unit-side hang-up (HCI 0x13) takes the same backoff, like calictl's
+ * inactive instead. A unit-side hang-up (HCI 0x13) takes the same backoff (unless it starts the rest below), like calictl's
  * supervisor (the #266 "kicked" 30 s pacing was removed after #279 fixed its root cause: the
  * unit's ATT MTU request went unanswered). A control command meanwhile (cali_session_connect_now)
  * makes a waiting reconnect due at once.
+ *
+ * Power-save rest (R_FW_BLE_REST, the app's rule, 5.4.0 gg/k): when the unit itself ends the link
+ * (DISCONNECTED with HCI 0x13, raw 19 or NimBLE's 531) while the stored frames say camping mode off
+ * (1202 State 0) and no shore power (1602 StateLandAfs neither 1 active nor 2 standby), the session
+ * does not reconnect. Every other loss, or an unknown frame, takes the backoff above. Rest ends on a
+ * control command (cali_session_connect_now), cali_session_connect (the Connect button), a stored
+ * frame that shows camping on or shore power, pairing, or cali_session_stop; a mode change alone
+ * (the idle policy's viewer -> hold, /api/ble mode) never connects out of it. While resting, a probe
+ * runs every rest poll interval (cali_session_set_rest_poll, 0 = none): connect, one read pass, then
+ * the session drops its own link and rests again (or holds, when the read shows camping on / shore).
  *
  * C99, no malloc, no NimBLE/ESP-IDF includes, no clock of its own.
  */
@@ -91,6 +101,17 @@ void cali_session_tick(uint64_t now_ms);  /* heartbeat every CODEC_HEARTBEAT_PER
 /* A control command found no armed link (control_run.c's NOT_READY): a mode other than hold switches
  * to hold ("command"); a reconnect waiting out its backoff delay becomes due on the next tick. */
 void cali_session_connect_now(void);
+
+#define CALI_SESSION_REST_POLL_DEFAULT_MIN 30u
+#define CALI_SESSION_REST_POLL_MAX_MIN 240u
+/* The Connect button: out of rest, hold, a reconnect due now (after the cooldown). -1 = no bond. */
+int cali_session_connect(void);
+/* 1 while in power-save rest (no auto-reconnect). */
+int cali_session_rest(void);
+/* ms to the next rest probe; -1 when not resting or the rest poll is off. */
+int64_t cali_session_rest_next_ms(void);
+/* The rest poll interval in minutes (0 = none; not stored here: ble_exp_run.c stores it). */
+void cali_session_set_rest_poll(unsigned min);
 
 enum { CALI_BLE_HOLD, CALI_BLE_QUIET, CALI_BLE_OFF };
 /* Owner task. hold = today; quiet = link held, the 1003 heartbeat only while a read-all warms up or

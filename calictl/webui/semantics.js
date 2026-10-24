@@ -461,6 +461,12 @@ function adaptSatellite(body, nowMs) {
       uptime_ms: typeof dev.uptime_ms === "number" ? dev.uptime_ms : null,
       wifi: dev.wifi || null,
       link_up: !!link.up,
+      // commands are accepted (read pass done + heartbeat armed); an older firmware without the
+      // field: the link alone
+      link_ready: !!link.up && (link.ready === undefined || !!link.ready),
+      // power-save rest (R_FW_BLE_REST): the unit hung up with camping off, no reconnect until Reconnect
+      link_rest: !!link.rest,
+      rest_next_s: typeof link.rest_next_s === "number" ? link.rest_next_s : null,
       sd: dev.sd || null,     // the SD log's card (R_FW_SD_LOG)
       res: dev.res || null,   // heap / PSRAM / CPU of the satellite itself
       battery: dev.battery || null,   // the CoreS3's own battery (R_FW_BATTERY)

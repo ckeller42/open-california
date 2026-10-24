@@ -29,6 +29,9 @@
  *   bond 0|1         has_bond() (identity() = C0:FF:EE:CA:11:F0 while 1)
  *   active 0|1       cali_session_active()
  *   linkup 0|1       cali_session_link_up() (defaults to 0: set both when a test wants "up")
+ *   ready 0|1        cali_session_ready() (commands accepted; default 0)
+ *   rest 0|1         cali_session_rest() (power-save rest; default 0)
+ *   restnext <ms>    cali_session_rest_next_ms() (default -1 = none; "restnext -1" for none again)
  *   waterheld 0|1    cali_session_water_held() (fn.water is the held last-plausible frame)
  *   watergood <ms>   cali_session_water_good_ms() (baseline adopted at; 0 = not this boot)
  *   stamp <ms>       cali_session_last_update_ms()
@@ -167,7 +170,16 @@ int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
 int cali_session_active(void) { return s_active; }
 int cali_session_link_up(void) { return s_linkup; }
 uint64_t cali_session_last_update_ms(void) { return s_stamp; }
-int cali_session_ready(void) { return 0; }
+static int s_ready, s_rest;
+static int64_t s_rest_next = -1;
+int cali_session_ready(void) { return s_ready; }
+int cali_session_rest(void) { return s_rest; }
+int64_t cali_session_rest_next_ms(void) { return s_rest_next; }
+int cali_session_connect(void) {
+    printf("CALL session_connect\n");
+    return 0;
+}
+void cali_session_set_rest_poll(unsigned min) { printf("CALL session_set_rest_poll %u\n", min); }
 int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len) { return cali_session_frame(i, frame, len); }
 int cali_session_water_held(void) { return s_water_held; }
 uint64_t cali_session_water_good_ms(void) { return s_water_good; }
@@ -424,6 +436,9 @@ int main(void) {
         else if (strcmp(w, "bond") == 0) s_bond = (int)v;
         else if (strcmp(w, "active") == 0) s_active = (int)v;
         else if (strcmp(w, "linkup") == 0) s_linkup = (int)v;
+        else if (strcmp(w, "ready") == 0) s_ready = (int)v;
+        else if (strcmp(w, "rest") == 0) s_rest = (int)v;
+        else if (strcmp(w, "restnext") == 0) s_rest_next = (int64_t)v;
         else if (strcmp(w, "waterheld") == 0) s_water_held = (int)v;
         else if (strcmp(w, "kvfail") == 0) s_kvfail = (int)v;
         else if (strcmp(w, "ctlbusy") == 0) s_ctl_busy = (int)v;

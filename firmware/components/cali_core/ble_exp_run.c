@@ -14,6 +14,7 @@
 
 static cali_bx_t s_bx;
 static cali_bi_t s_bi;   /* the idle policy (R_FW_BLE_IDLE) */
+static unsigned s_rest_min = CALI_SESSION_REST_POLL_DEFAULT_MIN;   /* the rest poll (R_FW_BLE_REST) */
 static unsigned s_min;
 static uint64_t s_phase_at;   /* now_ms the running phase started (evt ble_phase dur_ms) */
 static uint64_t s_tick_at;    /* the last tick's now_ms: the clock of a stop between ticks */
@@ -73,6 +74,18 @@ int cali_ble_idle_set(unsigned min) {
     return 0;
 }
 
+unsigned cali_ble_rest_min(void) { return s_rest_min; }
+
+int cali_ble_rest_set(unsigned min) {
+    uint8_t b = (uint8_t)min;
+    if (min > CALI_SESSION_REST_POLL_MAX_MIN || cali_kv_set(CALI_BR_KEY, &b, 1) != 0) return -1;
+    s_rest_min = min;
+    cali_session_set_rest_poll(min);
+    cali_log("ble-rest: poll %u min", min);
+    cali_diag_evt("ble_rest", "\"poll_min\":%u", min);
+    return 0;
+}
+
 /* The unit's advert sighting (1 seen / -1 gone from cali_bx_seen): log it; a reappearance in quiet/off
  * after a gone logged in that same mode WITH THE LINK DOWN = the unit woke (door, ignition) = activity.
  * A gone with the link up is not sleep: the unit is assumed (not yet checked on the van) not to advertise
@@ -111,6 +124,10 @@ void cali_ble_exp_init(void) {
     cali_bi_set(&s_bi, min, cali_uptime_ms());
     if (min) cali_log("ble-idle: probe every %u min", min);   /* hold (the default) logs nothing */
     cali_runner_on_unit_adv = on_unit_adv;
+    n = 1;   /* the rest poll: missing = the default */
+    s_rest_min = CALI_SESSION_REST_POLL_DEFAULT_MIN;
+    if (cali_kv_get(CALI_BR_KEY, &b, &n) == CALI_KV_OK && n == 1 && b <= CALI_SESSION_REST_POLL_MAX_MIN) s_rest_min = b;
+    cali_session_set_rest_poll(s_rest_min);
 }
 
 static void exp_tick(uint64_t now_ms, int ign);
@@ -181,6 +198,8 @@ void cali_ble_exp_fields(cali_json_t *j) {
     exp_json(j);
     cali_json_key(j, "idle_min");   /* the idle policy: 0 = hold, else a probe every n min (R_FW_BLE_IDLE) */
     cali_json_int(j, s_bi.probe_min);
+    cali_json_key(j, "rest_poll_min");   /* power-save rest: a read every n min, 0 = none (R_FW_BLE_REST) */
+    cali_json_int(j, s_rest_min);
     cali_json_key(j, "unit_adv_seen_ms_ago");   /* the tick clock: the sighting's stamp is the runner's */
     if (!s_adv_any) cali_json_null(j);
     else cali_json_int(j, (long long)(s_tick_at > s_adv_at ? s_tick_at - s_adv_at : 0));

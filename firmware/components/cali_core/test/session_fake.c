@@ -34,6 +34,9 @@
  *     ign <-1|0|1>         what cali_ac_ignition() answers (stubbed; ble_exp_run.c's quiet wake)
  *     diaghook             from now on, print "DIAG {<body>}" per diagnostics record (cali_diag_sink)
  *     variant <fn> <car_variant>  print "HAS <fn> <car_variant> <cali_variant_has()>"
+ *     restpoll <min>       cali_ble_rest_set (the stored rest poll, R_FW_BLE_REST)
+ *     connect              cali_session_connect (POST /api/ble {"connect":true}): prints "CONNECT <rc>"
+ *     rest                 print "REST <cali_session_rest()> <cali_session_rest_next_ms()>"
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
  *     watergood            print "WATERGOOD <cali_session_water_held()> <cali_session_water_good_ms()>"
  *     wifi_boot            cali_wifi_run_init(fake net) + cali_wifi_run_boot() (what host_main
@@ -457,6 +460,10 @@ int main(void) {
             cali_console_line("status");
         } else if (strcmp(word, "bond") == 0) s_bond = n1;
         else if (strcmp(word, "ident") == 0) snprintf(s_ident, sizeof s_ident, "%s", a1);
+        else if (strcmp(word, "restpoll") == 0) printf("RESTPOLL %d\n", cali_ble_rest_set((unsigned)n1));
+        else if (strcmp(word, "connect") == 0) printf("CONNECT %d\n", cali_session_connect());
+        else if (strcmp(word, "rest") == 0)
+            printf("REST %d %lld\n", cali_session_rest(), (long long)cali_session_rest_next_ms());
         else if (strcmp(word, "lastupd") == 0)
             printf("LASTUPD %llu\n", (unsigned long long)cali_session_last_update_ms());
         else if (strcmp(word, "watergood") == 0)
