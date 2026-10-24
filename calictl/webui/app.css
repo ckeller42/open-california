@@ -92,8 +92,9 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 .offline.unreachable { background: color-mix(in srgb, var(--error) 16%, var(--card)); color: var(--fg);
   border-color: color-mix(in srgb, var(--error) 55%, var(--border)); }
 .offline.connecting, .offline.unpaired { background: var(--card); color: var(--muted); border-color: var(--border); }
-#conn.satellite { margin-bottom: .9rem; padding: .7rem 1rem; border-radius: 12px; font-size: .9rem;
+#conn.satellite, #conn.rest { margin-bottom: .9rem; padding: .7rem 1rem; border-radius: 12px; font-size: .9rem;
   background: var(--card); color: var(--muted); border: 1px solid var(--border); }
+#conn.rest .btn { margin-left: .4rem; }
 .row { display: flex; align-items: center; gap: 1rem; padding: .8rem 0; }
 .rowwrap { border-top: 1px solid var(--border); }
 .rowwrap:first-child { border-top: 0; }

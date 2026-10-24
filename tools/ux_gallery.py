@@ -283,7 +283,7 @@ def esp_fixtures():
         "fn": _esp_fn(),
         "device": {
             "pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
-            "link": {"up": True, "last_snap_age_ms": 1200},
+            "link": {"up": True, "ready": True, "rest": False, "rest_next_s": None, "last_snap_age_ms": 1200},
             "wifi": station_wifi,
             "control": {"writes": True},
             "uptime_ms": 3912400,
@@ -301,6 +301,7 @@ def esp_fixtures():
                 "probing": False,
                 "exp": None,
                 "idle_min": 0,
+                "rest_poll_min": 30,
                 "unit_adv_seen_ms_ago": None,
             },
             "ux": {"enabled": True},
@@ -315,7 +316,13 @@ def esp_fixtures():
                 "fn": {},
                 "device": {
                     "pairing": {"state": "idle", "address": None},
-                    "link": {"up": False, "last_snap_age_ms": None},
+                    "link": {
+                        "up": False,
+                        "ready": False,
+                        "rest": False,
+                        "rest_next_s": None,
+                        "last_snap_age_ms": None,
+                    },
                     "wifi": setup_wifi,
                     "control": {"writes": False},
                     "uptime_ms": 41250,
@@ -339,6 +346,7 @@ def esp_fixtures():
                         "probing": False,
                         "exp": None,
                         "idle_min": 0,
+                        "rest_poll_min": 30,
                         "unit_adv_seen_ms_ago": None,
                     },
                     "ux": {"enabled": True},
@@ -412,6 +420,13 @@ def _pi_setting(dev, body):
     dev["pi_wake"].update(body)
 
 
+def _ble(dev, body):
+    """POST /api/ble: the stored settings land in device.ble; connect ends the power-save rest."""
+    dev["ble"].update({k: v for k, v in body.items() if k in ("idle_min", "rest_poll_min")})
+    if body.get("connect"):
+        dev["link"].update(rest=False, rest_next_s=None)
+
+
 def _set(member, key):
     """``device[member][key] = body[key]`` when the POST carries it (the firmware's settings rule)."""
 
@@ -433,6 +448,7 @@ _SETTINGS = {
     "/api/experimental": _set("experimental", "sensors"),
     "/api/display": lambda dev, body: dev["display"].update(body),
     "/api/ota": lambda dev, body: dev["ota"].update({k: v for k, v in body.items() if k == "channel"}),
+    "/api/ble": _ble,
 }
 
 
@@ -456,7 +472,7 @@ class EspStub:
     rules (``_sensors``; bodies in ``sensor_posts``), a removed sensor is seen again on the next
     ``GET /api/sensors``. ``POST /api/wifi`` appends the body to ``wifi_posts`` and answers
     ``{"ok": true}``; a POST to a settings endpoint (``_SETTINGS``: auto camper, usage data,
-    experimental, display, OTA) is recorded in ``posts`` as ``(path, body)``, applied to the fixture's
+    experimental, display, OTA, BLE) is recorded in ``posts`` as ``(path, body)``, applied to the fixture's
     ``device`` and answered ``{"ok": true}`` (``post_reply[path] = (status, body)`` answers that
     instead, changing nothing); ``down = True`` makes the stub answer nothing at all (the satellite left the
     network to join another one) until it is set back. ``GET /app`` is the UI bundle in every mode, and the

@@ -375,6 +375,11 @@ window.STRINGS_DE = {
     "Offline — noch keine Daten (Fahrzeug seit dem Start im Ruhezustand). Geprüft {clock}.",
   "Not paired yet — no data.": "Noch nicht gekoppelt — keine Daten.",
   "Connecting… Last data {clock} ({ago}).": "Verbinde … Letzte Daten {clock} ({ago}).",
+  "Disconnected to save energy — turn on camping mode to stay connected.": "Verbindung getrennt, um Energie zu sparen — schalte den Campingmodus ein, um verbunden zu bleiben.",
+  "Disconnected to save energy — turn on camping mode to stay connected. Last data {clock} ({ago}).": "Verbindung getrennt, um Energie zu sparen — schalte den Campingmodus ein, um verbunden zu bleiben. Letzte Daten {clock} ({ago}).",
+  "Next reading in {next} min.": "Nächste Ablesung in {next} min.",
+  "Reconnect": "Neu verbinden",
+  "power saving": "Energiesparen",
   "Connecting…": "Verbinde …",
   "⚠ {name} not reachable since {since}. Last data {clock} ({ago}).":
     "⚠ {name} nicht erreichbar seit {since}. Letzte Daten {clock} ({ago}).",
@@ -766,8 +771,11 @@ window.STRINGS_DE = {
   "Shut down at low battery": "Bei niedriger Batterie herunterfahren",
   "Always connected": "Immer verbunden",
   "Read every {n} min": "Alle {n} min lesen",
-  "Between reads the satellite lets go of the unit; opening this app connects again within seconds.":
-    "Zwischen den Lesevorgängen trennt der Satellit die Verbindung zur Einheit; beim Öffnen dieser App verbindet er sich in Sekunden neu.",
+  "Read while in power-save mode": "Im Energiesparmodus lesen",
+  "Every {n} min": "Alle {n} min",
+  "Every {n} h": "Alle {n} Std",
+  "Between reads the satellite lets go of the unit; opening this app connects again within seconds — except in power-save mode (camping mode off): then tap Reconnect.":
+    "Zwischen den Lesevorgängen trennt der Satellit die Verbindung zur Einheit; beim Öffnen dieser App verbindet er sich in Sekunden neu — außer im Energiesparmodus (Campingmodus aus): dann tippe auf Neu verbinden.",
   "Couldn't change the connection": "Verbindung konnte nicht geändert werden",
   "Shutdown in {n} min": "Herunterfahren in {n} min",
   "Shut down {n} min ago ({reason})": "Heruntergefahren vor {n} min ({reason})",

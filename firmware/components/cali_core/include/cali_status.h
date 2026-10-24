@@ -18,6 +18,9 @@ typedef struct {
     uint8_t pair_state;          /* PAIR_* (pairing_consts.h) */
     char address[18];            /* bonded identity "AA:BB:…", "" = none */
     uint8_t link_up;             /* cali_session_link_up() */
+    uint8_t link_ready;          /* cali_session_ready(): commands are accepted now */
+    uint8_t link_rest;           /* cali_session_rest(): power-save rest, no reconnect */
+    int64_t rest_next_ms;        /* cali_session_rest_next_ms(): -1 = none */
     int64_t snap_age_ms;         /* now - last SNAP; -1 = never */
     uint8_t wifi_mode;           /* CALI_WIFI_MODE_* */
     uint8_t wifi_state;          /* WIFI_* of the SM (joining/retrying detail) */

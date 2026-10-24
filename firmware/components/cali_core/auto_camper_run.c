@@ -60,6 +60,8 @@ int cali_ac_ignition(void) {
     return t15 < 0 && en < 0 ? -1 : t15 > 0 || en > 0;
 }
 
+int cali_ac_owed(void) { return S.owe != 0; }
+
 static void pack(uint8_t b[STATE_LEN]) {
     b[0] = (uint8_t)S.owe;
     b[1] = (uint8_t)S.pre;

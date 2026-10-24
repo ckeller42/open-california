@@ -53,7 +53,7 @@
  * @property {boolean} [restored]           set only by restoreLastState(): the saved offline snapshot shown until a live poll answers
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number}, experimental?: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -1082,7 +1082,7 @@ let stateAt = 0;                                        // ms: STATE (its _meta.
 const connEl = /** @type {HTMLElement} */ (document.getElementById("conn"));
 let connKey = "";
 
-/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"|"satellite"} */
+/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"|"satellite"|"rest"} */
 function linkState() {
   if (waitingSince != null && Date.now() - waitingSince >= UNREACHABLE_MS) return "unreachable";
   const m = STATE._meta;
@@ -1092,8 +1092,10 @@ function linkState() {
   // a normal blip's gap is ~2 s)
   if (lastAnswerAt == null || (m && m.restored)
       || (waitingSince != null && waitingSince - lastAnswerAt > UNREACHABLE_MS)) return "connecting";
-  // satellite: fresh data but the unit link is down (camping off: the unit ends it every 30 s)
-  if (m && m.online && m.sat && !m.sat.link_up) return "connecting";
+  // satellite in power-save rest (R_UI_REST_CARD): the unit hung up with camping off; the data ages
+  if (m && m.sat && m.sat.link_rest) return "rest";
+  // satellite: fresh data, but no link that takes commands yet (down, or up and still reading/arming)
+  if (m && m.online && m.sat && !m.sat.link_ready) return "connecting";
   if (!m || m.online) return "live";
   // no data ever and no unit paired: the cause is "not paired", not a sleeping van (M6)
   return m.last_seen ? "asleep" : m.paired === false ? "unpaired" : "never";
@@ -1110,7 +1112,7 @@ function backendName() {
 const LINK_PILL = { live: ["live", "ok"], asleep: ["offline", "warn"], never: ["offline", "warn"],
   unpaired: ["not paired", ""],
   connecting: ["connecting…", ""], unreachable: ["unreachable", "error"],
-  satellite: ["🛰 Satellite mode", ""] };
+  satellite: ["🛰 Satellite mode", ""], rest: ["power saving", ""] };
 
 // Paint the pill + the persistent #conn banner (outside #app: a hung poll never reaches render(),
 // the 2 s tick still lands here). #conn is a role=status region: its text is replaced only when the
@@ -1121,7 +1123,7 @@ function paintLink() {
   const m = STATE._meta;
   const clock = m && m.last_seen ? clockText(m.last_seen) : null;
   const ago = agoText(m && m.age_s != null ? m.age_s + (Date.now() - stateAt) / 1000 : null);
-  let cls = "offline", tmpl = "", tick = "ago";
+  let cls = "offline", tmpl = "", tick = "ago", restNext = "";
   /** @type {Record<string, any>} */
   let vars = { clock: clock, ago: ago };
   if (s === "unreachable") {
@@ -1133,6 +1135,13 @@ function paintLink() {
   } else if (s === "satellite") {
     cls = "satellite";   // neutral, not the offline warning: the age of the frozen Pi cache, never shown as live
     tmpl = clock ? "🛰 Satellite mode — Pi data from {clock} ({ago})." : "";
+  } else if (s === "rest") {
+    cls = "rest";   // neutral, not the offline warning: the satellite stays away on purpose
+    const next = m && m.sat && m.sat.rest_next_s != null ? Math.max(1, Math.ceil(m.sat.rest_next_s / 60)) : null;
+    // ticks like {ago}: outside the key, so the card (and its button's focus) survives each minute
+    restNext = next == null ? "" : tf("Next reading in {next} min.", { next: next });
+    tmpl = !clock ? "Disconnected to save energy — turn on camping mode to stay connected."
+      : "Disconnected to save energy — turn on camping mode to stay connected. Last data {clock} ({ago}).";
   } else if (s === "connecting") {
     cls += " connecting";
     tmpl = clock ? "Connecting… Last data {clock} ({ago})." : "Connecting…";
@@ -1157,12 +1166,31 @@ function paintLink() {
     connEl.replaceChildren();
     if (parts.length > 1) {
       const sp = document.createElement("span");
+      sp.className = "tick";
       sp.setAttribute("aria-hidden", "true");
       connEl.append(parts[0], sp, parts[1]);
     } else if (tmpl) connEl.append(parts[0]);
+    if (s === "rest") {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn"; b.id = "rest-connect";
+      b.textContent = /** @type {string} */ (t("Reconnect"));
+      b.onclick = restConnect;
+      const nx = document.createElement("span");
+      nx.className = "rest-next";
+      nx.setAttribute("aria-hidden", "true");
+      connEl.append(" ", nx, " ", b);
+    }
   }
-  const sp = connEl.querySelector("span");
+  const sp = connEl.querySelector("span.tick"), nx = connEl.querySelector("span.rest-next");
   if (sp) sp.textContent = br ? "(" + vars[tick] + ")" : String(vars[tick]);
+  if (nx) nx.textContent = restNext;
+}
+
+/** The rest card's Reconnect: POST /api/ble {"connect":true} (R_UI_REST_CARD), then a fresh poll. */
+async function restConnect() {
+  ux({ type: "control", fn: "satellite", control: "connect" });
+  try { await satFetch("/api/ble", { connect: true }); } catch (e) { /* the next poll shows the state */ }
+  await refreshState(true);
 }
 
 /** @param {boolean} [force] */
@@ -2016,7 +2044,7 @@ const SAT_CLOCK = { synced: "synced (SNTP) · boot {boot}", waiting: "not synced
 // The camper unit's connection, in linkState()'s words (the pill + banner): online / asleep / not paired
 /** @type {Record<string, string>} */
 const LINK_WORD = { live: "online", asleep: "asleep", never: "asleep", unpaired: "not paired",
-  connecting: "connecting…", unreachable: "unreachable", satellite: "🛰 Satellite mode" };
+  connecting: "connecting…", unreachable: "unreachable", satellite: "🛰 Satellite mode", rest: "power saving" };
 
 /** A Device-status card: its heading names the device (UX review 3.2: one card per device).
  * @param {string} title @returns {HTMLElement} */
@@ -2204,9 +2232,13 @@ function buildSat(v) {
   if (v !== "satsettings") return satDom;
   const idle = h("select", { id: "ble-idle" });
   for (const n of BLE_IDLE_MIN) idle.append(idleOpt(n));
-  idle.onchange = satBleIdle;
+  idle.onchange = () => satBleSet("ble-idle", "idle_min");
+  const rest = h("select", { id: "ble-rest" });
+  for (const n of BLE_REST_MIN) rest.append(restOpt(n));
+  rest.onchange = () => satBleSet("ble-rest", "rest_poll_min");
   sq("pair").append(h("div", { class: "row", id: "ble-idle-row" }, h("label", { class: "lbl", for: "ble-idle" }, T("Connection")), idle),
-    h("p", { class: "note", id: "ble-idle-note" }, T("Between reads the satellite lets go of the unit; opening this app connects again within seconds.")),
+    h("p", { class: "note", id: "ble-idle-note" }, T("Between reads the satellite lets go of the unit; opening this app connects again within seconds — except in power-save mode (camping mode off): then tap Reconnect.")),
+    h("div", { class: "row", id: "ble-rest-row" }, h("label", { class: "lbl", for: "ble-rest" }, T("Read while in power-save mode")), rest),
     satMsg("ble-msg"));
   const toggle = (/** @type {string} */ id, /** @type {string} */ path, /** @type {string} */ err, /** @type {string} */ key, /** @type {string} */ msgId) =>
     { sq(id + "-toggle").onclick = () => satToggle(path, id, err, key, msgId); };
@@ -2279,6 +2311,8 @@ function satUpdate() {
   sq("ble-idle-row").hidden = !idleKnown || !st;
   sq("ble-idle-note").hidden = !idleKnown || !st || !(ble && ble.idle_min);
   if (ble && idleKnown) satPiSelectSet("ble-idle", ble.idle_min);
+  sq("ble-rest-row").hidden = !ble || ble.rest_poll_min === undefined || !st;
+  if (ble) satPiSelectSet("ble-rest", ble.rest_poll_min);
   sq("pw").hidden = !s.pi_wake;
   if (s.pi_wake) {
     const p = s.pi_wake;
@@ -2358,13 +2392,20 @@ const BLE_IDLE_MIN = [0, 2, 5, 15, 30];
 /** @param {number} n */
 const idleOpt = (n) => h("option", { value: String(n) }, !n ? T("Always connected") : tf("Read every {n} min", { n: n }));
 
-/** POST {"idle_min": n} to /api/ble; a refusal puts the shown value back. */
-async function satBleIdle() {
-  const sel = /** @type {HTMLSelectElement} */ (sq("ble-idle")), msg = sq("ble-msg");
+// The power-save rest's reads (R_FW_BLE_REST): 0 = none, else a read every n min while resting
+const BLE_REST_MIN = [0, 15, 30, 60, 120];
+/** @param {number} n */
+const restOpt = (n) => h("option", { value: String(n) }, !n ? T("Off")
+  : n < 120 || n % 60 ? tf("Every {n} min", { n: n }) : tf("Every {n} h", { n: n / 60 }));
+
+/** POST {key: n} (idle_min, rest_poll_min) to /api/ble; a refusal puts the shown value back.
+ * @param {string} id the select @param {string} key the /api/ble key */
+async function satBleSet(id, key) {
+  const sel = /** @type {HTMLSelectElement} */ (sq(id)), msg = sq("ble-msg");
   msg.textContent = "";
-  ux({ type: "control", fn: "satellite", control: "idle_min" });
+  ux({ type: "control", fn: "satellite", control: key });
   let ok = false;
-  try { ok = (await satFetch("/api/ble", { idle_min: Number(sel.value) })).status === 200; } catch (e) { /* ok stays false */ }
+  try { ok = (await satFetch("/api/ble", { [key]: Number(sel.value) })).status === 200; } catch (e) { /* ok stays false */ }
   if (!ok) { msg.textContent = T("Couldn't change the connection"); sel.value = sel.dataset.v || ""; }
   sel.blur();
   await refreshState(true);
@@ -2376,7 +2417,7 @@ function satPiSelectSet(id, v) {
   const sel = /** @type {HTMLSelectElement} */ (sq(id));
   if (v === undefined || document.activeElement === sel) return;
   if (!Array.from(sel.options).some((o) => o.value === String(v)))
-    sel.append(id === "ble-idle" ? idleOpt(v) : piOpt(id, v));
+    sel.append(id === "ble-idle" ? idleOpt(v) : id === "ble-rest" ? restOpt(v) : piOpt(id, v));
   sel.value = sel.dataset.v = String(v);
 }
 

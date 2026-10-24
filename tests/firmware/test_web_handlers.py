@@ -251,7 +251,13 @@ def test_api_state_shape(web_cli):
     d = body["device"]
     assert d["uptime_ms"] == body["t"] and 5000 < body["t"] < 5100 and d["fw"] == "test"
     assert d["pairing"] == {"state": "idle", "address": IDENTITY}
-    assert d["link"] == {"up": True, "last_snap_age_ms": body["t"] - 4000}
+    assert d["link"] == {
+        "up": True,
+        "ready": False,
+        "rest": False,
+        "rest_next_s": None,
+        "last_snap_age_ms": body["t"] - 4000,
+    }
     assert d["wifi"] == {"mode": "station", "ssid": "minsel", "ip": "192.168.1.23", "rssi": -61}
 
 
@@ -266,7 +272,7 @@ _PIN_SETUP = [
 ]
 EXPECTED_DEVICE_TAIL = (
     '"device":{"pairing":{"state":"idle","address":"C0:FF:EE:CA:11:F0"},"link":{"up":true,'
-    '"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
+    '"ready":false,"rest":false,"rest_next_s":null,"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
     '"control":{"writes":true},"uptime_ms":5010,"fw":"test",'
     '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null,"channel":"stable"},'
     '"time":{"source":"none","synced":false,"boot":0,"up":5010},'
@@ -276,7 +282,7 @@ EXPECTED_DEVICE_TAIL = (
     '"auto_camper":{"enabled":true,"state":"idle"},'
     '"pi_wake":{"enabled":true,"last_s":null,"reason":null,"halt_after_min":30,"halt_soc_pct":30,'
     '"halt_in_s":1795,"halted":false,"halt_last_s":null,"halt_reason":null,"batt_low":false},'
-    '"ble":{"mode":"hold","probing":false,"exp":null,"idle_min":0,"unit_adv_seen_ms_ago":null},'
+    '"ble":{"mode":"hold","probing":false,"exp":null,"idle_min":0,"rest_poll_min":30,"unit_adv_seen_ms_ago":null},'
     '"display":{"state":null,"lux":null,"prox":null,"motion":null,"brightness_pct":null,"sensor":null,'
     '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0,"dfs":null,"pm":null},'
     '"ux":{"enabled":true},'
@@ -319,7 +325,13 @@ def test_api_state_nulls(web_cli):
     body = json.loads(get(web_cli, "/api/state", setup=["nofn", "wifi setup_ap"]))
     assert body["fn"] == {}
     assert body["device"]["pairing"] == {"state": "idle", "address": None}
-    assert body["device"]["link"] == {"up": False, "last_snap_age_ms": None}
+    assert body["device"]["link"] == {
+        "up": False,
+        "ready": False,
+        "rest": False,
+        "rest_next_s": None,
+        "last_snap_age_ms": None,
+    }
     assert body["device"]["wifi"] == {"mode": "setup", "ssid": None, "ip": None, "rssi": None}
 
 
@@ -2421,7 +2433,14 @@ def test_api_log_a_failed_sd_read_is_503(web_cli, tmp_path):
 
 # ---- /api/ble: the BLE link mode, the probe and the night experiment (R_FW_BLE_EXP) ------------------
 
-BLE_IDLE = {"mode": "hold", "probing": False, "exp": None, "idle_min": 0, "unit_adv_seen_ms_ago": None}
+BLE_IDLE = {
+    "mode": "hold",
+    "probing": False,
+    "exp": None,
+    "idle_min": 0,
+    "rest_poll_min": 30,
+    "unit_adv_seen_ms_ago": None,
+}
 # 2026-10-20 21:00 UTC = 23:00 in Berlin (CEST): inside the default 22-06 window
 NIGHT_MS = 1792530000000
 
@@ -2436,6 +2455,10 @@ NIGHT_MS = 1792530000000
         ('{"probe":false}', []),
         ('{"exp_min":0}', []),
         ('{"warm_ms":0}', ["CALL session_set_warm_ms 0"]),
+        ('{"rest_poll_min":0}', ["CALL session_set_rest_poll 0"]),
+        ('{"rest_poll_min":240}', ["CALL session_set_rest_poll 240"]),
+        ('{"connect":true}', ["CALL session_connect"]),
+        ('{"connect":false}', []),
     ],
 )
 def test_api_ble_post(web_cli, body, calls):
@@ -2446,7 +2469,7 @@ def test_api_ble_post(web_cli, body, calls):
        :links: R_FW_BLE_EXP
     """
     resps, other = drive(
-        web_cli, [*(s.encode() for s in STATION), b"active 1", req("POST", "/api/ble", body)]
+        web_cli, [*(s.encode() for s in STATION), b"active 1", b"bond 1", req("POST", "/api/ble", body)]
     )
     assert resps[-1].status == 200
     assert [ln for ln in other if ln.startswith("CALL session_")] == calls
@@ -2469,6 +2492,11 @@ def test_api_ble_post(web_cli, body, calls):
         (STATION + ["ntp %d" % NIGHT_MS], "POST", '{"exp_min":60,"to":24}', 400, "bad_value"),
         (STATION, "POST", '{"idle_min":61}', 400, "bad_value"),
         (STATION, "POST", '{"warm_ms":5001}', 400, "bad_value"),
+        (STATION, "POST", '{"rest_poll_min":241}', 400, "bad_value"),
+        (STATION, "POST", '{"rest_poll_min":-1}', 400, "bad_json"),
+        (STATION, "POST", '{"connect":1}', 400, "bad_json"),
+        (STATION + ["bond 0"], "POST", '{"connect":true}', 409, "not_paired"),
+        (STATION + ["bond 1", "kvfail 1"], "POST", '{"rest_poll_min":15}', 500, "store"),
         (STATION + ["kvfail 1"], "POST", '{"idle_min":5}', 500, "store"),
         (["wifi setup_ap"], "POST", '{"mode":"off"}', 403, "setup_mode"),
     ],
@@ -2617,12 +2645,116 @@ def test_api_ble_idle_policy_is_stored_and_drives_the_link(web_cli):
     )
     assert [r.status for r in resps] == [200, 200, 200, 200]
     assert resps[0].json() == dict(BLE_IDLE, idle_min=5)
-    assert [ln for ln in other if ln.startswith("CALL session_")] == [
+    assert [ln for ln in other if ln.startswith("CALL session_") and "rest_poll" not in ln] == [
         "CALL session_set_mode off idle",
         "CALL session_probe",
     ]
     assert resps[-2].json() == dict(BLE_IDLE, mode="off", probing=True, idle_min=5)
     assert resps[-1].json() == dict(BLE_IDLE, mode="off", probing=True)
+
+
+def test_api_ble_rest_poll_is_stored(web_cli):
+    """``{"rest_poll_min":15}`` stores the power-save rest's read interval (kv ``ble_rest``, read back at
+    boot; missing = 30) and hands it to the session; device.ble reports it.
+
+    .. test:: POST /api/ble rest_poll_min: stored, applied, reported
+       :id: T_FW_BLE_REST_API
+       :links: R_FW_BLE_REST
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/ble", '{"rest_poll_min":15}'),
+            b"bxinit",  # boot: the stored 15
+            req("GET", "/api/ble"),
+            b"kvhex ble_rest f1",  # out of range: the default
+            b"bxinit",
+            req("GET", "/api/ble"),
+        ],
+    )
+    assert [r.json()["rest_poll_min"] for r in resps] == [15, 15, 30]
+    assert [ln for ln in other if ln.startswith("CALL session_set_rest")] == [
+        "CALL session_set_rest_poll 15",
+        "CALL session_set_rest_poll 15",
+        "CALL session_set_rest_poll 30",
+    ]
+
+
+def test_idle_policy_and_experiment_never_probe_in_rest(web_cli):
+    """In the power-save rest only its own poll wakes the unit: the idle policy's periodic probe and
+    the experiment's phase-end probe are skipped while ``cali_session_rest()`` is 1, and run again
+    once the rest ends.
+
+    .. test:: No idle-policy or experiment probe while resting
+       :id: T_FW_BLE_REST_NO_OTHER_PROBE
+       :links: R_FW_BLE_REST
+    """
+    steps = [
+        *(s.encode() for s in STATION),
+        b"active 1",
+        b"now 1000",
+        req("POST", "/api/ble", '{"idle_min":5}'),
+        b"now 601100",
+        b"bxtick",  # 10 min idle -> off
+        b"rest 1",
+        b"now 901100",
+        b"bxtick",  # 5 min off -> its probe, skipped in rest
+        b"now 1201100",
+        b"bxtick",
+        b"rest 0",
+        b"now 1501100",
+        b"bxtick",  # out of rest: the policy probes again
+    ]
+    _, other = drive(web_cli, steps)
+    assert [ln for ln in other if ln.startswith("CALL session_") and "rest_poll" not in ln] == [
+        "CALL session_set_mode off idle",
+        "CALL session_probe",
+    ]
+    steps = [
+        *(s.encode() for s in STATION),
+        b"active 1",
+        b"ntp %d" % NIGHT_MS,
+        b"now 1000",
+        b"rest 1",
+        req("POST", "/api/ble", '{"exp_min":1}'),
+    ] + [b"now %d" % (1000 + k * 30000) + b"\nbxtick" for k in range(1, 9)]
+    _, other = drive(web_cli, steps)
+    assert not [ln for ln in other if ln == "CALL session_probe"]
+
+
+def test_state_link_reports_ready_and_rest(web_cli):
+    """/api/state device.link: ``ready`` (commands accepted), ``rest`` (power-save rest) and
+    ``rest_next_s`` (seconds to the next rest read, null when none).
+
+    .. test:: /api/state device.link carries ready, rest and rest_next_s
+       :id: T_FW_BLE_REST_STATE
+       :links: R_FW_BLE_REST
+    """
+    resps, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"linkup 1",
+            b"ready 1",
+            req("GET", "/api/state"),
+            b"linkup 0",
+            b"ready 0",
+            b"rest 1",
+            b"restnext 1799001",
+            req("GET", "/api/state"),
+            b"restnext -1",
+            req("GET", "/api/state"),
+        ],
+    )
+    links = [
+        {k: r.json()["device"]["link"][k] for k in ("up", "ready", "rest", "rest_next_s")} for r in resps
+    ]
+    assert links == [
+        {"up": True, "ready": True, "rest": False, "rest_next_s": None},
+        {"up": False, "ready": False, "rest": True, "rest_next_s": 1800},
+        {"up": False, "ready": False, "rest": True, "rest_next_s": None},
+    ]
 
 
 def test_app_shell_load_is_a_viewer(web_cli):

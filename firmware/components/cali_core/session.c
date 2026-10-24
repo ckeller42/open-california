@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cali_auto_camper.h"
 #include "cali_console.h"
 #include "cali_control.h"
 #include "cali_diag.h"
@@ -57,6 +58,12 @@ static uint64_t s_water_next;  /* now_ms of the next water re-read */
 
 static int s_mode = CALI_BLE_HOLD;
 static int s_probe;            /* 1 = a probe waits for its read-all */
+
+/* Power-save rest (R_FW_BLE_REST): the unit hung up while camping is off and no shore power feeds it,
+ * so no reconnect; a probe every s_rest_poll_ms (0 = none) reads once and drops the link again. */
+static int s_rest;
+static uint64_t s_rest_next;   /* now_ms of the next rest probe */
+static uint32_t s_rest_poll_ms = CALI_SESSION_REST_POLL_DEFAULT_MIN * 60000u;
 static const char *const MODE_NAME[] = {"hold", "quiet", "off"};
 
 #define WATER_CHAR 0x1302u
@@ -152,6 +159,38 @@ static int index_of(uint16_t short_id) {
         if (CODEC_CHARS[i].state_short == short_id) return (int)i;
     }
     return -1;
+}
+
+/* One field of a stored frame (this boot, this unit; kept across links), -1 when there is none. */
+static int stored_field(uint16_t c, const char *fn, const char *field) {
+    static codec_kv_t kv[CODEC_KV_MAX];   /* static: the 8 KB host-task stack */
+    int i = index_of(c);
+    if (i < 0 || !s_fr[i].have) return -1;
+    int n = codec_decode(codec_func_by_name(fn), s_fr[i].frame, s_fr[i].len, kv);
+    for (int k = 0; k < n; k++)
+        if (strcmp(kv[k].name, field) == 0) return (int)kv[k].value;
+    return -1;
+}
+
+/* The app's rule for staying away (5.4.0 gg/k): camping mode (1202 State) off AND shore power
+ * (1602 StateLandAfs) neither active (1) nor standby (2). Ours adds: the ignition known off on this
+ * link (an engine-on van is the auto camper's armed state; the Pi wake needs the ignition edge) and
+ * no camping restore owed (R_FW_AUTO_CAMPER). A missing frame or field = 0 (reconnect as usual). */
+static int rest_conditions(void) {
+    int camping = stored_field(0x1202u, "campingmode", "State");
+    int shore = stored_field(0x1602u, "energy", "StateLandAfs");
+    return camping == 0 && shore >= 0 && shore != 1 && shore != 2 && cali_ac_ignition() == 0 && !cali_ac_owed();
+}
+
+/* The unit ended the link itself: HCI 0x13 "remote user terminated", raw or as NimBLE's 0x200 + code. */
+static int peer_hangup(int status) { return status == 0x13 || status == 0x213; }
+
+static void rest_set(int on, const char *why) {
+    if (s_rest == on) return;
+    s_rest = on;
+    s_rest_next = s_now + s_rest_poll_ms;
+    cali_log("session: power-save rest %s (%s)", on ? "on" : "off", why);
+    cali_diag_evt("rest", "\"on\":%s,\"why\":\"%s\"", on ? "true" : "false", why);
 }
 
 /* Fresh/waste tank LEVEL from a raw water frame. Returns 1 if FreshWaterLevel is present (sets
@@ -313,8 +352,14 @@ static void probe_end(int ok, const char *reason) {
     cali_log("session: probe %s (%s)", ok ? "ok" : "fail", reason);
     cali_diag_evt("probe", "\"ok\":%s,\"mode\":\"%s\",\"reason\":\"%s\"", ok ? "true" : "false",
                   MODE_NAME[s_mode], reason);
-    if (ok && s_mode == CALI_BLE_OFF && s_link != LINK_DOWN) {
-        s_why = "ble_off";
+    if (s_rest) {   /* a rest probe: the next poll counts from its end */
+        s_rest_next = s_now + s_rest_poll_ms;
+        /* the whole read pass is this link's: camping on, shore power, ignition -> hold again */
+        if (ok && !rest_conditions()) rest_set(0, "unit_state");
+    }
+    /* rest or off: drop our own link right after the read pass (the unit is woken seconds, not 30 s) */
+    if (ok && (s_rest || s_mode == CALI_BLE_OFF) && s_link != LINK_DOWN) {
+        s_why = s_rest ? "rest" : "ble_off";
         s_why_st = 0;
         (void)s_t->disconnect();
         link_clear();
@@ -324,6 +369,7 @@ static void probe_end(int ok, const char *reason) {
 static void schedule_reconnect(void) {
     if (!s_active) return;
     if (s_mode == CALI_BLE_OFF) return;               /* off: no link and no reconnect */
+    if (s_rest) return;                               /* power-save rest: only its poll connects */
     if (!s_t->has_bond()) {                           /* bond gone (forget): nothing to reconnect to */
         s_active = 0;
         return;
@@ -345,7 +391,10 @@ static void link_lost(const char *why, int status) {
     s_why_st = status;
     link_clear();
     if (was != LINK_DOWN) (void)s_t->disconnect();   /* may be down already: silent either way */
-    schedule_reconnect();
+    if (s_active && s_mode != CALI_BLE_OFF && strcmp(why, "disconnected") == 0 && peer_hangup(status) &&
+        !cali_ctl_busy() && rest_conditions())   /* a command in flight waits for its reconnect */
+        rest_set(1, "camping_off");
+    schedule_reconnect();   /* nothing in rest */
 }
 
 static void link_up(void) {
@@ -417,15 +466,7 @@ int cali_variant_has(const char *function, int car_variant) {
 }
 
 /* The CarVariant of the stored 1004 frame (this boot, this unit), -1 when there is none. */
-static int stored_variant(void) {
-    static codec_kv_t kv[CODEC_KV_MAX];   /* static: the 8 KB host-task stack */
-    int v = index_of(VEHICLE_CHAR);
-    if (v < 0 || !s_fr[v].have) return -1;
-    int n = codec_decode(codec_func_by_name("vehicle"), s_fr[v].frame, s_fr[v].len, kv);
-    for (int k = 0; k < n; k++)
-        if (strcmp(kv[k].name, "CarVariant") == 0) return (int)kv[k].value;
-    return -1;
-}
+static int stored_variant(void) { return stored_field(VEHICLE_CHAR, "vehicle", "CarVariant"); }
 
 /* 1 when this link's read pass reads CODEC_CHARS[i]: the variant has it, and it is not the 1004 the
  * pre-subscribe read already stored for the link's first pass. */
@@ -600,6 +641,7 @@ static void on_event(const cali_tevent_t *e) {
 void cali_session_init(const cali_transport_t *t) {
     s_t = t;
     s_active = 0;
+    s_rest = 0;
     link_clear();
     s_reconnect_pending = 0;
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
@@ -644,11 +686,13 @@ void cali_session_boot(void) {
 
 void cali_session_on_bonded(void) {
     (void)cali_session_set_mode(CALI_BLE_HOLD, "pairing");   /* before s_active: only logs, no connect */
+    rest_set(0, "pairing");
     s_active = 1;
     link_up();
 }
 
 void cali_session_stop(void) {
+    rest_set(0, "stop");
     if (s_probe) probe_end(0, "stop");
     s_active = 0;
     s_reconnect_pending = 0;
@@ -696,6 +740,12 @@ void cali_session_tick(uint64_t now_ms) {
         link_lost("enc_timeout", 0);
         return;
     }
+    /* probe_end re-stamps s_rest_next (a connect that fails at once ends the probe inside the call) */
+    if (s_rest && s_rest_poll_ms && s_mode != CALI_BLE_OFF && s_link == LINK_DOWN && !s_probe && now_ms >= s_rest_next) {
+        cali_log("session: rest poll");
+        (void)cali_session_probe();
+        return;
+    }
     if (s_link == LINK_DOWN && s_reconnect_pending && now_ms >= s_reconnect_at) {
         s_reconnect_pending = 0;
         if (!s_t->has_bond()) {
@@ -722,7 +772,7 @@ int cali_session_set_mode(int mode, const char *why) {
             (void)s_t->disconnect();
             link_clear();
         }
-    } else if (s_link == LINK_DOWN && !s_reconnect_pending) {
+    } else if (s_link == LINK_DOWN && !s_reconnect_pending && !s_rest) {   /* rest: only connect/a command */
         s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
         connect_now();
     }
@@ -742,11 +792,41 @@ int cali_session_probe(void) {
     return 0;
 }
 
-void cali_session_connect_now(void) {
-    if (s_mode != CALI_BLE_HOLD) (void)cali_session_set_mode(CALI_BLE_HOLD, "command");   /* writes need hold */
-    if (s_active && s_link == LINK_DOWN && s_reconnect_pending)   /* due now, but not inside the cooldown */
+/* A command or the Connect button: hold, out of rest, and a reconnect due now (not inside the cooldown). */
+static void wake(const char *why) {
+    if (s_mode != CALI_BLE_HOLD) (void)cali_session_set_mode(CALI_BLE_HOLD, why);   /* writes need hold */
+    if (s_rest) {
+        rest_set(0, why);
+        if (s_active && s_link == LINK_DOWN && !s_reconnect_pending && !s_probe) {
+            s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
+            schedule_reconnect();
+        }
+    }
+    if (s_active && s_link == LINK_DOWN && s_reconnect_pending)
         s_reconnect_at = s_was_up && s_now < s_down_at + CALI_SESSION_UNIT_COOLDOWN_MS
                              ? s_down_at + CALI_SESSION_UNIT_COOLDOWN_MS : s_now;
+}
+
+void cali_session_connect_now(void) { wake("command"); }
+
+int cali_session_connect(void) {
+    if (!s_t->has_bond()) return -1;
+    wake("connect");
+    return 0;
+}
+
+int cali_session_rest(void) { return s_rest; }
+
+unsigned cali_session_rest_poll_min(void) { return (unsigned)(s_rest_poll_ms / 60000u); }
+
+int64_t cali_session_rest_next_ms(void) {
+    if (!s_rest || !s_rest_poll_ms) return -1;
+    return s_rest_next > s_now ? (int64_t)(s_rest_next - s_now) : 0;
+}
+
+void cali_session_set_rest_poll(unsigned min) {
+    s_rest_poll_ms = (uint32_t)min * 60000u;
+    s_rest_next = s_now + s_rest_poll_ms;   /* a new interval counts from now */
 }
 
 int cali_session_water_held(void) { return s_water_held; }

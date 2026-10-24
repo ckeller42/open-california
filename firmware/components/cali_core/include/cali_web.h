@@ -16,7 +16,11 @@
  *   GET /api/state    200 application/json:
  *                       {"t":<uptime_ms>,"fn":{<the SNAP "fn" object, cali_snapshot_fn>},
  *                        "device":{"pairing":{"state":"<PAIR_STATE_NAMES>","address":"…"|null},
- *                                  "link":{"up":<bool>,"last_snap_age_ms":<int>|null},
+ *                                  "link":{"up":<bool>,"ready":<bool>,"rest":<bool>,"rest_next_s":<int>|null,
+ *                                          "last_snap_age_ms":<int>|null},
+ *                                                -- ready = cali_session_ready (commands accepted); rest = the
+ *                                                power-save rest (no reconnect, R_FW_BLE_REST); rest_next_s =
+ *                                                s to its next read, null = not resting or the poll is off
  *                                  "wifi":{"mode":"setup"|"station"|"off","ssid":"…"|null,
  *                                          "ip":"a.b.c.d"|null,"rssi":<int>|null},
  *                                  "control":{"writes":<bool>},   -- POST /api/command accepted (station mode)
@@ -37,7 +41,8 @@
  *                                                -- cali_pi_wake.h (R_FW_PI_WAKE, R_FW_PI_HALT); last_s = s since the last pulse
  *                                  "ble":{"mode":"hold"|"quiet"|"off","probing":<bool>,"exp":null|{"on":true,
  *                                         "phase_min","from","to","phase":"hold"|"quiet"|"off"|null,
- *                                         "remaining_ms":<int>|null},"idle_min":0..60,"unit_adv_seen_ms_ago":<int>|null},
+ *                                         "remaining_ms":<int>|null},"idle_min":0..60,"rest_poll_min":0..240,
+ *                                         "unit_adv_seen_ms_ago":<int>|null},
  *                                                -- cali_ble_exp.h (R_FW_BLE_MODE, R_FW_BLE_EXP, R_FW_BLE_IDLE); a
  *                                                GET of /api/state is a viewer: it holds the experiment and the
  *                                                idle policy
@@ -161,11 +166,13 @@
  *   POST /api/ble     any of {"mode":"hold"|"quiet"|"off"}, {"probe":true}, {"exp_min":1..720,"from"?:0..23,
  *                     "to"?:0..23} (the night experiment, window default 22-06), {"exp_min":0} (stop),
  *                     {"idle_min":0..60} (the idle policy, stored; R_FW_BLE_IDLE), {"warm_ms":0..5000} (the
- *                     read pass's warm-up, not stored; R_FW_BLE_WARM), each key once -> 200
- *                     device.ble; station mode only (403 setup_mode), 400 bad_json (unknown or repeated key,
- *                     wrong type, none of mode/probe/exp_min/idle_min/warm_ms), 400 bad_value (out of range), 409
- *                     no_time (exp_min without a wall clock, nothing applied), 409 busy (probe refused), 500
- *                     store (idle_min not stored), 405 for another method.
+ *                     read pass's warm-up, not stored; R_FW_BLE_WARM), {"rest_poll_min":0..240} (the rest's
+ *                     read interval, stored; R_FW_BLE_REST), {"connect":true} (leave the rest, reconnect after
+ *                     the cooldown), each key once -> 200 device.ble; station mode only (403 setup_mode), 400
+ *                     bad_json (unknown or repeated key, wrong type, none of mode/probe/exp_min/idle_min/warm_ms/
+ *                     rest_poll_min/connect), 400 bad_value (out of range), 409 no_time (exp_min without a wall
+ *                     clock, nothing applied), 409 busy (probe refused), 409 not_paired (connect without a
+ *                     bond), 500 store (idle_min / rest_poll_min not stored), 405 for another method.
  *   POST /api/pi_wake_setting  a non-empty subset of {"enabled":<bool>,"halt_after_min":0..1440,
  *                     "halt_soc_pct":0..100}, each key once (R_FW_PI_WAKE, R_FW_PI_HALT): wake on ignition,
  *                     the halt timer and battery guard -> 200 {"ok":true,"pi_wake":<bool>,"halt_after_min":n,

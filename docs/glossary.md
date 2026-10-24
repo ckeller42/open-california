@@ -197,6 +197,11 @@ HCI reason code
   host, `0x3e` connection failed to be established (often a busy scanner), `0x08` supervision
   timeout (out of range, or the peer went silent).
 
+Power-save rest
+  The satellite's link state after the unit ends the link itself (HCI 0x13) while camping mode is
+  off and no shore power feeds it: no auto-reconnect (as the app does), one short reading every
+  `rest_poll_min` minutes (default 30); a control tap or *Reconnect* ends it. See {doc}`firmware`.
+
 Persistent session
 Held link
   A BLE connection kept open between commands instead of connect-read-release; buspi's daemon

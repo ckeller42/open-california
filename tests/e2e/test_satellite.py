@@ -746,6 +746,83 @@ def test_fresh_data_with_the_link_down_is_not_live(stub, error_gated_page):
         expect(pg.locator("#status")).to_have_text("connecting…")
 
 
+def test_live_only_once_the_link_takes_commands(stub, error_gated_page):
+    """An up link still reading or arming (``device.link.ready`` false) is not "live" yet: commands
+    would answer not_connected. Live once ready. In mode quiet (no arming ever) the link alone."""
+    dev = stub.fixtures["satellite"]["/api/state"]["device"]
+    dev["link"]["ready"] = False
+    with error_gated_page(stub.base) as pg:
+        expect(pg.locator("#status")).to_have_text("connecting…")
+        dev["link"]["ready"] = True
+        expect(pg.locator("#status")).to_have_text("live")
+        dev["link"]["ready"] = False
+        dev["ble"]["mode"] = "quiet"
+        pg.wait_for_timeout(2500)
+        expect(pg.locator("#status")).to_have_text("live")
+
+
+@pytest.mark.parametrize(
+    "locale, pill, head, nxt, button",
+    [
+        (
+            "en-US",
+            "power saving",
+            "Disconnected to save energy — turn on camping mode",
+            "Next reading in 25 min.",
+            "Reconnect",
+        ),
+        (
+            "de-DE",
+            "Energiesparen",
+            "Verbindung getrennt, um Energie zu sparen",
+            "Nächste Ablesung in 25 min.",
+            "Neu verbinden",
+        ),
+    ],
+)
+def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale, pill, head, nxt, button):
+    """Power-save rest (``device.link.rest``): the unit hung up with camping off and no shore power,
+    the satellite stays away. The banner is the app's card (neutral, not the offline warning) with
+    the last data's age and the next rest read; Reconnect posts ``{"connect":true}`` and the card
+    goes; the pill says power saving. With the rest poll off, nothing about readings.
+
+    .. test:: The rest card explains the power-save stop and reconnects on request
+       :id: T_UI_REST_CARD
+       :links: R_UI_REST_CARD
+    """
+    link = stub.fixtures["satellite"]["/api/state"]["device"]["link"]
+    link.update(up=False, ready=False, rest=True, rest_next_s=1500, last_snap_age_ms=600000)
+    with error_gated_page(stub.base, locale=locale) as pg:
+        conn = pg.locator("#conn")
+        expect(conn).to_contain_text(head)
+        expect(conn).to_contain_text(nxt)
+        expect(conn).to_have_class("rest")
+        expect(pg.locator("#status")).to_have_text(pill)
+        btn = conn.get_by_role("button", name=button).element_handle()
+        link["rest_next_s"] = 1440  # a minute later: the count moves, the card is not rebuilt
+        expect(conn).to_contain_text(nxt.replace("25", "24"))
+        assert btn.evaluate("b => b.isConnected")
+        link["rest_next_s"] = None
+        expect(conn).not_to_contain_text(nxt)
+        conn.get_by_role("button", name=button).click()
+        expect(conn).not_to_contain_text(head)
+    assert ("/api/ble", {"connect": True}) in stub.posts
+
+
+def test_settings_rest_poll_select_posts_the_interval(stub, error_gated_page):
+    """Satellite settings → Camper unit: "Read while in power-save mode" shows the stored rest poll
+    and posts the chosen interval (``rest_poll_min``)."""
+    with error_gated_page(stub.base + "/#satsettings") as pg:
+        sel = pg.locator("#ble-rest")
+        expect(sel).to_have_value("30")
+        expect(sel.locator("option")).to_have_text(
+            ["Off", "Every 15 min", "Every 30 min", "Every 60 min", "Every 2 h"]
+        )
+        sel.select_option("120")
+        expect(sel).to_have_value("120")
+    assert ("/api/ble", {"rest_poll_min": 120}) in stub.posts
+
+
 def _engine_or_skip(engine):
     try:
         with sync_api.sync_playwright() as p:

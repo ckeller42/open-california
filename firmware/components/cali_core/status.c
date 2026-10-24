@@ -24,6 +24,9 @@ void cali_status_get(cali_status_t *s, const cali_transport_t *t, uint64_t now_m
     s->pair_state = cali_runner_state()->st;
     copy(s->address, sizeof s->address, cali_snapshot_pair_address(t));
     s->link_up = (uint8_t)(cali_session_link_up() != 0);
+    s->link_ready = (uint8_t)(cali_session_ready() != 0);
+    s->link_rest = (uint8_t)(cali_session_rest() != 0);
+    s->rest_next_ms = cali_session_rest_next_ms();
     s->snap_age_ms = last ? (int64_t)(now_ms >= last ? now_ms - last : 0) : -1;
     s->wifi_mode = (uint8_t)cali_wifi_mode(w);
     s->wifi_state = w->st;
