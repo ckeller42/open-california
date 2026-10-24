@@ -196,7 +196,7 @@ calictl's supervisor.
   the GATT handles across reconnects would save the discovery.
 - **Page open.** A page open in `hold` waits out the delay (≤ 60 s). A page that moves an
   idle-policy session from `off` to `hold` connects at once (the mode change clears the pending
-  reconnect and resets the backoff).
+  reconnect and resets the backoff), except during the power-save rest below.
 - **Watchdogs.** `CALI_SESSION_CONNECT_TIMEOUT_MS` (20 s, twice the transport's connect timeout)
   fires only when the transport's verdict got lost; `CALI_SESSION_ENC_TIMEOUT_MS` (15 s) bounds
   the encryption.
@@ -1014,9 +1014,11 @@ try-lock: a concurrent caller, a full queue or a body that does not fit `CALI_SD
 | `evt` `boot` | once per boot, when the card takes it | `reset_reason` (`esp_reset_reason`: `poweron`/`sw`/`panic`/`task_wdt`/`int_wdt`/`brownout`/…), `fw`, `boot`, `prev_up_s` (the previous boot's last diag uptime, RTC no-init RAM: survives a reset, `null` after power-on) |
 | `evt` `panic` | right after `boot`, when the previous boot panicked (`R_FW_PANIC_CAPTURE`, below) | `task` (the task running on the panicking core), `reason` (the exception, or abort()/assert's details; <= 47 chars), `bt` (up to 16 backtrace PCs, innermost first, space-separated bare hex) |
 | `evt` `link_up` | link encrypted (session.c) | `reconnect_ms` (down -> up; `null` for the first link of a boot), `attempts` (`connect_bonded` calls since) |
-| `evt` `link_down` | an up link went | `reason` (`disconnected`/`connect_fail`/`enc_fail`/`heartbeat`/`discover`/`connect_timeout`/`enc_timeout`/`ble_off`/`stop`), `status` (the transport status: NimBLE, HCI = 0x200 + code, e.g. 531 = 0x13), `dur_ms` |
-| `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why`: `console` (`ble mode`), `api` (`POST /api/ble`), `command` (a control command in `quiet`/`off`), `pairing`, `exp` (an experiment phase starts), `exp_abort` (a phase cut short), `exp_off` (`ble exp off`), `idle` (the idle policy, `R_FW_BLE_IDLE`) |
+| `evt` `link_down` | an up link went | `reason` (`disconnected`/`connect_fail`/`enc_fail`/`heartbeat`/`discover`/`connect_timeout`/`enc_timeout`/`ble_off`/`rest`/`stop`; `rest` = the satellite dropped a rest probe's link after its read pass), `status` (the transport status: NimBLE, HCI = 0x200 + code, e.g. 531 = 0x13), `dur_ms` |
+| `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why`: `console` (`ble mode`), `api` (`POST /api/ble`), `command` (a control command in `quiet`/`off`), `connect` (`POST /api/ble` `connect`), `pairing`, `exp` (an experiment phase starts), `exp_abort` (a phase cut short), `exp_off` (`ble exp off`), `idle` (the idle policy, `R_FW_BLE_IDLE`) |
 | `evt` `ble_idle` | the idle policy was set (`POST /api/ble` `idle_min`; ble_exp_run.c, `R_FW_BLE_IDLE`) | `probe_min` (0 = hold) |
+| `evt` `ble_rest` | the rest poll was set (`POST /api/ble` `rest_poll_min`; ble_exp_run.c, `R_FW_BLE_REST`) | `poll_min` (0 = no probe) |
+| `evt` `rest` | the power-save rest began or ended (session.c, `R_FW_BLE_REST`) | `on` (bool), `why`: `camping_off` (entered), `command`, `connect`, `unit_state` (a frame showed camping on or shore power), `pairing`, `stop` |
 | `evt` `ble_exp` | the BLE experiment started / stopped (ble_exp_run.c, `R_FW_BLE_EXP`) | `on` (bool); on start also `phase_min`, `from`, `to` (Berlin local hours) |
 | `evt` `ble_phase` | an experiment phase ended (also: stopped or restarted mid-phase) | `mode` (the phase: `hold`/`quiet`/`off`), `aborted` (bool: cut short by a viewer, a mode change from outside — a command in `quiet`/`off`, the console, `/api/ble`, also during the probe —, the ignition on an up link, the window's end, `ble exp off` or a new `ble exp`; `false` = ran its length, probe done), `dur_ms` (the phase's span: a `hold` phase logs no `ble_mode` at its start) |
 | `evt` `unit_adv` | the bonded unit's own advert, while an experiment runs (ble_exp_run.c, `R_FW_BLE_EXP`): first seen in a sensor window, or gone (no sighting for `CALI_BX_GONE_MS` = 3 sensor scan periods + one window, 185 s) | `seen` (bool; never the address) |
