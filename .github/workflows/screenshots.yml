@@ -23,21 +23,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  screenshots:
-    # workflow_dispatch can target any branch; this job holds a write token, so main only.
+  # Render with a read-only token: this job runs pip + Playwright (third-party code).
+  render:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Write scope lives on the job (not the workflow): this is the only job that pushes.
     permissions:
-      contents: write   # push the screenshots branch
-      actions: write    # start docs.yml
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        # persist-credentials stays at its default (true) ON PURPOSE: the last step runs
-        # `git push` with the checkout token.
         with:
-          persist-credentials: true  # zizmor: ignore[artipacked] -- the final step pushes with this token
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -57,8 +53,31 @@ jobs:
         run: python -m playwright install ${{ steps.pw-cache.outputs.cache-hit == 'true' && 'chromium' || '--with-deps chromium' }}
       - name: Render the web UI over the mock unit
         run: python -m tools.ux_gallery --out "$RUNNER_TEMP/shots"
-      # main is ruleset-protected (PRs only), so the shots live on their own `screenshots` branch:
-      # the README links them there and docs.yml lays them over main's copies before building.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: shots
+          path: ${{ runner.temp }}/shots/*.png
+          retention-days: 1
+
+  # main is ruleset-protected (PRs only), so the shots live on their own `screenshots` branch: the
+  # README links them there and docs.yml lays them over main's copies before building. Only this
+  # job holds write scopes, and it runs nothing but git + gh on the rendered PNGs.
+  publish:
+    needs: render
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # push the screenshots branch
+      actions: write    # start docs.yml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # persist-credentials stays at its default (true) ON PURPOSE: this job pushes with it.
+        with:
+          persist-credentials: true  # zizmor: ignore[artipacked] -- the publish step pushes with this token
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: shots
+          path: ${{ runner.temp }}/shots
       - name: Commit refreshed screenshots to the screenshots branch (if any changed)
         id: push
         run: |
@@ -68,7 +87,7 @@ jobs:
           else
             git worktree add -q --detach "$w" && git -C "$w" checkout -q --orphan screenshots && git -C "$w" rm -rqf .
           fi
-          mkdir -p "$w/docs/screenshots" && cp -R "$RUNNER_TEMP/shots/." "$w/docs/screenshots/"
+          mkdir -p "$w/docs/screenshots" && cp "$RUNNER_TEMP"/shots/*.png "$w/docs/screenshots/"
           cd "$w"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

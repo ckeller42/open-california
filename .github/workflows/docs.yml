@@ -35,9 +35,11 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: docs/requirements.txt
+      # The screenshots branch is outside the PR review of main: take only its PNGs (images, never
+      # pages or scripts), so nothing unreviewed can reach the published site as markup.
       - name: Use the newest web-UI screenshots (screenshots branch, written by screenshots.yml)
         run: |
-          git fetch -q --depth=1 origin screenshots && git checkout FETCH_HEAD -- docs/screenshots \
+          git fetch -q --depth=1 origin screenshots && git checkout FETCH_HEAD -- 'docs/screenshots/*.png' \
             || echo "no screenshots branch yet, building with main's copies"
       - name: Install doc toolchain
         run: pip install -r docs/requirements.txt
