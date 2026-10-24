@@ -25,13 +25,13 @@ for how strongly each fact is proven.
 | Pairing over a virtual radio (`tests/test_pairing_link.py`) | the fake unit as a Bumble peripheral, Bumble `LocalLink` | the real pairing runner + state machine with real SMP passkey pairing | `test` |
 | Pairing over real BlueZ (`tests/realstack/`) | the same fake unit, real BlueZ + kernel in a VM | calictl's real `BluezTransport` (D-Bus agent, scan, connect, Pair, bond probe) | `pairing-real-stack` (not required yet) |
 | App lab (`tools/applab/`) | the **vendor Android app** in an emulator against the fake unit | that the fake behaves like the unit *as the app sees it*, and app-vs-calictl frame diffs | manual (local only) |
-| Real phone vs real unit (`.claude/skills/phone-app-lab`) | the **vendor app on the owner's phone** driving the **real unit**, Android HCI snoop pulled over adb from buspi | the app's real frames, the unit's replies, pushes and link behaviour (tier CAPTURE); first pass with app 5.4.0.3036 on 2026-10-10 | manual (owner at the van; snoops stay on buspi, not committed) |
+| Real phone vs real unit (`.claude/skills/phone-app-lab`) | the **vendor app on the owner's phone** driving the **real unit**, Android HCI snoop pulled over adb from buspi | the app's real frames, the unit's replies, pushes and link behaviour (captured on the wire, app 5.4.0) | manual (owner at the van; snoops stay on buspi, not committed) |
 | App recordings (`tests/vectors/app/`) | the real app's recorded GATT steps and writes, per scenario and APK version (12 committed) | that calictl's frames equal the app's — whole frame for every function but the roof | `test` |
 | C codec parity (`csrc/`) | the C port of the codec and three decision ports | Python and C produce identical results | `codec-parity` |
 | ESP control twin (`firmware/components/cali_core/control.c`) | `tests/vectors/control.json`, generated from `calictl.control` | the satellite plans the same gates, frames and commits as calictl, byte for byte; the write allow-list is exactly the five control chars | `codec-parity`, `test` |
 | ESP firmware, pure C (`tests/firmware/test_*_fake.py`, `test_http_core.py`, `test_web_handlers.py`, …) | scripted fake transports and sockets | the pairing/WiFi state machines, the session + control sequencer, the HTTP core and endpoints on any host | `test` |
 | ESP firmware, host tier (`tests/firmware/test_*_e2e.py`) | `cali-host` on upstream NimBLE (Linux) + the Bumble fake unit + a scripted fake WiFi | pairing, reads, the heartbeat, the setup flow, the live UI in Chromium, and the control path end to end (every app-recorded action byte-exact at the fake unit) | `firmware-host-e2e` |
-| ESP firmware, QEMU + board | the real esp32s3 image in QEMU; a CoreS3 on the bench against the fake unit on a dongle | boot, console, NVS; the real radio stack and the screen (read side, and the control path vs the mock 2026-10-07) | `firmware-qemu`; bench (manual) |
+| ESP firmware, QEMU + board | the real esp32s3 image in QEMU; a CoreS3 on the bench against the fake unit on a dongle | boot, console, NVS; the real radio stack and the screen (read side, and the control path vs the mock) | `firmware-qemu`; bench (manual) |
 
 `tools/ci.sh` runs most of this locally. It skips `gui-e2e` without Playwright and the C tests
 without a compiler, and it never runs the real-BlueZ VM job. The git hooks (`tools/ci.sh dev`
@@ -59,7 +59,8 @@ runtime is stdlib-only at import. Some guards in this suite protect repo-wide in
 - `tests/test_gen_c_dict.py`, `tests/test_codec_vectors.py`: the generated C header and the golden
   vectors are fresh.
 - `tests/vectors/pairing.json` (replayed by `tests/test_pairing_sm.py`): the pairing state
-  machine's sequence vectors, which a future C port will also replay.
+  machine's sequence vectors, which the firmware's C port replays too
+  (`tests/firmware/test_pairing_sm_parity.py`).
 - `tests/test_mock_fidelity.py`: pins the mock to behaviour observed in the vendor app's own
   traffic.
 
@@ -91,7 +92,7 @@ What it models:
 - **Device-confirmed silent refusals.** A write is ACKed but not applied for: camping master while
   driving and a cooling-timer change while the fridge is on. The pop-top reading light (L9) stays
   off while the roof is closed; the rest of that lighting frame applies.
-- **Push cadence (CAPTURE 2026-10-10).** Nothing is pushed on subscribe. A {term}`state char <GATT characteristic>` is pushed
+- **Push cadence (as captured on the real unit).** Nothing is pushed on subscribe. A {term}`state char <GATT characteristic>` is pushed
   whenever its frame changes, from a write or from the clock. The app's neutral follow-up frames
   (cooler `ff771e3e1f1f`, camping `ff`) change nothing, so they push nothing. The 1004 clock
   ticking alone is never pushed; the ignition edge is. Water pushes only on a measured change.
@@ -99,13 +100,13 @@ What it models:
   `set_water_power(False)`, fresh reads the 1 L sleep {term}`latch <Water latch>` (`WATER_LATCH_L`) and grey stays frozen.
   It is pushed on a measured change and never refreshed by the heartbeat. This is the latch that
   `freshness.implausible_water_drop` detects.
-- **Lighting (CAPTURE 2026-10-10).** SET_PROFILE and SET_BRIGHTNESS apply at once. The `0e00…`
+- **Lighting (as captured on the real unit).** SET_PROFILE and SET_BRIGHTNESS apply at once. The `0e00…`
   commit is ACKed as a no-op. A brightness frame must carry a non-zero ProfileNumber. A zone rising
   from 0 is notified as `1` and then at its level. DEFAULT (11) reports the lamp's own level
   (`LIGHT_DEFAULT_LEVEL`). A 1502 read returns the last frame the unit sent, config echoes
   included. `light_applies = False` models "ACKed and echoed, but the lamps stay dark": the write
   lands in the readback and nothing is notified.
-- **Lighting configuration (A2).** Seven {term}`favourite` slots: a save (SET_BRIGHTNESS PN 1-7, with an
+- **Lighting configuration.** Seven {term}`favourite` slots: a save (SET_BRIGHTNESS PN 1-7, with an
   optional SET_COLOR before it) is staged until the commit and makes no live change. An activate
   (SET_PROFILE PN N) applies the stored levels, and an empty slot is ACKed and ignored. The wake-up
   config (Mode 20) and the door-contact flag (Mode 16 / PN 8) are stored and echoed on 1502.
@@ -115,12 +116,12 @@ What it models:
   (`LIGHTS_OFF`) plus the commit. ON lights every equipped zone that is off at
   `control.LIGHT_ON_BRIGHTNESS` (10); a zone that is already lit keeps its level. OFF sets every
   equipped zone to 0. NOT_EQUIPPED zones (13) do not change, and the pop-top reading light (L9)
-  stays off while the roof is down. The frames carry PN 12/0. The real unit lit every zone at 10
-  (CAPTURE 2026-10-10, `0c10…aaaaaaaa…`); whether a lit zone keeps its level is unverified.
+  stays off while the roof is down. The frames carry PN 12/0. The real unit lights every zone at
+  10 (`0c10…aaaaaaaa…`); whether a lit zone keeps its level is not verified on the unit.
 - **The roof SafetyCounter.** The counter is valid only while it is monotonic and still advancing.
   A restart invalidates it. A freshly validated counter withholds the motor for about 3 s
   (`ROOF_WITHHOLD_S`, semi-verified); a counter the roof page already streams has paid it before
-  the press. Motion and its 1402 pushes follow the real unit (CAPTURE 2026-10-10): an open press
+  the press. Motion and its 1402 pushes follow the real unit as captured under the real app: an open press
   first raises the pre-open checklist (`0302`, no motion, cleared after 4 s; a fresh press within
   30 s moves), then `030c` → `230c` → `2308` → `1300` / `0300` over ~28 s open / ~23 s close of
   held travel; a release mid-travel gives `2303` → `2300`.
@@ -193,7 +194,7 @@ A difference means the mock has a bug or you have found a new protocol fact. Don
 to make it go away. Results are recorded in
 [protocol-crosscheck-applab.md](https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html).
 
-## Pairing harnesses (#201)
+## Pairing harnesses
 
 Pairing can't use the mock: it happens below GATT, in SMP and in BlueZ. So
 `tools/fake_unit_peripheral.py` wraps the same `MockCamperUnit` in a **Bumble BLE peripheral**
@@ -202,8 +203,8 @@ Pairing can't use the mock: it happens below GATT, in SMP and in BlueZ. So
 - advertises `VWCAMPER` from a rotating private address over a fixed identity;
 - pairs with LE Secure Connections passkey entry, and **displays a fresh passkey per attempt**;
 - refuses new bonds while its "Gerät verbinden" screen is closed;
-- serves several centrals at once and notifies every subscriber (CAPTURE 2026-10-10: the phone
-  app, {term}`buspi` and the ESP32 were connected together); `one_slot` brings back the one-link model.
+- serves several centrals at once and notifies every subscriber, as the real unit does with the
+  phone app, {term}`buspi` and the ESP32 connected together; `one_slot` brings back the one-link model.
 
 The same fake is used in three places.
 
@@ -245,8 +246,8 @@ bash tests/realstack/vm.sh      # passes when the rig prints "ALL PASS"
 ```
 
 What CI still can't show is the real unit's radio behaviour: RSSI jitter, its advertising policy
-and deep sleep, WiFi coexistence on buspi, and other clients starving LE connects. That is the
-open van session (#157). See {doc}`protocol-sequences` (`S_SEQ_PAIRING`) and
+and deep sleep, WiFi coexistence on buspi, and other clients starving LE connects. Those need a
+session at the van. See {doc}`protocol-sequences` (`S_SEQ_PAIRING`) and
 {doc}`howto-pair-your-camper`.
 
 ### 3. The app lab: the real app against the fake unit
@@ -258,7 +259,7 @@ state you inject through the scenario console. Its real control frames land in t
 they can be diffed against `control.build()`.
 
 The lab is how the mock learned the app's leave-unchanged defaults and the roof {term}`SafetyCounter`
-stream. It is also how the fake's pairing behaviour was checked against the app on 2026-09-27.
+stream. It is also how the fake's pairing behaviour is checked against the app.
 It is local-only tooling: nothing from the APK or the emulator is committed. Setup and usage are in
 [`tools/applab/README.md`](https://github.com/ckeller42/open-california/blob/main/tools/applab/README.md).
 
@@ -292,13 +293,14 @@ satellite's. It is a report, not a test: nothing asserts.
 on thinky and committing the new files, with the evidence-ledger rows that name them. The header's
 `recorded_by` is the only version signal.
 
-Status (2026-10-06): 12 recordings in `tests/vectors/app/` (app 5.0.8.3028, thinky lab34), each named by
-the evidence-ledger rows it flips to APP-RECORDED; the A2 session added `door-contact`,
-`lighting-favourite` and a re-recorded `lighting-wakeup`.
+`tests/vectors/app/` holds 12 recordings (app 5.0.8), each named by the evidence-ledger rows
+that cite it: air heater (with the permanent-heating switch), camping mode, cooler, door contact,
+energy mode, the lighting favourite, profile, wake-up and zone writes, the roof hold, and the
+connection session.
 
 ## C codec parity (`csrc/`)
 
-The planned {term}`ESP32 satellite <Satellite>` (#154) reuses the protocol through a C port generated from the same
+The {term}`ESP32 satellite <Satellite>` reuses the protocol through a C port generated from the same
 dictionary. The C side has the codec plus the water freshness ports (stale-latch guard and ramp debounce). Golden vectors are generated by an independent
 bit slicer and proven against Python. Then `tests/test_codec_parity.py` (vectors plus a seeded
 differential fuzz pass) and `tests/test_ports_parity.py` replay them through the host-compiled
@@ -311,7 +313,7 @@ line protocol, the regenerate commands, and what is still parked (the postcheck 
 
 ## ESP32 firmware: the control path's tiers
 
-The satellite's writes (#154 B) are proven in a ladder, each rung closer to hardware
+The satellite's writes are proven in a ladder, each rung closer to hardware
 ({doc}`firmware` has the full tier table and the requirements trace):
 
 1. **Vectors** — `tools/gen_control_vectors.py` asks `calictl.control` (`command_precondition`,
@@ -319,7 +321,7 @@ The satellite's writes (#154 B) are proven in a ladder, each rung closer to hard
    app-recorded action, in `device.actuate`'s write order; `tests/test_control_vectors.py` keeps
    `tests/vectors/control.json` and `csrc/control_consts.h` fresh, every recorded action of the
    five functions a vector, the frames the app's byte for byte, the roof absent; none refused but
-   the time-only wake-up edit made while no config was known (`WAKEUP_UNKNOWN`, ruling R5), whose
+   the time-only wake-up edit made while no config was known (`WAKEUP_UNKNOWN`), whose
    explicit `07:00 off` sibling builds the app's frame. The wake-up cases carry the page's clock
    `local_now` and the unit's latched config.
 2. **Pure-C parity** — `tests/firmware/test_control_parity.py` replays every vector through the C
@@ -339,15 +341,14 @@ The satellite's writes (#154 B) are proven in a ladder, each rung closer to hard
    UI: a fridge toggle and a wake-up edit in Chromium land at the fake unit; the roof greyed. `tests/e2e/
    test_satellite.py` pins the same UI over a stub firmware on every platform (CI `test`).
 6. **CoreS3 bench** — `tools/esplab_control_walk.py` against the fake unit on a dongle, the same
-   walker as rung 5 — **BOARD 2026-10-07**: 31 cases byte-exact at the mock over three walks, no
-   `1401`, `403` over the real hotspot, the UI toggle from Chromium (`docs/business-logic/evidence-ledger.md`)
-   — a firmware before the wake-up light; **BOARD 2026-10-08** with it (`6ac867c`): 32 cases over three
-   walks incl. the app's 4 wake-up edits, and a wake-up card edit from Chromium with and without a
-   latched config (the second as the REQUEST_CONFIG pull, then the frame).
-7. **The real unit** — **DEVICE 2026-10-08**: the satellite bonded to the real unit (from its
-   console) and its cooler power, wake-up and door-contact commands landed there (evidence-ledger
-   2026-10-08). The bytes are calictl's, and the real app's identical frames, cooler `State=3`
-   included, were accepted by the real unit (CAPTURE 2026-10-10).
+   walker as rung 5: every app-recorded case byte-exact at the mock, the app's wake-up edits
+   included, no `1401`, `403` over the real hotspot, the UI toggle and a wake-up card edit from
+   Chromium with and without a latched config (the second as the REQUEST_CONFIG pull, then the
+   frame) ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)).
+7. **The real unit** — the satellite is bonded to the real unit (from its console) and its
+   cooler power, lighting, wake-up and door-contact commands land there (live-verified,
+   [evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). The bytes are calictl's, and the real app's identical frames, cooler
+   `State=3` included, are accepted by the real unit.
 
 ## Which CI job runs what
 
@@ -360,8 +361,12 @@ The satellite's writes (#154 B) are proven in a ladder, each rung closer to hard
 | `ci.yml` `codec-parity` | every PR and push to `main` | C header and vector `--check` (codec, control twin), the codec/ports parity test modules and `tests/firmware/test_control_parity.py` with `gcc` |
 | `ci.yml` `firmware-host-e2e` | every PR and push to `main` | `tools/ci.sh firmware`: the NimBLE-Linux host build against the Bumble fake unit — pairing, session, WiFi/web, the control path (`test_control_e2e.py`) and the live UI in Chromium (`test_web_e2e.py`) |
 | `ci.yml` `firmware-build` / `firmware-qemu` | every PR and push to `main` | the release esp32s3 image compile-only (artifact with `flasher_args.json`) / the QEMU variant booted in Espressif's QEMU |
+| `ci.yml` `coverage-badge` | push to `main` only | the coverage badge JSON, committed to the `badges` branch |
+| `ci.yml` `firmware-release` | push to `main` only | uploads the built firmware (`cali_fw.bin`, `manifest.json`, the first-flash `cali_fw_full.bin`) to the `esp-latest` prerelease |
 | `ci.yml` `pairing-real-stack` | every PR and push to `main` | `tests/realstack/vm.sh` (real BlueZ in a VM); not a required check |
 | `ci.yml` `no-vendor-material` | every PR and push to `main` | no APK/decompile/manual/vendor binaries, no real vehicle MAC, no VIN in any tracked file |
 | `ci.yml` `install-script` | every PR and push to `main` | `sh -n` + `shellcheck install.sh` |
 | `docs.yml` | push to `main` (docs/code paths) only | `sphinx -W` site build + GitHub Pages deploy (see {doc}`building-the-docs`) |
+| `docs-touched.yml` | every PR (also when its description is edited) | a PR that changes `calictl/`, `firmware/components/` or `csrc/` also changes the docs, or says why not (`tools/docs_touched.py`) |
+| `esp-stable.yml` | manual (`tools/esplab/promote_stable.sh`) | republishes a soaked `esp-latest` build as the `esp-stable` release |
 | `screenshots.yml` | push to `main` (web UI / mock paths) only | re-render `docs/screenshots` over the mock and commit them with `[skip ci]` |
