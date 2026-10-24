@@ -1270,9 +1270,10 @@ async function processQueue() {
   let res;
   /** @type {Record<string, any>} */
   const body = { function: inflight.fn, what: inflight.what, value: inflight.value, confirm: true };
-  if (inflight.fn === "lighting" && inflight.what === "wakeup") body.local_now = localNow();
   const until = Date.now() + CMD_LINK_WAIT_MS;
   for (;;) {
+    // the wall clock at each try: a retry can cross the wake-up time the first try saw
+    if (inflight.fn === "lighting" && inflight.what === "wakeup") body.local_now = localNow();
     try {
       res = await api("/api/command", {
         method: "POST",
