@@ -595,7 +595,7 @@ def _reconnects(out):
     return [i for i, line in enumerate(out) if line == "CALL connect_bonded"]
 
 
-def test_unwritable_heartbeat_drops_and_reconnects_after_1s(fake):
+def test_unwritable_heartbeat_drops_and_reconnects_after_the_cooldown(fake):
     t = T + PERIOD  # the beat after READ_ALL's first one
     out = run(
         fake,
@@ -603,18 +603,18 @@ def test_unwritable_heartbeat_drops_and_reconnects_after_1s(fake):
         *READ_ALL,
         "fail write_heartbeat",
         "tick %d" % t,
-        *["tick %d" % u for u in range(t + 100, t + 1200, 100)],
+        *["tick %d" % u for u in range(t + 100, t + 7100, 100)],
     )
     i = out.index("CALL write_heartbeat %d" % (HB + 1))
     assert out[i + 1 : i + 3] == ["LOG session: heartbeat not written -1", "CALL disconnect"]
     ticks_before = [line for line in out if line == "CALL connect_bonded"]
     assert len(ticks_before) == 1
-    out2 = run(fake, *PAIRED, *READ_ALL, "fail write_heartbeat", "tick %d" % t, "tick %d" % (t + 900))
-    assert not calls(out2, "connect_bonded")  # not before 1 s
+    out2 = run(fake, *PAIRED, *READ_ALL, "fail write_heartbeat", "tick %d" % t, "tick %d" % (t + 6999))
+    assert not calls(out2, "connect_bonded")  # not before the 7 s cooldown
 
 
 def test_failed_heartbeat_completion_drops_and_reconnects(fake):
-    out = run(fake, *PAIRED, *READ_ALL, "HEARTBEAT 14", "tick %d" % (T + 1000))
+    out = run(fake, *PAIRED, *READ_ALL, "HEARTBEAT 14", "tick %d" % (T + 7000))
     rest = after(out, "LOG session: heartbeat failed 14")
     assert rest[:1] == ["CALL disconnect"] and "CALL connect_bonded" in rest
 
@@ -622,7 +622,8 @@ def test_failed_heartbeat_completion_drops_and_reconnects(fake):
 def test_backoff_doubles_to_60s_and_resets_after_a_stable_link(fake):
     script = list(PAIRED) + READ_ALL + ["DISCONNECTED"]
     t, at = T, []
-    for delay in (1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000):
+    # the first reconnect waits the unit's 7 s cooldown, the later ones their backoff step
+    for delay in (7000, 2000, 4000, 8000, 16000, 32000, 60000, 60000):
         t += delay
         script += ["tick %d" % (t - 1), "tick %d" % t, "CONNECT_FAIL"]
         at.append(t)
@@ -631,7 +632,7 @@ def test_backoff_doubles_to_60s_and_resets_after_a_stable_link(fake):
     logs = [line for line in out if line.startswith("LOG session: reconnect in")]
     assert logs == [
         "LOG session: reconnect in %d ms" % d
-        for d in (1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000, 60000)
+        for d in (7000, 2000, 4000, 8000, 16000, 32000, 60000, 60000, 60000)
     ]
     # a link the unit ends at once keeps the delay; one that held CALI_SESSION_STABLE_MS resets it
     t += 60000
@@ -642,13 +643,13 @@ def test_backoff_doubles_to_60s_and_resets_after_a_stable_link(fake):
     out = run(fake, *up, "tick %d" % (t + 59999), "DISCONNECTED")
     assert out[-1] == "LOG session: reconnect in 60000 ms"
     out = run(fake, *up, "tick %d" % (t + 60000), "DISCONNECTED")
-    assert out[-1] == "LOG session: reconnect in 1000 ms"
+    assert out[-1] == "LOG session: reconnect in 7000 ms"  # delay reset to 1 s, the cooldown rules
 
 
 def test_unit_ending_each_link_soon_backs_off(fake):
     """Camping master off (2026-10-22): the unit ends every link ~1-31 s after it comes up. Each such
     loss doubles the delay instead of resetting it at link-up, so the reconnects back off to 60 s
-    rather than waking the unit every 1 s.
+    rather than waking the unit every 1 s (never sooner than the 7 s cooldown).
 
     .. test:: Links the unit ends soon back the reconnects off
        :id: T_FW_SESSION_SHORT_LINK_BACKOFF
@@ -657,19 +658,19 @@ def test_unit_ending_each_link_soon_backs_off(fake):
     script = list(PAIRED) + READ_ALL + ["DISCONNECTED 531"]
     t = T
     for delay in (1000, 2000, 4000, 8000, 16000, 32000, 60000):
-        t += delay
+        t += max(delay, 7000)  # the unit's cooldown floors the early steps
         script += ["tick %d" % t, "CONNECTED", "ENC_OK", "tick %d" % (t + 1300), "DISCONNECTED 531"]
         t += 1300
     out = run(fake, *script)
     logs = [line for line in out if line.startswith("LOG session: reconnect in")]
     assert logs == [
-        "LOG session: reconnect in %d ms" % d for d in (1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000)
+        "LOG session: reconnect in %d ms" % d for d in (7000, 7000, 7000, 8000, 16000, 32000, 60000, 60000)
     ]
 
 
 def test_unit_hangup_after_read_all_takes_the_backoff(fake):
     """A unit-side hang-up (HCI 0x13, raw or NimBLE host-encoded 531) after read-all reconnects on
-    the ordinary 1 s backoff, like calictl's supervisor: the #266 30 s "kicked" pacing was removed
+    the ordinary backoff (floored by the unit's 7 s cooldown), like calictl's supervisor: the #266 30 s "kicked" pacing was removed
     once #279 fixed the root cause (the unit's ATT MTU request is answered; parked links hold).
 
     .. test:: A unit hang-up after read-all takes the ordinary backoff
@@ -678,29 +679,49 @@ def test_unit_hangup_after_read_all_takes_the_backoff(fake):
     """
     for status in (19, 531, 8):
         out = run(fake, *PAIRED, *READ_ALL, "DISCONNECTED %d" % status)
-        assert out[-1] == "LOG session: reconnect in 1000 ms", status
+        assert out[-1] == "LOG session: reconnect in 7000 ms", status
 
 
 def test_command_during_the_backoff_connects_now(fake):
     """A control command must not wait out a reconnect delay (#264): the submit still answers
-    NOT_READY (there is no link), but the pending reconnect is made due at once, so the client's
-    retry lands in seconds.
+    NOT_READY (there is no link), but the pending reconnect is made due as soon as the unit's cooldown
+    allows (drop + 7 s), so the client's retry lands in seconds.
 
-    .. test:: A control command during a reconnect delay reconnects at once
+    .. test:: A control command during a reconnect delay reconnects as soon as the cooldown allows
        :id: T_FW_SESSION_KICK_NUDGE
        :links: R_FW_SESSION
     """
-    t = T + 200
-    out = run(
-        fake,
-        *PAIRED,
-        *READ_ALL,
-        "DISCONNECTED 19",
-        "tick %d" % (t - 100),
-        "submit - cooler level 2",
-        "tick %d" % t,
-    )
+    # three short links drive the backoff to 8 s, so a plain reconnect after the next drop is due
+    # at drop + 8000 -- later than the unit's 7 s cooldown, which is as soon as a nudge may connect
+    script = [*PAIRED, *READ_ALL, "DISCONNECTED 19"]
+    t = T
+    for _ in range(3):
+        t += 7000
+        script += ["tick %d" % t, "CONNECTED", "ENC_OK", "tick %d" % (t + 1300), "DISCONNECTED 19"]
+        t += 1300
+    drop = t  # backoff is 8000 now: the plain reconnect would be at drop + 8000
+    script += ["tick %d" % (drop + 100), "submit - cooler level 2"]
+    out = run(fake, *script, "tick %d" % (drop + 6999))
     assert "SUBMIT 7 -" in out  # CALI_CTL_NOT_READY
+    assert not calls(after(out, "SUBMIT 7 -"), "connect_bonded")  # not inside the cooldown
+    out = run(fake, *script, "tick %d" % (drop + 7000))
+    assert calls(after(out, "SUBMIT 7 -"), "connect_bonded")  # due at drop + 7000, not drop + 8000
+
+
+def test_no_reconnect_within_the_units_cooldown(fake):
+    """Camping master off (2026-10-22/23, 98 links): every link that started < 6 s after the unit
+    ended the previous one was cut ~1.2 s later (51/51), every later one held (0/47). Neither the
+    backoff nor a command's nudge reconnects before CALI_SESSION_UNIT_COOLDOWN_MS (7 s).
+
+    .. test:: No reconnect within the unit's cooldown after a lost link
+       :id: T_FW_SESSION_UNIT_COOLDOWN
+       :links: R_FW_SESSION
+    """
+    out = run(fake, *PAIRED, *READ_ALL, "DISCONNECTED 531")
+    assert out[-1] == "LOG session: reconnect in 7000 ms"
+    out = run(fake, *PAIRED, *READ_ALL, "DISCONNECTED 531", "submit - cooler level 2", "tick %d" % (T + 6999))
+    assert "SUBMIT 7 -" in out and not calls(after(out, "SUBMIT 7 -"), "connect_bonded")
+    out = run(fake, *PAIRED, *READ_ALL, "DISCONNECTED 531", "submit - cooler level 2", "tick %d" % (T + 7000))
     assert calls(after(out, "SUBMIT 7 -"), "connect_bonded")
 
 
@@ -769,7 +790,7 @@ def test_console_lines(fake):
 def test_link_drop_mid_read_all_reconnects_and_reads_afresh(fake):
     """The link drops between two READs of a read-all: nothing more goes to the dead link (no read,
     no heartbeat — also not for a late READ completion), no SNAP of the half-read set, a reconnect
-    by bond after the 1 s backoff, then a fresh read-all from the first function and one SNAP."""
+    by bond after the 7 s cooldown, then a fresh read-all from the first function and one SNAP."""
     half = READ_ALL[:7]  # DISCOVERED + warm-up + 5 of the 14 reads
     drop_at = T + 600
     out = run(
@@ -779,25 +800,25 @@ def test_link_drop_mid_read_all_reconnects_and_reads_afresh(fake):
         "tick %d" % drop_at,
         "DISCONNECTED",
         "READ %x 0" % CHARS[5],  # a completion racing the drop: stale
-        *["tick %d" % t for t in range(drop_at + 100, drop_at + 1100, 100)],
+        *["tick %d" % t for t in range(drop_at + 100, drop_at + 7100, 100)],
         "CONNECTED",
         "ENC_OK",
-        *read_all(at=drop_at + 1000),
+        *read_all(at=drop_at + 7000),
     )
-    drop = out.index("LOG session: reconnect in 1000 ms")
+    drop = out.index("LOG session: reconnect in 7000 ms")
     reconnect = out.index("CALL connect_bonded")
     assert drop < reconnect
     dead = out[drop:reconnect]
     assert not calls(dead, "read") and not calls(dead, "write_heartbeat"), dead
     assert not snaps(out[:reconnect])  # the half-finished read-all printed none
-    # the reconnect waits the backoff: not on the ticks before drop + 1000
+    # the reconnect waits the backoff: not on the ticks before drop + 7000
     ticks = run(
         fake,
         *PAIRED,
         *half,
         "tick %d" % drop_at,
         "DISCONNECTED",
-        *["tick %d" % t for t in range(drop_at + 100, drop_at + 1000, 100)],
+        *["tick %d" % t for t in range(drop_at + 100, drop_at + 7000, 100)],
     )
     assert not calls(ticks, "connect_bonded")
     fresh = out[reconnect:]
@@ -1743,7 +1764,7 @@ def test_control_after_a_link_drop_the_relinked_satellite_is_not_busy(fake):
     """The transport drops its queue with the link (no WRITTEN ever comes): once a new link is
     up and armed, the next command goes out instead of answering busy forever."""
     t = ARM + 100
-    up = t + 1200  # the session reconnects 1 s after the drop
+    up = t + 7200  # the session reconnects 7 s (the unit's cooldown) after the drop
     out = run(
         fake,
         *armed(),
@@ -1785,7 +1806,7 @@ def test_control_never_gates_on_the_previous_links_frame(fake):
     fails, the command is not ready — never built on the stale frame."""
     frames = {0x1102: pack("cooler", Installed=1, State=0, Mode=4, Level=3)}
     reads = ["READ %x %d" % (c, 14 if c == 0x1102 else 0) for c in READS]  # link 2: cooler read fails
-    up = ARM + 1200
+    up = ARM + 7200
     out = run(
         fake,
         *armed(frames),
@@ -1869,7 +1890,7 @@ def test_previous_links_latch_is_shown_but_never_gates(fake):
     new link does not use them — profile 3 goes out. Once the unit reports again, it gates again."""
     from calictl import control
 
-    up = ARM + 1200
+    up = ARM + 7200
     relinked = [
         *armed({0x1502: FAVS_3_EMPTY}),
         "DISCONNECTED",
@@ -2109,7 +2130,7 @@ def test_wakeup_link_drop_during_the_pull_fails_and_writes_nothing_more(fake):
 
 def test_wakeup_after_a_reconnect_pulls_again(fake):
     """Review focus 3: the previous link's wake-up is shown, but the edit on the new link pulls."""
-    up = ARM + 1200
+    up = ARM + 7200
     t = up + ARM + 100
     out = run(
         fake,
@@ -2138,7 +2159,7 @@ def test_another_units_state_is_never_shown_after_forget_or_a_new_bond(fake):
     """Task-3 carry-over M1: when the bond's identity changes (forget, or a bond to another unit) the
     stored frames and the shown config latch are dropped — the old unit's wake-up is never displayed
     for the new one. The same unit keeps them shown across links (test above)."""
-    up = ARM + 1200
+    up = ARM + 7200
     old = [*armed({0x1502: WAKE_0700_ON}), "DISCONNECTED", "tick %d" % (ARM + 100), "tick %d" % up]
     same = run(fake, *old, *_relink_lighting_unread(up))
     assert snaps(same)[-1]["fn"]["lighting"]["WakeupLightValue"] == 0x1101
@@ -2215,9 +2236,9 @@ def test_diag_events_link_cmd_wifi(fake):
         "WRITTEN 1101 0",
         "> set cooler level 99",
         "DISCONNECTED 531",
-        "tick %d" % (t + 1300),  # the 1 s backoff: connect_bonded
+        "tick %d" % (t + 7300),  # the 7 s cooldown: connect_bonded
         "CONNECT_FAIL",
-        "tick %d" % (t + 3300),  # 2 s: again
+        "tick %d" % (t + 9300),  # 2 s backoff: again
         "CONNECTED",
         "ENC_OK",
     )
@@ -2238,7 +2259,7 @@ def test_diag_events_link_cmd_wifi(fake):
         "status": 531,
         "dur_ms": t + 300,
     }
-    assert ev[4] == {"ev": "evt", "kind": "link_up", "reconnect_ms": 3000, "attempts": 2}
+    assert ev[4] == {"ev": "evt", "kind": "link_up", "reconnect_ms": 9000, "attempts": 2}
     # a heartbeat that cannot be written: the reason says so
     hb = _diag(run(fake, "diaghook", *PAIRED, *READ_ALL, "fail write_heartbeat", "tick %d" % (T + PERIOD)))
     assert hb[-1] | {"dur_ms": 0} == {

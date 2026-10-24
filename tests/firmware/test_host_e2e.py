@@ -347,6 +347,8 @@ def test_link_drop_mid_read_all_reconnects(host_fw, hci_unit):
     assert not any("subscribe" in line and "failed" in line for line in fw.log)  # dropped in the reads
     snap = fw.expect("SNAP", timeout=60)  # backoff reconnect + fresh read_all
     assert hci_unit.unit.drop_on_read is None  # the knob fired (one-shot)
-    assert set(snap["fn"]) == _first_snap_fns(hci_unit)
+    # water too: the torn pass already read it, and the reconnect waits out the unit's 7 s cooldown
+    # (> FRESH_SETTLE_MS 5 s), so the second, equal water read settles it
+    assert set(snap["fn"]) == _first_snap_fns(hci_unit) | {"water"}
     lost = [line for line in fw.log if line.startswith("LOG session: reconnect in")]
-    assert lost == ["LOG session: reconnect in 1000 ms"], lost  # one drop, one reconnect
+    assert lost == ["LOG session: reconnect in 7000 ms"], lost  # one drop, one reconnect

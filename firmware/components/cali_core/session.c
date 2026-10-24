@@ -324,7 +324,9 @@ static void schedule_reconnect(void) {
     }
     s_reconnect_pending = 1;
     s_reconnect_at = s_now + s_backoff;
-    cali_log("session: reconnect in %u ms", (unsigned)s_backoff);
+    if (s_was_up && s_reconnect_at < s_down_at + CALI_SESSION_UNIT_COOLDOWN_MS)
+        s_reconnect_at = s_down_at + CALI_SESSION_UNIT_COOLDOWN_MS;
+    cali_log("session: reconnect in %u ms", (unsigned)(s_reconnect_at - s_now));
     s_backoff = s_backoff * 2 > CALI_SESSION_BACKOFF_MAX_MS ? CALI_SESSION_BACKOFF_MAX_MS : s_backoff * 2;
 }
 
@@ -649,7 +651,9 @@ int cali_session_probe(void) {
 
 void cali_session_connect_now(void) {
     if (s_mode != CALI_BLE_HOLD) (void)cali_session_set_mode(CALI_BLE_HOLD, "command");   /* writes need hold */
-    if (s_active && s_link == LINK_DOWN && s_reconnect_pending) s_reconnect_at = s_now;
+    if (s_active && s_link == LINK_DOWN && s_reconnect_pending)   /* due now, but not inside the cooldown */
+        s_reconnect_at = s_was_up && s_now < s_down_at + CALI_SESSION_UNIT_COOLDOWN_MS
+                             ? s_down_at + CALI_SESSION_UNIT_COOLDOWN_MS : s_now;
 }
 
 int cali_session_water_held(void) { return s_water_held; }
