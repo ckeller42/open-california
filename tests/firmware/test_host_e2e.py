@@ -26,10 +26,15 @@ async def _served_frames(unit):
     return {fn: unit.read_state(fn) for fn in unit.funcs if unit.funcs[fn].state_char}
 
 
+# R_FW_VARIANT_GATE: the fake serves CarVariant 0 (a California T7, as this van), so the firmware never
+# subscribes or reads the Grand-California-only functions the fake also serves
+T7_SKIPPED = {"livingroomheater", "roofaircondition", "satelliteantenna", "stairs"}
+
+
 def _first_snap_fns(hci_unit):
-    """The functions a link's FIRST SNAP shows: every served one except water — its one read is a
-    ramp-debounce candidate (calictl.freshness.settle_water), shown only once it has settled."""
-    return set(hci_unit.call(_served_frames, hci_unit.unit)) - {"water"}
+    """The functions a link's FIRST SNAP shows: every served one a T7 has, except water — its one read
+    is a ramp-debounce candidate (calictl.freshness.settle_water), shown only once it has settled."""
+    return set(hci_unit.call(_served_frames, hci_unit.unit)) - {"water"} - T7_SKIPPED
 
 
 async def _beats_seen(unit):

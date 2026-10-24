@@ -4,9 +4,10 @@
    :id: R_FW_SESSION
 
    ``firmware/components/cali_core/session.c`` keeps the bonded link: after the runner reaches
-   bonded (or a boot with a stored bond reconnects and re-encrypts) it discovers, subscribes every
-   notifying state char, lets the heartbeat run ``CODEC_HEARTBEAT_WARMUP_MS`` (calictl's
-   ``HEARTBEAT_WARMUP_S``), reads every ``CODEC_CHARS`` function (``READS`` order), and prints one
+   bonded (or a boot with a stored bond reconnects and re-encrypts) it discovers, subscribes the
+   notifying state chars of the unit's variant (``R_FW_VARIANT_GATE``), lets the heartbeat run
+   ``CODEC_HEARTBEAT_WARMUP_MS`` (calictl's ``HEARTBEAT_WARMUP_S``), reads each of the variant's
+   ``CODEC_CHARS`` functions (``READS`` order), and prints one
    ``SNAP`` of the ``codec_decode`` of each stored frame. Read completions and notifications both
    replace that function's whole frame, so the LAST frame to arrive wins (the app's order: it
    subscribes, then reads; one decoder for both, decompile 2026-10-07 — as ``calictl.device.read_all``,
@@ -19,6 +20,20 @@
    ``passkey N`` / ``forget`` / ``status`` / ``quit`` in; ``STATE`` / ``SNAP`` / ``LOG`` out); a
    passkey outside ``waiting_passkey`` is ignored. (C comments are not autodoc'd: this docstring is
    the sphinx-needs shim, like ``test_runner_fake``.)
+
+.. req:: Firmware per-variant subscribe and read gate
+   :id: R_FW_VARIANT_GATE
+
+   The session subscribes and reads only the functions the unit's vehicle variant has, as the app
+   does (5.4.0 ``isSupportedForVariant``; the real app on the real unit, CAPTURE 2026-10-10). The
+   variant is the 1004 ``CarVariant``: 0 California T7, 1 Grand California, 2 California Next, any
+   other value T7. Roof: T7 only; satellite antenna, stairs, living-room heater, roof air-condition:
+   Grand California only; energy, water, air heater, cooler: T7 and Grand California; every other
+   function: all variants. With no 1004 frame stored on this boot, the session reads 1004 first
+   (the app's order), then subscribes, then reads the variant's other functions; a reconnect in the
+   same boot uses the stored frame. The subscribes leave out 1001 and f001 (read only, as the app).
+   When the 1004 read fails the session subscribes and reads every function (no data lost to the
+   gate). It logs the skipped functions once per link.
 
 .. test:: Session and console call/output sequences against a fake transport
    :id: T_FW_SESSION_FAKE
@@ -59,8 +74,13 @@ CHARS = [
     0x1004,
     0x1302,
 ]  # csrc/codec_chars.h CODEC_CHARS order
+# R_FW_VARIANT_GATE: what a California T7 (the default 0102 frames' CarVariant 0, as this van) skips
+T7_SKIPS = {0x2102, 0x2002, 0x1902, 0x1802}  # livingroomheater, roofaircondition, satelliteantenna, stairs
+# the app's 8 CCCD writes on a T7 (CAPTURE 2026-10-10), in CODEC_CHARS order: no 1001/f001 (read only)
+SUBS = [c for c in CHARS if c not in T7_SKIPS | {0x1001, 0xF001}]
 # the read-all order (session.c READ_FIRST, R_FW_SESSION): the home screen's functions first, then the
-# rest in CODEC_CHARS order
+# rest in CODEC_CHARS order — a T7's functions only. A reconnect's pass reads 1004 at its place here; a
+# boot's first link reads 1004 BEFORE the subscribes (the variant) and its pass skips it (FIRST_READS).
 READS = [
     0x1602,
     0x1302,
@@ -71,12 +91,11 @@ READS = [
     0x1702,
     0x1001,
     0xF001,
-    0x2102,
     0x1402,
-    0x2002,
-    0x1902,
-    0x1802,
 ]
+FIRST_READS = [0x1004] + [c for c in READS if c != 0x1004]
+# the pass over EVERY function (variant unknown, or a Grand California): the same order, all 14
+READS_ALL = [*READS[:7], *READS[7:9], 0x2102, 0x1402, 0x2002, 0x1902, 0x1802]
 FNS = [
     "airheater",
     "campingmode",
@@ -170,12 +189,17 @@ PAIRED = [
 ]
 
 
-def read_all(at=0, reads=None):
+def read_all(at=0, reads=None, first=True):
     """DISCOVERED at session time ``at`` (the last tick), the tick that ends the heartbeat warm-up,
-    then the READ completions (default: every function, status 0, data 0102)."""
-    return ["DISCOVERED 0", "tick %d" % (at + WARM)] + (
-        reads if reads is not None else ["READ %x 0" % c for c in READS]
-    )
+    then the READ completions (default: every T7 function, status 0, data 0102). ``first`` (no 1004
+    stored on this boot yet): the 1004 completion moves before the warm-up tick — the variant read
+    that precedes the subscribes (R_FW_VARIANT_GATE)."""
+    reads = list(reads if reads is not None else ["READ %x 0" % c for c in READS])
+    pre = []
+    if first:
+        pre = [r for r in reads if r.startswith("READ 1004 ")][:1] or ["READ 1004 0"]
+        reads = [r for r in reads if not r.startswith("READ 1004 ")]
+    return ["DISCOVERED 0", *pre, "tick %d" % (at + WARM)] + reads
 
 
 READ_ALL = read_all()
@@ -198,8 +222,11 @@ def test_bonded_discovers_subscribes_then_reads_every_function_in_order(fake):
     out = run(fake, *PAIRED, *READ_ALL)
     rest = after(out, 'STATE {"state":"bonded","attempts":0,"error":null,"address":"%s"}' % IDENTITY)
     assert rest[0] == "CALL discover"
-    assert rest[1:15] == ["CALL subscribe %d" % c for c in CHARS]
-    assert [line for line in rest if line.startswith("CALL read")] == ["CALL read %d" % c for c in READS]
+    assert rest[1] == "CALL read %d" % 0x1004  # the variant first (R_FW_VARIANT_GATE)
+    assert rest[2:10] == ["CALL subscribe %d" % c for c in SUBS]
+    assert [line for line in rest if line.startswith("CALL read")] == [
+        "CALL read %d" % c for c in FIRST_READS
+    ]
     assert len(snaps(out)) == 1 and out[-1].startswith("SNAP ")  # one SNAP, after the last read
 
 
@@ -215,7 +242,7 @@ def test_io_hook_sees_every_unit_frame_and_link_change(fake):
     out = run(fake, "iohook", *PAIRED, *read_all(reads=reads), "NOTIFY 1302 01", "DISCONNECTED")
     io = [line for line in out if line.startswith("IO ")]
     assert io[0] == "IO 2 0 "  # up
-    assert io[1:-2] == ["IO 1 %x 0102" % c for c in READS if c != 0x1602]  # reads, raw
+    assert io[1:-2] == ["IO 1 %x 0102" % c for c in FIRST_READS if c != 0x1602]  # reads, raw
     assert io[-2:] == ["IO 0 1302 01", "IO 3 0 "]  # the 1 L latch as sent (held, not served), down
 
 
@@ -223,7 +250,8 @@ def test_snap_is_codec_decode_of_every_stored_frame(fake):
     funcs = protocol.load()
     overrides.apply(funcs)
     snap = snaps(run(fake, *PAIRED, *READ_ALL))[0]
-    stored = [fn for fn in FNS if fn != "water"]  # a lone 0102 water frame (fresh 2 L) hasn't settled
+    # a lone 0102 water frame (fresh 2 L) hasn't settled; a T7 never reads the Grand-California-only four
+    stored = [fn for fn, c in zip(FNS, CHARS) if fn != "water" and c not in T7_SKIPS]
     assert list(snap["fn"]) == stored
     for fn in stored:
         assert snap["fn"][fn] == protocol.decode(funcs[fn], b"\x01\x02"), fn
@@ -265,13 +293,13 @@ def test_read_all_waits_the_heartbeat_warm_up(fake):
        :links: R_FW_SESSION
     """
     warming = ["tick %d" % t for t in range(100, WARM, 100)]
-    out = run(fake, *PAIRED, "warm %d" % WARM, "DISCOVERED 0", *warming)
-    assert not calls(after(out, "CALL discover"), "read"), out  # still warming up
+    out = run(fake, *PAIRED, "warm %d" % WARM, "DISCOVERED 0", "READ 1004 0", *warming)
+    assert not calls(after(out, "CALL subscribe %d" % CHARS[-1]), "read"), out  # still warming up
     beats = calls(out, "write_heartbeat")
     assert len(beats) >= WARM // PERIOD  # the liveness is running
-    out = run(fake, *PAIRED, "warm %d" % WARM, "DISCOVERED 0", *warming, "tick %d" % WARM)
+    out = run(fake, *PAIRED, "warm %d" % WARM, "DISCOVERED 0", "READ 1004 0", *warming, "tick %d" % WARM)
     rest = after(out, "CALL subscribe %d" % CHARS[-1])
-    first_read = rest.index("CALL read %d" % READS[0])
+    first_read = rest.index("CALL read %d" % FIRST_READS[1])
     assert calls(rest[:first_read], "write_heartbeat") == beats  # beats, then the reads
 
 
@@ -283,9 +311,9 @@ def test_warm_ms_knob_sets_the_read_pass_warm_up(fake):
        :id: T_FW_BLE_WARM
        :links: R_FW_BLE_WARM
     """
-    out = run(fake, *PAIRED, "DISCOVERED 0", "tick 100")  # the default
-    assert calls(after(out, "CALL subscribe %d" % CHARS[-1]), "read")[0] == "CALL read %d" % READS[0]
-    out = run(fake, *PAIRED, "warm 500", "DISCOVERED 0", "tick 400")
+    out = run(fake, *PAIRED, "DISCOVERED 0", "READ 1004 0", "tick 100")  # the default
+    assert calls(after(out, "CALL subscribe %d" % CHARS[-1]), "read")[0] == "CALL read %d" % FIRST_READS[1]
+    out = run(fake, *PAIRED, "warm 500", "DISCOVERED 0", "READ 1004 0", "tick 400")
     assert not calls(after(out, "CALL subscribe %d" % CHARS[-1]), "read")  # still warming up
 
 
@@ -319,14 +347,17 @@ def test_read_after_the_subscribe_push_wins(fake):
         fake,
         *PAIRED,
         "DISCOVERED 0",
+        "READ 1004 0",  # the variant read (R_FW_VARIANT_GATE), then the subscribes
         "NOTIFY 1302 " + STALE_WATER,
         "tick %d" % WARM,
-        *reads,
+        *[r for r in reads if not r.startswith("READ 1004 ")],
         "tick %d" % (WARM + SETTLE),
         "NOTIFY 1302 " + LIVE_WATER,
     )
     rest = after(out, "CALL subscribe %d" % CHARS[-1])
-    assert [line for line in rest if line.startswith("CALL read")] == ["CALL read %d" % c for c in READS]
+    assert [line for line in rest if line.startswith("CALL read")] == [
+        "CALL read %d" % c for c in FIRST_READS[1:]
+    ]
     first, last = snaps(out)
     assert "water" not in first["fn"]  # cold start: the read's 17 L is a candidate, not yet shown
     got, f = _water(last)
@@ -791,7 +822,7 @@ def test_link_drop_mid_read_all_reconnects_and_reads_afresh(fake):
     """The link drops between two READs of a read-all: nothing more goes to the dead link (no read,
     no heartbeat — also not for a late READ completion), no SNAP of the half-read set, a reconnect
     by bond after the 7 s cooldown, then a fresh read-all from the first function and one SNAP."""
-    half = READ_ALL[:7]  # DISCOVERED + warm-up + 5 of the 14 reads
+    half = READ_ALL[:7]  # DISCOVERED + the variant read + warm-up + 4 of the T7's reads
     drop_at = T + 600
     out = run(
         fake,
@@ -803,7 +834,7 @@ def test_link_drop_mid_read_all_reconnects_and_reads_afresh(fake):
         *["tick %d" % t for t in range(drop_at + 100, drop_at + 7100, 100)],
         "CONNECTED",
         "ENC_OK",
-        *read_all(at=drop_at + 7000),
+        *read_all(at=drop_at + 7000, first=False),  # 1004 stored on this boot: no variant read
     )
     drop = out.index("LOG session: reconnect in 7000 ms")
     reconnect = out.index("CALL connect_bonded")
@@ -853,12 +884,99 @@ def test_last_update_stamps_every_stored_frame(fake):
     ]
 
 
+# R_FW_VARIANT_GATE: the app's isSupportedForVariant table (variant -> functions it does NOT have)
+VARIANT_SKIPS = {
+    0: {"livingroomheater", "roofaircondition", "satelliteantenna", "stairs"},
+    1: {"roof"},
+    2: {"roof", "livingroomheater", "roofaircondition", "satelliteantenna", "stairs"}
+    | {"energy", "water", "airheater", "cooler"},
+}
+
+
+def _subscribed(out):
+    return [int(line.split()[2]) for line in calls(out, "subscribe")]
+
+
+def _read_calls(out):
+    return [int(line.split()[2]) for line in calls(after(out, "CALL discover"), "read")]
+
+
+@pytest.mark.parametrize("variant", [0, 1, 2, 7, -1])
+def test_variant_has_is_the_apps_table(fake, variant):
+    out = run(fake, *["variant %s %d" % (fn, variant) for fn in FNS])
+    skips = set() if variant < 0 else VARIANT_SKIPS.get(variant, VARIANT_SKIPS[0])  # 7 -> T7, -1 -> all
+    assert out == ["HAS %s %d %d" % (fn, variant, fn not in skips) for fn in FNS]
+
+
+def _gated(variant):
+    """(subscribes, read CALLs) a first link makes for a 1004 frame of CarVariant ``variant``."""
+    skips = VARIANT_SKIPS.get(variant, VARIANT_SKIPS[0])
+    has = [c for c, fn in zip(CHARS, FNS) if fn not in skips]
+    return [c for c in has if c not in (0x1001, 0xF001)], [0x1004] + [
+        c for c in READS_ALL if c in has and c != 0x1004
+    ]
+
+
+@pytest.mark.parametrize("variant", [0, 1, 2, 7])
+def test_first_link_reads_the_variant_then_subscribes_and_reads_only_its_functions(fake, variant):
+    """A boot's first link reads 1004 before any subscribe, then subscribes (CODEC_CHARS order) and
+    reads (READ_FIRST order) only the functions the CarVariant has; 1004 is not read twice. T7 = the
+    app's 8 CCCD writes (1702 1202 1102 1602 1502 1402 1004 1302 — the capture's set, here in
+    CODEC_CHARS order); an unknown variant (7) is a T7.
+
+    .. test:: The firmware subscribes and reads only the unit variant's functions
+       :id: T_FW_VARIANT_GATE
+       :links: R_FW_VARIANT_GATE
+    """
+    subs, reads = _gated(variant)
+    frame = "%x102" % variant  # CarVariant = the top 4 bits of byte 0 (MSB-first)
+    script = ["DISCOVERED 0", "READ 1004 0 " + frame, "tick %d" % WARM, *["READ %x 0" % c for c in reads[1:]]]
+    out = run(fake, *PAIRED, *script)
+    rest = after(out, "CALL discover")
+    assert rest[0] == "CALL read 4100" and rest[1 : 1 + len(subs)] == ["CALL subscribe %d" % c for c in subs]
+    assert _subscribed(out) == subs and _read_calls(out) == reads
+    skipped = sorted(VARIANT_SKIPS.get(variant, VARIANT_SKIPS[0]), key=FNS.index)
+    assert "LOG session: variant %d — skipping %s" % (variant, ", ".join(skipped)) in out
+    snap = snaps(out)[-1]["fn"]
+    assert not set(snap) & set(skipped) and snap["vehicle"]["CarVariant"] == variant
+    if variant == 0:
+        assert sorted(subs) == sorted([0x1702, 0x1502, 0x1102, 0x1602, 0x1004, 0x1302, 0x1402, 0x1202])
+
+
+@pytest.mark.parametrize("fail", [["READ 1004 14"], ["fail read"]], ids=["status", "refused"])
+def test_a_failed_variant_read_subscribes_and_reads_everything(fake, fail):
+    pre = ["fail read", "DISCOVERED 0"] if fail == ["fail read"] else ["DISCOVERED 0", *fail]
+    out = run(fake, *PAIRED, *pre, "tick %d" % WARM, *["READ %x 0" % c for c in READS_ALL])
+    assert _subscribed(out) == [c for c in CHARS if c not in (0x1001, 0xF001)]
+    assert _read_calls(out) == [0x1004, *READS_ALL]  # the failed variant read, then every function
+    assert "LOG session: variant unknown — subscribing and reading every function" in out
+    assert set(snaps(out)[-1]["fn"]) == set(FNS) - {"water"}  # the lone 0102 water hasn't settled
+
+
+def test_a_reconnect_in_the_same_boot_uses_the_stored_variant(fake):
+    up = T + 7200
+    out = run(
+        fake,
+        *PAIRED,
+        *READ_ALL,
+        "DISCONNECTED",
+        "tick %d" % up,
+        "CONNECTED",
+        "ENC_OK",
+        *read_all(at=up, first=False),
+    )
+    relink = after(out, "CALL connect_bonded")
+    assert calls(relink, "read") == ["CALL read %d" % c for c in READS]  # no 1004 before the subscribes
+    assert _subscribed(relink) == SUBS
+
+
 def test_snap_line_bytes_are_pinned(fake):
     """The console ``SNAP`` line, byte for byte, for a fixed frame set: only cooler read (one byte,
     so only the fields inside it), every other read failed. Pins the emitter (``snapshot.c``) and
     the line framing together — key order, no whitespace, the ``t`` of the read-all's last tick."""
-    reads = ["READ %x %s" % (c, "0 01" if c == 0x1102 else "14") for c in READS]
-    out = run(fake, *PAIRED, *read_all(reads=reads))
+    reads = ["READ %x %s" % (c, "0 01" if c == 0x1102 else "14") for c in READS_ALL]
+    # the variant read failed too: every function is read (R_FW_VARIANT_GATE's fallback)
+    out = run(fake, *PAIRED, "DISCOVERED 0", "READ 1004 14", *read_all(reads=reads, first=False)[1:])
     assert [line for line in out if line.startswith("SNAP ")] == [
         'SNAP {"t":%d,"fn":{"cooler":{"Error":0,"NightTimerSet":0,"Installed":0,"TimerElapsed":0,'
         '"TimerState":0,"State":1}}}' % T
@@ -1775,7 +1893,7 @@ def test_control_after_a_link_drop_the_relinked_satellite_is_not_busy(fake):
         "tick %d" % up,
         "CONNECTED",
         "ENC_OK",
-        *read_all(at=up),
+        *read_all(at=up, first=False),
         "tick %d" % (up + ARM),
         "> set cooler level 3",
         "tick %d" % (up + ARM + 100),
@@ -1815,7 +1933,7 @@ def test_control_never_gates_on_the_previous_links_frame(fake):
         "tick %d" % up,
         "CONNECTED",
         "ENC_OK",
-        *read_all(at=up, reads=reads),
+        *read_all(at=up, reads=reads, first=False),
         "tick %d" % (up + ARM),
         "> set cooler power on",
         "tick %d" % (up + ARM + 100),
@@ -1898,7 +2016,7 @@ def test_previous_links_latch_is_shown_but_never_gates(fake):
         "tick %d" % up,
         "CONNECTED",
         "ENC_OK",
-        *read_all(at=up),
+        *read_all(at=up, first=False),
         "tick %d" % (up + ARM),
     ]
     out = run(fake, *relinked, "> set lighting profile 3", "tick %d" % (up + ARM + 100))
@@ -2140,7 +2258,7 @@ def test_wakeup_after_a_reconnect_pulls_again(fake):
         "tick %d" % up,
         "CONNECTED",
         "ENC_OK",
-        *read_all(at=up),
+        *read_all(at=up, first=False),
         "tick %d" % (up + ARM),
         "submit %d lighting wakeup 08:00" % LN,
         "tick %d" % t,
@@ -2149,10 +2267,11 @@ def test_wakeup_after_a_reconnect_pulls_again(fake):
     assert writes(out) == PULL_WRITES[:1]
 
 
-def _relink_lighting_unread(at):
-    """A new link at session time ``at`` whose read-all has no lighting frame (its read fails)."""
+def _relink_lighting_unread(at, first=False):
+    """A new link at session time ``at`` whose read-all has no lighting frame (its read fails);
+    ``first``: another unit (its stored frames dropped), so the variant is read again."""
     reads = ["READ %x %d" % (c, 14 if c == 0x1502 else 0) for c in READS]
-    return ["CONNECTED", "ENC_OK", *read_all(at=at, reads=reads)]
+    return ["CONNECTED", "ENC_OK", *read_all(at=at, reads=reads, first=first)]
 
 
 def test_another_units_state_is_never_shown_after_forget_or_a_new_bond(fake):
@@ -2163,7 +2282,7 @@ def test_another_units_state_is_never_shown_after_forget_or_a_new_bond(fake):
     old = [*armed({0x1502: WAKE_0700_ON}), "DISCONNECTED", "tick %d" % (ARM + 100), "tick %d" % up]
     same = run(fake, *old, *_relink_lighting_unread(up))
     assert snaps(same)[-1]["fn"]["lighting"]["WakeupLightValue"] == 0x1101
-    other = run(fake, *old, "ident AA:BB:CC:DD:EE:FF", *_relink_lighting_unread(up))
+    other = run(fake, *old, "ident AA:BB:CC:DD:EE:FF", *_relink_lighting_unread(up, first=True))
     assert "lighting" not in snaps(other)[-1]["fn"]
     # the new unit's own lighting frame carries no config: none of the old unit's latch rides along
     other = run(fake, *old, "ident AA:BB:CC:DD:EE:FF", "CONNECTED", "ENC_OK", *read_all(at=up))
@@ -2347,7 +2466,7 @@ def test_probe_from_off_connects_reads_all_then_disconnects(fake):
         "tick %d" % t0,
         "> ble probe",
         *_RECONNECT,
-        *read_all(t0 + 100),
+        *read_all(t0 + 100, first=False),
         *["tick %d" % t for t in range(t0 + 3000, t0 + 70000, 1000)],
     )
     tail = after(out, "LOG session: ble mode off (console)")
@@ -2561,7 +2680,7 @@ def _probe_done(at):
         "tick %d" % at,
         "READ 1302 0",
         "tick %d" % (at + WARM),
-        *read_all()[2:],
+        *read_all(first=False)[2:],
         "tick %d" % (at + WARM + 100),
     ]
 

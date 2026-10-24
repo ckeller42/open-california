@@ -96,6 +96,9 @@ def _home(pg):
 
 
 def test_every_tile_renders_and_every_control_is_disabled(sat, stub):
+    # a T7 satellite never reads the Grand-California-only functions (R_FW_VARIANT_GATE): no tile, no error
+    gc_only = {"stairs", "satelliteantenna", "livingroomheater", "roofaircondition"}
+    assert not gc_only & set(stub.fixtures["satellite"]["/api/state"]["fn"])
     sat.wait_for_selector(".tilegrid .tile")
     expect(sat.locator(".tile")).to_have_count(len(TILES))  # a new dashboard tile must join TILES
     for name in TILES:

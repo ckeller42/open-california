@@ -154,6 +154,12 @@ int cali_session_water_held(void);
  * /api/state reports now - this as device.water_held_age_ms while the water is held. */
 uint64_t cali_session_water_good_ms(void);
 
+/* 1 when a unit of 1004 CarVariant car_variant has CODEC_CHARS function `function` (the app's
+ * per-variant gate, 5.4.0 isSupportedForVariant, R_FW_VARIANT_GATE): 0 = California T7, 1 = Grand
+ * California, 2 = California Next, any other value = T7 (as the app). car_variant < 0 (no 1004 frame:
+ * variant unknown) = 1 for every function — the session then subscribes and reads everything. */
+int cali_variant_has(const char *function, int car_variant);
+
 #ifdef __cplusplus
 }
 #endif
