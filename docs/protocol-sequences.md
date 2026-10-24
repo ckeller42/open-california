@@ -324,7 +324,7 @@ sequenceDiagram
     opt BlueZ already holds a bond (CONNECTING, 20 s budget)
         C->>U: bond probe, connect and read 1004 (up to 5 s)
         alt read OK
-            C->>C: keep the bond and its link, skip connect and Pair(), go to VERIFYING
+            C->>C: keep the bond and its link, go straight to VERIFYING
         else auth-class failure, or link up but the read timed out
             C->>B: remove_bond with clear_cache False (Adapter1.RemoveDevice)
             C->>B: re-discover the unit (up to 5 s), pairing.json kept
@@ -332,19 +332,21 @@ sequenceDiagram
             C->>C: EV_CONNECT_FAIL, bond and pairing.json kept, retry from scan
         end
     end
-    C->>U: connect (no bond, or after the drop, at least 8 s left)
-    C->>B: Device1.Pair() (PAIRING, 15 s)
-    opt Pair() fails with AlreadyExists
-        C->>B: drop the bond, re-discover, retry Pair() exactly once
+    opt no working bond (none, or dropped above)
+        C->>U: connect (at least 8 s left)
+        C->>B: Device1.Pair() (PAIRING, 15 s)
+        opt Pair() fails with AlreadyExists
+            C->>B: drop the bond, re-discover, retry Pair() exactly once
+        end
+        B->>U: SMP pairing request
+        Note over U: unit shows a 6-digit passkey on its screen
+        B->>C: Agent1.RequestPasskey (WAITING_PASSKEY, 60 s)
+        C-->>W: wizard asks for the passkey
+        W->>C: POST /api/pairing passkey (6 digits)
+        C->>B: passkey returned by the agent
+        B->>U: LE passkey entry completes, link encrypted and bonded
+        B-->>C: Pair() returns OK
     end
-    B->>U: SMP pairing request
-    Note over U: unit shows a 6-digit passkey on its screen
-    B->>C: Agent1.RequestPasskey (WAITING_PASSKEY, 60 s)
-    C-->>W: wizard asks for the passkey
-    W->>C: POST /api/pairing passkey (6 digits)
-    C->>B: passkey returned by the agent
-    B->>U: LE passkey entry completes, link encrypted and bonded
-    B-->>C: Pair() returns OK
     C->>U: read 1001 and 1004, count readable chars (VERIFYING, 10 s)
     alt all reads OK and at least one char readable
         C->>C: BONDED, write pairing.json (0600), daemon retargets the address live
@@ -1077,7 +1079,7 @@ sequenceDiagram
     participant U as Camper unit
     C->>U: connect, subscribe-all (real handler into the sink)
     Note over U: no push on subscribe (CAPTURE 2026-10-10), only on a later change
-    loop calictl ~0.6 s, warm-up 2 s then across the reads (app 500 ms, continuous)
+    loop calictl ~0.6 s, warm-up 2 s then across the reads (app 750-850 ms, continuous)
         C-)U: write 1003 heartbeat
     end
     Note over U: heartbeat keeps the link up and refreshes re-read chars (1102, 1602, 1902, 1004)
@@ -1502,9 +1504,11 @@ write is done. In order:
 * **Submit** (`control_run.c`): `409 busy` while a command, or a timed-out write that is
   still unacknowledged, is in flight. Then `cali_ctl_plan`, the C twin of
   `command_precondition` / `build` / `preface_for` / `commit_for` held byte for byte to
-  `tests/vectors/control.json`. The **roof, the wake-up light and every function but the five**
-  (cooler, camping mode, lighting, energy, air heater) answer `200` with `refused` = "Only via
-  buspi or the app", with no link needed. An unbuildable value is `400 bad_value` or
+  `tests/vectors/control.json`. The **roof and every function but the five** (cooler, camping
+  mode, lighting, energy, air heater) answer `200` with `refused` = "Only via buspi or the app",
+  with no link needed. The **wake-up light** (`lighting` `wakeup`) is planned from the page's
+  wall clock (`local_now`, {need}`S_SEQ_WAKEUP`); a request without it is refused the same way,
+  with the clock reason. An unbuildable value is `400 bad_value` or
   `unknown_control`. A buildable command needs an **armed link** (up for
   `CODEC_ARM_DELAY_MS` = 3 s with its first read-all done) and a frame of that function read on
   this link, else `503 not_connected`. A gate's refusal is `200` with `refused` = calictl's
@@ -1541,8 +1545,8 @@ sequenceDiagram
         W->>C: cali_ctl_submit
         alt a command is still in flight
             C-->>B: 409 busy
-        else roof, wake-up light or any other function
-            C-->>B: 200 refused, Only via buspi or the app
+        else roof or any other function, or a wake-up edit without the page's clock
+            C-->>B: 200 refused, Only via buspi or the app (or the clock reason)
         else bad value or unknown control
             C-->>B: 400 bad_value or unknown_control
         else no armed link or no frame read on this link
@@ -1560,11 +1564,13 @@ sequenceDiagram
                 N-->>C: written, a lighting commit follows at least 300 ms after the ACK
             end
             C-->>W: done
-            W-->>B: 200 ok, applied null (no readback)
-            opt ATT error or no ACK within 4 s
+            alt every frame ACKed
+                W-->>B: 200 ok, applied null (no readback)
+            else ATT error or no ACK within 4 s
                 W-->>B: 502 write_failed or 504 write_timeout, no further frame
-            end
-            opt link lost after a frame went out
+            else link lost before any frame went out
+                W-->>B: 502 write_failed
+            else link lost after a frame went out
                 W-->>B: 200 ok, applied null, unconfirmed true
             end
         end

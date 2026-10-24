@@ -75,8 +75,9 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
 
 ## Conventions
 
-- Pages are MyST Markdown; RST appears only in Python docstrings (autodoc renders them) and
-  inside the api page's `eval-rst` block.
+- Pages are MyST Markdown. RST appears only in Python docstrings (autodoc renders them) and inside
+  ```` ```{eval-rst} ```` blocks: the api page's autodoc lines, and `.. req::` blocks on a page
+  such as `firmware.md` (a requirement outside such a block is not collected).
 - **Requirement:** `.. req::` with `:id: R_<NAME>` in the docstring of the code
   that implements it (e.g. `calictl.semantics.vehicle` → `R_VEHICLE_1004`).
 - **Test:** `.. test::` with `:id: T_<NAME>` and `:links: R_<NAME>` in the test
