@@ -26,7 +26,7 @@ import secrets
 import time
 
 from bumble import core
-from bumble.att import Attribute, AttributeValue
+from bumble.att import ATT_INVALID_HANDLE_ERROR, ATT_Error, Attribute, AttributeValue
 from bumble.core import UUID, AdvertisingData
 from bumble.device import Device, DeviceConfiguration, Peer
 from bumble.gatt import (
@@ -180,6 +180,9 @@ class FakeUnit:
         # works against the real unit.
         self.mtu_request = False
         self.drop_on_read: str | None = None  # test knob: hang up on the next GATT read of this fn
+        self.stale_handle_on_read: str | None = (
+            None  # test knob: answer the next read of this fn ATT Invalid Handle
+        )
         self.fixed_passkey: int | None = None
         self.last_passkey: int | None = None
         self.passkey_shown = asyncio.Event()
@@ -221,9 +224,13 @@ class FakeUnit:
     def gatt_read(self, fn: str, conn=None):
         """A central's GATT read of ``fn``'s state char (notifications do not come through here).
         With ``drop_on_read == fn`` (one-shot) the unit hangs up on that central instead of
-        answering: the read never completes — a link lost mid read-all.
+        answering: the read never completes — a link lost mid read-all. With
+        ``stale_handle_on_read == fn`` (one-shot) it answers ATT Invalid Handle (a stale GATT cache).
         (Bumble awaits an awaitable read value; this one returns only after the link is gone.)"""
         conn = conn or self.conn
+        if self.stale_handle_on_read == fn:  # one-shot: as if the central's cached handle were stale
+            self.stale_handle_on_read = None
+            raise ATT_Error(ATT_INVALID_HANDLE_ERROR)
         if self.drop_on_read != fn or conn is None:
             v = self.read_state(fn)
             self.rec.read(self.funcs[fn].state_char, v)
