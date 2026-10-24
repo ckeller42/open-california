@@ -193,6 +193,12 @@ Tests
 .. autofunction:: tests.test_firmware_anchors.test_anchors_flag_implausible_decode
 .. autofunction:: tests.test_web_serve.test_web_server_binds_without_reverse_dns
 
+Docs gate
+---------
+
+.. automodule:: tools.docs_touched
+.. autofunction:: tests.test_docs_touched.test_runtime_change_needs_docs_or_a_reason
+
 Cross-language codec (issue #156)
 ---------------------------------
 

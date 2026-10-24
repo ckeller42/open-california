@@ -1,0 +1,30 @@
+name: docs-touched
+
+# A PR that changes runtime code (calictl/, firmware/components/, csrc/) also changes the docs, or
+# its description says why not ("Docs: n/a — <reason>"). Own workflow so an edited description
+# re-runs only this check, not the whole CI. Logic + test: tools/docs_touched.py (R_DOCS_TOUCHED).
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-touched-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  docs-touched:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Runtime change ships with docs
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: python3 -m tools.docs_touched "$BASE"
