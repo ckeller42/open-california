@@ -248,10 +248,11 @@ static void op_finish(int status, const uint8_t *data, size_t len) {
     s_ophead = (s_ophead + 1) % OPQ;
     s_oplen--;
     s_op_busy = 0;
-    if (status == 0 && (o.kind == OP_READ || o.kind == OP_WRITE || o.kind == OP_WRITE_HB)) {
+    if (status == 0) {   /* disc (MTU + characteristics, char 0000) and sub: where a reconnect's time goes */
+        static const char *const OP_NAME[] = {"disc", "read", "hb", "sub", "write"};   /* enum order */
         uint64_t now = cali_uptime_ms();
-        cali_diag_ble(o.kind == OP_WRITE_HB ? CODEC_CHAR_HEARTBEAT : o.short_id,
-                      o.kind == OP_READ ? "read" : o.kind == OP_WRITE ? "write" : "hb", (uint32_t)(now - s_op_t0), now);
+        cali_diag_ble(o.kind == OP_WRITE_HB ? CODEC_CHAR_HEARTBEAT : o.short_id, OP_NAME[o.kind],
+                      (uint32_t)(now - s_op_t0), now);
     }
     switch (o.kind) {
     case OP_DISC: emit(CALI_TEV_DISCOVERED, status, 0, NULL, 0, NULL); break;
