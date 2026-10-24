@@ -12,7 +12,7 @@
  *                                    ota | auto_camper | sd | ble_mode | probe | ble_exp | ble_phase | unit_adv | panic | touch (cali_diag_touch, #346) | display (the display-wake PR:
  *                                    cali_diag_evt("display", "\"state\":\"on\",\"src\":\"tap\""))
  *   {"ev":"perf","route":"/api/state","status":200,"bytes":4711,"ms":100}   every HTTP response
- *   {"ev":"perf","char":"1602","op":"read","ms":84}                         BLE ops, sampled
+ *   {"ev":"perf","char":"1602","op":"read","ms":84}                         BLE ops (read/write/hb/disc/sub), sampled
  *   {"ev":"log","lvl":"W","tag":"wifi","msg":"…"} / {"ev":"log","dropped":n} ESP_LOGW/E, rate-limited
  *   {"ev":"ext","dev":"<alias>","type":"govee","temp_c":…,…}  a configured external sensor's reading
  *                                    (sensors.c, R_FW_SENSORS), at most once a minute per sensor
