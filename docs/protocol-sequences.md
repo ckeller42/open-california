@@ -497,7 +497,8 @@ sequenceDiagram
 
 **Evidence.** Live-verified on buspi ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)): the session comes up on a web
 nudge and is released for UI idleness (`persistent session released (web UI idle)`), with no
-unit-side drop while the heartbeat ticks. A parked, locked unit holds buspi's persistent session
+unit-side drop while the heartbeat ticks and camping mode is on (with camping mode off the unit
+ends every link after about 30 s, see {need}`S_SEQ_SLEEP`). A parked, locked unit holds buspi's persistent session
 while the phone app holds its own link. The roof running inside the live session, and the roof
 command skipping the session warm-up, are covered by tests only; the roof has never moved under
 `calictl` (see {need}`S_SEQ_ROOF`). Design notes:
@@ -1001,8 +1002,8 @@ never emits out-of-range values. See
 :links: R_READ_HEARTBEAT_REFRESH, R_READ_RETRY_SHARED, R_READ_LAST_FRAME_WINS, R_WATER_STALE_GUARD
 
 **Contract.** A cold per-op read ({py:meth}`calictl.device.CamperDevice.read_all`) follows the
-app's order, subscribe and then read, under the `1003` heartbeat that keeps the link up and
-refreshes the re-read chars:
+app's order, subscribe and then read, under the `1003` heartbeat (the app ticks it for its
+whole connection):
 
 * Connect, then subscribe-all with a sink. There are no `1001`/`1004` reads on this path.
 * Start the heartbeat (0.6 s) and wait `CALICTL_HEARTBEAT_WARMUP_S` (2 s).
@@ -1032,7 +1033,7 @@ sequenceDiagram
     loop calictl ~0.6 s, warm-up 2 s then across the reads (app 750-850 ms, continuous)
         C-)U: write 1003 heartbeat
     end
-    Note over U: heartbeat keeps the link up and refreshes re-read chars (1102, 1602, 1902, 1004)
+    Note over U: the heartbeat ticks for the whole read, as the app's does
     loop every state char in function order, water included
         Note over C: remember the sink value for this char
         C->>U: read the state char (3 tries, 0.8 s backoff)
@@ -1047,6 +1048,8 @@ sequenceDiagram
 **Evidence.** Live-verified with calictl's BLE trace of the real unit ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)).
 `calictl` runs the heartbeat during every read; whether the unit drops a link that carries none
 is not settled (one early read lost its link after ~15 s, later links held minutes without it).
+The satellite's reads show that a read right at connect returns the same frames as a read after
+the heartbeat has run, so the heartbeat does not refresh values.
 Water is **measurement-gated**: the unit measures only while its water system is powered, and
 the heartbeat does not change that. The app subscribes `1302` and then *reads* it, and a read
 and a push go to the same decoder, so the last frame wins. The unit sends no subscribe-time
@@ -1185,7 +1188,13 @@ holding a link, buspi polling and the ESP32 satellite. Right after connect the u
 and its ATT transaction timeout ends a link (HCI `0x13`) whose central leaves it unanswered.
 BlueZ and Android answer it. The satellite answers it because its NimBLE is built with a
 {term}`GATT server` (in ESP-IDF, `BT_NIMBLE_GATT_SERVER` needs `BT_NIMBLE_ROLE_PERIPHERAL`; the
-satellite's `sdkconfig` enables both), so its parked link holds too.
+satellite's `sdkconfig` enables both), so its parked link holds too while camping mode is on.
+
+**Camping mode off.** While camping master is off, the unit ends every held central link (HCI
+`0x13`) about 30.7 s after encryption, with or without a heartbeat or reads, and cuts a link
+that starts less than 6 s after it ended the previous one about 1.2 s in. With camping master on,
+links hold. The satellite therefore waits at least 7 s before a reconnect
+({need}`S_SEQ_ESP_PAIRING`); buspi's supervisor reconnects with its own backoff.
 
 The connection failure modes are in [value-freshness.md](https://ckeller42.github.io/open-california/business-logic/value-freshness.html) ("Connection
 failure modes").
@@ -1314,7 +1323,8 @@ CoreS3) or from the web wizard (`/api/pairing`), by the platform-free C twin of 
 * **Reconnect**: a lost link (a unit hang-up, HCI `0x13`, included) reconnects by bond after a
   backoff of 1 s, doubling to 60 s. The backoff resets to 1 s only after a link has held for
   60 s (`CALI_SESSION_STABLE_MS`), and no reconnect starts sooner than 7 s after a link was
-  lost (`CALI_SESSION_UNIT_COOLDOWN_MS`).
+  lost (`CALI_SESSION_UNIT_COOLDOWN_MS`): with camping mode off the unit cuts a link that
+  starts sooner, and ends every other link after about 30 s ({need}`S_SEQ_SLEEP`).
 ```
 
 ```mermaid
@@ -1355,7 +1365,7 @@ the Bumble fake unit (`test_host_e2e.py`). `make cali-host-jw` rebuilds the late
 bug on purpose and the fake unit refuses it. The CoreS3 bench ran the read side against the mock
 unit over real BLE. Live-verified on the real unit ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)): the satellite
 bonded from the console (passkey off the unit's screen) while buspi's session stayed up, then
-read state; the web wizard has not been run on the real unit. The parked link holds because the
+read state; the web wizard has not been run on the real unit. The parked link holds (camping mode on) because the
 satellite answers the unit's ATT Exchange MTU Request ({need}`S_SEQ_SLEEP`). The variant gate is
 tested on the scripted transport and the host tier (`T_FW_VARIANT_GATE`). See {doc}`firmware` ("Console line protocol").
 

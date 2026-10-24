@@ -6,7 +6,7 @@ pairs with your {term}`camper unit` on its own, without the Raspberry Pi (see [E
 
 > **Status.** The satellite is paired with a real camper unit (while the Pi stays connected to
 > the same unit) and switches the fridge, camping mode, lights, air heater and energy mode there;
-> it keeps its link while the van is parked. It is also tested on a Linux build with a simulated
+> it keeps its link while the van is parked with camping mode on. It is also tested on a Linux build with a simulated
 > WiFi radio, on an emulated chip, and on a real CoreS3 against a simulated camper unit (setup
 > hotspot, every screen state, every recorded app action byte for byte, the pairing wizard on a
 > home network and over the setup hotspot). What is still to confirm
