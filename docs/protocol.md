@@ -44,8 +44,8 @@ chosen by state-field overlap.
 
 Per field it emits: **name, bit offset, width, default, raw_range** (`0..2^w-1`).
 Control offsets come from each `f()`; state offsets from each `e()` (`subList`).
-A field placed differently across a shared model's two branches gets an ambiguous-offset marker
-(see the {doc}`glossary`) rather than a guess; every such offset calictl uses
+A field placed differently across a shared model's two branches gets an ambiguous offset ({term}`MERGED_AMBIGUOUS`)
+rather than a guess; every such offset calictl uses
 is placed in `calictl/overrides.py` from the app's frame builder (the generated views show it as
 "(override)").
 A `command_enums:` section lists the app's command vocabularies (e.g. lighting's
@@ -58,7 +58,8 @@ private own-vehicle-RE repo (they analyse the VW-copyrighted app locally); this 
 RESULT (`protocol/dictionary.yaml`). Regenerate the {term}`dictionary` from local decompiled sources with
 `python3 tools/extract_protocol.py <sources> protocol/dictionary.yaml`. The
 dictionary-driven frame builder is `calictl.protocol.encode` + `calictl/control.py`
-(they refuse to build when a required field has no placed offset or width).
+(`encode` raises for a control field with no placed offset whose name is absent from `values`;
+it packs only placed fields).
 
 ## Frame format
 

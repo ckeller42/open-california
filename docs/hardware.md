@@ -107,7 +107,9 @@ off the wire with no scale applied:
 
 - `AmbSwVersion` — the camper-unit ("Ambiente") firmware version. The reference van has run
   `0409` and `0410`. On both, `calictl` adds 2 to the decoded DC-DC current (the energy signal
-  notes in `docs/business-logic/signals.md` explain the correction).
+  notes in `docs/business-logic/signals.md` explain the correction). The correction needs
+  `general` and `energy` state together (`calictl.semantics.apply_sw_corrections`); a read of
+  `energy` alone, such as `calictl get energy`, skips it.
 - `CmSwVersion` — the "CM" (control-module) firmware version.
 - `CommunicationVersion` — the BLE protocol/communication-layer version. The reference van
   reports 2.

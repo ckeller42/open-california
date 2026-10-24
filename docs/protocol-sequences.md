@@ -125,7 +125,7 @@ Vendor UUID `0000XXXX-6c77-4b7d-bbf6-a5e587701f3d`. Per subsystem, `NN01` is the
   - VERSION (`general`)
   - Read once in the handshake. The app aborts if it is empty or `CommunicationVersion` is
     above its maximum (3 in app 5.4.0, which also branches the energy and general-purpose
-    decode on it: V2 / V3 / V4). This van reports 2. `calictl` does not
+    decode on it: V2 / V3; it defines a V4 layout for California Next, but its version gate rejects V4). This van reports 2. `calictl` does not
     refuse other values; it flags anything but 2 as `firmware_untested`.
 * - `1002`
   - VIN check
@@ -227,7 +227,7 @@ sequenceDiagram
 ```
 
 **Evidence.** Live-verified on the real unit, and captured from the real app on the real unit
-([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). The handshake order 1001 → 1004 → subscribe-all matches the app's code.
+([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). `calictl`'s handshake order is 1001 → 1004 → subscribe-all, the three steps of the app's decompiled handshake; the captured app also reads `1002` before `1001` and `1004`.
 The `1004` read is the app's *authenticated read* (60 s timeout). On an unbonded link it fails
 with ATT `0x05` (insufficient authentication), which triggers SMP passkey pairing. Its value is
 only checked for empty vs non-empty and is never used as a token. There is no
@@ -996,7 +996,7 @@ never emits out-of-range values. See
 
 ## Fresh state read under heartbeat
 
-```{spec} Read under a live heartbeat for fresh values
+```{spec} Read every state char under a live heartbeat
 :id: S_SEQ_READ
 :status: live-verified
 :links: R_READ_HEARTBEAT_REFRESH, R_READ_RETRY_SHARED, R_READ_LAST_FRAME_WINS, R_WATER_STALE_GUARD

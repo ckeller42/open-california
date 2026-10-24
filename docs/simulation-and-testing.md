@@ -116,8 +116,9 @@ What it models:
   (`LIGHTS_OFF`) plus the commit. ON lights every equipped zone that is off at
   `control.LIGHT_ON_BRIGHTNESS` (10); a zone that is already lit keeps its level. OFF sets every
   equipped zone to 0. NOT_EQUIPPED zones (13) do not change, and the pop-top reading light (L9)
-  stays off while the roof is down. The frames carry PN 12/0. The real unit lights every zone at
-  10 (`0c10…aaaaaaaa…`); whether a lit zone keeps its level is not verified on the unit.
+  stays off while the roof is down. The frames carry PN 12/0; the real app sends `0c10…` to the real unit. What the real unit's
+  lamps do on it (a fixed level, or each lamp's last level) is not verified. The "ON lights every
+  off zone at 10, a lit zone keeps its level" behaviour is the mock's model.
 - **The roof SafetyCounter.** The counter is valid only while it is monotonic and still advancing.
   A restart invalidates it. A freshly validated counter withholds the motor for about 3 s
   (`ROOF_WITHHOLD_S`, semi-verified); a counter the roof page already streams has paid it before

@@ -41,7 +41,7 @@ roof and runs no anchors, so they stay Python-only (`calictl/anchors.py`, `calic
 
 `calictl/postcheck.py` (the post-write applied-check) is deliberately **not**
 ported. The satellite does no readback after a write: its command answer
-carries `applied` null ({doc}`firmware`). `set_check` reads *interpreted* state
+carries `applied` null for a sent command without a refusal reason (a refusal answers `applied: false` with `refused`; an HTTP error has its own `error` shape; {doc}`firmware`). `set_check` reads *interpreted* state
 and lazily imports `control`/`semantics`, so a raw-field-space check table would
 be a redesign. The table maps `(function, what)` to interpreted got/want pairs
 (cooler numerics additionally read the raw decode); regenerating it in raw space
