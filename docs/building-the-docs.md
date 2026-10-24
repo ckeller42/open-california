@@ -40,8 +40,8 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
   `docs/requirements.txt` on Python 3.12, uploads the result as a Pages artifact, and the `deploy`
   job publishes it with `actions/deploy-pages` to <https://ckeller42.github.io/open-california/>.
 - **Mermaid** renders in the browser, so `-W` does not catch a broken diagram;
-  `tests/test_mermaid_syntax.py` (in the normal pytest run) lints the `.. mermaid::` blocks and
-  the markdown fences instead.
+  `tests/test_mermaid_syntax.py` (in the normal pytest run) lints the ```` ```mermaid ```` fences
+  instead.
 - **Screenshots** in `docs/screenshots/` are not built here: `.github/workflows/screenshots.yml`
   re-renders them over the mock unit on a push to `main` that touches `calictl/webui/**`,
   `calictl/semantics.py`, `tools/ux_gallery.py` or `tools/mock_unit.py`, and commits them to
@@ -57,7 +57,7 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
 - **Add a term:** a line with the term at column 0, then the definition indented two spaces
   (≤3 lines, link the page that defines it). Synonyms (German unit labels, short forms) are extra
   term lines directly above the same definition.
-- **Link it:** `` {term}`Latch` `` in Markdown, ``:term:`Latch` `` in rst (case-insensitive;
+- **Link it:** `` {term}`Latch` `` in Markdown, ``:term:`Latch` `` in a docstring (case-insensitive;
   `` {term}`text <Latch>` `` for other link text). `sphinx -W` fails on an unknown term.
 - **Where to link:** the first meaningful use of a term on each page, in prose only (not in
   headings, code, tables that would break, or Mermaid). Skip common words where the specific
@@ -75,10 +75,14 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
 
 ## Conventions
 
+- Pages are MyST Markdown. RST appears only in Python docstrings (autodoc renders them) and inside
+  ```` ```{eval-rst} ```` blocks: the api page's autodoc lines, and `.. req::` blocks on a page
+  such as `firmware.md` (a requirement outside such a block is not collected).
 - **Requirement:** `.. req::` with `:id: R_<NAME>` in the docstring of the code
   that implements it (e.g. `calictl.semantics.vehicle` → `R_VEHICLE_1004`).
 - **Test:** `.. test::` with `:id: T_<NAME>` and `:links: R_<NAME>` in the test
   function's docstring; the link is the trace.
-- Add each new autodoc'd module/function to `api.rst` so its needs are collected.
+- Add each new autodoc'd module/function to `docs/api.md` (an `auto*::` line inside one of its
+  ```` ```{eval-rst} ```` blocks) so its needs are collected.
 - `needs_id_required = True` — every need must have an explicit ID.
 - Verify a trace resolved: `needs.json` → the req's `links_back` lists its test.

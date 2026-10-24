@@ -24,6 +24,7 @@ extensions = [
 # myst: render ```mermaid fences through sphinxcontrib.mermaid; allow heading anchors for
 # the markdown docs' internal links.
 myst_fence_as_directive = ["mermaid"]
+myst_enable_extensions = ["deflist"]  # protocol-sequences "Verification status" list
 myst_heading_anchors = 3
 
 # autodoc must not pull the lazily-imported runtime stack (hard rule: stdlib-only import).

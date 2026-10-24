@@ -11,7 +11,5 @@ def test_help_docs_links_resolve_to_a_docs_page():
     block = src[src.index("const HELP = {") : src.index("\n};\n", src.index("const HELP = {"))]
     docs = re.findall(r'^  \w+: \["([^"#]+)(?:#[^"]*)?",$', block, re.M)
     assert len(docs) >= 10, docs
-    missing = [
-        d for d in docs if not any((ROOT / "docs" / d).with_suffix(x).exists() for x in (".md", ".rst"))
-    ]
+    missing = [d for d in docs if not (ROOT / "docs" / d).with_suffix(".md").exists()]
     assert not missing, "HELP links to docs pages that do not exist: %r" % missing

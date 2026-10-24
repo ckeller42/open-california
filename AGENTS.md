@@ -81,8 +81,8 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
   `tools.gen_semantics_vectors`) in the same PR, then deploy buspi AND flash the ESP. Show only what the
   van has: no "not installed" rows/tiles (owner 2026-10-10).
 - **Mermaid diagrams render in the browser, not at build** — `sphinx -W` won't catch a broken
-  one. Keep `;`, `&`, bare `<`/`>`, and label-`:` out of `.. mermaid::` blocks AND ```mermaid
-  fences (root `*.md` + `docs/**/*.md`); the guard `tests/test_mermaid_syntax.py` lints both.
+  one. Keep `;`, `&`, bare `<`/`>`, and label-`:` out of ```mermaid fences (root `*.md` +
+  `docs/**/*.md`; every Sphinx page is MyST Markdown); the guard `tests/test_mermaid_syntax.py` lints them.
 
 ## Commands
 
@@ -197,11 +197,11 @@ buspi's own adapter). Warm the fast session first with `POST /api/session {"acti
   `:id: R_<NAME>` in the implementing code, `.. test::` with `:id: T_<NAME>` +
   `:links: R_<NAME>` in the verifying test's docstring (the link is the trace). Example:
   `calictl.semantics.vehicle` (`R_VEHICLE_1004`) ← `tests/…test_vehicle_decode_char_1004`
-  (`T_VEHICLE_DECODE`). Add each autodoc'd target to `docs/api.rst`.
+  (`T_VEHICLE_DECODE`). Add each autodoc'd target to `docs/api.md` (its `eval-rst` blocks).
 - Build/verify the trace: `docs/building-the-docs.md` (`sphinx -b html -W` and `-b needs`; a
   resolved trace shows up as the req's `links_back` in `needs.json`). `needs_id_required=True`.
 - `tests/test_needs_docstrings.py` fails on a need with no/unprefixed/duplicate `:id:` (e.g. options
-  pushed out by a directive on the docstring's first line), a dangling `:links:`, or one `docs/api.rst`
+  pushed out by a directive on the docstring's first line), a dangling `:links:`, or one `docs/api.md`
   never autodocs. tests/e2e needs are autodoc'd per function (pytest is mocked, Playwright never imported).
 - New jargon → an entry in `docs/glossary.md` (Sphinx `glossary`); link its first use per page with
   `{term}` (MyST) / `:term:` (rst). `tests/test_glossary.py` keeps it the only glossary, terms unique.

@@ -49,7 +49,7 @@ runtime is stdlib-only at import. Some guards in this suite protect repo-wide in
   `control.BUILDERS` accepts has a row with an {term}`evidence tier` in `control-and-actuation.md` §5, and a
   retired command (lighting `color`) is refused, not listed.
 - `tests/test_needs_docstrings.py`: every `.. req::`/`.. test::` in a docstring has a prefixed,
-  unique `:id:`, its `:links:` resolve, and `docs/api.rst` autodocs it (else it drops out of the trace).
+  unique `:id:`, its `:links:` resolve, and `docs/api.md` autodocs it (else it drops out of the trace).
 - `tests/test_evidence_recordings.py`: the evidence ledger cites every `tests/vectors/app/*.jsonl`
   recording, and only existing ones.
 - `tests/test_e2e_patterns.py`: no `wait_for_function` with an `async` predicate in `tests/e2e`

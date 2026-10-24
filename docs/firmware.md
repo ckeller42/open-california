@@ -1606,7 +1606,7 @@ The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait
 Requirements are authored as `sphinx-needs` objects next to the code they constrain (or, where the
 implementation is C — not autodoc'd — in the docstring of the Python test module that verifies
 it, a "shim" `sphinx-needs` can parse; see `firmware/README.md`'s own traceability section for the
-human-readable version of the same trace). `docs/api.rst` pulls those test modules in via
+human-readable version of the same trace). `docs/api.md` pulls those test modules in via
 `.. automodule::` so their objects are collected here.
 
 ```{eval-rst}

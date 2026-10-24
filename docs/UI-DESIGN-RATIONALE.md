@@ -35,7 +35,7 @@ The vendor's trademarks appear only nominatively, to identify the vehicle the in
 
 ## Per-screen map (design + traceability)
 
-Char bases per subsystem are in `docs/hardware.rst`; field bit-layout is
+Char bases per subsystem are in `docs/hardware.md`; field bit-layout is
 `protocol/dictionary.yaml`; per-feature RE notes are `docs/business-logic/*.md`.
 
 | Screen | Subsystem / `Installed` source | Core widgets → why (functional) | Trace (protocol field · decompile/enigma) |
@@ -61,7 +61,7 @@ satellite) keeps all help text in one table, `HELP` in `app.js` (English), with 
 
 | Screen | Help links to |
 |---|---|
-| Vehicle (overview) | [documentation home](index.rst) |
+| Vehicle (overview) | [documentation home](index.md) |
 | Device status | [ESP32 satellite firmware](firmware.md) |
 | Cooler | [cooler and air heater business logic](https://ckeller42.github.io/open-california/business-logic/cooler-airheater.html) |
 | Camping mode | [auto camper mode](https://ckeller42.github.io/open-california/business-logic/auto-camper-mode.html) |

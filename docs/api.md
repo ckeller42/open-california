@@ -1,21 +1,21 @@
-API & requirements (from docstrings)
-====================================
+# API & requirements (from docstrings)
 
-Requirements (``.. req::``) and test cases (``.. test::``) are declared in the
+Requirements (`.. req::`) and test cases (`.. test::`) are declared in the
 docstrings of the code they describe and are collected here by autodoc, so
 traceability is generated from the source, not maintained separately.
 
-Semantics
----------
+## Semantics
 
+```{eval-rst}
 .. autofunction:: calictl.semantics.vehicle
 .. autofunction:: calictl.semantics.roof
 .. autofunction:: calictl.freshness.implausible_water_drop
 .. autofunction:: calictl.freshness.settle_water
+```
 
-Daemon state
-------------
+## Daemon state
 
+```{eval-rst}
 .. automethod:: calictl.serve.Server._save_last
 .. automethod:: calictl.serve.Server._pull_lighting_config
 .. automethod:: calictl.serve.Server._forget_unit_state
@@ -25,10 +25,11 @@ Daemon state
 .. autofunction:: tests.e2e.test_link_state.test_serve_no_ble_shows_satellite_pill_and_no_banner
 .. autofunction:: calictl.serve.interpret_frames
 .. autofunction:: calictl.serve.guard_water
+```
 
-Device / reads
---------------
+## Device / reads
 
+```{eval-rst}
 .. autofunction:: calictl.device._read_char_with_retry
 .. autofunction:: calictl.device._later_pushes
 .. automethod:: calictl.device.CamperDevice._arm
@@ -39,23 +40,25 @@ Device / reads
 .. automethod:: calictl.device.CamperDevice._subscribe_all
 .. automethod:: calictl.device.CamperDevice._actuate_on
 .. autoclass:: calictl.device.PersistentSession
-   :members:
+  :members:
 .. autoclass:: calictl.device.RoofStream
+```
 
-Protocol codec
---------------
+## Protocol codec
 
+```{eval-rst}
 .. autofunction:: calictl.protocol.check_value
+```
 
-Control frames
---------------
+## Control frames
 
+```{eval-rst}
 .. autofunction:: calictl.control._airheater
 .. autofunction:: calictl.control._int_range
 .. autofunction:: calictl.control._cooler
 .. autofunction:: calictl.control._lighting
 .. automodule:: calictl.postcheck
-   :no-members:
+  :no-members:
 .. autofunction:: calictl.postcheck.set_check
 .. autofunction:: calictl.control.command_precondition
 .. autofunction:: calictl.control.commit_for
@@ -74,41 +77,44 @@ Control frames
 .. autofunction:: tests.test_web_serve.test_poll_door_contact_echo_keeps_the_active_profile
 .. autofunction:: tests.test_web_serve.test_confirm_waits_past_the_rising_zones_first_frame
 .. autofunction:: tests.e2e.test_gui.test_favourite_save_is_not_an_activation
+```
 
-Sinks (MQTT / Home Assistant)
------------------------------
+## Sinks (MQTT / Home Assistant)
 
+```{eval-rst}
 .. autofunction:: calictl.mqtt.command_topics
 .. autofunction:: calictl.mqtt.render_discovery
+```
 
-Automation
-----------
+## Automation
 
+```{eval-rst}
 .. autofunction:: calictl.automation.auto_camper_restore_decide
 .. autoclass:: calictl.automation.AutoCamper
-   :members: step, set_enabled, snapshot, to_state_dict, load
+  :members: step, set_enabled, snapshot, to_state_dict, load
 .. automodule:: calictl.observer
-   :no-members:
+  :no-members:
 .. autoclass:: calictl.observer.CampingObserver
-   :members: observe, on_push, poll_interval
+  :members: observe, on_push, poll_interval
 .. automodule:: calictl.firmware
-   :no-members:
+  :no-members:
 .. autofunction:: calictl.firmware.write_snapshot
 .. autofunction:: calictl.firmware.changed
 .. automodule:: calictl.anchors
-   :no-members:
+  :no-members:
 .. autofunction:: calictl.anchors.check
 .. automodule:: calictl.session
-   :no-members:
+  :no-members:
 .. autoclass:: calictl.web._NoResolveHTTPServer
-   :no-members:
+  :no-members:
 .. autofunction:: calictl.web.ux_batch
 .. autoclass:: calictl.session.SessionSupervisor
-   :members: attach, live_session, note_activity, set_mode, claim_intent, nudge, supervise, mode
+  :members: attach, live_session, note_activity, set_mode, claim_intent, nudge, supervise, mode
+```
 
-Tests
------
+## Tests
 
+```{eval-rst}
 .. autofunction:: tests.test_calictl.test_vehicle_decode_char_1004
 .. autofunction:: tests.test_calictl.test_airheater_control_frame
 .. autofunction:: tests.test_calictl.test_airheater_timer_time_matches_app_frame
@@ -192,16 +198,18 @@ Tests
 .. autofunction:: tests.test_firmware_anchors.test_firmware_snapshot_captures_raw_frames
 .. autofunction:: tests.test_firmware_anchors.test_anchors_flag_implausible_decode
 .. autofunction:: tests.test_web_serve.test_web_server_binds_without_reverse_dns
+```
 
-Docs gate
----------
+## Docs gate
 
+```{eval-rst}
 .. automodule:: tools.docs_touched
 .. autofunction:: tests.test_docs_touched.test_runtime_change_needs_docs_or_a_reason
+```
 
-Cross-language codec (issue #156)
----------------------------------
+## Cross-language codec (issue #156)
 
+```{eval-rst}
 .. automodule:: tools.gen_codec_vectors
 .. automodule:: tools.gen_semantics_vectors
 .. automodule:: tools.gen_control_vectors
@@ -216,34 +224,33 @@ Cross-language codec (issue #156)
 .. automodule:: tests.test_control_vectors
 .. automodule:: tests.test_wifi_consts
 .. automodule:: tests.test_ports_parity
+```
 
-BLE trace recorder + replay (real-unit evidence for the mock)
--------------------------------------------------------------
+## BLE trace recorder + replay (real-unit evidence for the mock)
 
+```{eval-rst}
 .. automodule:: calictl.trace
-   :members:
-
+  :members:
 .. automodule:: tools.trace_compare
-   :members:
-
+  :members:
 .. automodule:: tests.test_trace
 .. automodule:: tests.test_trace_compare
 .. automodule:: tests.test_mock_fidelity
-
 .. automodule:: tools.capture_diff
 .. automodule:: tests.test_app_recordings
+```
 
-Daemon logging
---------------
+## Daemon logging
 
+```{eval-rst}
 .. automodule:: calictl.log
-   :members:
-
+  :members:
 .. automodule:: tests.test_log
+```
 
-Guided pairing (issue #154, #157)
-----------------------------------
+## Guided pairing (issue #154, #157)
 
+```{eval-rst}
 .. automodule:: calictl.pairing
 .. automodule:: calictl.pairing_bluez
 .. automodule:: tests.test_pairing_sm
@@ -251,10 +258,11 @@ Guided pairing (issue #154, #157)
 .. automodule:: tests.test_pairing_bluez_transport
 .. automodule:: tests.test_pairing_link
 .. autofunction:: tests.test_web_serve.test_pairing_start_waits_for_an_in_flight_ble_operation
+```
 
-Firmware (issue #154)
-----------------------
+## Firmware (issue #154)
 
+```{eval-rst}
 .. automodule:: tests.firmware.test_pairing_sm_parity
 .. automodule:: tests.firmware.test_runner_fake
 .. automodule:: tests.firmware.test_session_fake
@@ -286,7 +294,6 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_sensors_e2e
 .. automodule:: calictl.esp_ingest
 .. automodule:: tests.test_esp_ingest
-
 .. automodule:: tests.test_esplab_sensors_setup
 .. automodule:: tests.test_camper_dashboard
 .. automodule:: tests.test_wifi_sm_ref
@@ -300,9 +307,11 @@ Firmware (issue #154)
 .. automodule:: tests.test_soak_report
 .. automodule:: tools.esplab.ble_exp_report
 .. automodule:: tests.test_ble_exp_report
+```
 
-Fake unit peripheral (Bumble, shared by the app lab + pairing tests)
-----------------------------------------------------------------------
+## Fake unit peripheral (Bumble, shared by the app lab + pairing tests)
 
+```{eval-rst}
 .. automodule:: tools.fake_unit_peripheral
 .. automodule:: tests.test_fake_unit_peripheral
+```

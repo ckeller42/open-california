@@ -4,7 +4,7 @@
  *    :id: R_FW_PAIRING_SM
  *
  *    (sphinx-needs cannot parse this C comment; the actual req/test objects live in the Python
- *    shim docstring of tests/firmware/test_pairing_sm_parity.py, collected via docs/api.rst.
+ *    shim docstring of tests/firmware/test_pairing_sm_parity.py, collected via docs/api.md.
  *    See firmware/README.md's traceability section.)
  *
  * Same contract as the Python original: no strings, no clock, no BLE/addresses in the SM. Time

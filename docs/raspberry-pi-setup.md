@@ -375,7 +375,7 @@ never fails the verdict.
 | 9 | `i2c_timeouts` | `esp_log` lines with `i2c.master` and `timeout`: at most 2 per 24 h |
 | 10 | `sensors` | for each ESP sensor alias (`ext.<alias>` paired by its `type`) whose `/api/state` `ext` reading and buspi's own last point (no `source` tag) are both at most 5 min old: `battery_voltage` within 0.05 V, `temp_c`/`temperature_c` within 0.5 °C, `humidity` within 2 %, `battery` within 5; a FAIL names `alias.field esp=… buspi=…` (SKIP when nothing is comparable) |
 
-Requirement `R_SOAK_REPORT` (in the script's docstring, `docs/api.rst`).
+Requirement `R_SOAK_REPORT` (in the script's docstring, `docs/api.md`).
 
 **Gate rule.** The stable firmware must be green for 72 h; then install the experimental sensors
 build and run another 72 h; then 72 h with it off again, then 72 h on. Only a green window counts.
