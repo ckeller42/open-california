@@ -177,6 +177,8 @@ COMMAND_SPECS: dict[str, list] = {
     ],
     "lighting": [
         CommandSpec("switch", "power", "Interior Lights", {}, "any_on"),
+        # 0-10 on purpose (the app's own slider max): the builder also takes 11 = the unit's DEFAULT
+        # level, which is not a brightness step, so HA never offers it.
         CommandSpec(
             "number", "brightness", "All Lights Brightness", _range((0, control.LIGHT_ON_BRIGHTNESS)), None
         ),

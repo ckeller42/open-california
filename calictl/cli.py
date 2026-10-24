@@ -7,9 +7,9 @@
     calictl set cooler level <1-5>
     calictl set campingmode master|lights|usb on|off
     calictl set lighting power on|off             # master toggle: LIGHTS_ON/LIGHTS_OFF profile (like the app)
-    calictl set lighting <zone> <0-11>            # 0=off, 1-10=10%..100%, 11=default; zones: reading-1/2/3, kitchen, kitchen-ambient, roof-ambient, roof-reading, outside-rear
+    calictl set lighting <zone> <0-11>            # 0=off, 1-10=10%..100%, 11=default; zones: reading-1/2/3, kitchen, kitchen-ambient, kitchen-cabinet, roof-ambient, roof-reading, outside-rear, entrance
     calictl set lighting all <0-11>               # every real zone to one level
-    calictl set lighting profile <N>              # activate a favourite (1-7) or 10 wake-up / 11 interior
+    calictl set lighting profile <N>              # activate profile 0-13 except 8 (app tiles A-D = favourites 1/5/6/7; 0 all off, 12 all on)
     calictl set lighting save_profile <N> [colour] # save the current lamps as favourite N (+ SET_COLOR first)
     calictl set lighting wakeup HH:MM [areas] [brightness] [ramp] [on|off]   # e.g. wakeup 07:00 1,2 5 10 on
     calictl set lighting wakeup on|off            # the app's wake-up switch (needs a known time)
@@ -19,28 +19,29 @@
     calictl set airheater level <1-10>
     calictl set airheater runtime <0-120>         # minutes
     calictl set airheater timer HH:MM
-    calictl set roofaircondition power on|off       # UNVERIFIED (not installed)
-    calictl set roofaircondition fanspeed <0-4>     # UNVERIFIED
-    calictl set roofaircondition mode <0-3>         # UNVERIFIED
-    calictl set roofaircondition temperature <0-255># UNVERIFIED (raw)
-    calictl set stairs move extend|retract|stop     # UNVERIFIED (not installed)
-    calictl set stairs mode <0-3>                    # UNVERIFIED
-    calictl set livingroomheater air on|off          # UNVERIFIED (not installed)
-    calictl set livingroomheater water on|off        # UNVERIFIED
-    calictl set livingroomheater temperature <0-255> # UNVERIFIED (raw)
-    calictl set roof open|close|stop                 # SAFETY-SENSITIVE + UNVERIFIED
+    calictl set roofaircondition power on|off       # NOT-LIVE-VERIFIED (not installed on this van)
+    calictl set roofaircondition fanspeed <0-4>     # NOT-LIVE-VERIFIED
+    calictl set roofaircondition mode <0-3>         # NOT-LIVE-VERIFIED
+    calictl set roofaircondition temperature <0-255># NOT-LIVE-VERIFIED (raw, scale unknown)
+    calictl set stairs move extend|retract|stop     # NOT-LIVE-VERIFIED (not installed on this van)
+    calictl set stairs mode <0-3>                    # NOT-LIVE-VERIFIED
+    calictl set livingroomheater air on|off          # NOT-LIVE-VERIFIED (not installed on this van)
+    calictl set livingroomheater water on|off        # NOT-LIVE-VERIFIED
+    calictl set livingroomheater temperature <0-255> # NOT-LIVE-VERIFIED (raw, scale unknown)
+    calictl set roof open|close|stop                 # SAFETY-SENSITIVE; calictl never drove the motor
 
 Read commands are fully live-verified. `set` builds the full-packet frame and
 writes it under a 1003 liveness heartbeat (`device.actuate`), which arms
 actuation on-device (issue #2); it reads the state back and reports whether the
 change actually took effect.
 
-The roofaircondition/stairs/livingroomheater/roof targets are NOT-LIVE-VERIFIED
+The roofaircondition/stairs/livingroomheater targets are NOT-LIVE-VERIFIED
 (none is installed on this van) — their enum polarity is statically derived, not
-confirmed on hardware. `roof` is additionally SAFETY-SENSITIVE: it physically
-moves the pop-up roof and needs a ~1 Hz move-heartbeat, so it runs via
-`device.actuate_roof` (re-send move at 1 Hz, bounded, always STOP) rather than the
-one-shot `device.actuate`. Nothing runs automatically.
+confirmed on hardware. The pop-up `roof` IS installed: its frames match the real
+app's (CAPTURE 2026-10-10), but calictl has never driven the motor. It is
+SAFETY-SENSITIVE and needs a streamed move frame with a live SafetyCounter, so it
+runs via `device.actuate_roof` (stream the move, bounded, always STOP) rather than
+the one-shot `device.actuate`. Nothing runs automatically.
 """
 
 from __future__ import annotations
@@ -118,13 +119,13 @@ from .postcheck import set_check as _set_check  # noqa: E402
 
 
 async def _set_roof(f, funcs, dev, args):
-    """Actuate the pop-up roof. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED.
+    """Actuate the pop-up roof. SAFETY-SENSITIVE; calictl has never driven the motor.
 
     `set roof open|close|stop`: the direction is `args.what`. open/close stream the
     move frame with a live app-generated SafetyCounter (`device.actuate_roof`, bounded
     then always STOP; the unit self-gates the first ~3 s via counter validation); stop is
-    a one-shot STOP frame. Loudly flags that roof travel is unverified on this vehicle
-    (roof not installed here) before writing."""
+    a one-shot STOP frame. Loudly flags that calictl has never driven the roof motor
+    (the roof IS installed on this van; frames match the real app's) before writing."""
     from . import control
     from . import device as _device
 
@@ -132,10 +133,10 @@ async def _set_roof(f, funcs, dev, args):
     if direction not in control.ROOF_MOVES:
         print("roof direction must be open|close|stop, got %r" % direction, file=sys.stderr)
         return 2
-    print("*** SAFETY-SENSITIVE + NOT-LIVE-VERIFIED ***", file=sys.stderr)
+    print("*** SAFETY-SENSITIVE: calictl has never driven the roof motor ***", file=sys.stderr)
     print(
-        "roof %s: pop-up roof actuation. Not installed on this van -> enum polarity + "
-        "SafetyCounter handshake are UNVERIFIED; this has never moved real hardware. "
+        "roof %s: pop-up roof actuation. The frames match the real app's (CAPTURE "
+        "2026-10-10), but calictl has never moved the real roof. "
         "Ensure the roof path is physically clear." % direction,
         file=sys.stderr,
     )
