@@ -61,25 +61,20 @@ def set_check(function, what, value, interp, decoded):
 
 
 def _max_zone(interp):
-    # only the REAL lamps (L1-L8) — L9-L16 carry the unchanged sentinel 14 that _all_real_zones
+    # only the REAL lamps (_REAL_LIGHT_ZONES) — the never-fitted zones carry the unchanged sentinel 14 that _all_real_zones
     # leaves in place, which would otherwise masquerade as the peak brightness
     from .semantics import _REAL_LIGHT_ZONES
 
     return max((interp.get("brightness_zone_%d" % z) or 0 for z in _REAL_LIGHT_ZONES), default=0)
 
 
-# friendly lighting-zone key -> the interpreted brightness_zone_<N> it maps to (see
-# control.LIGHT_ZONES / semantics._LZONES). Used only for the applied-check.
-_LIGHT_ZONE_NUM = {
-    "reading-1": 2,
-    "reading-2": 1,
-    "reading-3": 4,
-    "kitchen": 7,
-    "roof-ambient": 8,
-    "outside-rear": 3,
-    "kitchen-ambient": 5,
-    "roof-reading": 6,
-}  # L5/L6 inferred (unverified)
+# friendly lighting-zone key -> the interpreted brightness_zone_<N> it maps to, derived from
+# control.LIGHT_ZONES (the one source of truth: "BrightnessLNine" -> 9). Used only for the applied-check.
+def _light_zone_num():
+    from .control import LIGHT_ZONES
+    from .semantics import _LZONES
+
+    return {key: _LZONES[field[len("BrightnessL") :]] for key, field in LIGHT_ZONES.items()}
 
 
 def _lighting_check(what, value, interp, on):
@@ -90,7 +85,7 @@ def _lighting_check(what, value, interp, on):
         return (what, None, None)
     if what == "profile":
         return ("profile", interp.get("profile"), int(value))
-    znum = _LIGHT_ZONE_NUM.get(what)
+    znum = _light_zone_num().get(what)
     label, got = (
         ("zone_%d" % znum, interp.get("brightness_zone_%d" % znum))
         if znum
