@@ -102,3 +102,18 @@ Fires when a Bash command reads/greps/traces the decompiled app sources (or runs
 vineflower) — injects a reminder to record any newly-understood class/method into the private
 `mapping.enigma` (the standing "mapping grows monotonically" rule). Stays silent while you're
 editing the mapping itself or on unrelated commands. Wire it as a PostToolUse `Bash` matcher.
+
+## docs-sync-reminder.py
+
+A **PostToolUse** hook (matcher `Edit|Write`): when runtime code changes (`firmware/components/`,
+`calictl/webui/`, `csrc/`, the rest of `calictl/`; tests excluded), it names the docs page that
+describes it — `docs/firmware.md` + an evidence-ledger row for the firmware, the UI page +
+`strings.de.js` for the web UI, and so on. The enforcing half is the CI check `docs-touched`
+(`tools/docs_touched.py`, `R_DOCS_TOUCHED`): a PR that changes runtime code without a change under
+`docs/`, a Markdown file or `protocol/signals.yaml` fails unless its description has a line
+`Docs: n/a — <reason>`.
+
+Register it like the others (`.claude/settings.local.json`, `PostToolUse`, matcher `Edit|Write`,
+command `python3 "$CLAUDE_PROJECT_DIR/tools/hooks/docs-sync-reminder.py"`).
+
+Test: `echo '{"tool_input":{"file_path":"x/firmware/components/a.c"}}' | python3 tools/hooks/docs-sync-reminder.py`
