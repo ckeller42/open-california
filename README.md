@@ -120,14 +120,14 @@ Need to (re-)pair later from the web UI, or after a "Bluetooth zurücksetzen" on
   pop-top roof (live `roof.Installed=1`; its motor has never been driven by this project).
   **Not installed** here — stairs, living-room heater, roof-A/C, satellite, solar; those
   functions are decompile/static-verified only, not live-tested.
-- **Control writes live-actuation-verified** on that van: cooler, camping mode, lighting. Air
-  heater is installed but not yet verified end-to-end (setters are decompile-verified). The pop-top
-  roof is installed but its motor has **never been driven** by this project (its actuation frame is
-  decompile-documented). Full per-function verification tiers are in the [hardware reference](https://ckeller42.github.io/open-california/hardware.html).
+- **Control writes live-actuation-verified** on that van: cooler, camping mode, lighting, air
+  heater. The pop-top roof is installed but its motor has **never been driven** by this project.
+  What each function shows and controls, and how far each is verified, is on
+  [What calictl does today](https://ckeller42.github.io/open-california/features.html).
 - **Host:** a Raspberry Pi ("[buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi)", Debian 13, aarch64), Python 3.13, BlueZ via `bleak`.
 
-Full GATT service/characteristic map, software-version fields, the equipment/verification
-tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardware.html)**.
+Full GATT service/characteristic map, software-version fields and the equipment profile:
+**[Hardware reference](https://ckeller42.github.io/open-california/hardware.html)**.
 
 ## How it works
 
