@@ -28,6 +28,7 @@ map, and the downstream consumers Home Assistant and Grafana.
 
 - **`hci0` on the Pi is shared with other readers** — `serve` is the single BLE owner on the Pi, holds one link to the unit, and an `asyncio.Lock` serialises all access. The unit itself accepts several centrals at once
 - **The unit expects every central to answer its ATT Exchange MTU Request** — it sends one on connect and drops the link (HCI `0x13`) when it is unanswered for 30 s
+- **With camping mode off, the unit does not hold a link** — it ends every central's link about 30 s after encryption, and cuts a link that starts less than 6 s after the previous one ended. With camping mode on, links hold
 - **Runtime `calictl/*` imports only the standard library at import time** — The suite runs with no BLE or MQTT installed. `bleak`, `paho`, `influxdb_client` and `yaml` import lazily
 - **The BLE codec is MSB-first and control frames are full-packet** — That is how the unit and the vendor app behave. Every field is resent, and unchanged fields carry the {term}`leave-unchanged sentinel <Sentinel>`
 - **No vendor material in the repository** — The APK, decompiled sources and manuals are never committed. VW material appears as citations only
@@ -280,9 +281,9 @@ alongside buspi. Like the app, it subscribes and reads only the functions of the
 variant. It sends calictl's frames for the cooler, camping mode, lighting, air heater and energy
 mode (live-verified on the real unit so far: cooler, lighting, wake-up light and
 {term}`door contact`), runs the same water guard as calictl, and answers a write whose link
-dropped after the frame went out as *unconfirmed*. It holds its link while the van is parked,
-because its NimBLE keeps a {term}`GATT server` that answers the unit's ATT MTU request; a dropped
-link reconnects with a 1 s→60 s backoff. It also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
+dropped after the frame went out as *unconfirmed*. It holds its link while the van is parked
+with camping mode on, because its NimBLE keeps a {term}`GATT server` that answers the unit's ATT
+MTU request; a dropped link reconnects with a 1 s→60 s backoff, never sooner than 7 s. It also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
 then it serves the calictl UI at `/` in every WiFi mode (with Device status, Satellite settings and, over the hotspot, a WiFi-setup screen), a minimal WiFi recovery page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
 from `http://calictl-esp.local` — the same platform-free C (`wifi_sm`/`wifi_run`/`http_core`/`web`)
 on the host tier, where a scripted fake WiFi stands in for the radio, and on the chip. In station mode
