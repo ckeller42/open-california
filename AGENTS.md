@@ -157,7 +157,8 @@ buspi's own adapter). Warm the fast session first with `POST /api/session {"acti
 - **Lighting** actuates on an awake unit with a bare `SET_BRIGHTNESS` + `0e00…` commit (no preamble, no
   heartbeat). Brightness is the 0–11 enum (0 OFF, 1–10, 11 DEFAULT; 13 NOT_EQUIPPED, 14 leave-unchanged).
   **The state-char readback is a write-through echo, never proof**; the `1502` Mode-4 notification is the
-  truthful feedback. Wake-up/door/favourite config is latched only from the unit's own frames. Extend via
+  truthful feedback. Wake-up/door/favourite config is latched only from the unit's own frames. `set lighting
+  color` is retired (raises): the app recolours a saved favourite — `save_profile N <colour>`. Extend via
   `control.BUILDERS`.
 - **Roof** (ignition ON, press-and-hold): **calictl has NEVER driven the real motor** (#157/#230). The
   SafetyCounter is app-generated (+1 per 500 ms); a fresh counter gets a ~3 s motor withhold. The 1003

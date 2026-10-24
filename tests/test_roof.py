@@ -1,7 +1,7 @@
 """Roof safety tests (device.actuate_roof), with a stubbed `bleak`.
 
-SAFETY-SENSITIVE + NOT-LIVE-VERIFIED (roof not installed on this van; asserted against the
-mock only). Model settled by the app-engine decompile (`w8/a`, 2026-07-13): the app streams
+SAFETY-SENSITIVE + NOT-LIVE-VERIFIED (the roof IS installed on this van, but calictl has never
+driven the motor; asserted against the mock only). Model settled by the app-engine decompile (`w8/a`, 2026-07-13): the app streams
 the OPEN/CLOSE move frame IMMEDIATELY until STOP -- there is NO STOP-hold / confirmation phase
 (the STOP frames seen in a capture were the press-and-hold dead-man, not protocol). The
 SafetyCounter (frame bytes 1-4, 32-bit BE) is APP-GENERATED and purely time-derived: a random

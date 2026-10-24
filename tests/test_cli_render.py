@@ -40,3 +40,12 @@ def test_render_status_skips_raw_bytes():
     # the codec's raw frame is never human-facing; it must not leak into the status line
     line = cli._render_status("cooler", {"on": True, "raw": b"\x00"})
     assert "raw" not in line
+
+
+def test_cli_help_lists_every_lighting_zone():
+    """The module help's ``set lighting <zone>`` line names every ``control.LIGHT_ZONES`` key."""
+    from calictl import control
+
+    line = next(ln for ln in cli.__doc__.splitlines() if "set lighting <zone>" in ln)
+    missing = [z for z in control.LIGHT_ZONES if z not in line and not z.startswith("reading-")]
+    assert not missing, missing

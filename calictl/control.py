@@ -195,7 +195,10 @@ def _camping(funcs, what, value, last):
 # The frame is 1 byte: EnergyModeSet @2/w2 carries the mode; DisplayRefresh @7/w1 stays 0 (the
 # app's energy-VM mode setter, xf/d.java:389, only stages EnergyModeSet and writes DIRECT —
 # a one-shot actuate, no commit/preamble). Mode ordinals match the read side (semantics.energy
-# `energy_mode`, enum bf/c.java). DECOMPILE-DERIVED, not yet wire-captured / live-verified.
+# `energy_mode`, enum bf/c.java). Normal `00` / Max `10` are APP-RECORDED (2026-10-05,
+# tests/vectors/app/energy-mode.jsonl, byte-equal on the targeted field); ECO is offered by the app
+# only when 1602 `PvInstalled` = 1 (not on this van), so it is DECOMPILE-only. calictl has never
+# sent an energy frame to the real unit (evidence-ledger.md).
 ENERGY_MODES = {"normal": 0, "max_charge": 1, "eco": 2}
 ENERGY_MODE_UNCHANGED = 3  # 2-bit leave-unchanged sentinel (pg/a v())
 
@@ -206,7 +209,9 @@ def _energy(funcs, what, value, last):
 
     Decompile-derived from the app's own energy setter (``xf/d.java:389`` stages
     ``EnergyModeSet`` = the mode ordinal, ``DisplayRefresh`` stays 0) and the shared
-    ``EnergyMode`` enum (``bf/c.java``); NOT yet verified on the wire or on-device."""
+    ``EnergyMode`` enum (``bf/c.java``). Normal/Max match the app's recorded frames
+    (``tests/vectors/app/energy-mode.jsonl``); ECO is DECOMPILE-only (the app offers it only with
+    ``PvInstalled``). Not yet sent to the real unit."""
     if what != "mode":
         return None
     key = str(value).strip().lower()
@@ -883,8 +888,10 @@ def _airheater(funcs, what, value, last):
        ``3f3b017f1f3f``), ``timer_cancel`` (``OperationModeAirHeater`` = 0, the app's
        ``3f0b007f1f3f``) and ``permanent`` (OFF only: ``PermanentOperationRequest`` = 0; ON is
        refused because continuous heating can only be started from inside the vehicle),
-       carrying current state for untargeted physical fields and the ``7`` sentinel for the
-       timer-arm field.
+       carrying the app's own leave-unchanged defaults in every untargeted field (``3`` for the
+       2-bit requests, ``7`` for the timer-arm field, ``11``/``127``/``31``/``63`` for level,
+       run time and timer, ``0`` for ``AirDistribution``/``OperationModeCombined``) — never the
+       current state (``_airheater_values``).
     """
     if what == "power":
         ch = {"NormalOperationRequest": 1 if _truthy(value) else 0}
@@ -938,7 +945,9 @@ def _airheater(funcs, what, value, last):
 
 
 # --- roof / roof-A/C / stairs / LR-heater ------------------------------------
-# ALL FOUR ARE NOT-LIVE-VERIFIED (none installed on this van; see AGENTS.md "Known state").
+# ALL FOUR ARE NOT-LIVE-VERIFIED. Roof-A/C, stairs and LR-heater are not installed on this van; the
+# roof IS installed and its frames match the real app's (CAPTURE 2026-10-10), but calictl has never
+# driven the motor (see AGENTS.md "Known state").
 # Their frames are offset-resolved in overrides.py; encode() validates bit-widths only. Enum
 # meanings vary in confidence: roof-A/C Mode (jf/c.java: 0=AUTOMATIC/1=MANUAL_COOLING/
 # 2=MANUAL_HEATING/3=VENTING) + FanSpeed (jf/b.java: 0-4=LEVEL_0..AUTO) are STATICALLY VERIFIED
