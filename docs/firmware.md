@@ -301,9 +301,9 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
 matches the unit by address only: the advertiser's identity (a controller-resolved RPA is reported
 typed 2/3) or its RPA resolving with the bond's IRK, against the stored bond. No address leaves the
 transport (`CALI_TEV_UNIT_ADV` has no payload, `evt unit_adv` carries only `seen`). The host tier
-proves it against the Bumble fake's RPA (`T_FW_BLE_EXP_ADV_E2E`). On the van the unit keeps
-advertising while connected (live, [evidence ledger](business-logic/evidence-ledger.md)); that is why
-a gone logged with the link up arms no wake. To check the match near the van: `sensors on`, the link
+proves it against the Bumble fake's RPA (`T_FW_BLE_EXP_ADV_E2E`). A gone logged with the
+link up arms no wake. On the van the unit also advertises while connected (live,
+[evidence ledger](business-logic/evidence-ledger.md)). To check the match near the van: `sensors on`, the link
 in `off`, then read `device.ble.unit_adv_seen_ms_ago`. The advertised local name (`VWCAMPER…`) is no
 substitute: it is not unique, so a second California on the same campsite would read as "our unit
 is awake".
@@ -703,7 +703,9 @@ read the latest frame, so a notification that flips a gating field is honoured b
 command.
 
 - **One command at a time** (`busy` otherwise, also while a timed-out write still awaits its ACK).
-- The planned frames go out one at a time **with response**.
+- The planned frames go out one at a time **with response**. The sequencer marks a write in flight
+  before it calls the transport, because the `WRITTEN` completion can fire inside the `write()`
+  call when the op fails at once.
 - A **lighting commit** (`0e00…`) follows each frame at least `CODEC_FOLLOW_DELAY_MS` (300 ms) after
   the previous write's ACK. The sequencer runs on the 100 ms tick and cannot see the ACK's own time,
   so the real gap is 300–400 ms, never less (the app streams at ~500 ms).
@@ -1590,34 +1592,35 @@ someone climbs in, with the engine idling, on a drive and when picked up, then s
 ## Network watch items (board only)
 
 The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these radio and OS behaviours
-are checked on the CoreS3 only:
+can be checked on the CoreS3 only. They are the expected behaviours; none of them is in the
+[evidence ledger](business-logic/evidence-ledger.md) yet.
 
 1. **BLE + WiFi coexistence.** The S3 shares one 2.4 GHz radio (IDF's default software coex).
-   With the setup hotspot up and a phone attached, the BLE link holds, the `1003` heartbeat keeps
+   With the setup hotspot up and a phone attached, the BLE link must hold, the `1003` heartbeat keep
    its period and `SNAP`s keep their cadence; the same while the station scans and joins.
 2. **Captive portal per OS.** Join `calictl-esp-setup` from iOS, macOS, Android and Windows: the
    sign-in sheet should open the page by itself (DNS answers everything with `192.168.4.1`, probe
-   paths get a 302). Whether it pops differs per OS; `http://192.168.4.1` always works.
+   paths get a 302). Record per OS whether it pops, and that `http://192.168.4.1` always works.
 3. **mDNS.** `http://calictl-esp.local` from iOS, macOS and Android (Android's `.local` support
    varies — the router list and `wifi status` are the documented fallbacks).
 4. **Single-connection HTTP.** Browsers open several parallel connections; the core serves one at
-   a time. The page stays responsive with one tab; with two or three it degrades.
+   a time. Check the page stays responsive with one tab, and how it degrades with two or three.
 5. **ESP event behaviours taken from the IDF docs** (`net_esp.c`, join generations): our own
    `esp_wifi_disconnect` ends an attempt with reason `ASSOC_LEAVE` (8); the disconnect event carries
    the SSID; `esp_wifi_connect` straight after `esp_wifi_disconnect` works; a `SCAN_DONE` arrives
    when a join aborts a running scan (the 15 s scan watchdog is the backstop).
 6. **Typo, then the fix.** A wrong password, then the right one within ~2 s: `LOG wifi: online`
-   follows and no `LOG wifi: failed auth`.
-7. **Out of range and back.** The saved network out of range for minutes, then back: at most one
+   must follow and no `LOG wifi: failed auth`.
+7. **Out of range and back.** The saved network out of range for minutes, then back: expect at most one
    `esp_wifi_connect` per driver attempt (`LOG net:` stays quiet), `ONLINE` within one retry period
    of the AP returning, the hotspot opening after 5 min and closing 30 s after the join.
 8. **Pairing start during a WiFi scan.** The coexistence gate is one-way: a WiFi scan never starts
    while a pairing flow runs, but `POST /api/pairing {"action":"start"}` is accepted while a scan
    (the hotspot's own at `AP_START`, or one WiFi setup asked for) is still running. Over the
-   hotspot this is the main pairing path: *Pair now* right after the hotspot comes up still reaches
-   `waiting_passkey` (no scan-refused or connect-timeout retries).
-9. **Station scan + replacement rollback.** Online, *Change network…* → *Search again*: networks
-   listed, the page and a calictl command stay responsive, `1003` keeps its period through the scan
+   hotspot this is the main pairing path: check that *Pair now* right after the hotspot comes up
+   still reaches `waiting_passkey` (no scan-refused or connect-timeout retries).
+9. **Station scan + replacement rollback.** Online, *Change network…* → *Search again*: expect the
+   networks listed, the page and a calictl command responsive, `1003` keeps its period through the scan
    (`LOG net:` quiet). Then a wrong password: `LOG wifi: failed auth`, `replacement failed, back to
    <ssid>`, `online` within a minute, the page "didn't work … back on <ssid>", the hotspot closed
    30 s later; a reboot afterwards rejoins the old network. A network out of range (`not_found`) and
@@ -2168,8 +2171,8 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
   1 MB roll, `since` inside a segment, `max` and the buffer bound a page with `more`, `since` past
   the end, a cut last line never sent, deleted oldest segments reported as `lost`) and
   `T_FW_LOG_API_ROUTE` (`tests/firmware/test_web_handlers.py`: the route waits for the SD side's
-  page, NDJSON + trailer, 503 no card / failed read, 400, 405). On the board: buspi's
-  `calictl esp-ingest` pulls it.
+  page, NDJSON + trailer, 503 no card / failed read, 400, 405). The ingest is set up on buspi
+  ([the Pi setup](raspberry-pi-setup.md#esp-ingest-gap-fill)); a board run is not yet in the ledger.
 - **`R_FW_SD_LOG`** — verified by `T_FW_SD_LOG` (`tests/firmware/test_sdlog.py`: `sdlog.c` against a
   temp dir — the record shape read back by `calictl.trace.read_events`, a `1004` record stamped by
   its own clock, the roll at 1 MB with `seq` running on, `seq` resumed after a cut last line, an
