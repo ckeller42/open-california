@@ -205,9 +205,12 @@ traceability is generated from the source, not maintained separately.
 ```{eval-rst}
 .. automodule:: tools.docs_touched
 .. autofunction:: tests.test_docs_touched.test_runtime_change_needs_docs_or_a_reason
+.. automodule:: tools.gen_features
+.. autofunction:: tests.test_features_page.test_features_page_is_fresh_and_reader_clean
+.. autofunction:: tests.test_docs_style.test_reader_pages_follow_the_style_rules
 ```
 
-## Cross-language codec (issue #156)
+## Cross-language codec
 
 ```{eval-rst}
 .. automodule:: tools.gen_codec_vectors
@@ -248,7 +251,7 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.test_log
 ```
 
-## Guided pairing (issue #154, #157)
+## Guided pairing
 
 ```{eval-rst}
 .. automodule:: calictl.pairing
@@ -260,7 +263,7 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.test_web_serve.test_pairing_start_waits_for_an_in_flight_ble_operation
 ```
 
-## Firmware (issue #154)
+## Firmware
 
 ```{eval-rst}
 .. automodule:: tests.firmware.test_pairing_sm_parity

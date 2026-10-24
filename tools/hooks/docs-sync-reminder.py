@@ -35,7 +35,9 @@ for frag, docs in WHERE:
         msg = (
             "You changed runtime code (%s). Update the docs in the same PR: %s. "
             "CI's docs-touched check fails without a docs change unless the PR says "
-            "'Docs: n/a — <reason>'." % (fp.split("/open-california/")[-1], docs)
+            "'Docs: n/a — <reason>'. Write it per docs/building-the-docs.md \"Writing reader pages\": "
+            "behaviour → the page, proof → an evidence-ledger row."
+            % (fp.split("/open-california/")[-1], docs)
         )
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": msg}}))
         break

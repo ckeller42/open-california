@@ -13,6 +13,14 @@ that truly needs no docs (a refactor, a test-only fix) says so in the PR body wi
 
    A PR that changes runtime code (calictl, the firmware, the C codec) also changes the docs, or
    its body names why none is needed (``Docs: n/a — <reason>``).
+
+.. req:: Reader pages describe today's behaviour, without history or internal markers
+   :id: R_DOCS_STYLE
+
+   A reader page of the documentation site (``docs/building-the-docs.md`` "Writing reader
+   pages") shall carry no bare issue or PR numbers, no catalog status markers, no obfuscated app
+   class names, no firmware commit hashes and no dates; ``tests/test_docs_style.py`` checks the
+   pages in its ``CHECKED_PAGES`` list.
 """
 
 from __future__ import annotations

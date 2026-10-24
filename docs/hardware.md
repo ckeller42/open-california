@@ -4,7 +4,7 @@ This page documents the *specific* vehicle and host this project has been revers
 and tested against — what's confirmed on real hardware versus decompile/static analysis only.
 Facts here are hand-authored from the repo's [AGENTS.md](https://github.com/ckeller42/open-california/blob/main/AGENTS.md) ("Known state"),
 `docs/business-logic/control-and-actuation.md`, and the generated protocol views under
-`docs/protocol/reference.md`; nothing here is regenerated automatically, so if the
+`docs/protocol/` ({doc}`protocol/frame-layouts`, {doc}`protocol/signal-matrix`); nothing here is regenerated automatically, so if the
 equipment profile or verification tier changes, update this page by hand.
 
 ```{danger}
@@ -23,7 +23,7 @@ iOS/Android app; there is no other Linux-facing interface.
 ## GATT service map
 
 Each on-board function occupies a 4-hex-digit slot in the vendor UUID base. The **generated**
-`docs/protocol/reference.md` lists every field per function (offsets, widths, scales); the
+{doc}`protocol/frame-layouts` places every field of each function in a per-byte bit grid; the
 table below is the coarse per-function characteristic map for orientation:
 
 ```{list-table}
