@@ -2,27 +2,21 @@ airheater:
   control:
     AirDistribution:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     HeatingLevel:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     NormalOperationRequest:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
@@ -47,45 +41,35 @@ airheater:
         vwdoc: null
     PermanentOperationConfirmation:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     PermanentOperationRequest:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     RunningTime:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerHour:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerMin:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
@@ -228,36 +212,28 @@ campingmode:
   control:
     InteriorLight:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     OutsideLight:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     State:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     UsbCharger:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
@@ -327,90 +303,70 @@ cooler:
   control:
     Level:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     Mode:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     NightTimerHourOff:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     NightTimerHourOn:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     NightTimerSet:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     State:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerCancel:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerHour:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerMin:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerStart:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
@@ -547,9 +503,7 @@ energy:
   control:
     DisplayRefresh:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
@@ -1134,180 +1088,140 @@ lighting:
   control:
     BrightnessLEight:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLFive:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLFour:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLNine:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOne:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneFive:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneFour:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneOne:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneSix:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneThree:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneTwo:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneZero:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLSeven:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLSix:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLThree:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLTwo:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     LightValue:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     Mode:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     ProfileNumber:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     Timestamp:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by calictl's commands (calictl/control.py), not a read signal"
       sources:
         app: null
         gui: null
@@ -1537,45 +1451,35 @@ livingroomheater:
   control:
     Mode:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     StateAir:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     StateWater:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     TemperatureAir:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     TemperatureWater:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
@@ -1638,7 +1542,7 @@ livingroomheater:
       decision: surface
       kind: raw
       name: air_temp
-      scale: UNVERIFIED
+      scale: raw
       sources:
         app: null
         gui: null
@@ -1649,7 +1553,7 @@ livingroomheater:
       decision: surface
       kind: flag
       name: water_temp_flag
-      scale: UNVERIFIED
+      scale: raw
       sources:
         app: null
         gui: null
@@ -1667,27 +1571,21 @@ roof:
   control:
     Down:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by the roof move (device.actuate_roof; the motor has never been driven), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     SafetyCounter:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by the roof move (device.actuate_roof; the motor has never been driven), not a read signal"
       sources:
         app: null
         gui: null
         vwdoc: null
     Up:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 written by the roof move (device.actuate_roof; the motor has never been driven), not a read signal"
       sources:
         app: null
         gui: null
@@ -1734,36 +1632,28 @@ roofaircondition:
   control:
     FanSpeed:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     Mode:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     State:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     Temperature:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
@@ -1826,7 +1716,7 @@ roofaircondition:
       decision: surface
       kind: raw
       name: target_temp
-      scale: UNVERIFIED
+      scale: raw
       sources:
         app: null
         gui: null
@@ -1836,45 +1726,35 @@ satelliteantenna:
   control:
     Dish:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     DishStop:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     SatelliteSelection:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     System:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     Wlan:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
@@ -1947,18 +1827,14 @@ stairs:
   control:
     Movement:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null
         vwdoc: null
     OperationMode:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 its function is not installed on this van, so no command writes it"
       sources:
         app: null
         gui: null

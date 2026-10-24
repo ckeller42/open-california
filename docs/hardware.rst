@@ -3,7 +3,7 @@ Tested hardware
 
 This page documents the *specific* vehicle and host this project has been reverse-engineered
 and tested against — what's confirmed on real hardware versus decompile/static analysis only.
-Facts here are hand-authored from ``AGENTS.md`` ("Known state"),
+Facts here are hand-authored from the repo's `AGENTS.md <https://github.com/ckeller42/open-california/blob/main/AGENTS.md>`_ ("Known state"),
 ``docs/business-logic/control-and-actuation.md``, and the generated protocol views under
 ``docs/protocol/reference.md``; nothing here is regenerated automatically, so if the
 equipment profile or verification tier changes, update this page by hand.
@@ -154,9 +154,9 @@ tested against:
      - 16 addressable zones
    * - airheater
      - yes
-     - installed; ``power`` setter capture-observed, level/timer/runtime setters
-       decompile-verified — untested end-to-end because buspi was offline during the capture
-       window, not because the unit lacks one
+     - installed; ``power``, level, runtime and departure timer device-verified on the real unit
+       (2026-10-11, calictl-driven, heater ran 30 min — evidence ledger); permanent-ON is not
+       reachable from the app
    * - roof
      - yes
      - installed (pop-top) — settled by the live ``roof.Installed=1`` bit 2026-08-26; the
@@ -183,12 +183,9 @@ make this self-describing at runtime (``calictl status`` only shows what's actua
 
 .. note::
 
-   A former conflict between ``AGENTS.md`` (which omitted the roof from its not-installed
-   list) and ``control-and-actuation.md`` §4 (which said "not installed here") was **resolved
-   2026-08-26 against the live unit**: ``roof.Installed = 1`` — the pop-top IS installed
-   (issue #106; the §4 claim had likely conflated it with the roof *A/C*, which is absent).
-   Installed does **not** mean actuation-verified: the roof motor has never been driven by
-   this project (needs ignition ON + an owner watching).
+   The pop-top roof is installed (``roof.Installed = 1``, live 2026-08-26) — only the roof *A/C*
+   is absent. Installed does **not** mean actuation-verified: the roof motor has never been driven
+   by this project (needs ignition ON + an owner watching).
 
 Per-function verification tier
 -------------------------------
@@ -252,7 +249,7 @@ Host
 - **OS:** Debian 13 (aarch64).
 - **Python:** 3.13 (the project floor is 3.11+; ``tools/ci.sh`` prefers 3.13 to match :term:`buspi`).
 - **BLE:** BlueZ via the `bleak <https://github.com/hbldh/bleak>`_ library, imported lazily —
-  the runtime package is stdlib-only at import time (see ``AGENTS.md``).
+  the runtime package is stdlib-only at import time (a hard rule in `AGENTS.md <https://github.com/ckeller42/open-california/blob/main/AGENTS.md>`_).
 - **Sinks:** Home Assistant over MQTT, and Grafana over InfluxDB, both fed by the same daemon
   that owns the Pi's BLE link to the unit (the unit itself serves several centrals at once — the
   phone app and the :term:`ESP32 satellite <Satellite>` stay connected alongside it).

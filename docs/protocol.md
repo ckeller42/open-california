@@ -45,10 +45,12 @@ chosen by state-field overlap.
 Per field it emits: **name, bit offset, width, default, raw_range** (`0..2^w-1`).
 Control offsets come from each `f()`; state offsets from each `e()` (`subList`).
 A field placed differently across a shared model's two branches is flagged
-`offset: MERGED_AMBIGUOUS` (needs a live pass to disambiguate) rather than guessed.
+`offset: MERGED_AMBIGUOUS` rather than guessed; every such offset calictl uses is placed in
+`calictl/overrides.py` from the app's frame builder (the generated views show it as "(override)").
 A `command_enums:` section lists the app's command vocabularies (e.g. lighting's
 `SET_BRIGHTNESS`/`SET_COLOR`/`SET_PROFILE`) for `Mode`-style value semantics;
-everything else stays `value_semantics: UNVERIFIED`.
+elsewhere the extractor writes `value_semantics: UNVERIFIED` — its default, not a verification
+verdict: what is verified, and how, is the [signal catalog](protocol/signal-matrix.md).
 
 **Reproduce**: the decompile pipeline (apkeep → dex → jadx) + the enigma name-map are kept in a
 private own-vehicle-RE repo (they analyse the VW-copyrighted app locally); this repo ships the
@@ -73,13 +75,11 @@ sliced/packed into fields at hardcoded bit offsets, per subsystem.
 bonded write. Security finding: the control plane is **bonded-but-unauthenticated**;
 any bonded central has full, replayable control.
 
-## Worked example (fridge) — superseded
+## Control frame rules
 
-This page used to walk through the fridge (`1101` control / `1102` state) as its worked example.
-That walkthrough has been superseded by live on-device results, and the current per-feature
-recipes live in
+The per-feature recipes live in
 [`control-and-actuation.md`](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html) (§3 frame model, §4
-per-feature status). Two points from it still hold:
+per-feature status). Two rules hold for every control frame:
 
 - **Never write a whole frame of model defaults** (e.g. `fd770f1e3e1f`). It carries out-of-range
   and conflicting action values; the unit ignored power and stored stray bytes. A control frame
