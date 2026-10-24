@@ -169,6 +169,7 @@ Installed bit
   The per-function flag that says the equipment is fitted. Only installed functions publish.
 
 MERGED_AMBIGUOUS
+ambiguous offset
   The extractor's offset marker for a dictionary field it could not place; every such field
   calictl uses is placed in `overrides.py`. The generated protocol views show the marker.
 

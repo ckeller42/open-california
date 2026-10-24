@@ -44,7 +44,7 @@ chosen by state-field overlap.
 
 Per field it emits: **name, bit offset, width, default, raw_range** (`0..2^w-1`).
 Control offsets come from each `f()`; state offsets from each `e()` (`subList`).
-A field placed differently across a shared model's two branches gets an ambiguous offset ({term}`MERGED_AMBIGUOUS`)
+A field placed differently across a shared model's two branches gets an {term}`ambiguous offset`
 rather than a guess; every such offset calictl uses
 is placed in `calictl/overrides.py` from the app's frame builder (the generated views show it as
 "(override)").
