@@ -17,22 +17,6 @@ pytest.importorskip("yaml")
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
-def test_reference_md_matches_dictionary(tmp_path):
-    from tools import gen_protocol_reference
-
-    committed = ROOT / "docs" / "protocol" / "reference.md"
-    assert committed.exists(), "run: python3 -m tools.gen_protocol_reference --out docs/protocol/reference.md"
-
-    fresh = gen_protocol_reference.build()
-    out = tmp_path / "reference.md"
-    out.write_text(fresh)
-
-    assert out.read_text() == committed.read_text(), (
-        "docs/protocol/reference.md is stale — regenerate with "
-        "`python3 -m tools.gen_protocol_reference --out docs/protocol/reference.md`"
-    )
-
-
 def test_frame_layouts_md_matches_dictionary(tmp_path):
     from tools import gen_frame_layouts
 
@@ -117,8 +101,8 @@ def test_signal_matrix_md_matches_signals_yaml(tmp_path):
 
 # --- independent-correctness checks (issue #107) -------------------------------------------------
 # The freshness tests above only regen-diff: a WRONG-but-self-consistent generator passes them
-# (exactly how the original mirror-reversed bit grid slipped through its own test). These two
-# checks parse the COMMITTED output text and compare it against dictionary.yaml directly — no
+# (exactly how the original mirror-reversed bit grid slipped through its own test). This
+# check parses the COMMITTED output text and compare it against dictionary.yaml directly — no
 # generator code in the loop.
 
 
@@ -127,37 +111,6 @@ def _dict_functions():
 
     doc = yaml.safe_load((ROOT / "protocol" / "dictionary.yaml").read_text())
     return doc.get("functions", doc)
-
-
-def test_reference_rows_match_dictionary_independently():
-    """Every placed state/control field appears in its function's reference.md section with
-    the exact offset and width cells from dictionary.yaml."""
-    text = (ROOT / "docs" / "protocol" / "reference.md").read_text()
-    funcs = _dict_functions()
-    checked = 0
-    for fn, spec in funcs.items():
-        start = text.find("\n## %s\n" % fn)
-        assert start >= 0, "reference.md: missing section for %s" % fn
-        end = text.find("\n## ", start + 1)
-        section = text[start : end if end > 0 else len(text)]
-        for f in spec.get("state_fields", []) + spec.get("control_fields", []):
-            if not (isinstance(f.get("offset"), int) and isinstance(f.get("width"), int)):
-                continue
-            rows = [ln for ln in section.splitlines() if ln.startswith("| %s |" % f["name"])]
-            assert rows, "reference.md[%s]: no row for %s" % (fn, f["name"])
-            ok = any(
-                ln.split("|")[2].strip() == str(f["offset"]) and ln.split("|")[3].strip() == str(f["width"])
-                for ln in rows
-            )
-            assert ok, "reference.md[%s]: %s row disagrees with dictionary (want off=%s w=%s): %r" % (
-                fn,
-                f["name"],
-                f["offset"],
-                f["width"],
-                rows,
-            )
-            checked += 1
-    assert checked > 50, "suspiciously few rows checked (%d)" % checked
 
 
 def test_frame_layout_grid_matches_dictionary_independently():

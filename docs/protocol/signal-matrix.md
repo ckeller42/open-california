@@ -8,7 +8,9 @@ Every catalogued field, its surface/omit decision, and the evidence behind it. S
 - **provenance**: which of `app` (decompiled getter/setter), `gui` (UI screen spec key), `vwdoc` (vendor manual), `live` (a captured live sample) back this entry — signals.yaml's `sources` map.
 - **semantic-review**: signals.yaml persists **no** dedicated review-status field — `tools/audit_signals.py --report` computes `SEMANTIC-REVIEW-NEEDED` live against a decompile source tree, it isn't stored here. This column is a best-effort proxy: entries whose `scale` mentions "inverted" or "combined" (the only persisted marker of a non-trivial transform, e.g. the camping-lights case) are flagged `needs-review`; run the real auditor for anything authoritative.
 
-Totals: 228 fields catalogued, 94 surfaced, 134 omitted, 1 flagged for review.
+Totals: 228 fields catalogued, 1 flagged for review. State fields (what the unit reports): 163, of which 94 are shown as values and 69 are not. Control fields (what calictl writes): 65, of which 0 are shown and 65 are not.
+
+Control fields are written by calictl's commands and are never shown as values, so a control field marked `omit` (not shown) is still implemented: "not shown" does not mean "not implemented". The commands that write these fields are on the [features page](../features.md).
 
 | function | category | field | decision | surfaced-name | confidence | provenance | semantic-review | omit-reason |
 |---|---|---|---|---|---|---|---|---|

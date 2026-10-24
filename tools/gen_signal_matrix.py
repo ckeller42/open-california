@@ -112,8 +112,10 @@ def build(signals_path=None) -> str:
 
     rows = _rows(catalog)
     total = len(rows)
-    surfaced = sum(1 for r in rows if r[3] == "surface")
-    omitted = sum(1 for r in rows if r[3] == "omit")
+
+    def count(category, decision):
+        return sum(1 for r in rows if r[1] == category and r[3] == decision)
+
     flagged = sum(1 for r in rows if r[7] != "—")
 
     lines = [
@@ -137,8 +139,24 @@ def build(signals_path=None) -> str:
         "(the only persisted marker of a non-trivial transform, e.g. the camping-lights "
         "case) are flagged `needs-review`; run the real auditor for anything authoritative.",
         "",
-        "Totals: %d fields catalogued, %d surfaced, %d omitted, %d flagged for review."
-        % (total, surfaced, omitted, flagged),
+        "Totals: %d fields catalogued, %d flagged for review."
+        " State fields (what the unit reports): %d, of which %d are shown as values and %d are not."
+        " Control fields (what calictl writes): %d, of which %d are shown and %d are not."
+        % (
+            total,
+            flagged,
+            count("state", "surface") + count("state", "omit"),
+            count("state", "surface"),
+            count("state", "omit"),
+            count("control", "surface") + count("control", "omit"),
+            count("control", "surface"),
+            count("control", "omit"),
+        ),
+        "",
+        "Control fields are written by calictl's commands and are never shown as values, so a"
+        ' control field marked `omit` (not shown) is still implemented: "not shown" does not mean'
+        ' "not implemented". The commands that write these fields are on the'
+        " [features page](../features.md).",
         "",
         "| " + " | ".join(_COLUMNS) + " |",
         "|" + "---|" * len(_COLUMNS),

@@ -85,3 +85,34 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
   ```` ```{eval-rst} ```` blocks) so its needs are collected.
 - `needs_id_required = True` — every need must have an explicit ID.
 - Verify a trace resolved: `needs.json` → the req's `links_back` lists its test.
+
+## Writing reader pages
+
+Reader pages are the site's own pages under `docs/` and the prose headers of the generated
+views in `docs/protocol/`. They describe what the code does today. The lab notes in
+`docs/business-logic/` are different: they keep the history and the proof, so these rules do
+not apply there.
+
+1. **Present tense, current behaviour only.** Describe what the code does now.
+2. **No history.** No "was", "formerly", "used to", "fixed by", issue or PR numbers, dated
+   events or measurements, firmware commit hashes, or review and ruling labels. Where proof
+   matters, use one short tier word ("live-verified on the real unit", "verified against the
+   app's code only", "host-tier tested") and link the
+   [evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html).
+   Numbers that are current behaviour stay: timeouts, periods, sizes.
+3. **No internal markers.** No bare issue numbers, no catalog status words in capitals, no
+   catalog jargon, no obfuscated class names from the decompiled app. When the app's behaviour
+   matters, say "the app" and what it does.
+4. **Check every claim against the code** (`calictl/`, `firmware/components/`, `csrc/`,
+   `tests/`). When the code and the page disagree, the code is right: fix the page.
+5. **Keep the `sphinx-needs` objects and anchors.** Do not change a `.. req::`, `{spec}` or
+   `.. test::` id, link or status unless it is wrong. Keep a `(name)=` label that another page
+   links to.
+6. **Keep it readable.** Short paragraphs, one fact per sentence, tables where they help. Do not
+   cut content that is true and useful, and do not pad.
+
+In short: the behaviour goes on the page, the proof goes into an evidence-ledger row.
+
+`tests/test_docs_style.py` holds the exact patterns for rules 2 and 3 and checks the pages in its
+`CHECKED_PAGES` list. Add a page to that list when it passes. Before a commit, build the site with
+`sh docs/build_site.sh` (warnings are errors) and run the full pytest suite.

@@ -11,17 +11,14 @@ and `DISCLAIMER.md`.
 ```
 
 Reverse-engineered control + monitoring for the VW California T7 camper unit over BLE.
-Start with {doc}`architecture` for how the pieces fit and {doc}`protocol-sequences` for the
-wire-level flows (all diagrams are Mermaid); the requirement traceability at the
-bottom of this page is generated from `sphinx-needs` objects authored **inside code
-docstrings** (`.. req::`) and traced to the tests that verify them (`.. test:: … :links:`),
-so a link to a nonexistent requirement fails the doc build (a requirement with no test builds
-clean and shows an empty "incoming" list).
+Start with {doc}`features`: per function of the camper unit, what calictl shows, what it can
+control, where, and how well that is proven. {doc}`architecture` shows how the pieces fit.
 
 ```{toctree}
 :maxdepth: 1
 :caption: Getting started
 
+What calictl does today <features>
 architecture
 raspberry-pi-setup
 howto-pair-your-camper
@@ -36,27 +33,26 @@ howto-esp-standalone
 
 hardware
 protocol
-protocol-sequences
-protocol/reference
-protocol/frame-layouts
-protocol/signal-matrix
-cross-language-codec
 firmware
 screenshots
 glossary
-api
 ```
 
 * {ref}`genindex` — every glossary term and API object
 
 ```{toctree}
 :maxdepth: 1
-:caption: Appendix
+:caption: For contributors
 
-UI-DESIGN-RATIONALE
+protocol-sequences
+protocol/frame-layouts
+protocol/signal-matrix
+cross-language-codec
+api
 simulation-and-testing
 mock-unit-guide
 howto-android-phone-lab
+UI-DESIGN-RATIONALE
 building-the-docs
 ```
 
@@ -68,6 +64,11 @@ separately from these docs: [Reverse-engineering notes](https://ckeller42.github
 (also browsable [in the repository](https://github.com/ckeller42/open-california/tree/main/docs/business-logic)).
 
 ## Requirement traceability
+
+Requirements are `sphinx-needs` objects written inside the code's docstrings (`.. req::`) and
+linked to the tests that verify them (`.. test:: … :links:`). A link to a requirement that does
+not exist fails the doc build; a requirement without a test builds and shows an empty
+"incoming" column. {doc}`building-the-docs` has the details.
 
 Protocol sequence diagrams ({doc}`protocol-sequences`) are `spec` objects that link to the
 requirement each one depicts, so the table below shows the diagram → requirement → test chain.
