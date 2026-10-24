@@ -200,7 +200,7 @@ calictl's supervisor.
 - **Watchdogs.** `CALI_SESSION_CONNECT_TIMEOUT_MS` (20 s, twice the transport's connect timeout)
   fires only when the transport's verdict got lost; `CALI_SESSION_ENC_TIMEOUT_MS` (15 s) bounds
   the encryption.
-- **Power-save rest.** When the unit itself ends the link (HCI 0x13) while camping mode is off and
+- **{term}`Power-save rest`.** When the unit itself ends the link (HCI 0x13) while camping mode is off and
   no shore power feeds it, the satellite does not reconnect, as the app does
   (`R_FW_BLE_REST`). The web UI shows the app's card "Disconnected to save energy" with a
   *Reconnect* button. Every other loss takes the backoff above.
