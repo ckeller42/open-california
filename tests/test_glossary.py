@@ -19,9 +19,7 @@ _DIRECTIVE = re.compile(r"^```\{glossary\}|^\.\. glossary::", re.M)
 
 
 def _doc_files():
-    files = (
-        list(ROOT.glob("*.md")) + list((ROOT / "docs").rglob("*.md")) + list((ROOT / "docs").rglob("*.rst"))
-    )
+    files = list(ROOT.glob("*.md")) + list((ROOT / "docs").rglob("*.md"))
     return [f for f in files if "_build" not in f.parts and f != GLOSSARY]
 
 

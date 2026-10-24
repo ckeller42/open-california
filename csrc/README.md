@@ -86,4 +86,4 @@ via `pairing_consts.h`), not here.
 Still parked:
 
 - the **postcheck port** — the ESP does no readback check after a write (`applied` is never `true`
-  on the satellite); see the "Parked" section of `docs/cross-language-codec.rst`.
+  on the satellite); see the "Parked" section of `docs/cross-language-codec.md`.

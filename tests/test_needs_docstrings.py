@@ -1,13 +1,13 @@
 """Guard: the sphinx-needs objects authored in docstrings are well-formed and actually render.
 
-``sphinx -W`` only sees needs in objects that ``docs/api.rst`` autodocs; a ``.. test::`` in a
+``sphinx -W`` only sees needs in objects that ``docs/api.md`` autodocs (inside its eval-rst blocks); a ``.. test::`` in a
 module nobody autodocs (or whose options cleandoc pushed out of the directive) silently drops out
 of the trace. This walks every docstring under calictl/, tools/, tests/ with ``ast`` (no imports)
 and checks, after ``inspect.cleandoc`` (what autodoc's ``prepare_docstring`` does):
 
 - each ``.. req::``/``.. test::`` has an indented ``:id:`` option with the R_/T_ prefix,
 - ids are unique, every ``:links:`` target is an existing R_ id,
-- the docstring's owner is rendered by an ``auto*::`` directive in docs/api.rst.
+- the docstring's owner is rendered by an ``auto*::`` directive in docs/api.md.
 """
 
 import ast
@@ -71,9 +71,9 @@ def _collect():
 
 
 def _api_directives():
-    """docs/api.rst -> list of (directive, target, options-dict)."""
+    """docs/api.md (eval-rst blocks) -> list of (directive, target, options-dict)."""
     out = []
-    for line in (ROOT / "docs" / "api.rst").read_text(encoding="utf-8").splitlines():
+    for line in (ROOT / "docs" / "api.md").read_text(encoding="utf-8").splitlines():
         m = re.match(r"^\.\. auto(\w+):: (\S+)", line)
         if m:
             out.append((m.group(1), m.group(2), {}))
@@ -83,7 +83,7 @@ def _api_directives():
 
 
 def _rendered(module, qual, api):
-    """Is the docstring at ``module``/``qual`` emitted by some autodoc directive in api.rst?"""
+    """Is the docstring at ``module``/``qual`` emitted by some autodoc directive in api.md?"""
     target = module + ("." + qual if qual else "")
     public = not any(p.startswith("_") for p in qual.split(".") if p)
     for kind, tgt, opts in api:
@@ -132,10 +132,10 @@ def test_need_ids_are_unique():
 
 
 def _doc_reqs():
-    """R_ ids authored directly in the rendered docs pages (firmware.md, cross-language-codec.rst)."""
+    """R_ ids authored directly in the rendered docs pages (firmware.md, cross-language-codec.md)."""
     ids = set()
     for p in (ROOT / "docs").rglob("*"):
-        if p.suffix in (".rst", ".md") and not {"_build", "business-logic", "superpowers"} & set(p.parts):
+        if p.suffix == ".md" and not {"_build", "business-logic", "superpowers"} & set(p.parts):
             ids |= set(re.findall(r"^\s*:id:\s*(R_\w+)", p.read_text(encoding="utf-8"), re.M))
     return ids
 
@@ -151,10 +151,10 @@ def test_links_resolve_to_requirements():
     assert not bad, "dangling :links: targets:\n" + "\n".join(bad)
 
 
-def test_every_need_is_autodocd_in_api_rst():
+def test_every_need_is_autodocd_in_api_md():
     api = _api_directives()
     bad = sorted({"%s (%s)" % (w, o.get("id")) for w, m, q, _k, o in NEEDS if not _rendered(m, q, api)})
     assert not bad, (
-        "needs whose docstring docs/api.rst never renders (add an auto*:: directive, else the "
+        "needs whose docstring docs/api.md never renders (add an auto*:: directive, else the "
         "need silently drops out of the sphinx-needs trace):\n" + "\n".join(bad)
     )

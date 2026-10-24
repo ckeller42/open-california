@@ -606,7 +606,7 @@ replaces exactly that function, and a passkey typed while idle is ignored.
 
 These `.. req::` / `.. test::` IDs are declared in that test module's own docstring — a Python
 "shim" sphinx-needs can parse, since the real implementation is C (whose comments sphinx-needs
-does not collect). `docs/api.rst` pulls the module in via `.. automodule::
+does not collect). `docs/api.md` pulls the module in via `.. automodule::
 tests.firmware.test_pairing_sm_parity`, so both objects and their `:links:` resolve in the
 `sphinx -b needs` build today.
 

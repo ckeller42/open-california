@@ -91,11 +91,11 @@ change + its test. When calictl's behaviour changes: DECISIONS. No row is option
 | What | Where |
 |---|---|
 | tier row (tier, date, source path) | `docs/business-logic/evidence-ledger.md` |
-| frame/sequence/cadence | `docs/protocol-sequences.rst`, `docs/business-logic/protocol-alignment.md`, `signals.md` (field meaning → `protocol-change` skill) |
+| frame/sequence/cadence | `docs/protocol-sequences.md`, `docs/business-logic/protocol-alignment.md`, `signals.md` (field meaning → `protocol-change` skill) |
 | command tier | `control-and-actuation.md` §5 Status column |
 | doc claim checked | `protocol-crosscheck-applab.md`: OBSERVED / CONSISTENT / CONTRADICTED / NOT TESTABLE |
 | behaviour change | `docs/business-logic/DECISIONS.md` entry, newest first |
-| simulation | `tools/mock_unit.py` / `tools/fake_unit_peripheral.py` match the capture; test whose docstring cites the capture (`.. test::` id **registered in `docs/api.rst`**); `tools/scenarios/<fn>/<case>.yaml` for a byte-identical frame |
+| simulation | `tools/mock_unit.py` / `tools/fake_unit_peripheral.py` match the capture; test whose docstring cites the capture (`.. test::` id **registered in `docs/api.md`**); `tools/scenarios/<fn>/<case>.yaml` for a byte-identical frame |
 | older contradicted rows | mark **CORRECTED <date>** / superseded with the reason; never delete silently |
 
 Then `tools/ci.sh` (includes the sphinx `-W` docs build) before the PR.
@@ -119,7 +119,7 @@ app. Check `gh pr diff N --name-only` for image/video files before pushing.
 | no app version on the observation | `dumpsys package … grep versionName` with every capture |
 | frame matched to an action by eye | align snoop clock to a `marks.txt` mark first |
 | docs autodoc section removed with the entry you meant to drop | it carried unrelated entries — edit the entry, keep the section |
-| new `.. test::` id, CI fails in sphinx-needs | register the test in `docs/api.rst` |
+| new `.. test::` id, CI fails in sphinx-needs | register the test in `docs/api.md` |
 | old ledger row left contradicting the new one | mark it CORRECTED/superseded in the same PR |
 | fact only in DECISIONS/ledger | also the protocol docs + crosscheck + mock (table §4) |
 | capture/screenshot staged | unstage; cite `buspi:~/applog/…` instead |

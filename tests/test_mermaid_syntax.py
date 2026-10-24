@@ -6,7 +6,7 @@ only emits the diagram source into the page, and mermaid.js parses it in the *br
 that builds clean can still render as "Syntax error in text" on the live GitHub-Pages site. That is
 exactly what shipped 2026-08-28: semicolons (mermaid's statement separator), a bare ``&`` (actor
 conjunction), a bare ``>`` (arrow token), and a ``:`` inside a ``loop``/``opt`` label all broke the
-sequence diagrams in `protocol-sequences.rst`. Nobody saw it until the repo went public and the docs
+sequence diagrams in `protocol-sequences` (then RST, now `docs/protocol-sequences.md`). Nobody saw it until the repo went public and the docs
 actually deployed.
 
 This lint runs in the normal pytest CI (which gates merges) and fails BEFORE a broken diagram can
@@ -24,26 +24,6 @@ _DOCS = _ROOT / "docs"
 _ARROWS = re.compile(r"--?(>>|\)|->|x|>)|<br\s*/?>|&(amp|lt|gt|nbsp);")
 # block keywords whose label is free text after the keyword (a ':' there breaks parsing)
 _BLOCK_LABEL = re.compile(r"^\s*(loop|opt|alt|else|par|and|rect|critical|option|break)\b(.*)$")
-
-
-def _mermaid_blocks(rst_text):
-    """Yield (start_line, [body_lines]) for every ``.. mermaid::`` block in an RST document."""
-    lines = rst_text.split("\n")
-    i = 0
-    while i < len(lines):
-        if lines[i].strip() == ".. mermaid::":
-            start = i + 1
-            i += 1
-            while i < len(lines) and lines[i].strip() == "":
-                i += 1
-            body = []
-            while i < len(lines) and (lines[i].startswith("    ") or lines[i].strip() == ""):
-                body.append((i + 1, lines[i]))
-                # walk to the first non-indented, non-blank line
-                i += 1
-            yield start, body
-        else:
-            i += 1
 
 
 def _offending(lineno, line):
@@ -88,24 +68,22 @@ def _md_sources():
 
 
 def test_docs_mermaid_blocks_have_no_browser_breaking_chars():
-    """Every mermaid diagram — ``.. mermaid::`` in docs/*.rst AND ```mermaid fences in markdown —
+    """Every mermaid diagram (```mermaid fences in markdown; the Sphinx pages are all MyST) —
     must be free of characters mermaid.js rejects in free text, otherwise it builds clean but
     renders as "Syntax error in text" in the browser (regression guard for the 2026-08-28
     protocol-sequences breakage; markdown fences render on GitHub and, via myst, on the site).
     """
-    problems = []
-    for rst in sorted(_DOCS.rglob("*.rst")):
-        for _start, body in _mermaid_blocks(rst.read_text()):
-            for lineno, line in body:
-                reason = _offending(lineno, line)
-                if reason:
-                    problems.append(f"{rst.relative_to(_ROOT)}:{lineno}: {reason}\n      {line.strip()}")
+    problems, seen = [], 0
     for md in _md_sources():
         for body in _mermaid_fences(md.read_text()):
+            seen += 1
             for lineno, line in body:
                 reason = _offending(lineno, line)
                 if reason:
                     problems.append(f"{md.relative_to(_ROOT)}:{lineno}: {reason}\n      {line.strip()}")
+    assert seen >= 17, (
+        "found only %d mermaid fences; the lint went blind (protocol-sequences alone has 17)" % seen
+    )
     assert not problems, (
         "mermaid diagram(s) contain characters that render as 'Syntax error in text' in the browser "
         "(sphinx -W cannot catch this — it only emits the source):\n" + "\n".join(problems)

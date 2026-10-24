@@ -13,7 +13,7 @@ the lab moved to **5.4.0.3036** on 2026-10-10 (first re-run: section "App 5.4.0.
 The real-phone pass ("Real app on the real unit" below) is app **5.4.0.3036** on the owner's phone
 against the real unit (2026-10-10).
 
-## Session (`docs/protocol-sequences.rst` S_SEQ_CONNECT / S_SEQ_NOTIFY)
+## Session (`docs/protocol-sequences.md` S_SEQ_CONNECT / S_SEQ_NOTIFY)
 
 | Claim | Observation (2026-09-16) | Verdict |
 |---|---|---|

@@ -10,7 +10,7 @@ on:
       - 'ARCHITECTURE.md'   # included into the site via the docs/architecture.md stub
       - 'calictl/**'
       - 'tests/**'
-      - 'tools/gen_c_dict.py'        # automodule'd in docs/api.rst
+      - 'tools/gen_c_dict.py'        # automodule'd in docs/api.md
       - 'tools/gen_codec_vectors.py'
       - '.github/workflows/docs.yml'
   workflow_dispatch:

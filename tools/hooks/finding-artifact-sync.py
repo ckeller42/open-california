@@ -54,7 +54,7 @@ if fp.endswith(finding_triggers):
             "  • RE docs: docs/business-logic/ (the relevant note + evidence-ledger.md tier + a dated "
             "DECISIONS.md entry) — supersede any now-wrong 'inferred/UNVERIFIED' claim;\n"
             "  • ui/screens/*.yaml if the app-UI semantics changed;\n"
-            "  • protocol sequence diagrams (docs/protocol-sequences.rst) only if a FRAME/sequence changed "
+            "  • protocol sequence diagrams (docs/protocol-sequences.md) only if a FRAME/sequence changed "
             "(the lamp/area map does not);\n"
             "  • Grafana dashboard (see the dashboard-sync reminder) if a SURFACED signal changed;\n"
             "  • tests + `python3 -m tools.audit_signals --report`, then deploy to buspi to live-verify."

@@ -2,7 +2,7 @@
 
 The BLE sequence diagrams have **one canonical copy**:
 [**Protocol sequence diagrams**](https://ckeller42.github.io/open-california/protocol-sequences.html)
-(source `docs/protocol-sequences.rst`). There, every flow is a `sphinx-needs` spec (`S_SEQ_*`) with
+(source `docs/protocol-sequences.md`). There, every flow is a `sphinx-needs` spec (`S_SEQ_*`) with
 a verification status, a short contract, the diagram, and the evidence behind it. The RE detail that
 used to live only on this page has been folded in: the `1502` config-dump modes, the `1402` byte
 layout, the "two overlapping senders" explanation of the old roof-counter reading, and the

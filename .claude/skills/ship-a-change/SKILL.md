@@ -85,7 +85,7 @@ else
 fi
 ```
 
-`git add -A` stages a hand-written file **with** its conflict markers (a `docs/api.rst` slipped
+`git add -A` stages a hand-written file **with** its conflict markers (a `docs/api.rst`, now `api.md`, slipped
 into a commit that way): grep for them before `--continue`. When both sides added different
 tests or doc lines at the same spot, keep both.
 

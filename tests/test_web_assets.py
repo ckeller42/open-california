@@ -14,7 +14,7 @@ def test_screens_json_exists_and_matches_build():
 
 
 def test_committed_ui_screenshots_exist():
-    # The README + Sphinx `screenshots.rst` embed these; CI (screenshots.yml) regenerates them on
+    # The README + Sphinx `screenshots.md` embed these; CI (screenshots.yml) regenerates them on
     # UI changes. Keep them present as real PNGs so the docs never render a broken image.
     shots = ROOT / "docs" / "screenshots"
     for name in (
