@@ -4,12 +4,12 @@ This walks you through connecting the ESP32 "satellite" — the small M5Stack {t
 pairs with your {term}`camper unit` on its own, without the Raspberry Pi (see [ESP32 firmware](firmware.md))
 — to your WiFi, so you can open the camper UI from a phone or laptop.
 
-> **Status.** The satellite has been paired with a real camper unit since 2026-10-08 (while the Pi
-> stayed connected to the same unit) and switches the fridge, camping mode, lights, air heater and
-> energy mode there; it keeps its link while the van is parked. Before that it was proven on a
-> Linux build with a simulated WiFi radio, on an emulated chip, and on a real CoreS3 against a
-> simulated camper unit (setup hotspot, every screen state, every recorded app action byte for
-> byte, the pairing wizard on a home network and over the setup hotspot). What is still to confirm
+> **Status.** The satellite is paired with a real camper unit (while the Pi stays connected to
+> the same unit) and switches the fridge, camping mode, lights, air heater and energy mode there;
+> it keeps its link while the van is parked with camping mode on. It is also tested on a Linux build with a simulated
+> WiFi radio, on an emulated chip, and on a real CoreS3 against a simulated camper unit (setup
+> hotspot, every screen state, every recorded app action byte for byte, the pairing wizard on a
+> home network and over the setup hotspot). What is still to confirm
 > is listed in [ESP32 firmware → Network watch items](firmware.md#network-watch-items-board-only).
 
 The satellite reads the camper unit and, on your home WiFi, controls the fridge, camping mode,

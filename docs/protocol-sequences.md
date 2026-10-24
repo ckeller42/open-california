@@ -13,8 +13,9 @@ every diagram traces to the function that realises it. Every section has the sam
 * **Contract** — what `calictl` does *today*, normative and short (the spec body).
 * **Diagram** — the wire sequence. Steps only the official app performs are drawn on a separate
   participant, `App (reference only)`. `calictl` does not send them.
-* **Evidence** — how it was established: dated captures, decompile citations, corrections. The
-  full lab-note history lives in the [RE lab notes](https://ckeller42.github.io/open-california/business-logic/index.html).
+* **Evidence** — how strongly the flow is proven (the verification tier) and which tests hold it.
+  The dated record of each observation is the [evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html); the lab-note history lives
+  in the [RE lab notes](https://ckeller42.github.io/open-california/business-logic/index.html).
 
 ## Verification status
 
@@ -82,13 +83,13 @@ traceability table on the index page):
   - The `1003` heartbeat spanning one control write, cold and persistent paths.
 * - {need}`S_SEQ_COOLER`
   - Cooler command
-  - The app-faithful cooler frame (ruling R1) from request to applied-check.
+  - The app-faithful cooler frame from request to applied-check.
 * - {need}`S_SEQ_LIGHT_COMMIT`
   - Lighting SET and neutral flush
   - A bare brightness write, the flush frame, confirmation from the `1502` push.
 * - {need}`S_SEQ_WAKEUP`
   - Wake-up light and door contact
-  - A config edit, the REQUEST_CONFIG pull (R5), config latched from the unit's frames.
+  - A config edit, the REQUEST_CONFIG pull, config latched from the unit's frames.
 * - {need}`S_SEQ_ROOF`
   - Roof actuation
   - The roof view's STOP stream, press-and-hold on the same counter, STOP.
@@ -123,8 +124,8 @@ Vendor UUID `0000XXXX-6c77-4b7d-bbf6-a5e587701f3d`. Per subsystem, `NN01` is the
 * - `1001`
   - VERSION (`general`)
   - Read once in the handshake. The app aborts if it is empty or `CommunicationVersion` is
-    above its maximum: 2 in app 5.0.8, **3 since app 5.4.0**, which also branches the energy
-    and general-purpose decode on it (V2 / V3 / V4). This van reports 2. `calictl` does not
+    above its maximum (3 in app 5.4.0, which also branches the energy and general-purpose
+    decode on it: V2 / V3 / V4). This van reports 2. `calictl` does not
     refuse other values; it flags anything but 2 as `firmware_untested`.
 * - `1002`
   - VIN check
@@ -133,7 +134,7 @@ Vendor UUID `0000XXXX-6c77-4b7d-bbf6-a5e587701f3d`. Per subsystem, `NN01` is the
 * - `1003`
   - HEARTBEAT / Counter
   - Write-only liveness counter, 4-byte big-endian, `+1` per tick. Ticking it arms control
-    writes (issue #2) and keeps a read session alive.
+    writes and keeps a read session alive.
 * - `1004`
   - vehicle
   - Ignition (terminal-15, bit 7), car variant, unit RTC, roll/pitch leveling
@@ -149,7 +150,7 @@ Vendor UUID `0000XXXX-6c77-4b7d-bbf6-a5e587701f3d`. Per subsystem, `NN01` is the
 * - `1302`
   - water
   - State only (no `1301`). Read after subscribing, like every char; the last frame wins (the
-    app's order, decompile 2026-10-07). The old "push-only" rule was dropped.
+    app's order).
 * - `1401` / `1402`
   - roof
   - 5-byte move frame `[direction][SafetyCounter]` / Position, Installed,
@@ -188,14 +189,14 @@ Vendor UUID `0000XXXX-6c77-4b7d-bbf6-a5e587701f3d`. Per subsystem, `NN01` is the
   3 attempts, 4 s apart. With `CALICTL_ADAPTER_RESET=1` the adapter is power-cycled once
   after the first failure (default off, because `hci0` is shared). After the third failure,
   raise `ConnectionUnavailable`. The unit is asleep, or Bluetooth is disabled on the unit. (A
-  phone app that holds a link does not block `calictl`: the unit served the app, {term}`buspi` and the
-  ESP32 satellite at the same time on 2026-10-10.)
+  phone app that holds a link does not block `calictl`: the unit serves the app, {term}`buspi` and the
+  ESP32 satellite at the same time.)
 * Paths that write, and the {term}`persistent session`, then read `1001` VERSION and `1004`
   vehicle (read failures are swallowed and logged as a weak handshake). The per-op read path
   skips these two reads.
 * Subscribe every notify/indicate char ({py:meth}`~calictl.device.CamperDevice._subscribe_all`).
   There are 12 on this unit. The session is then ready.
-* The app's `1002` VIN check, its version-above-maximum abort (2 in app 5.0.8, 3 since 5.4.0) and its empty-`1004` reconnect are
+* The app's `1002` VIN check, its version-above-maximum abort and its empty-`1004` reconnect are
   app-only. `calictl` does none of them.
 ```
 
@@ -213,43 +214,39 @@ sequenceDiagram
     U-->>C: connected, services discovered by bleak
     A->>U: requestMtu(26) then read 1002, compare with SHA-256(VIN) bytes 16..32 (real phone with cached GATT, no discovery)
     Note over A,U: app only, a mismatch disconnects about 20 ms later (Wrong vehicle found)
-    Note over A,U: real app 2026-10-10 subscribes only the 8 chars of the fitted functions, then reads each state char
+    Note over A,U: the app subscribes only the 8 chars of its variant's functions, then reads each state char
     C->>U: read 1001 (VERSION)
-    Note over A: app only, aborts if VERSION is empty or above its max (2, or 3 since app 5.4.0)
+    Note over A: app only, aborts if VERSION is empty or above its max (3 in app 5.4.0)
     C->>U: read 1004 (vehicle, handshake read, forces encryption)
     Note over A: app only, an empty 1004 read means reconnect
     loop every notifiable / indicatable char (12 on this unit)
         C->>U: write CCCD (0100 notify / 0200 indicate)
-        U-->>C: write response only, no notification (CAPTURE 2026-10-10)
+        U-->>C: write response only, no notification
     end
     Note over C,U: session ready, state reads are fresh, writes can be armed
 ```
 
-**Evidence.** The order 1001 → 1004 → subscribe-all was decompile-confirmed 2026-07-14 (`pf/g`
-handshake, `s/a1` GATT dispatcher). The `1004` read is the app's *authenticated read*
-(`pf/g.java:52`, 60 s timeout). On an unbonded link it fails with ATT `0x05` (insufficient
-authentication), which triggers SMP passkey pairing. Its value is only checked for empty vs
-non-empty and is never used as a token (`DECISIONS.md`, "1004 is NOT a session token"). There is
-no challenge/response write. The app's `1002` gate was **APP-OBSERVED 2026-09-16** against
-`tools/applab` (`d2/g1` case 7 "Starting Vin Check" → `ny/c` case 8). `calictl` skips it:
-the bond is its identity, and the gate only protects the app user from a neighbour's van. The
-per-attempt timeout became tunable in #199: a unit that advertises but ignores connection requests
-(seen 2026-09-18) burns the whole timeout three times, so a shorter timeout samples its brief
-connectable windows more often. See [control-and-actuation.md §2](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html) and
+**Evidence.** Live-verified on the real unit, and captured from the real app on the real unit
+([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). The handshake order 1001 → 1004 → subscribe-all matches the app's code.
+The `1004` read is the app's *authenticated read* (60 s timeout). On an unbonded link it fails
+with ATT `0x05` (insufficient authentication), which triggers SMP passkey pairing. Its value is
+only checked for empty vs non-empty and is never used as a token. There is no
+challenge/response write. `calictl` skips the app's `1002` VIN check: the bond is its identity,
+and the check only protects the app user from a neighbour's van. The per-attempt timeout is
+tunable because a unit that advertises but ignores connection requests burns the whole timeout
+three times; a shorter timeout samples its brief connectable windows more often. See
+[control-and-actuation.md §2](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html) and
 [protocol-crosscheck-applab.md](https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html).
 
-**CAPTURE 2026-10-10** (the real CaliforniaOnTour app on a Fairphone 6 against the van's unit,
-AmbSw `0410` / {term}`CommunicationVersion` 2, Android {term}`HCI snoop`; evidence-ledger 2026-10-10). With the
-GATT table cached the phone runs **no service discovery**. It reads `1002` (identity), `1001`,
-`1004`; writes CCCD `0100` for `1702`, `1502`, `1102`, `1602`, `1004`, `1302`,
-`1402`, `1202` (in that order); then reads `1702`, `1102`, `1001`, `1602`, `1302`,
-`1004`, `f001`, `1402`, `1502`, `1202`; then the `1003` {term}`heartbeat` starts. That is 8
-subscriptions, the chars of the functions fitted on this van plus `1004`, not the 12 the {term}`app lab`
-saw against a fake unit with every function fitted. `calictl` still subscribes all 12; the unit
-accepts both. The 8 match app 5.4.0's per-variant subscribe gate (decompile 2026-10-10, `gg/o`):
-on a T7 it no longer subscribes stairs, satellite, roof A/C and living-room heater, whatever their
-`Installed` bit. App 5.4.0 keeps this handshake order and the `1003` timing (random
-750–850 ms, seed 1..1e6) unchanged from 5.0.8.
+The real app (Android {term}`HCI snoop`, the unit on {term}`CommunicationVersion` 2) runs **no
+service discovery** once the GATT table is cached. It reads `1002` (identity), `1001`, `1004`;
+writes CCCD `0100` for `1702`, `1502`, `1102`, `1602`, `1004`, `1302`, `1402`, `1202` (in that
+order); then reads `1702`, `1102`, `1001`, `1602`, `1302`, `1004`, `f001`, `1402`, `1502`,
+`1202`; then the `1003` {term}`heartbeat` starts. That is 8 subscriptions: the app subscribes
+only the functions of the unit's vehicle variant (on a T7 not stairs, satellite, roof A/C and
+living-room heater, whatever their `Installed` bit), plus `1004`. `calictl` subscribes all 12;
+the unit accepts both. The ESP32 satellite gates like the app ({need}`S_SEQ_ESP_PAIRING`). The
+app's `1003` timing is a random 750–850 ms period from a random seed in 1..1 000 000.
 
 ## Guided pairing — passkey entry and stale-bond recovery
 
@@ -296,7 +293,7 @@ BlueZ transport ({py:class}`calictl.pairing_bluez.BluezTransport`):
   passkey the unit displays → VERIFYING (10 s): `1001` + `1004` must read, and at least one
   readable char → BONDED: cache the identity address in `pairing.json` (mode 0600) and
   retarget the running daemon live.
-* **Stale-bond recovery at Pair() (#200)**: when `Pair()` still fails with
+* **Stale-bond recovery at Pair()**: when `Pair()` still fails with
   `org.bluez.Error.AlreadyExists`, drop the bond the same way (`_drop_bond_and_rediscover()`,
   cache kept, re-discovery bounded by the PAIRING budget) and retry `Pair()` exactly once. Any
   other error propagates unchanged.
@@ -365,12 +362,12 @@ pair with the Bumble fake unit ({py:mod}`tools.fake_unit_peripheral`) over a Bum
 `BluezTransport` against real BlueZ and `bluetoothd` inside a VM (`tests/realstack/`): agent,
 scan, connect, Pair, verify, persist, link release at flow end, the stale-bond probe and removal,
 an asleep unit keeping its bond, and `radio_busy`. That job is not yet a required check. The fake
-unit's pairing behaviour was cross-checked against the vendor app on 2026-09-27 ([protocol-crosscheck-applab.md](https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html),
-"Pairing"). The one live contact with the real unit was a re-pair at the van on 2026-09-18, which
-hit `AlreadyExists` from a stale local bond left by a unit-side Bluetooth reset and motivated #200.
+unit's pairing behaviour is cross-checked against the vendor app ([protocol-crosscheck-applab.md](https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html),
+"Pairing"). On the real unit, a re-pair after a unit-side Bluetooth reset hit `AlreadyExists`
+from the stale local bond; the Pair() recovery above handles that case ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)).
 CI does **not** cover the real unit's radio behaviour (RSSI jitter, advertising policy and
-deep sleep, WiFi coexistence on buspi, other clients starving LE connects); the full live unbond
-and re-pair is still open (#157). Details: [guided-pairing.md](https://ckeller42.github.io/open-california/business-logic/guided-pairing.html); owner guide:
+deep sleep, WiFi coexistence on buspi, other clients starving LE connects); a full live unbond
+and re-pair with the wizard has not been run. Details: [guided-pairing.md](https://ckeller42.github.io/open-california/business-logic/guided-pairing.html); owner guide:
 {doc}`howto-pair-your-camper`; test layers: {doc}`simulation-and-testing`.
 
 ## Notifications
@@ -389,8 +386,7 @@ path. They are never discarded:
   water `1302` included. The last frame wins: the read replaces any earlier push, and a push
   that lands after the read replaces the read (`R_READ_LAST_FRAME_WINS`; lighting is excluded,
   its config frames are latched by `serve`). No char is served from the push cache instead of
-  a read, so an early push can never pin a char (the unit sends none on subscribe, CAPTURE
-  2026-10-10).
+  a read, so an early push can never pin a char (the unit sends none on subscribe).
 * On the persistent session, the daemon's `on_push` is
   {py:meth}`calictl.serve.Server._on_push`. It hands every push to
   {py:meth}`calictl.observer.CampingObserver.on_push`, which decodes `1202` camping, `1004`
@@ -402,8 +398,7 @@ path. They are never discarded:
 * After a lighting write, the newer `1502` pushes are the confirmation. Each updates the served
   lighting state; the daemon keeps watching until one shows the requested level (a rising zone
   arrives as `1` first, the level ~100 ms later) or the window ends.
-* A `1502` read returns the last frame the unit sent, config echoes included (CAPTURE
-  2026-10-10, #284). Only a **lamp-state frame** sets the active profile, mode and lamp levels:
+* A `1502` read returns the last frame the unit sent, config echoes included. Only a **lamp-state frame** sets the active profile, mode and lamp levels:
   Mode 4 with ProfileNumber outside 1-7, or Mode 16 with ProfileNumber other than 8
   ({py:func}`calictl.semantics.lighting_reports_state`). A config or ack frame — Mode 4 / PN 1-7
   (favourite save ack), Mode 16 / PN 8 (door contact), Modes 6, 8, 12, 20, 24 — only feeds the
@@ -435,17 +430,14 @@ sequenceDiagram
     end
 ```
 
-**Evidence.** The first real-unit trace (buspi, 2026-09-16) showed no periodic stream in 150 s,
-which contradicted an older "`1602` ~3×/s" note. Its "one notify per char right after the CCCD
-write" was BlueZ re-delivering each read: btmon on buspi's link and the phone's HCI snoop
-(CAPTURE 2026-10-10) show **no** notification after a CCCD write. The same capture shows a push
-whenever a frame changes (`1102`, `1202`, `1502`, `1602`) and `1004` only at the
-ignition edge, never for the clock. Event-driven pushes were observed for `1502` (Mode-4 ramp,
-2026-08-16) and `1302` (water, during use). The app subscribes `1202`. For water it subscribes `1302`
-and then reads it, and the read and any push go to the same decoder (VM `qg/b`), so the last
-frame wins (decompile 2026-10-07, enigma `38a0d6b`). Live `1202`/`1004` push *changes* on
-this unit are decompile-asserted; the observer's `camping-push` log is how they are being
-confirmed ([auto-camper-mode.md](https://ckeller42.github.io/open-california/business-logic/auto-camper-mode.html)).
+**Evidence.** Live-verified with calictl's BLE trace of the real unit and captured from the real
+app on the real unit ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). The unit sends no periodic stream and **no**
+notification after a CCCD write (btmon on buspi's link and the phone's HCI snoop agree). It pushes
+a char whenever its frame changes (`1102`, `1202`, `1502`, `1602`), `1004` only at the ignition
+edge (never for the clock), `1502` during a Mode-4 ramp and `1302` while the water system
+measures. The app subscribes `1302` and then reads it, and the read and any push go to the same
+decoder, so the last frame wins. The observer's `camping-push` log records the `1202`/`1004`
+pushes ([auto-camper-mode.md](https://ckeller42.github.io/open-california/business-logic/auto-camper-mode.html)).
 
 ## Persistent session supervisor
 
@@ -470,15 +462,12 @@ It is on unless `CALICTL_PERSISTENT_SESSION=0`.
   (`arm=False`), so they land in well under a second. A command first waits up to
   `CALICTL_SESSION_WAIT_S` (6 s) for the session to come up instead of racing it cold. A roof
   move is the exception: it neither nudges nor waits (see Roof).
-* **Idle**: close the session under the `_ble` lock. (The old reason, "so the phone app gets
-  the single slot", is disproven: the unit served the phone app, buspi and the satellite at once,
-  CAPTURE 2026-10-10.)
-  Polls fall back to brief cold per-op reads. While the supervisor is mid-connect the poll loop
+* **Idle**: close the session under the `_ble` lock. Polls fall back to brief cold per-op reads. While the supervisor is mid-connect the poll loop
   naps 2 s instead of racing it with a cold connect.
 * **Unreachable**: back off 5 / 10 / 30 / 60 s (capped). After 4 consecutive failures the state
   is `asleep`. A command resets the backoff and reconnects immediately (keep-warm nudge).
 * **Roof**: a roof move or STOP runs **inside** an already-live session, with its `1003`
-  heartbeat still ticking, as the app's does (#235). It never warms the session first: a roof
+  heartbeat still ticking, as the app's does. It never warms the session first: a roof
   command skips the keep-warm nudge and the `CALICTL_SESSION_WAIT_S` wait, and with no
   session up it opens its own connection (heartbeat on). After a move, the daemon nudges the
   supervisor, which reconnects once the lock is free. Guided pairing parks the session with
@@ -506,15 +495,13 @@ sequenceDiagram
     Note over S,U: connect failures back off 5, 10, 30, 60 s, asleep after 4, a command nudges now
 ```
 
-**Evidence.** On buspi (2026-09-16 trace) the session repeatedly came up on a web nudge and was
-released for UI idleness (`persistent session released (web UI idle)`). No unit-side drop was
-found while the heartbeat ticked. The 2026-07-13 stability spike held the link 180 s with 100 %
-uptime and 0 drops. On 2026-10-10 the parked, locked unit held buspi's persistent session for
-3 min (a viewer open, 11:45) while the phone app held its own link and the satellite cycled.
-The roof running inside the live session (#235, replacing the #198 handover),
-and the roof command skipping the session warm-up, are covered by tests only; the roof itself has
-never
-moved under `calictl` (see {need}`S_SEQ_ROOF`). Design notes:
+**Evidence.** Live-verified on buspi ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)): the session comes up on a web
+nudge and is released for UI idleness (`persistent session released (web UI idle)`), with no
+unit-side drop while the heartbeat ticks and camping mode is on (with camping mode off the unit
+ends every link after about 30 s, see {need}`S_SEQ_SLEEP`). A parked, locked unit holds buspi's persistent session
+while the phone app holds its own link. The roof running inside the live session, and the roof
+command skipping the session warm-up, are covered by tests only; the roof has never moved under
+`calictl` (see {need}`S_SEQ_ROOF`). Design notes:
 [protocol-crosscheck-applab.md](https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html).
 
 ## Heartbeat-armed control write
@@ -525,7 +512,7 @@ moved under `calictl` (see {need}`S_SEQ_ROOF`). Design notes:
 :links: R_ACTUATE_ARM, R_POST_WRITE_CHECK
 
 **Contract.** The unit honours a control write only while a **+1 monotonic 4-byte big-endian
-counter ticks on** `1003` (the arm gate, issue #2). There is no ignition, mode or enable gate
+counter ticks on** `1003` (the arm gate). There is no ignition, mode or enable gate
 (the roof is the one exception). {py:meth}`calictl.device.CamperDevice.actuate` (cold path,
 CLI) does the following:
 
@@ -572,32 +559,23 @@ sequenceDiagram
     C->>U: disconnect (heartbeat stops, the load stays latched)
 ```
 
-**Evidence.** Live-verified on-device 2026-07-07 (issue #2) for the cooler (power/level) and
-campingmode (master/lights/USB). The jadx decompile matches: `d2/s` driver and
-`ag/b` builder, a 4-byte BE uint32 with `+1` per tick (`b1/d`). The ticker's period is a
-**random 750–850 ms** and its seed a **random 1–1 000 000, drawn per connection** (`c/i.java:349-367`,
-call-stack reading; the 2026-07-14 reading of a 500 ms timer, `zf/d` `J0=500L`, and seed 0 was
-wrong). `calictl`'s 0.6 s cadence and fixed start value satisfy the same liveness/monotonicity
-check; the value itself does not matter. **APP-OBSERVED 2026-09-16** (`tools/applab`, app 5.0.8):
-the connected app beats `1003` continuously at ~750 ms. Its writes are {term}`full-packet` with untargeted fields at the model defaults (2-bit
-`3`; heater `HeatingLevel 11 / RunningTime 127`, cooler `Level 7 / Mode 7`, timer hours
-`30/62/31`). 500 ms later it sends a neutral frame with **every** field at its {term}`sentinel`
-(cooler `ff771e3e1f1f`, heater `3f7b007f1f3f`, camping `ff`, energy `30`, lighting
-`0e00…`). The unit accepts both styles. See [control-and-actuation.md §1](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html).
+**Evidence.** Live-verified on the real unit for the cooler (power/level) and camping mode
+(master/lights/USB), and for the air heater; captured from the real app on the real unit
+([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). The app's code agrees: a 4-byte BE uint32 with `+1` per tick, a
+**random 750–850 ms** period and a **random seed in 1–1 000 000, drawn per connection**.
+`calictl`'s 0.6 s cadence and fixed start value satisfy the same liveness and monotonicity
+check; the value itself does not matter
+([protocol-alignment.md](https://ckeller42.github.io/open-california/business-logic/protocol-alignment.html)).
 
-**CAPTURE 2026-10-10** (real app on the real unit, HCI snoop, evidence-ledger 2026-10-10). The app
-writes `1003` with write-request, a 4-byte BE counter `+1` per write, every **0.76–0.79 s**, for
-as long as it is in the foreground. The value is **not 0 at connect**: values such as
-`0x00049363…` and, later, `0x00061b62` were seen. This contradicts the old "seed 0" reading
-and agrees with the call-stack reading of a random seed in 1–1 000 000 and a
-750–850 ms period ([protocol-alignment.md](https://ckeller42.github.io/open-california/business-logic/protocol-alignment.html)). The two
-values come from two links 47 min apart: a carried counter would have moved ~3 600 ticks, not
-~100 000, so the app reseeds per connection.
-When the app goes to the background, the phone disconnects (HCI `0x13` from the phone). In the
-foreground, with the van parked and locked, the unit did **not** drop the app's link: it was held
-46 min, and 93 s of that while locked. Every non-motor app write was byte-identical to
-`control.build`. Each cooler write was followed ~500 ms later by `ff771e3e1f1f`, each
-camping-mode write by `ff`, each lighting write by the commit `0e00…`.
+The real app writes `1003` with write-request every 0.76–0.79 s for as long as it is in the
+foreground, and reseeds the counter per connection. When the app goes to the background the
+phone disconnects. In the foreground the unit holds the app's link, also while the van is parked
+and locked. The app's writes are {term}`full-packet` with untargeted fields at the model defaults
+(2-bit `3`; heater `HeatingLevel 11 / RunningTime 127`, cooler `Level 7 / Mode 7`, timer hours
+`30/62/31`). 500 ms later it sends a neutral frame with **every** field at its {term}`sentinel`
+(cooler `ff771e3e1f1f`, heater `3f7b007f1f3f`, camping `ff`, energy `30`, lighting `0e00…`).
+Every non-motor app write is byte-identical to `control.build`, and the unit accepts writes with
+and without the neutral follow-up. See [control-and-actuation.md §1](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html).
 
 ## Cooler command — the app's frame
 
@@ -616,18 +594,18 @@ following:
   value must be `on/off`, `true/false` or `1/0` (`R_ONOFF_STRICT`). `timer_set` and
   `timer_start` are refused while the fridge is **on**. `mode`, `night_on` and
   `night_off` are refused while it is **off** (the app greys those rows). `night_on` and
-  `night_off` are also refused while no cooler state is known (ruling R4).
+  `night_off` are also refused while no cooler state is known.
 * Claim intent: clear a manual Disconnect, mark the UI active, nudge the supervisor, and wait up
   to `CALICTL_SESSION_WAIT_S` (6 s) for a live session. Then take the `_ble` lock and read
   the cooler state once if the cache is cold. An unreachable unit skips the command.
 * **Build** with {py:func}`calictl.control.build`. Only the targeted field is set. **Every
   other control field sits at its dictionary default**, the app's leave-unchanged value: 2-bit
-  fields `3`, `Level` and `Mode` 7, `TimerHour`/`TimerMin` 30/62, night hours 31
-  (ruling R1). The neutral frame is `ff771e3e1f1f`. Power on is `fd771e3e1f1f`, off
+  fields `3`, `Level` and `Mode` 7, `TimerHour`/`TimerMin` 30/62, night hours 31.
+  The neutral frame is `ff771e3e1f1f`. Power on is `fd771e3e1f1f`, off
   `fc771e3e1f1f`, level 5 `ff751e3e1f1f`, quiet mode `ff271e3e1f1f`, timer start
   `f7771e3e1f1f`. All are byte-identical to the app's recording. The state is not copied into
   the frame. The only exception is `night_on`/`night_off`, which carry the current schedule,
-  because the unit takes those hour bytes literally and a default would clobber it (#99).
+  because the unit takes those hour bytes literally and a default would clobber it.
 * `protocol.encode` checks width and `CONTROL_RANGES` (`State` admits `0`, `1` and the
   sentinel `3`).
 * **Write**: over the live session at once, with the heartbeat already ticking. With no session,
@@ -660,21 +638,15 @@ sequenceDiagram
     S-->>H: applied result
 ```
 
-**Evidence.** The frames are **APP-RECORDED** (`tests/vectors/app/cooler.jsonl`, replayed
-byte for byte by `tests/test_app_recordings.py`) and held by `tests/test_calictl.py`. Before
-ruling R1 (2026-10-06) calictl re-asserted the unit's current `State`/`Mode`/`Level` and
-schedule in every untargeted field. **That older state-carry frame is the one live-verified on the
-unit** (2026-07-07 power, and the schedule write of 2026-08-26 that showed the hour bytes are
-taken literally). Until 2026-10-10 the app-faithful frames, `State=3` in the level, mode and
-timer frames, had only run against the mock. The 2026-07-05 `0x0E` drop of `State=3` predates the heartbeat
-({need}`S_SEQ_REJECT`). The capture below answered that check (#230, closed).
-**CAPTURE 2026-10-10:** the real app wrote these app-faithful frames to the real unit (level
-`ff74…` / `ff73…`, quiet `ff27…` / `ff47…` / `ff07…`, timer `f777…` / `df77…`, power
-`fd77…` / `fc77…`), byte-identical to `control.build`. The unit accepted every one (no
-`0x0E`) and the level writes actuated. So the `State=3` frame works on the unit; `calictl` itself has still not sent it
-(status stays `mock-only`, evidence-ledger 2026-10-10). See
-[DECISIONS.md](https://ckeller42.github.io/open-california/business-logic/DECISIONS.html) (ruling
-R1, R3, R4) and [control-and-actuation.md §5](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html).
+**Evidence.** The frames are recorded from the real app (`tests/vectors/app/cooler.jsonl`,
+replayed byte for byte by `tests/test_app_recordings.py`) and held by `tests/test_calictl.py`.
+The real app sends these same frames to the real unit (level `ff74…` / `ff73…`, quiet `ff27…` /
+`ff47…` / `ff07…`, timer `f777…` / `df77…`, power `fd77…` / `fc77…`), and the unit accepts every
+one (no `0x0E`); the level writes actuate. `calictl`'s own cooler writes on the real unit
+(power, level, the quiet schedule) used an older frame that copied the unit's current state into
+the untargeted fields; `calictl` has not yet sent the app-faithful frame to the real unit itself,
+so the status stays `mock-only` ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). See
+[DECISIONS.md](https://ckeller42.github.io/open-california/business-logic/DECISIONS.html) and [control-and-actuation.md §5](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html).
 
 ## Lighting SET and neutral flush
 
@@ -696,9 +668,9 @@ arming frame, no REQUEST_CONFIG preamble and no heartbeat. `calictl` does the fo
   it takes the cold armed path and does not confirm.
 * CLI: cold armed path ({need}`S_SEQ_ACTUATE`) with a readback, which is **an echo, not proof**.
 * No lighting write is preceded by REQUEST_CONFIG `0d0c000000000000eeeeeeeeeeeeeeee`. It is the
-  app's screen-open config pull, retired as a write preamble on 2026-08-29. The daemon sends it
+  app's screen-open config pull, not a write preamble. The daemon sends it
   for one other purpose only: to read the wake-up configuration before a wake-up edit whose
-  config is unknown (ruling R5, {need}`S_SEQ_WAKEUP`). CLI paths never send it.
+  config is unknown ({need}`S_SEQ_WAKEUP`). CLI paths never send it.
 
 Both `calictl` paths happen to write over a heartbeat-armed link. The unit does not require
 that; the photon trials included un-armed writes.
@@ -716,41 +688,36 @@ sequenceDiagram
     C->>U: SET_BRIGHTNESS (Mode 4, PN 9, zone N, others 14)
     C->>U: 0.3 s later flush 0e00 (NO_MODE neutral default frame)
     U--)C: 1502 Mode-4 frames, a rising zone at 1 then at N, before the flush lands
-    Note right of U: lamp PHYSICALLY changes (photon-verified 2026-08-16, bare SET included)
+    Note right of U: lamp PHYSICALLY changes (photon-verified, bare SET included)
     Note over C: daemon confirms from the first newer 1502 push at level N within 1.2 s, never from the readback echo
 ```
 
-**Evidence.** For over a month a byte-identical `calictl` SET was ACKed and echoed while the lamp
-stayed dark. This was settled on **2026-08-16**: six evening trials were photon-confirmed,
-including an immediate write on a cold connection. The owner watched Kochen L7 go 0 → dark,
-8 → 80 %, 0 → dark. A morning HCI capture (`tools/capture_diff.py`) had suggested REQUEST_CONFIG
-was a required arming step. The evening trials falsified that: a sleepy morning unit plus the
-preamble's ~3.3 s delay was the confound. The decompile agrees: the app's set-one-zone
-`dg/h.java:174` `E()` writes directly and never calls the config request `d0()`
-(`dg/h.java:471`).
+**Evidence.** Photon-verified: the owner watched a lamp follow `calictl`'s writes (0 → dark,
+8 → 80 %, 0 → dark), including an immediate bare SET on a cold connection with no
+REQUEST_CONFIG before it ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). The app's code agrees: its set-one-zone write
+goes out directly and never calls the config request. A readback alone proves nothing here: the
+unit ACKs and echoes a SET even when the lamp stays dark.
 
-`0e00…` is **not an app "commit"**. The Mode enum (`dg/n`) is `NO_MODE=0, SET_BRIGHTNESS=4,
+`0e00…` is **not an app "commit"**. The app's Mode enum is `NO_MODE=0, SET_BRIGHTNESS=4,
 SET_COLOR=6, SET_DOUBLE=8, REQUEST_CONFIG=12, SET_PROFILE=16, WAKEUP_TIME=20, SYSTEM_TIME=24,
 PREVIEW=28`. So `0e00…` is just the builder's default frame (ProfileNumber `14` + NO_MODE +
 all-unchanged). The app self-flushes by streaming frames every ~500 ms. `calictl`'s single write
-needs the explicit flush. The old "a profile must be active first" precondition was an artefact of
-the echo.
+needs the explicit flush. No profile needs to be active before a SET.
 
 The config dump that REQUEST_CONFIG triggers arrives as `1502` notifications, tagged by Mode:
 `0x0c` config echo, `0x06` colour state, `0x08` SET_DOUBLE, `0x10` profile state
 (profile 8), `0x14` wake time, `0x18` system time (ticking unix seconds). After an *applied*
 SET_BRIGHTNESS the unit pushes Mode-4 frames with the real brightness. The real app on the real unit
-(CAPTURE 2026-10-10) showed a zone rising from 0 as `1` first and at its level ~100 ms later, a
+shows a zone rising from 0 as `1` first and at its level ~100 ms later, a
 decrease as one frame, DEFAULT (11) as the lamp's own level, and both frames ~230 ms after the SET
 — **before** the `0e00…` flush, so the flush is not what applies it. A `1502` read returns the
 last frame sent. These are normal `1502` state frames, decodable with
 {py:func}`calictl.protocol.decode`. They tracked real actuation in every observed case, armed or
-not. Still open: whether a *deep-asleep* unit needs any arming. Full history:
+not. Still open: whether a *deep-asleep* unit needs any arming. Details:
 [control-and-actuation.md §4](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html) and
 [lighting-energy-water-sat-roof.md](https://ckeller42.github.io/open-california/business-logic/lighting-energy-water-sat-roof.html).
 
-**CAPTURE 2026-10-10** (real app on the real unit, evidence-ledger 2026-10-10). Opening the
-Lighting screen writes REQUEST_CONFIG `0d0c…` and the commit, as drawn above. The app's group
+**Captured from the real app on the real unit.** Opening the Lighting screen writes REQUEST_CONFIG `0d0c…` and the commit, as drawn above. The app's group
 switches (Reading, Kitchen, Pop-up roof, Exterior) each write **one** `SET_BRIGHTNESS` frame
 `0904…` (Mode 4, ProfileNumber 9) with every zone of the group at `11` (DEFAULT) for on or
 `0` for off, then the commit. The camping screen's "sliding door" toggle writes the lighting
@@ -773,14 +740,14 @@ Mode 12 reply (stored-favourite bits).
   such frame replaces it. It is latched from the poll's decoded frames and from the live
   session's pushes ({py:meth}`calictl.serve.Server._on_push`), and **only** from the unit's own
   frames, never from calictl's own write. An ACKed write that the unit did not apply must stay
-  unknown (ruling R4).
+  unknown.
 * **Edit.** `wakeup HH:MM [areas] [brightness] [ramp] [on|off]` is merged over the latched
   config ({py:func}`calictl.control.wakeup_request`), else over the app's defaults. The enabled
-  bit is the one the unit reported, and only `on`/`off` changes it (ruling R3). The frame is
+  bit is the one the unit reported, and only `on`/`off` changes it. The frame is
   the app's Mode 20: ProfileNumber 14, `Timestamp` = the next local `HH:MM` packed as if UTC,
   the packed `LightValue`, zones unchanged. It is followed by the `0e00…` flush, like every
   lighting write, and needs no arming on an awake unit.
-* **Unknown config (ruling R5).** An edit that gives no `on`/`off` while no wake-up config
+* **Unknown config.** An edit that gives no `on`/`off` while no wake-up config
   has been reported would silently disarm the light, so the gate returns `WAKEUP_UNKNOWN`. The
   daemon then does what the app's lighting page does
   ({py:meth}`calictl.serve.Server._pull_lighting_config`): on the **live session** it writes the
@@ -828,19 +795,19 @@ sequenceDiagram
     U--)S: 1502 Mode 16 PN 8 echo latches DoorContact
 ```
 
-**Evidence.** The wake-up time edit and the on/off switch, and the door-contact switch, are
-**APP-RECORDED** and reproduced byte for byte (`tests/vectors/app/lighting-wakeup.jsonl`,
-`door-contact.jsonl`). The "edit keeps the unit's enabled bit" rule (R3) and the pull before an
-unknown-config edit (R5) were settled from the 2026-10-06 decompile cross-check (`si/h.j`
-takes each field from the edit, else from the config only the Mode-20 decode writes). The app
-waits up to 2000 ms for the reply, which is where `CALICTL_CONFIG_PULL_S` comes from. The daemon
-side (the pull, the latch, the refusal when the config stays unknown) is covered by
-`tests/test_web_serve.py` against a faked session. **DEVICE 2026-10-08** (the ESP satellite,
-same frames): a wake-up edit `07:45 on` reached the real unit, and the unit's own Mode-20 frame
-latched `WakeupTimestamp` = the next 07:45 local (restored afterwards). A `door_contact` off / on
-was owner-watched at the entrance light. The real app's wake-up switch and door-contact frames
-were captured on the real unit on 2026-10-10. buspi's daemon has not run a wake-up edit on the real
-unit yet, and whether the lights ramp at the set time is unobserved. See
+**Evidence.** The wake-up time edit, its on/off switch and the door-contact switch are recorded
+from the real app and reproduced byte for byte (`tests/vectors/app/lighting-wakeup.jsonl`,
+`door-contact.jsonl`). The "edit keeps the unit's enabled bit" rule and the pull before an
+unknown-config edit follow the app's code: it takes each field from the edit, else from the
+config that only the Mode-20 decode writes. The app waits up to 2000 ms for the reply, which is
+where `CALICTL_CONFIG_PULL_S` comes from. The daemon side (the pull, the latch, the refusal when
+the config stays unknown) is covered by `tests/test_web_serve.py` against a faked session.
+Live-verified on the real unit with the ESP32 satellite, which sends the same frames: a wake-up
+edit reached the unit and the unit's own Mode-20 frame latched the new wake-up time, and a
+`door_contact` off / on was owner-watched at the entrance light. The real app's wake-up switch
+and door-contact frames are captured on the real unit. buspi's daemon has not run a wake-up edit
+on the real unit, and whether the lights ramp at the set time is unobserved
+([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). See
 [evidence-ledger.md](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html) and
 [lighting-energy-water-sat-roof.md](https://ckeller42.github.io/open-california/business-logic/lighting-energy-water-sat-roof.html).
 
@@ -854,7 +821,7 @@ unit yet, and whether the lights ramp at the set time is unobserved. See
 **Contract.** SAFETY-SENSITIVE. The unit itself requires ignition ON. The daemon refuses a
 move up front when `control.command_precondition` blocks it (a blocking `InfoPopUp` alert,
 or `Position` 15 = error). STOP is never gated. `calictl` follows the real app's roof
-screen (owner decision 2026-10-10, CAPTURE 2026-10-10):
+screen:
 
 * **Roof view** (`R_ROOF_VIEW_STREAM`): while the web UI's roof page is open it posts
   `POST /api/roof {"action":"view"}` (refreshed every ~5 s; `leave` when the page is left
@@ -875,11 +842,10 @@ screen (owner decision 2026-10-10, CAPTURE 2026-10-10):
   session carries the move ({py:meth}`calictl.device.PersistentSession.actuate_roof`): no
   second connection. With no session up, `actuate_roof` opens its own.
 * **Arm = the app's**: the `1003` heartbeat **ticks during the move**, as the app's
-  session-global heartbeat does (decompile `zf/d:183`, `d2/s:795-802`, `mj/d:247`,
-  `c/i:349-367`, #235; **CAPTURE 2026-10-10**: the real app's heartbeat ran through a full
-  open and close on the real unit). A live session's heartbeat is already running; an own connection
-  replays the handshake (`1001` + `1004` reads, subscribe-all) and starts it. There is
-  **no** `ARM_DELAY_S` **pre-arm**, so the counter streams immediately (#150).
+  session-global heartbeat does (the real app's heartbeat runs through a full open and close on
+  the real unit). A live session's heartbeat is already running; an own connection replays the
+  handshake (`1001` + `1004` reads, subscribe-all) and starts it. There is **no**
+  `ARM_DELAY_S` **pre-arm**, so the counter streams immediately.
 * At 3 s, read `1402` once. If `SafetyCounterValid` (bit 7) is still clear, abort (the app's
   dead-man). Poll `1402` every `CALICTL_ROOF_LIMIT_POLL_S` (1 s) and cease at the end of
   travel: `InfoPopUp` 8 (the unit's `2308`, about 1 s before the final Position, where the
@@ -934,51 +900,37 @@ sequenceDiagram
     S->>C: the stream ends, the session stays up
 ```
 
-**Evidence.** Settled 2026-07-13 from the **decompiled roof class** (`w8/a`), reconciled against
-an at-the-van capture of a full open and close. {term}`Control char <GATT characteristic>` `1401` is ATT handle `0x0037`;
+**Evidence.** The frame model comes from the app's roof code and matches captures of the real
+app opening and closing the real roof ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). {term}`Control char <GATT characteristic>` `1401` is ATT handle `0x0037`;
 state `1402` is handle `0x0033`. The frame is 5 bytes, and the direction bytes match
 {py:func}`calictl.control.roof_frame` byte for byte. There is **no confirmation or STOP-hold
-phase**: an earlier "safety hold" reading was the user releasing the button while reading the
-safety dialog. The {term}`SafetyCounter` is **app-generated** (`b1/d.java:352`) and never echoed. The old
-"echoes the unit's counter, ~0.8 per frame" reading came from **two overlapping senders**: the
-500 ms counter engine and a secondary 1000 ms `ig/c` direction re-send repeating the current
-value, which averaged ~0.8 increments per observed frame. The ~3 s wait is **unit-enforced**. The
-app's 3000 ms dead-man only reports "SafetyCounter is invalid after 3 seconds"
-(`dialog_info_popUpRoof_safetyCheck`). The perceived ~4 s is 3 s plus BLE latency; there is no
-4 s countdown constant.
+phase**. The {term}`SafetyCounter` is **app-generated** and never echoed. The app runs two
+overlapping senders: the 500 ms counter engine and a 1000 ms direction re-send that repeats the
+current value. The ~3 s wait is **unit-enforced**. The app's 3000 ms dead-man only reports
+"SafetyCounter is invalid after 3 seconds"; there is no 4 s countdown constant.
 
 `1402` layout, MSB-first per `dictionary.yaml`: `Position@0` is byte 0's high nibble
 (`0`/`14` closed, `1` open, `2` middle, `15` error), then `Installed@6` and
 `SafetyCounterValid@7` in byte 0's low bits. So `03xx` means closed + installed + counter
 valid, and `23xx` means middle. `InfoPopUp@12` is byte 1's low nibble (the alert enum,
-`R_ROOF_ALERT`). **CAPTURE 2026-10-10 (real app, real unit)**, a full open + close: the first
-open press after the page opened answers `0302` ({term}`InfoPopUp` 2, the app shows its pre-open safety
-checklist, no motion; after OK a fresh press moves), then `030c` → `230c` while moving
-(InfoPopUp 12), `2308` at end of travel (8), then `1300` (open) or `0300` (closed); a release
-mid-travel gives `2303` (3) then `2300`. These are prompt/progress codes, not alerts: none of
-them blocks a move or STOP. **APP-OBSERVED 2026-09-16** (`tools/applab`): the roof page pre-streams
-`[0x00][counter]` from the moment it opens. While a button is held the rate rises to ~8 frames/s,
-with four consecutive frames carrying the same counter. Without {term}`terminal 15 <Terminal-15>` the page hides its
-controls ("Switch on the ignition"). The no-pre-arm stream is from the 2026-08-30 decompile
-cross-check (#150). The heartbeat during the move follows the app (decompile + the `roof-hold`
-recording, #235); it replaced the #198 no-heartbeat handover. **Mock-tested only**: `calictl` has never driven
-the real motor.
+`R_ROOF_ALERT`). Without {term}`terminal 15 <Terminal-15>` the app's roof page hides its
+controls ("Switch on the ignition"). **Mock-tested only**: `calictl` has never driven the real
+motor; its frames, heartbeat and stream follow the app's recording (`roof-hold`) and the capture
+below.
 
-**CAPTURE 2026-10-10** (the real app on the real unit, the owner's finger on the button, ignition
-on, stationary, a full open and a full close; evidence-ledger 2026-10-10 roof row):
+**Captured from the real app on the real unit** (the owner's finger on the button, ignition on,
+stationary, a full open and a full close):
 
-* **Heartbeat.** The app's `1003` heartbeat ticks through the whole move. This **confirms** the
-  #235 contract above (`calictl`'s roof path ticks it too).
+* **Heartbeat.** The app's `1003` heartbeat ticks through the whole move, as `calictl`'s roof
+  path does.
 * **Stream.** With the roof screen open and nothing pressed, the app streams STOP frames
-  `00 <counter>`, one per ~500 ms tick, +1 each (0.4997 s per increment over the whole
-  capture). A press switches the direction byte to `01` (open) or `04` (close) at once and
-  continues the **same** counter: the first move frame repeats the last STOP's value, and the
-  first STOP after a release repeats the last move frame's (26 of 26 direction changes). While
-  held, a second frame repeats the current value about once a second, so frames arrive every
-  ~0.1–0.5 s — exactly the decompiled two-timer model (the 500 ms counter timer plus the 1000 ms
-  `ig/c` re-send). This **contradicts** the 2026-09-16 lab reading above (about 8 frames/s
-  while held, four frames per counter value). `calictl`'s {term}`roof view <STOP stream>` follows the stream and the
-  repeat-on-change (`R_ROOF_VIEW_STREAM`); it omits the 1000 ms re-send.
+  `00 <counter>`, one per ~500 ms tick, +1 each. A press switches the direction byte to `01`
+  (open) or `04` (close) at once and continues the **same** counter: the first move frame
+  repeats the last STOP's value, and the first STOP after a release repeats the last move
+  frame's. While held, a second frame repeats the current value about once a second, so frames
+  arrive every ~0.1–0.5 s (the 500 ms counter timer plus the 1000 ms re-send).
+  `calictl`'s {term}`roof view <STOP stream>` follows the stream and the repeat-on-change
+  (`R_ROOF_VIEW_STREAM`); it omits the 1000 ms re-send.
 * **First press.** The first open press after the screen opened got `1402` = `0302`
   (closed, counter valid, InfoPopUp 2). The app showed its pre-open safety checklist dialog and the
   roof did not move. After OK, a fresh press moved it. (The InfoPopUp names are owned by
@@ -986,7 +938,8 @@ on, stationary, a full open and a full close; evidence-ledger 2026-10-10 roof ro
 * **Travel.** `1402` while moving: `030c` → `230c` (Position 2 = between, InfoPopUp 12). At
   the end of travel `2308` (InfoPopUp 8), then `1300` (Position 1, open) or `0300`
   (Position 0, closed). A release mid-travel gave `2303` → `2300`. Opening took ~28 s of hold,
-  closing ~23 s.
+  closing ~23 s. These are prompt and progress codes, not alerts: none of them blocks a move or
+  STOP.
 
 See [lighting-energy-water-sat-roof.md (Roof)](https://ckeller42.github.io/open-california/business-logic/lighting-energy-water-sat-roof.html)
 and [alert-states.md](https://ckeller42.github.io/open-california/business-logic/alert-states.html).
@@ -1006,7 +959,7 @@ and [alert-states.md](https://ckeller42.github.io/open-california/business-logic
 * {py:func}`calictl.protocol.encode` runs {py:func}`calictl.protocol.check_value` on every
   field: it must fit its width and any curated `valid` set (`overrides.CONTROL_RANGES`).
 * Before any builder runs, an on/off command whose value is not `on/off`, `true/false` or
-  `1/0` is refused (`R_ONOFF_STRICT`, ruling R3). It is never read as OFF.
+  `1/0` is refused (`R_ONOFF_STRICT`). It is never read as OFF.
 
 A raise or a refusal means the frame is never written. If a bad frame *does* reach the unit, it
 answers ATT `0x0E` and drops the link.
@@ -1031,18 +984,15 @@ sequenceDiagram
     end
 ```
 
-**Evidence.** The `0x0E` rejection is `calictl`'s own on-device observation (cooler
-`State=3`; lighting `ProfileNumber=14` with `Mode=4`). It does not come from the app code.
-The cooler observation dates from 2026-07-05, **before** the `1003` heartbeat existed, and has not
-been re-tested: since ruling R1 (2026-10-06) `State=3` is the app's own leave-unchanged value in
-the cooler level, mode and timer frames, `CONTROL_RANGES` admits `{0, 1, 3}`, and `calictl` has
-not yet written that frame to the real unit. On 2026-10-10 the real app sent that
-frame (cooler level, quiet mode and timer, `State=3`) to the real unit under its heartbeat and
-the unit accepted it (CAPTURE, evidence-ledger 2026-10-10), which closed the van check (#230). A `power` command is always 0 or 1.
-The app's state fields carry the same bounds (`sg.a(default, max)` wrappers), so the app never
-emits out-of-range values. Status `live-verified` refers to the on-device rejections. See
-[DECISIONS.md](https://ckeller42.github.io/open-california/business-logic/DECISIONS.html)
-(2026-07-07).
+**Evidence.** The `0x0E` rejection is `calictl`'s own on-device observation (lighting
+`ProfileNumber=14` with `Mode=4`), not something taken from the app code; status
+`live-verified` refers to these on-device rejections ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). A cooler frame
+with `State=3`, sent without the `1003` heartbeat, was dropped the same way. Under the heartbeat
+the real app sends `State=3` (its leave-unchanged value) in the cooler level, mode and timer
+frames and the unit accepts them, so `CONTROL_RANGES` admits `{0, 1, 3}` for the cooler `State`;
+a `power` command is always 0 or 1. The app's state fields carry the same bounds, so the app
+never emits out-of-range values. See
+[DECISIONS.md](https://ckeller42.github.io/open-california/business-logic/DECISIONS.html).
 
 ## Fresh state read under heartbeat
 
@@ -1052,8 +1002,8 @@ emits out-of-range values. Status `live-verified` refers to the on-device reject
 :links: R_READ_HEARTBEAT_REFRESH, R_READ_RETRY_SHARED, R_READ_LAST_FRAME_WINS, R_WATER_STALE_GUARD
 
 **Contract.** A cold per-op read ({py:meth}`calictl.device.CamperDevice.read_all`) follows the
-app's order, subscribe and then read, under the `1003` heartbeat that keeps the link up and
-refreshes the re-read chars:
+app's order, subscribe and then read, under the `1003` heartbeat (the app ticks it for its
+whole connection):
 
 * Connect, then subscribe-all with a sink. There are no `1001`/`1004` reads on this path.
 * Start the heartbeat (0.6 s) and wait `CALICTL_HEARTBEAT_WARMUP_S` (2 s).
@@ -1069,8 +1019,9 @@ refreshes the re-read chars:
 * Stop the heartbeat and disconnect.
 * The persistent session ({need}`S_SEQ_SESSION`) runs the same read loop over its live link, with
   no connect, subscribe or warm-up of its own.
-* Water freshness is not in reach of the heartbeat. The daemon's stale guard
-  (`freshness.implausible_water_drop`) holds the last plausible reading and flags it stale.
+* Water freshness is not in reach of the heartbeat. The daemon's water guard
+  (`freshness.settle_water`, see {need}`S_SEQ_POLL`) holds the last plausible reading and flags
+  it stale.
 ```
 
 ```mermaid
@@ -1078,11 +1029,11 @@ sequenceDiagram
     participant C as calictl
     participant U as Camper unit
     C->>U: connect, subscribe-all (real handler into the sink)
-    Note over U: no push on subscribe (CAPTURE 2026-10-10), only on a later change
+    Note over U: no push on subscribe, only on a later change
     loop calictl ~0.6 s, warm-up 2 s then across the reads (app 750-850 ms, continuous)
         C-)U: write 1003 heartbeat
     end
-    Note over U: heartbeat keeps the link up and refreshes re-read chars (1102, 1602, 1902, 1004)
+    Note over U: the heartbeat ticks for the whole read, as the app's does
     loop every state char in function order, water included
         Note over C: remember the sink value for this char
         C->>U: read the state char (3 tries, 0.8 s backoff)
@@ -1094,25 +1045,24 @@ sequenceDiagram
     C->>U: disconnect
 ```
 
-**Evidence.** On 2026-07-09 the unit dropped a link with no heartbeat after ~15 s, and with one the
-link held 64 s. On 2026-10-10 a buspi link held more than 2 min with no heartbeat, so that drop is
-not reproduced. Water is **measurement-gated**: the unit measures only while its water
-system is powered. While parked, it pushed zero `1302` frames in 40 s, and a bare read returns
-the stale latch. The 2026-07-09 "1 L → 11 L after a heartbeat" was correlation, not cause. The
-earlier "water is push-only" rule (decompile 2026-07-14) was **dropped on 2026-10-07**: the app
-subscribes `1302` and then *reads* it, and a read and a push go to the same decoder (VM `qg/b`),
-so the last frame wins. The parked "1 L" was not a stale push: the unit sends no
-subscribe-time push (CAPTURE 2026-10-10), and `1` is the unit's own "{term}`not measuring <Water latch>`" value. A
-measurement ramps the level from `1` to the real value in ~4 s. The guard stays, narrowed to the
-≤ 1 L latch (#274), and a debounce for the ramp is in flight (#290). What starts a measurement is
-still open. See [value-freshness.md](https://ckeller42.github.io/open-california/business-logic/value-freshness.html).
+**Evidence.** Live-verified with calictl's BLE trace of the real unit ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)).
+`calictl` runs the heartbeat during every read; whether the unit drops a link that carries none
+is not settled (one early read lost its link after ~15 s, later links held minutes without it).
+The satellite's reads show that a read right at connect returns the same frames as a read after
+the heartbeat has run, so the heartbeat does not refresh values.
+Water is **measurement-gated**: the unit measures only while its water system is powered, and
+the heartbeat does not change that. The app subscribes `1302` and then *reads* it, and a read
+and a push go to the same decoder, so the last frame wins. The unit sends no subscribe-time
+push; `1` is its own "{term}`not measuring <Water latch>`" value, and a measurement ramps the
+level from `1` to the real value in ~4 s. What starts a measurement is still open. See
+[value-freshness.md](https://ckeller42.github.io/open-california/business-logic/value-freshness.html).
 
 ## Daemon poll cycle
 
 ```{spec} One poll cycle: read, decode, guard, cache, fan out
 :id: S_SEQ_POLL
 :status: live-verified
-:links: R_READ_HEARTBEAT_REFRESH, R_READ_LAST_FRAME_WINS, R_WATER_STALE_GUARD, R_SERVE_STATE_CACHE, R_SESSION_SUPERVISOR, R_CAMPING_OBSERVER, R_FIRMWARE_DRIFT_CAPTURE, R_PLAUSIBILITY_ANCHORS, R_AUTO_CAMPER_CONTROLLER
+:links: R_READ_HEARTBEAT_REFRESH, R_READ_LAST_FRAME_WINS, R_WATER_STALE_GUARD, R_WATER_RAMP_DEBOUNCE, R_SERVE_STATE_CACHE, R_SESSION_SUPERVISOR, R_CAMPING_OBSERVER, R_FIRMWARE_DRIFT_CAPTURE, R_PLAUSIBILITY_ANCHORS, R_AUTO_CAMPER_CONTROLLER
 
 **Contract.** `serve` is the single BLE owner. Every `interval` seconds (30 s by default,
 shortened by the observer for a burst after an engine start) {py:meth}`calictl.serve.Server.poll`
@@ -1130,10 +1080,14 @@ does the following, in this order:
   corrections.
 * **Guards** on the interpreted states. A change of firmware identity dumps a raw-frame snapshot
   (`R_FIRMWARE_DRIFT_CAPTURE`). Plausibility anchors flag a decode drift in `_meta`
-  (`R_PLAUSIBILITY_ANCHORS`). The **water stale-latch guard** compares fresh water with the
-  last plausible reading (`_water_good`). A fresh drop to at most 1 L (`WATER_LATCH_MAX_L`,
-  the observed latch value) while the grey tank is exactly frozen is the parked latch, so the last plausible reading is published instead and flagged stale
-  (`R_WATER_STALE_GUARD`).
+  (`R_PLAUSIBILITY_ANCHORS`). The **water guard** (`serve.guard_water`,
+  {py:func}`calictl.freshness.settle_water`) compares fresh water with the last adopted reading
+  (`_water_good`). A fresh change to at most 1 L (`WATER_LATCH_MAX_L`, the not-measuring
+  value) while the grey tank is exactly frozen is the latch (`R_WATER_STALE_GUARD`); a frame
+  with the unit's own empty alarm is always a measurement. Any other new level is adopted only
+  after the same reading has held for `WATER_SETTLE_S` (5 s), so a read that lands mid-ramp is
+  not published (`R_WATER_RAMP_DEBOUNCE`). Until then the last adopted reading is published,
+  flagged stale. With no adopted reading yet (cold start) nothing is published for water.
 * **Cache** (only if a read produced states): rebind `_last` whole (the web thread reads it
   unlocked), stamp `_last_ok_ts`, run the camping
   observer (passive), run the auto-camper step (which may command through `on_command`), then
@@ -1172,7 +1126,7 @@ sequenceDiagram
         end
         U-->>L: raw frames
         L->>L: protocol.decode, semantics.interpret, firmware corrections
-        L->>L: drift snapshot, plausibility anchors, water stale-latch guard
+        L->>L: drift snapshot, plausibility anchors, water latch guard and settle
         L->>C: rebind last state, stamp as-of time, history sample, save the state file
         L->>L: camping observer and auto-camper step
         L->>K: MQTT discovery once, state per installed function, Influx points
@@ -1184,7 +1138,7 @@ sequenceDiagram
     Note over W: online false, the UI shows last values with their age and the offline banner
 ```
 
-**Evidence.** This is the loop buspi has run since the daemon went live, and the outcome log is
+**Evidence.** Live-verified: this is the loop buspi runs, and the outcome log is
 how telemetry gaps are classified after the fact (deep-sleep rows versus connection-loss rows
 versus no rows at all). The pairing skip, the lock ordering, the cache persistence across a
 restart and the offline flag are covered by `tests/test_web_serve.py`. The water guard is
@@ -1222,25 +1176,25 @@ sequenceDiagram
     C->>U: connect OK, polls resume (fresh reads)
 ```
 
-**Evidence.** Once awake, with buspi holding the session and the heartbeat ticking, the link is
-stable. A 180 s spike (2026-07-13) held 100 % uptime with 0 drops, and locking the van did not
-drop it. A one-off 2026-07-13 outage had a different root cause: **Bluetooth had been disabled on
-the unit itself**, so it stayed unreachable for days even though the van was in use. That is why
-`ConnectionUnavailable`'s message lists "Bluetooth disabled in the unit's settings" as a cause
-that will not resolve by itself.
+**Evidence.** Live-verified on the real unit ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). Once awake, with buspi
+holding the session and the heartbeat ticking, the link is stable, also when the van is locked.
+A unit with **Bluetooth disabled in its own settings** stays unreachable for days even while the
+van is in use. That is why `ConnectionUnavailable`'s message lists "Bluetooth disabled in the
+unit's settings" as a cause that will not resolve by itself.
 
-**Several centrals at once (CAPTURE 2026-10-10).** The unit served three centrals at the same
-time: the phone app holding a link, buspi polling (99 clean connect / read / release cycles in an
-hour, no errors) and the ESP32 satellite. While parked, the unit dropped the satellite's held link
-(HCI `0x13` ~30 s after each connect: 30.0 s and 31.3 s measured) but **not** the app's held link (46 min) and **not**
-buspi's held persistent session (3 min with a viewer, 11:45). **Root cause found and fixed (#279,
-`faaf7b0`):** right after connect the unit sends every {term}`central` {term}`an ATT Exchange MTU Request <ATT Exchange MTU Request>` (Client RX MTU 247).
-BlueZ and Android answer it. The satellite's NimBLE was built without a {term}`GATT server` (in IDF v6.1
-`BT_NIMBLE_GATT_SERVER` depends on `BT_NIMBLE_ROLE_PERIPHERAL`, which was off), so esp-nimble
-silently drops the request, and the unit's ATT transaction timeout then ends the link (`0x13`).
-The fix enables both options in the satellite's `sdkconfig`. It is a missing ATT response, not
-a parked-unit policy against idle links. With the fix (flashed 2026-10-10) the satellite's parked
-link holds, and the #266 reconnect pacing was removed: a drop takes the ordinary 1 s→60 s backoff.
+**Several centrals at once.** The unit serves several centrals at the same time: the phone app
+holding a link, buspi polling and the ESP32 satellite. Right after connect the unit sends every
+{term}`central` {term}`an ATT Exchange MTU Request <ATT Exchange MTU Request>` (Client RX MTU 247),
+and its ATT transaction timeout ends a link (HCI `0x13`) whose central leaves it unanswered.
+BlueZ and Android answer it. The satellite answers it because its NimBLE is built with a
+{term}`GATT server` (in ESP-IDF, `BT_NIMBLE_GATT_SERVER` needs `BT_NIMBLE_ROLE_PERIPHERAL`; the
+satellite's `sdkconfig` enables both), so its parked link holds too while camping mode is on.
+
+**Camping mode off.** While camping master is off, the unit ends every held central link (HCI
+`0x13`) about 30.7 s after encryption, with or without a heartbeat or reads, and cuts a link
+that starts less than 6 s after it ended the previous one about 1.2 s in. With camping master on,
+links hold. The satellite therefore waits at least 7 s before a reconnect
+({need}`S_SEQ_ESP_PAIRING`); buspi's supervisor reconnects with its own backoff.
 
 The connection failure modes are in [value-freshness.md](https://ckeller42.github.io/open-california/business-logic/value-freshness.html) ("Connection
 failure modes").
@@ -1312,7 +1266,7 @@ start. The broker, the retained configs and Home Assistant itself are not part o
 page records no end-to-end run, hence the status. The number entities take their ranges from the
 builders (`control.COOLER_LEVEL_RANGE`, `control.AIRHEATER_LEVEL_RANGE`, lighting 0 to
 `control.LIGHT_ON_BRIGHTNESS`); `lighting brightness` sets every real lamp, like `all`.
-`tests/test_ha.py` builds every advertised number at its min and max (#258).
+`tests/test_ha.py` builds every advertised number at its min and max.
 
 ## ESP32 satellite
 
@@ -1320,22 +1274,22 @@ The satellite (`firmware/`, the M5Stack CoreS3) is a second, independent impleme
 NimBLE stack, its own WiFi and HTTP server, no connection to buspi. Its flows are drawn here
 because they reuse the same protocol and the same frames. The firmware is proven on a Linux host
 build against the Bumble fake unit, in QEMU, and on a CoreS3 on a bench against the mock unit.
-Since 2026-10-08 it has also bonded to the real camper unit and run commands on it (evidence-ledger
-2026-10-08 to 2026-10-10): the console pairing and the command flows below are `live-verified`
-on that evidence. The web-wizard pairing path has not run on the real unit. The WiFi setup flow
+It is also bonded to the real camper unit and runs commands on it
+([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)): the console pairing and the command flows below are `live-verified` on
+that evidence. The web-wizard pairing path has not run on the real unit. The WiFi setup flow
 stays `mock-only`. Details:
 {doc}`firmware` and the owner guide {doc}`howto-esp-wifi-setup`.
 
 ```{spec} Satellite pairing from the USB console, then the bonded session
 :id: S_SEQ_ESP_PAIRING
 :status: live-verified
-:links: R_FW_PAIRING_SM, R_FW_PAIRING_RUNNER, R_FW_IO_CAP_BEFORE_LINK, R_FW_SESSION
+:links: R_FW_PAIRING_SM, R_FW_PAIRING_RUNNER, R_FW_IO_CAP_BEFORE_LINK, R_FW_SESSION, R_FW_VARIANT_GATE
 
 The `live-verified` status covers the USB-console path only; the web-wizard path has not run on
 the real unit.
 
 **Contract.** Pairing on the satellite is driven from the console (USB-Serial/JTAG on the
-CoreS3) or from the web wizard (`/api/pairing`, #261), by the platform-free C twin of the guided-pairing state machine
+CoreS3) or from the web wizard (`/api/pairing`), by the platform-free C twin of the guided-pairing state machine
 ({need}`S_SEQ_PAIRING` is the Pi's version).
 
 * **I/O capability first.** `cali_ble_nimble_init` sets keyboard-only I/O capability and MITM
@@ -1358,11 +1312,19 @@ CoreS3) or from the web wizard (`/api/pairing`, #261), by the platform-free C tw
 * The bond itself is persisted by NimBLE's store callbacks into the platform key-value store
   (NVS on the chip). The runner's persist step has nothing left to do.
 * **Bonded session** (`cali_session`): the `1003` heartbeat starts at once and then runs for
-  the whole link. Discover, subscribe to every state char, warm up
-  `CODEC_HEARTBEAT_WARMUP_MS` (2 s), then read every function in order. A read and a push both
-  replace a function's frame, so the last frame wins. The first `SNAP` line follows. Water
-  `1302` is re-read every 30 s. A lost link reconnects by bond after 1 s, doubling to 60 s
-  — a unit hang-up (HCI `0x13`) too: the #266 paced 30 s reconnect was removed after #279.
+  the whole link. Discover, then gate by the unit's vehicle variant as the app does
+  (`R_FW_VARIANT_GATE`): on a boot's first link read `1004` first for its `CarVariant`, then
+  subscribe only the state chars of that variant's functions (on a T7 the app's 8: no stairs,
+  satellite antenna, roof A/C or living-room heater, and no `1001`/`f001`, which are read only).
+  A reconnect in the same boot uses the stored `1004`; a failed `1004` read subscribes and
+  reads everything. Warm up `CODEC_HEARTBEAT_WARMUP_MS` (2 s), then read the variant's
+  functions. A read and a push both replace a function's frame, so the last frame wins. The
+  first `SNAP` line follows. Water `1302` is re-read every 30 s.
+* **Reconnect**: a lost link (a unit hang-up, HCI `0x13`, included) reconnects by bond after a
+  backoff of 1 s, doubling to 60 s. The backoff resets to 1 s only after a link has held for
+  60 s (`CALI_SESSION_STABLE_MS`), and no reconnect starts sooner than 7 s after a link was
+  lost (`CALI_SESSION_UNIT_COOLDOWN_MS`): with camping mode off the unit cuts a link that
+  starts sooner, and ends every other link after about 30 s ({need}`S_SEQ_SLEEP`).
 ```
 
 ```mermaid
@@ -1389,10 +1351,11 @@ sequenceDiagram
     E->>U: read 1004 (VERIFYING, 10 s)
     U-->>E: value, state BONDED with the identity address
     E-)U: write 1003 heartbeat every period for the whole link
-    E->>U: discover, subscribe to every state char
-    Note over E,U: warm-up 2 s, then read every function, last frame wins
+    E->>U: discover, read 1004 (CarVariant) on the boot's first link
+    E->>U: subscribe the state chars of the variant's functions (T7 8)
+    Note over E,U: warm-up 2 s, then read the variant's functions, last frame wins
     E-->>K: SNAP line, then SNAP on each later push
-    Note over E,U: link lost, reconnect by bond after 1 s, doubling to 60 s
+    Note over E,U: link lost, reconnect by bond, backoff 1 s doubling to 60 s, never sooner than 7 s
 ```
 
 **Evidence.** The state machine and the runner are held to the same golden vectors as
@@ -1400,13 +1363,11 @@ sequenceDiagram
 session is tested on a scripted transport (`test_session_fake.py`) and, over real NimBLE, against
 the Bumble fake unit (`test_host_e2e.py`). `make cali-host-jw` rebuilds the late-I/O-capability
 bug on purpose and the fake unit refuses it. The CoreS3 bench ran the read side against the mock
-unit over real BLE. **DEVICE 2026-10-08:** the satellite bonded to the real unit
-from the console (passkey off the unit's screen) while buspi's session stayed up, then read state;
-the web wizard has not been run on the real unit. Until #279 (`faaf7b0`) the parked unit dropped
-the satellite's held link ~30 s after each connect, because the satellite left the unit's ATT
-Exchange MTU Request unanswered (no GATT server built in). Since the fix (2026-10-10) the parked
-link holds ({need}`S_SEQ_SLEEP`). See {doc}`firmware`
-("Console line protocol", "Design rulings worth knowing").
+unit over real BLE. Live-verified on the real unit ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)): the satellite
+bonded from the console (passkey off the unit's screen) while buspi's session stayed up, then
+read state; the web wizard has not been run on the real unit. The parked link holds (camping mode on) because the
+satellite answers the unit's ATT Exchange MTU Request ({need}`S_SEQ_SLEEP`). The variant gate is
+tested on the scripted transport and the host tier (`T_FW_VARIANT_GATE`). See {doc}`firmware` ("Console line protocol").
 
 ```{spec} Satellite WiFi setup through the hotspot and captive portal
 :id: S_SEQ_ESP_WIFI
@@ -1484,10 +1445,10 @@ sequenceDiagram
 **Evidence.** The state machine is held to golden vectors against the Python reference
 (`tests/firmware/test_wifi_sm_parity.py`). The captive DNS, the HTTP core, the endpoints and a
 scripted fake WiFi run on the host tier (`test_captive_dns.py`, `test_http_core.py`,
-`test_web_handlers.py`, `test_net_host.py`, `test_host_e2e.py`). On 2026-10-01 a real CoreS3
-joined a 2.4 GHz network through its hotspot and the then setup page (the WiFi-setup screen since U2), with a
-Linux laptop on the hotspot, not a phone. A phone's sign-in notice, the captive-portal probes of each OS and a van WiFi are still to be
-confirmed (`howto-esp-wifi-setup.md` status box and {doc}`firmware`, "Network watch items").
+`test_web_handlers.py`, `test_net_host.py`, `test_host_e2e.py`). On the bench a real CoreS3
+joined a 2.4 GHz network through its hotspot, with a Linux laptop on the hotspot, not a phone
+([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). A phone's sign-in notice, the captive-portal probes of each OS and a
+van WiFi are still to be confirmed (`howto-esp-wifi-setup.md` status box and {doc}`firmware`, "Network watch items").
 
 ```{spec} Satellite station-mode control command through the write allow-list
 :id: S_SEQ_ESP_COMMAND
@@ -1523,11 +1484,8 @@ write is done. In order:
   further frame. No ACK within 4 s (`CALI_CTL_DEADLINE_MS`): `504 write_timeout`. A link
   lost before any command frame went out fails the command (`502 write_failed`). A link lost
   after one went out answers `200` with `applied` null and `"unconfirmed": true`: a link
-  drop for any reason can come after the unit applied a frame and before its ACK arrives
-  (field 2026-10-09, #264), so the page keeps watching the unit's state across the reconnect
-  (20 s). The drops seen in the field were the satellite's own bug, fixed by #279: it left the
-  unit's ATT Exchange MTU Request unanswered, so the unit's ATT timeout ended its link
-  ({need}`S_SEQ_SLEEP`).
+  drop for any reason can come after the unit applied a frame and before its ACK arrives, so
+  the page keeps watching the unit's state across the reconnect (20 s).
 ```
 
 ```mermaid
@@ -1583,14 +1541,12 @@ sequenceDiagram
 tested pure and at the transport (`T_FW_WRITE_ALLOWLIST_PURE`, `test_control_e2e.py`: the unit
 never sees a roof or unknown write). The sequencer is tested on a scripted transport
 (`test_session_fake.py`), the endpoint on a fake sequencer (`test_web_handlers.py`), and every
-app-recorded cooler, camping, lighting, heater and energy action went through `POST /api/command`
-to the mock unit **byte-exact** on a CoreS3 bench on 2026-10-07, with the roof, the wake-up edits
-and stairs refused and zero `1401` writes. On the real unit (DEVICE 2026-10-08), the
-satellite's cooler power on / off actuated (the unit's Kühlbox screen, and buspi's own poll read the
-change), and its wake-up and door-contact edits landed ({need}`S_SEQ_WAKEUP`). A satellite write
-actuated (kitchen ambient → 0, 2026-10-09), and on 2026-10-10, with the van parked and locked, the
-`"unconfirmed": true` answer (#271) fired: the 5th of a series of no-op lighting writes lost its
-ACK to the parked unit's drop (pre-#279 firmware) and was answered `200` with `applied` null and
-`"unconfirmed": true` (evidence-ledger 2026-10-10). The cooler `State=3` frames are the ones
-the real app sent to the real unit on 2026-10-10 ({need}`S_SEQ_COOLER`).
+app-recorded cooler, camping, lighting, heater and energy action goes through `POST /api/command`
+to the mock unit **byte-exact** on a CoreS3 bench, with the roof and stairs refused and zero
+`1401` writes. Live-verified on the real unit ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)): the satellite's cooler
+power on / off actuated (the unit's Kühlbox screen showed it, and buspi's own poll read the
+change), its wake-up and door-contact edits landed ({need}`S_SEQ_WAKEUP`), a lighting write
+actuated, and a write whose ACK was lost to a link drop was answered `200` with `applied` null
+and `"unconfirmed": true`. The cooler `State=3` frames are the ones the real app sends to the
+real unit ({need}`S_SEQ_COOLER`).
 See {doc}`firmware` ("Control path") and [evidence-ledger.md](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html).

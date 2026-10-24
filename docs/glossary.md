@@ -159,7 +159,7 @@ Settle window
 
 Unconfirmed
   The ESP's command answer `200 {"applied": null, "unconfirmed": true}`: the link dropped after
-  the frame went out, so the unit may have applied it (#271). See {doc}`firmware`.
+  the frame went out, so the unit may have applied it. See {doc}`firmware`.
 
 CommunicationVersion
   The unit's BLE protocol version in `1001`. This van reports 2 (V2); app 5.4.0 accepts up to 3
@@ -169,7 +169,8 @@ Installed bit
   The per-function flag that says the equipment is fitted. Only installed functions publish.
 
 MERGED_AMBIGUOUS
-  A dictionary field whose offset the extractor could not place; resolved in `overrides.py`.
+  The extractor's offset marker for a dictionary field it could not place; every such field
+  calictl uses is placed in `overrides.py`. The generated protocol views show the marker.
 
 EXLAP
   VW's XML publish/subscribe protocol, an alternative WiFi/TCP transport.
@@ -181,7 +182,7 @@ Peripheral
 
 GATT server
   The side that answers ATT requests. The unit is also a GATT client, so every central needs a
-  GATT server; the satellite's NimBLE had none built in. See {doc}`firmware`.
+  GATT server; the satellite's NimBLE is built with one for that reason. See {doc}`firmware`.
 
 ATT Exchange MTU Request
 MTU exchange
