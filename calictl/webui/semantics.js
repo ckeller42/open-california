@@ -463,7 +463,9 @@ function adaptSatellite(body, nowMs) {
       link_up: !!link.up,
       // commands are accepted (read pass done + heartbeat armed); an older firmware without the
       // field: the link alone
-      link_ready: !!link.up && (link.ready === undefined || !!link.ready),
+      // ready is the hold mode's arming (a quiet/off link never arms): elsewhere the link alone
+      link_ready: !!link.up && (link.ready === undefined || !!(dev.ble && dev.ble.mode && dev.ble.mode !== "hold")
+        || !!link.ready),
       // power-save rest (R_FW_BLE_REST): the unit hung up with camping off, no reconnect until Reconnect
       link_rest: !!link.rest,
       rest_next_s: typeof link.rest_next_s === "number" ? link.rest_next_s : null,

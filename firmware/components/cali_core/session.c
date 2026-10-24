@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cali_auto_camper.h"
 #include "cali_console.h"
 #include "cali_control.h"
 #include "cali_diag.h"
@@ -172,12 +173,13 @@ static int stored_field(uint16_t c, const char *fn, const char *field) {
 }
 
 /* The app's rule for staying away (5.4.0 gg/k): camping mode (1202 State) off AND shore power
- * (1602 StateLandAfs) neither active (1) nor standby (2). A missing frame or field = 0 (unknown:
- * reconnect as usual). */
+ * (1602 StateLandAfs) neither active (1) nor standby (2). Ours adds: the ignition known off on this
+ * link (an engine-on van is the auto camper's armed state; the Pi wake needs the ignition edge) and
+ * no camping restore owed (R_FW_AUTO_CAMPER). A missing frame or field = 0 (reconnect as usual). */
 static int rest_conditions(void) {
     int camping = stored_field(0x1202u, "campingmode", "State");
     int shore = stored_field(0x1602u, "energy", "StateLandAfs");
-    return camping == 0 && shore >= 0 && shore != 1 && shore != 2;
+    return camping == 0 && shore >= 0 && shore != 1 && shore != 2 && cali_ac_ignition() == 0 && !cali_ac_owed();
 }
 
 /* The unit ended the link itself: HCI 0x13 "remote user terminated", raw or as NimBLE's 0x200 + code. */
@@ -287,7 +289,6 @@ static void store(size_t i, const uint8_t *data, size_t len) {
     }
     s_fr[i].live = 1;
     s_last_update = s_now ? s_now : 1;
-    if (s_rest && !rest_conditions()) rest_set(0, "unit_state");   /* camping on / shore power: hold again */
 }
 
 /* The unit the stored frames + config latch came from: its bonded identity ("" = none). */
@@ -351,18 +352,14 @@ static void probe_end(int ok, const char *reason) {
     cali_log("session: probe %s (%s)", ok ? "ok" : "fail", reason);
     cali_diag_evt("probe", "\"ok\":%s,\"mode\":\"%s\",\"reason\":\"%s\"", ok ? "true" : "false",
                   MODE_NAME[s_mode], reason);
-    if (s_rest) {   /* a rest probe: drop our own link right after the read pass, wait for the next poll */
+    if (s_rest) {   /* a rest probe: the next poll counts from its end */
         s_rest_next = s_now + s_rest_poll_ms;
-        if (ok && s_link != LINK_DOWN) {
-            s_why = "rest";
-            s_why_st = 0;
-            (void)s_t->disconnect();
-            link_clear();
-        }
-        return;
+        /* the whole read pass is this link's: camping on, shore power, ignition -> hold again */
+        if (ok && !rest_conditions()) rest_set(0, "unit_state");
     }
-    if (ok && s_mode == CALI_BLE_OFF && s_link != LINK_DOWN) {
-        s_why = "ble_off";
+    /* rest or off: drop our own link right after the read pass (the unit is woken seconds, not 30 s) */
+    if (ok && (s_rest || s_mode == CALI_BLE_OFF) && s_link != LINK_DOWN) {
+        s_why = s_rest ? "rest" : "ble_off";
         s_why_st = 0;
         (void)s_t->disconnect();
         link_clear();
@@ -395,7 +392,7 @@ static void link_lost(const char *why, int status) {
     link_clear();
     if (was != LINK_DOWN) (void)s_t->disconnect();   /* may be down already: silent either way */
     if (s_active && s_mode != CALI_BLE_OFF && strcmp(why, "disconnected") == 0 && peer_hangup(status) &&
-        rest_conditions())
+        !cali_ctl_busy() && rest_conditions())   /* a command in flight waits for its reconnect */
         rest_set(1, "camping_off");
     schedule_reconnect();   /* nothing in rest */
 }
@@ -743,8 +740,8 @@ void cali_session_tick(uint64_t now_ms) {
         link_lost("enc_timeout", 0);
         return;
     }
-    if (s_rest && s_rest_poll_ms && s_link == LINK_DOWN && !s_probe && now_ms >= s_rest_next) {
-        s_rest_next = now_ms + s_rest_poll_ms;
+    /* probe_end re-stamps s_rest_next (a connect that fails at once ends the probe inside the call) */
+    if (s_rest && s_rest_poll_ms && s_mode != CALI_BLE_OFF && s_link == LINK_DOWN && !s_probe && now_ms >= s_rest_next) {
         cali_log("session: rest poll");
         (void)cali_session_probe();
         return;
@@ -819,6 +816,8 @@ int cali_session_connect(void) {
 }
 
 int cali_session_rest(void) { return s_rest; }
+
+unsigned cali_session_rest_poll_min(void) { return (unsigned)(s_rest_poll_ms / 60000u); }
 
 int64_t cali_session_rest_next_ms(void) {
     if (!s_rest || !s_rest_poll_ms) return -1;

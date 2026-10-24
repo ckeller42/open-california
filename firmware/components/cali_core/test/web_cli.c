@@ -179,7 +179,12 @@ int cali_session_connect(void) {
     printf("CALL session_connect\n");
     return 0;
 }
-void cali_session_set_rest_poll(unsigned min) { printf("CALL session_set_rest_poll %u\n", min); }
+static unsigned s_rest_poll = 30;   /* the session's own default (CALI_SESSION_REST_POLL_DEFAULT_MIN) */
+void cali_session_set_rest_poll(unsigned min) {
+    printf("CALL session_set_rest_poll %u\n", min);
+    s_rest_poll = min;
+}
+unsigned cali_session_rest_poll_min(void) { return s_rest_poll; }
 int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len) { return cali_session_frame(i, frame, len); }
 int cali_session_water_held(void) { return s_water_held; }
 uint64_t cali_session_water_good_ms(void) { return s_water_good; }

@@ -1123,7 +1123,7 @@ function paintLink() {
   const m = STATE._meta;
   const clock = m && m.last_seen ? clockText(m.last_seen) : null;
   const ago = agoText(m && m.age_s != null ? m.age_s + (Date.now() - stateAt) / 1000 : null);
-  let cls = "offline", tmpl = "", tick = "ago";
+  let cls = "offline", tmpl = "", tick = "ago", restNext = "";
   /** @type {Record<string, any>} */
   let vars = { clock: clock, ago: ago };
   if (s === "unreachable") {
@@ -1138,10 +1138,10 @@ function paintLink() {
   } else if (s === "rest") {
     cls = "rest";   // neutral, not the offline warning: the satellite stays away on purpose
     const next = m && m.sat && m.sat.rest_next_s != null ? Math.max(1, Math.ceil(m.sat.rest_next_s / 60)) : null;
-    vars.next = next;
+    // ticks like {ago}: outside the key, so the card (and its button's focus) survives each minute
+    restNext = next == null ? "" : tf("Next reading in {next} min.", { next: next });
     tmpl = !clock ? "Disconnected to save energy — turn on camping mode to stay connected."
-      : next == null ? "Disconnected to save energy — turn on camping mode to stay connected. Last data {clock} ({ago})."
-      : "Disconnected to save energy — turn on camping mode to stay connected. Last data {clock} ({ago}). Next reading in {next} min.";
+      : "Disconnected to save energy — turn on camping mode to stay connected. Last data {clock} ({ago}).";
   } else if (s === "connecting") {
     cls += " connecting";
     tmpl = clock ? "Connecting… Last data {clock} ({ago})." : "Connecting…";
@@ -1166,6 +1166,7 @@ function paintLink() {
     connEl.replaceChildren();
     if (parts.length > 1) {
       const sp = document.createElement("span");
+      sp.className = "tick";
       sp.setAttribute("aria-hidden", "true");
       connEl.append(parts[0], sp, parts[1]);
     } else if (tmpl) connEl.append(parts[0]);
@@ -1174,11 +1175,15 @@ function paintLink() {
       b.type = "button"; b.className = "btn"; b.id = "rest-connect";
       b.textContent = /** @type {string} */ (t("Reconnect"));
       b.onclick = restConnect;
-      connEl.append(" ", b);
+      const nx = document.createElement("span");
+      nx.className = "rest-next";
+      nx.setAttribute("aria-hidden", "true");
+      connEl.append(" ", nx, " ", b);
     }
   }
-  const sp = connEl.querySelector("span");
+  const sp = connEl.querySelector("span.tick"), nx = connEl.querySelector("span.rest-next");
   if (sp) sp.textContent = br ? "(" + vars[tick] + ")" : String(vars[tick]);
+  if (nx) nx.textContent = restNext;
 }
 
 /** The rest card's Reconnect: POST /api/ble {"connect":true} (R_UI_REST_CARD), then a fresh poll. */
@@ -2232,7 +2237,7 @@ function buildSat(v) {
   for (const n of BLE_REST_MIN) rest.append(restOpt(n));
   rest.onchange = () => satBleSet("ble-rest", "rest_poll_min");
   sq("pair").append(h("div", { class: "row", id: "ble-idle-row" }, h("label", { class: "lbl", for: "ble-idle" }, T("Connection")), idle),
-    h("p", { class: "note", id: "ble-idle-note" }, T("Between reads the satellite lets go of the unit; opening this app connects again within seconds.")),
+    h("p", { class: "note", id: "ble-idle-note" }, T("Between reads the satellite lets go of the unit; opening this app connects again within seconds — except in power-save mode (camping mode off): then tap Reconnect.")),
     h("div", { class: "row", id: "ble-rest-row" }, h("label", { class: "lbl", for: "ble-rest" }, T("Read while in power-save mode")), rest),
     satMsg("ble-msg"));
   const toggle = (/** @type {string} */ id, /** @type {string} */ path, /** @type {string} */ err, /** @type {string} */ key, /** @type {string} */ msgId) =>

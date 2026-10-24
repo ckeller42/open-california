@@ -259,6 +259,7 @@ battery.o: $(COMPONENTS)/cali_core/battery.c $(CORE_H)/cali_battery.h $(CORE_H)/
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/cali_console.h $(CORE_H)/cali_control.h \
+		$(CORE_H)/cali_auto_camper.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CSRC)/codec.h $(CSRC)/codec_chars.h \
 		$(CSRC)/ports.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<

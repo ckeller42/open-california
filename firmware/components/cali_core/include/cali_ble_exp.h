@@ -91,7 +91,6 @@ unsigned cali_ble_idle_min(void);
 /* Store + apply the idle policy (0 = hold); 0 ok, -1 out of range or the store failed (nothing changed). */
 int cali_ble_idle_set(unsigned min);
 #define CALI_BR_KEY "ble_rest"   /* kv, 1 byte: the rest poll's minutes 0..240 (R_FW_BLE_REST); missing = 30 */
-unsigned cali_ble_rest_min(void);
 /* Store + apply the rest poll (0 = none); 0 ok, -1 out of range or the store failed (nothing changed). */
 int cali_ble_rest_set(unsigned min);
 void cali_ble_exp_tick(uint64_t now_ms);      /* the owner tick: step + act (set_mode, probe, evts) */

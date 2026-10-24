@@ -40,12 +40,13 @@
  *
  * Power-save rest (R_FW_BLE_REST, the app's rule, 5.4.0 gg/k): when the unit itself ends the link
  * (DISCONNECTED with HCI 0x13, raw 19 or NimBLE's 531) while the stored frames say camping mode off
- * (1202 State 0) and no shore power (1602 StateLandAfs neither 1 active nor 2 standby), the session
- * does not reconnect. Every other loss, or an unknown frame, takes the backoff above. Rest ends on a
- * control command (cali_session_connect_now), cali_session_connect (the Connect button), a stored
- * frame that shows camping on or shore power, pairing, or cali_session_stop; a mode change alone
+ * (1202 State 0), no shore power (1602 StateLandAfs neither 1 active nor 2 standby), the ignition
+ * known off (cali_ac_ignition 0), no camping restore owed (cali_ac_owed) and no control command in
+ * flight, the session does not reconnect. Every other loss, or an unknown frame, takes the backoff above. Rest ends on a
+ * control command (cali_session_connect_now), cali_session_connect (the Connect button), a rest
+ * probe whose read pass no longer meets the conditions, pairing, or cali_session_stop; a mode change alone
  * (the idle policy's viewer -> hold, /api/ble mode) never connects out of it. While resting, a probe
- * runs every rest poll interval (cali_session_set_rest_poll, 0 = none): connect, one read pass, then
+ * runs every rest poll interval (cali_session_set_rest_poll, 0 = none; not in mode off): connect, one read pass, then
  * the session drops its own link and rests again (or holds, when the read shows camping on / shore).
  *
  * C99, no malloc, no NimBLE/ESP-IDF includes, no clock of its own.
@@ -112,6 +113,7 @@ int cali_session_rest(void);
 int64_t cali_session_rest_next_ms(void);
 /* The rest poll interval in minutes (0 = none; not stored here: ble_exp_run.c stores it). */
 void cali_session_set_rest_poll(unsigned min);
+unsigned cali_session_rest_poll_min(void);
 
 enum { CALI_BLE_HOLD, CALI_BLE_QUIET, CALI_BLE_OFF };
 /* Owner task. hold = today; quiet = link held, the 1003 heartbeat only while a read-all warms up or

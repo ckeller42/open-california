@@ -2681,6 +2681,48 @@ def test_api_ble_rest_poll_is_stored(web_cli):
     ]
 
 
+def test_idle_policy_and_experiment_never_probe_in_rest(web_cli):
+    """In the power-save rest only its own poll wakes the unit: the idle policy's periodic probe and
+    the experiment's phase-end probe are skipped while ``cali_session_rest()`` is 1, and run again
+    once the rest ends.
+
+    .. test:: No idle-policy or experiment probe while resting
+       :id: T_FW_BLE_REST_NO_OTHER_PROBE
+       :links: R_FW_BLE_REST
+    """
+    steps = [
+        *(s.encode() for s in STATION),
+        b"active 1",
+        b"now 1000",
+        req("POST", "/api/ble", '{"idle_min":5}'),
+        b"now 601100",
+        b"bxtick",  # 10 min idle -> off
+        b"rest 1",
+        b"now 901100",
+        b"bxtick",  # 5 min off -> its probe, skipped in rest
+        b"now 1201100",
+        b"bxtick",
+        b"rest 0",
+        b"now 1501100",
+        b"bxtick",  # out of rest: the policy probes again
+    ]
+    _, other = drive(web_cli, steps)
+    assert [ln for ln in other if ln.startswith("CALL session_") and "rest_poll" not in ln] == [
+        "CALL session_set_mode off idle",
+        "CALL session_probe",
+    ]
+    steps = [
+        *(s.encode() for s in STATION),
+        b"active 1",
+        b"ntp %d" % NIGHT_MS,
+        b"now 1000",
+        b"rest 1",
+        req("POST", "/api/ble", '{"exp_min":1}'),
+    ] + [b"now %d" % (1000 + k * 30000) + b"\nbxtick" for k in range(1, 9)]
+    _, other = drive(web_cli, steps)
+    assert not [ln for ln in other if ln == "CALL session_probe"]
+
+
 def test_state_link_reports_ready_and_rest(web_cli):
     """/api/state device.link: ``ready`` (commands accepted), ``rest`` (power-save rest) and
     ``rest_next_s`` (seconds to the next rest read, null when none).

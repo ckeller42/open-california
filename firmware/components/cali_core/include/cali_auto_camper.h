@@ -76,6 +76,9 @@ int cali_ac_enabled(void);
 /* This link's ignition: vehicle TerminalOneFive OR campingmode Enable; -1 when neither is read here.
  * The step's input, shared with the Pi wake (cali_pi_wake.h). */
 int cali_ac_ignition(void);
+/* 1 while a camping restore is owed (device.auto_camper.state armed/restoring): the power-save rest
+ * stays away from it (R_FW_BLE_REST). */
+int cali_ac_owed(void);
 void cali_ac_set_step_ms(uint32_t ms);   /* tests only (cali-host "acstep"): the step period */
 /* device.auto_camper: {"enabled":<bool>,"state":"idle"|"armed"|"restoring"} (a value: key first). */
 void cali_ac_json(cali_json_t *j);

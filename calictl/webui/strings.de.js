@@ -377,7 +377,7 @@ window.STRINGS_DE = {
   "Connecting… Last data {clock} ({ago}).": "Verbinde … Letzte Daten {clock} ({ago}).",
   "Disconnected to save energy — turn on camping mode to stay connected.": "Verbindung getrennt, um Energie zu sparen — schalte den Campingmodus ein, um verbunden zu bleiben.",
   "Disconnected to save energy — turn on camping mode to stay connected. Last data {clock} ({ago}).": "Verbindung getrennt, um Energie zu sparen — schalte den Campingmodus ein, um verbunden zu bleiben. Letzte Daten {clock} ({ago}).",
-  "Disconnected to save energy — turn on camping mode to stay connected. Last data {clock} ({ago}). Next reading in {next} min.": "Verbindung getrennt, um Energie zu sparen — schalte den Campingmodus ein, um verbunden zu bleiben. Letzte Daten {clock} ({ago}). Nächste Ablesung in {next} min.",
+  "Next reading in {next} min.": "Nächste Ablesung in {next} min.",
   "Reconnect": "Neu verbinden",
   "power saving": "Energiesparen",
   "Connecting…": "Verbinde …",
@@ -774,8 +774,8 @@ window.STRINGS_DE = {
   "Read while in power-save mode": "Im Energiesparmodus lesen",
   "Every {n} min": "Alle {n} min",
   "Every {n} h": "Alle {n} Std",
-  "Between reads the satellite lets go of the unit; opening this app connects again within seconds.":
-    "Zwischen den Lesevorgängen trennt der Satellit die Verbindung zur Einheit; beim Öffnen dieser App verbindet er sich in Sekunden neu.",
+  "Between reads the satellite lets go of the unit; opening this app connects again within seconds — except in power-save mode (camping mode off): then tap Reconnect.":
+    "Zwischen den Lesevorgängen trennt der Satellit die Verbindung zur Einheit; beim Öffnen dieser App verbindet er sich in Sekunden neu — außer im Energiesparmodus (Campingmodus aus): dann tippe auf Neu verbinden.",
   "Couldn't change the connection": "Verbindung konnte nicht geändert werden",
   "Shutdown in {n} min": "Herunterfahren in {n} min",
   "Shut down {n} min ago ({reason})": "Heruntergefahren vor {n} min ({reason})",

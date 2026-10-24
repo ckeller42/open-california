@@ -716,6 +716,7 @@ def test_unit_hangup_after_read_all_takes_the_backoff(fake):
 # R_FW_BLE_REST frames: 1202 campingmode (Installed 1, State 0 = off / 1 = on) and a 22-byte 1602
 # energy frame whose StateLandAfs (bits 36-39) is the shore state: 0 inactive, 1 active, 2 standby
 CAMPING_OFF, CAMPING_ON = "2000", "2100"
+REST_PRE = ["ign 0"]  # the ignition known off (the stubbed cali_ac_ignition; unknown = no rest)
 
 
 def energy(shore):
@@ -735,6 +736,7 @@ def ticks(t0, t1, step=1000):
 def test_unit_hangup_with_camping_off_and_no_shore_rests(fake):
     """The app's rule (5.4.0 gg/k): the unit ends the link (HCI 0x13, raw 19 or NimBLE 531) while
     camping mode is off and no shore power feeds it -> no reconnect ("Disconnected to save energy").
+    The satellite also needs the ignition known off and no camping restore owed.
 
     .. test:: A unit hang-up with camping off and no shore power rests without reconnecting
        :id: T_FW_BLE_REST_ENTER
@@ -742,7 +744,14 @@ def test_unit_hangup_with_camping_off_and_no_shore_rests(fake):
     """
     for status in (19, 531):
         out = run(
-            fake, "diaghook", *PAIRED, *parked(), "DISCONNECTED %d" % status, *ticks(T, T + 120000), "rest"
+            fake,
+            "diaghook",
+            *REST_PRE,
+            *PAIRED,
+            *parked(),
+            "DISCONNECTED %d" % status,
+            *ticks(T, T + 120000),
+            "rest",
         )
         tail = after(out, "LOG session: link lost (event 6, status %d)" % status)
         assert not calls(tail, "connect_bonded") and "LOG session: reconnect in" not in " ".join(tail)
@@ -751,10 +760,11 @@ def test_unit_hangup_with_camping_off_and_no_shore_rests(fake):
 
 
 def test_other_losses_reconnect_as_before(fake):
-    """Camping on, shore power active (1) or standby (2), a supervision timeout (8), or an unknown
-    energy frame: the ordinary backoff, never rest.
+    """Camping on, shore power active (1) or standby (2), a supervision timeout (8), an unknown
+    energy frame, the ignition on or unknown, a camping restore owed (the auto camper's armed
+    state), or a command in flight: the ordinary backoff, never rest.
 
-    .. test:: Camping on, shore power, a timeout or an unknown frame reconnect as before
+    .. test:: Camping on, shore power, a timeout, an unknown frame, the ignition, a restore owed or a command in flight reconnect as before
        :id: T_FW_BLE_REST_NOT
        :links: R_FW_BLE_REST
     """
@@ -765,22 +775,38 @@ def test_other_losses_reconnect_as_before(fake):
         (CAMPING_OFF, 0, 8),
         (CAMPING_OFF, 0, 0x208),
     ]:
-        out = run(fake, *PAIRED, *parked(camping, shore), "DISCONNECTED %d" % status, "rest")
+        out = run(fake, *REST_PRE, *PAIRED, *parked(camping, shore), "DISCONNECTED %d" % status, "rest")
         assert out[-2:] == ["LOG session: reconnect in 7000 ms", "REST 0 -1"], (camping, shore, status)
-    out = run(fake, *PAIRED, *READ_ALL, "DISCONNECTED 19", "rest")  # 0102: no StateLandAfs -> unknown
+    for pre in (["ign 1"], ["ign -1"], ["ign 0", "acowe 1"], []):
+        out = run(fake, *pre, *PAIRED, *parked(), "DISCONNECTED 19", "rest")
+        assert out[-2:] == ["LOG session: reconnect in 7000 ms", "REST 0 -1"], pre
+    out = run(fake, *REST_PRE, *PAIRED, *READ_ALL, "DISCONNECTED 19", "rest")  # 0102: no StateLandAfs
+    assert out[-2:] == ["LOG session: reconnect in 7000 ms", "REST 0 -1"]
+    # a write out, its ACK not yet in: the unit's hang-up may follow the command (camping on)
+    frames = {0x1202: CAMPING_OFF, 0x1602: energy(0)}
+    out = run(
+        fake,
+        *REST_PRE,
+        *armed(frames),
+        "> set cooler level 2",
+        "tick %d" % (ARM + 100),
+        "DISCONNECTED 19",
+        "rest",
+    )
+    assert len(writes(out)) == 1
     assert out[-2:] == ["LOG session: reconnect in 7000 ms", "REST 0 -1"]
 
 
 def test_command_and_connect_leave_rest_but_a_mode_change_does_not(fake):
     """Rest ends on a control command or the Connect button (POST /api/ble connect), each after the
-    unit's 7 s cooldown; a mode change alone (the idle policy's viewer -> hold, /api/ble mode) never
-    connects out of it.
+    unit's 7 s cooldown, and on a forget or a new pairing; a mode change alone (the idle policy's
+    viewer -> hold, /api/ble mode) never connects out of it.
 
     .. test:: A command or Connect leaves rest; a mode change stays in it
        :id: T_FW_BLE_REST_LEAVE
        :links: R_FW_BLE_REST
     """
-    rest = [*PAIRED, *parked(), "DISCONNECTED 19"]
+    rest = [*REST_PRE, *PAIRED, *parked(), "DISCONNECTED 19"]
     out = run(fake, *rest, "submit - cooler level 2", "tick %d" % (T + 6999))
     assert "SUBMIT 7 -" in out and not calls(after(out, "SUBMIT 7 -"), "connect_bonded")
     out = run(fake, *rest, "submit - cooler level 2", "tick %d" % (T + 7000), "rest")
@@ -794,19 +820,24 @@ def test_command_and_connect_leave_rest_but_a_mode_change_does_not(fake):
     assert out[-1].startswith("REST 1 ")
     out = run(fake, *rest, "bond 0", "connect")
     assert out[-1] == "CONNECT -1"
+    out = run(fake, *rest, "> forget", "rest")
+    assert out[-1] == "REST 0 -1"
+    out = run(fake, *rest, "> forget", *PAIRED, "rest")  # a new pairing starts out of rest too
+    assert out[-1] == "REST 0 -1"
 
 
 def test_rest_poll_reads_once_and_drops_the_link(fake):
     """Rest polling (rest_poll_min, stored): every n min one probe connects, runs one read pass and
     drops the satellite's own link right after it, back to rest; a read that shows camping on keeps
-    the link (rest ends). rest_poll_min 0 = no probe.
+    the link (rest ends), and so does a command during the probe. rest_poll_min 0, or mode off, =
+    no probe.
 
-    .. test:: The rest poll reads once, drops the link, rests again; 0 = no poll
+    .. test:: The rest poll reads once, drops the link, rests again; 0 or mode off = no poll
        :id: T_FW_BLE_REST_POLL
        :links: R_FW_BLE_REST
     """
     poll = 15 * 60000
-    rest = ["restpoll 15", *PAIRED, *parked(), "DISCONNECTED 19"]
+    rest = ["restpoll 15", *REST_PRE, *PAIRED, *parked(), "DISCONNECTED 19"]
     out = run(fake, *rest, *ticks(T, T + poll - 1000, 10000))
     assert not calls(after(out, "LOG session: link lost (event 6, status 19)"), "connect_bonded")
     up = [*rest, "tick %d" % (T + poll), "CONNECTED", "ENC_OK", *parked(at=T + poll, first=False)]
@@ -820,8 +851,21 @@ def test_rest_poll_reads_once_and_drops_the_link(fake):
     on = [*rest, "tick %d" % (T + poll), "CONNECTED", "ENC_OK", *parked(CAMPING_ON, at=T + poll, first=False)]
     out = run(fake, *on, "rest")
     assert not calls(after(out, "LOG session: rest poll"), "disconnect") and out[-1] == "REST 0 -1"
+    # a command while the probe connects: rest ends, the probe's link stays (the command needs it)
+    cmd = [*rest, "tick %d" % (T + poll), "submit - cooler level 2", "CONNECTED", "ENC_OK"]
+    out = run(fake, *cmd, *parked(at=T + poll, first=False), "rest")
+    assert not calls(after(out, "LOG session: rest poll"), "disconnect") and out[-1] == "REST 0 -1"
+    out = run(fake, *rest, "> ble mode off", *ticks(T, T + 3 * poll, 60000), "rest")
+    assert not calls(after(out, "LOG session: link lost (event 6, status 19)"), "connect_bonded")
     out = run(
-        fake, "restpoll 0", *PAIRED, *parked(), "DISCONNECTED 19", *ticks(T, T + 4 * 3600000, 60000), "rest"
+        fake,
+        "restpoll 0",
+        *REST_PRE,
+        *PAIRED,
+        *parked(),
+        "DISCONNECTED 19",
+        *ticks(T, T + 4 * 3600000, 60000),
+        "rest",
     )
     assert not calls(after(out, "LOG session: link lost (event 6, status 19)"), "connect_bonded")
     assert out[-1] == "REST 1 -1"

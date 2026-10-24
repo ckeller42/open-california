@@ -748,12 +748,16 @@ def test_fresh_data_with_the_link_down_is_not_live(stub, error_gated_page):
 
 def test_live_only_once_the_link_takes_commands(stub, error_gated_page):
     """An up link still reading or arming (``device.link.ready`` false) is not "live" yet: commands
-    would answer not_connected. Live once ready."""
-    link = stub.fixtures["satellite"]["/api/state"]["device"]["link"]
-    link["ready"] = False
+    would answer not_connected. Live once ready. In mode quiet (no arming ever) the link alone."""
+    dev = stub.fixtures["satellite"]["/api/state"]["device"]
+    dev["link"]["ready"] = False
     with error_gated_page(stub.base) as pg:
         expect(pg.locator("#status")).to_have_text("connecting…")
-        link["ready"] = True
+        dev["link"]["ready"] = True
+        expect(pg.locator("#status")).to_have_text("live")
+        dev["link"]["ready"] = False
+        dev["ble"]["mode"] = "quiet"
+        pg.wait_for_timeout(2500)
         expect(pg.locator("#status")).to_have_text("live")
 
 
@@ -794,6 +798,10 @@ def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale, pill,
         expect(conn).to_contain_text(nxt)
         expect(conn).to_have_class("rest")
         expect(pg.locator("#status")).to_have_text(pill)
+        btn = conn.get_by_role("button", name=button).element_handle()
+        link["rest_next_s"] = 1440  # a minute later: the count moves, the card is not rebuilt
+        expect(conn).to_contain_text(nxt.replace("25", "24"))
+        assert btn.evaluate("b => b.isConnected")
         link["rest_next_s"] = None
         expect(conn).not_to_contain_text(nxt)
         conn.get_by_role("button", name=button).click()

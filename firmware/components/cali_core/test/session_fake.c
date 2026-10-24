@@ -31,7 +31,8 @@
  *                          NimBLE transport does for an ATT request it cannot start)
  *     iohook               from now on, print "IO <what> <hex char> <hex data>" per cali_session_on_io call
  *     clock <epoch_ms>     SNTP synced at this fixed wall clock (time.c): "ble exp" then runs
- *     ign <-1|0|1>         what cali_ac_ignition() answers (stubbed; ble_exp_run.c's quiet wake)
+ *     ign <-1|0|1>         what cali_ac_ignition() answers (stubbed; ble_exp_run.c's quiet wake, the rest)
+ *     acowe 0|1            what cali_ac_owed() answers (a camping restore owed; the rest stays away)
  *     diaghook             from now on, print "DIAG {<body>}" per diagnostics record (cali_diag_sink)
  *     variant <fn> <car_variant>  print "HAS <fn> <car_variant> <cali_variant_has()>"
  *     restpoll <min>       cali_ble_rest_set (the stored rest poll, R_FW_BLE_REST)
@@ -218,6 +219,8 @@ uint64_t cali_uptime_ms(void) { return 0; }
 int cali_pw_pulse(const char *reason, uint32_t ms) { (void)reason; (void)ms; return -1; }
 static int s_ign = -1;   /* "ign": what the auto-camper's ignition reading answers (ble_exp_run.c reads it) */
 int cali_ac_ignition(void) { return s_ign; }
+static int s_owe;        /* "acowe": what cali_ac_owed() answers (a camping restore owed) */
+int cali_ac_owed(void) { return s_owe; }
 static int64_t s_clock;  /* "clock": the SNTP wall clock (time.c, fixed) */
 static int64_t fake_clock(void) { return s_clock; }
 int cali_pw_wake(const char *reason) { (void)reason; return -1; }
@@ -340,6 +343,10 @@ int main(void) {
         }
         if (strcmp(line, "iohook") == 0) {
             cali_session_on_io = print_io;
+            continue;
+        }
+        if (strncmp(line, "acowe ", 6) == 0) {
+            s_owe = atoi(line + 6);
             continue;
         }
         if (strncmp(line, "ign ", 4) == 0) {

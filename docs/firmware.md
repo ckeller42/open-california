@@ -299,12 +299,16 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    itself (``DISCONNECTED`` with HCI 0x13 "remote user terminated", raw ``19`` or NimBLE's ``531``)
    and the stored frames say camping mode off (1202 ``State`` 0) and no shore power (1602
    ``StateLandAfs`` neither 1 *active* nor 2 *standby*), the session enters *rest*: no
-   reconnect, ``evt rest`` ``on:true``. A timeout, a loss the satellite caused, camping on, shore
-   power active or standby, or a frame that is missing take the ordinary backoff.
+   reconnect, ``evt rest`` ``on:true``. The satellite adds three conditions of its own: the
+   ignition is known off on that link (an engine-on van is the auto camper's armed state, and the
+   Pi wake needs the ignition edge), no camping restore is owed (``R_FW_AUTO_CAMPER``), and no
+   control command is in flight (its reconnect confirms it). A timeout, a loss the satellite
+   caused, camping on, shore power active or standby, the ignition on or unknown, or a frame that is
+   missing take the ordinary backoff.
 
    Rest ends on a control command (``cali_session_connect_now``) or ``POST /api/ble
    {"connect":true}`` (409 ``not_paired`` without a bond), each a reconnect after the 7 s cooldown;
-   on a stored frame that shows camping on or shore power; on pairing or a forget. A mode change
+   on a rest probe whose read pass no longer meets the conditions; on pairing or a forget. A mode change
    alone (``/api/ble`` ``mode``, ``ble mode``, the idle policy's viewer -> ``hold``) never connects
    out of rest, so opening the page does not wake the unit.
 
@@ -313,8 +317,10 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    missing = **30**; 0 = no probe; the Satellite settings' *Read while in power-save mode*). The
    probe connects, runs one read pass, and the satellite drops its own link right after it
    (``link_down`` reason ``rest``), so the unit is woken for seconds, not for its 30 s timer. A read
-   that shows camping on or shore power keeps the link and ends the rest. A probe that cannot
-   connect stays in rest and tries again at the next interval.
+   that shows camping on, shore power or the ignition on keeps the link and ends the rest. A
+   command during the probe ends the rest and keeps the link too. A probe that cannot connect stays
+   in rest and tries again at the next interval. In mode ``off`` the rest poll waits. The rest poll
+   is the only wake while resting: the idle policy's and the experiment's probes are skipped.
 
    ``/api/state`` reports ``device.link.rest`` and ``device.link.rest_next_s`` (seconds to the next
    probe, ``null`` when not resting or with the poll off); ``device.ble.rest_poll_min`` the
@@ -1018,7 +1024,7 @@ try-lock: a concurrent caller, a full queue or a body that does not fit `CALI_SD
 | `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why`: `console` (`ble mode`), `api` (`POST /api/ble`), `command` (a control command in `quiet`/`off`), `connect` (`POST /api/ble` `connect`), `pairing`, `exp` (an experiment phase starts), `exp_abort` (a phase cut short), `exp_off` (`ble exp off`), `idle` (the idle policy, `R_FW_BLE_IDLE`) |
 | `evt` `ble_idle` | the idle policy was set (`POST /api/ble` `idle_min`; ble_exp_run.c, `R_FW_BLE_IDLE`) | `probe_min` (0 = hold) |
 | `evt` `ble_rest` | the rest poll was set (`POST /api/ble` `rest_poll_min`; ble_exp_run.c, `R_FW_BLE_REST`) | `poll_min` (0 = no probe) |
-| `evt` `rest` | the power-save rest began or ended (session.c, `R_FW_BLE_REST`) | `on` (bool), `why`: `camping_off` (entered), `command`, `connect`, `unit_state` (a frame showed camping on or shore power), `pairing`, `stop` |
+| `evt` `rest` | the power-save rest began or ended (session.c, `R_FW_BLE_REST`) | `on` (bool), `why`: `camping_off` (entered), `command`, `connect`, `unit_state` (a rest probe read camping on, shore power or the ignition on), `pairing`, `stop` |
 | `evt` `ble_exp` | the BLE experiment started / stopped (ble_exp_run.c, `R_FW_BLE_EXP`) | `on` (bool); on start also `phase_min`, `from`, `to` (Berlin local hours) |
 | `evt` `ble_phase` | an experiment phase ended (also: stopped or restarted mid-phase) | `mode` (the phase: `hold`/`quiet`/`off`), `aborted` (bool: cut short by a viewer, a mode change from outside — a command in `quiet`/`off`, the console, `/api/ble`, also during the probe —, the ignition on an up link, the window's end, `ble exp off` or a new `ble exp`; `false` = ran its length, probe done), `dur_ms` (the phase's span: a `hold` phase logs no `ble_mode` at its start) |
 | `evt` `unit_adv` | the bonded unit's own advert, while an experiment runs (ble_exp_run.c, `R_FW_BLE_EXP`): first seen in a sensor window, or gone (no sighting for `CALI_BX_GONE_MS` = 3 sensor scan periods + one window, 185 s) | `seen` (bool; never the address) |
