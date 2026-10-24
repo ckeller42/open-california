@@ -14,6 +14,14 @@
  * (HEARTBEAT / WRITTEN); a control write passes the allow-list (cali_ctl_write_ok) first.
  * A read/heartbeat of a char not yet in the table (e.g. the 1004 verify read right after pairing)
  * first looks it up with ble_gattc_disc_chrs_by_uuid.
+ * GATT cache (R_FW_GATT_CACHE): a discovered table (char handles, properties, and each CCCD once a
+ * subscribe found it) is kept in RAM for the peer it came from (the link's identity address,
+ * ble_addr_cmp). A later discover() on a link to the same peer still runs the MTU exchange, then
+ * takes the table from the cache instead of ble_gattc_disc_all_chrs, and a subscribe with a known
+ * CCCD writes it without the descriptor search. Never in NVS: each boot discovers afresh. Dropped
+ * (the next discover() walks the table again; the failing op is reported as before) on: an ATT
+ * Invalid Handle / Attribute Not Found from any op, a notification/indication on a handle not in a
+ * complete table (e.g. Service Changed), pair()/remove_bond()/any deleted bond, a different peer.
  * disconnect() during a connect cancels it; until that cancel's CONNECT event arrives a scan is
  * deferred (NimBLE refuses it) and a link that completed anyway is dropped. A connect while our own
  * dropped link still holds NimBLE's one connection slot (its DISCONNECT not yet in) waits for that
@@ -56,6 +64,7 @@
 struct chr {
     uint16_t short_id, def_handle, val_handle, end_handle; /* end_handle 0 = unknown */
     uint8_t props;
+    uint16_t cccd;                          /* 0 = unknown (OP_SUB finds it) */
 };
 
 enum { OP_DISC, OP_READ, OP_WRITE_HB, OP_SUB, OP_WRITE };
@@ -99,6 +108,10 @@ static uint64_t s_op_t0;                    /* uptime the running op started (ca
 static unsigned s_ophead, s_oplen;
 static int s_op_busy;
 static uint16_t s_cccd;                     /* OP_SUB: the CCCD handle found so far */
+/* R_FW_GATT_CACHE: the last complete table, for s_cache_peer; RAM only (a reboot discovers afresh) */
+static struct chr s_cache[MAX_CHRS];
+static int s_ncache, s_cache_valid;
+static ble_addr_t s_cache_peer;
 static int s_dsc_past;                      /* OP_SUB: walked past the char (a declaration seen) */
 
 static uint8_t s_buf[512];
@@ -191,6 +204,50 @@ static void add_chr(const struct ble_gatt_chr *c, uint16_t short_id) {
     x->val_handle = c->val_handle;
     x->end_handle = 0;
     x->props = c->properties;
+    x->cccd = 0;
+}
+
+/* ---- GATT cache (R_FW_GATT_CACHE) ---------------------------------------------------------- */
+
+static void cache_drop(const char *why) {
+    if (s_cache_valid) cali_log("ble: GATT cache dropped (%s)", why);
+    s_cache_valid = 0;
+}
+
+/* Every bond deletion goes through here: a forgotten or re-paired peer is discovered afresh. */
+static int forget_peer(const ble_addr_t *peer) {
+    cache_drop("bond deleted");
+    return ble_store_util_delete_peer(peer);
+}
+
+static int link_peer(ble_addr_t *out) {
+    struct ble_gap_conn_desc desc;
+    if (ble_gap_conn_find(s_conn, &desc) != 0) return -1;
+    *out = desc.peer_id_addr;
+    return 0;
+}
+
+static void cache_store(void) {
+    if (s_nchrs == 0 || link_peer(&s_cache_peer) != 0) return;
+    memcpy(s_cache, s_chrs, sizeof s_chrs);
+    s_ncache = s_nchrs;
+    s_cache_valid = 1;
+}
+
+/* The table from the cache when it is this link's peer's; 1 if taken. */
+static int cache_take(void) {
+    ble_addr_t peer;
+    if (!s_cache_valid) return 0;
+    if (link_peer(&peer) != 0) return 0;
+    if (ble_addr_cmp(&peer, &s_cache_peer) != 0) {
+        cache_drop("another peer");
+        return 0;
+    }
+    memcpy(s_chrs, s_cache, sizeof s_chrs);
+    s_nchrs = s_ncache;
+    s_disc_done = 1;
+    cali_log("ble: GATT table from cache (%d chars)", s_nchrs);
+    return 1;
 }
 
 static uint16_t om_copy(struct os_mbuf *om) {
@@ -245,6 +302,10 @@ static void op_finish(int status, const uint8_t *data, size_t len) {
         return;
     }
     struct op o = s_ops[s_ophead];
+    if (status == BLE_HS_ATT_ERR(BLE_ATT_ERR_INVALID_HANDLE) || status == BLE_HS_ATT_ERR(BLE_ATT_ERR_ATTR_NOT_FOUND)) {
+        cali_log("ble: ATT error 0x%02x on %04x (stale handles?)", (unsigned)(status - BLE_HS_ERR_ATT_BASE), o.short_id);
+        cache_drop("ATT handle error");
+    }
     s_ophead = (s_ophead + 1) % OPQ;
     s_oplen--;
     s_op_busy = 0;
@@ -344,8 +405,14 @@ static int on_disc_chr(uint16_t conn, const struct ble_gatt_error *err, const st
         s_chrs[i].end_handle = end;
     }
     s_disc_done = 1;
+    cache_store();
     op_finish(0, NULL, 0);
     return 0;
+}
+
+static int cccd_enable(uint16_t cccd) {
+    static const uint8_t enable[2] = {0x01, 0x00};           /* notifications on */
+    return ble_gattc_write_flat(s_conn, cccd, enable, sizeof enable, on_written, (void *)s_gen);
 }
 
 static int on_dsc(uint16_t conn, const struct ble_gatt_error *err, uint16_t chr_val_handle,
@@ -369,8 +436,12 @@ static int on_dsc(uint16_t conn, const struct ble_gatt_error *err, uint16_t chr_
         op_finish(BLE_HS_ENOENT, NULL, 0);
         return 0;
     }
-    static const uint8_t enable[2] = {0x01, 0x00};           /* notifications on */
-    int rc = ble_gattc_write_flat(s_conn, s_cccd, enable, sizeof enable, on_written, (void *)s_gen);
+    struct chr *c = find_short(s_ops[s_ophead].short_id);
+    if (c) {
+        c->cccd = s_cccd;
+        if (s_cache_valid) memcpy(s_cache, s_chrs, sizeof s_chrs);   /* valid = this link's peer's */
+    }
+    int rc = cccd_enable(s_cccd);
     if (rc != 0) op_finish(rc, NULL, 0);
     return 0;
 }
@@ -379,6 +450,15 @@ static int on_dsc(uint16_t conn, const struct ble_gatt_error *err, uint16_t chr_
  * link keeps the 23-byte default and a notification carries only 20 bytes — energy's 22-byte
  * frame would arrive truncated. A refused/failed exchange is logged, never fatal: discovery runs
  * either way (reads still return up to MTU-1 bytes). */
+/* OP_DISC, step 2: the table from the cache (the op ends here, ok) or ble_gattc_disc_all_chrs. */
+static int disc_start(void *gen) {
+    if (cache_take()) {
+        op_finish(0, NULL, 0);
+        return 0;
+    }
+    return ble_gattc_disc_all_chrs(s_conn, 1, 0xffff, on_disc_chr, gen);
+}
+
 static int on_mtu(uint16_t conn, const struct ble_gatt_error *err, uint16_t mtu, void *arg) {
     (void)conn; (void)mtu;
     if ((uintptr_t)arg != s_gen) return 0;
@@ -387,7 +467,7 @@ static int on_mtu(uint16_t conn, const struct ble_gatt_error *err, uint16_t mtu,
         return 0;
     }
     if (err->status != 0) cali_log("ble: MTU exchange failed %d", err->status);
-    int rc = ble_gattc_disc_all_chrs(s_conn, 1, 0xffff, on_disc_chr, arg);
+    int rc = disc_start(arg);
     if (rc != 0) op_finish(rc, NULL, 0);
     return 0;
 }
@@ -403,7 +483,7 @@ static int op_begin(struct op *o) {
         rc = ble_gattc_exchange_mtu(s_conn, on_mtu, gen);
         if (rc == 0) return 0;                          /* on_mtu starts the discovery */
         if (rc != BLE_HS_EALREADY) cali_log("ble: MTU exchange not started %d", rc);
-        return ble_gattc_disc_all_chrs(s_conn, 1, 0xffff, on_disc_chr, gen);
+        return disc_start(gen);
     case OP_READ:
     case OP_WRITE_HB:
     case OP_WRITE:
@@ -417,6 +497,7 @@ static int op_begin(struct op *o) {
         }
     case OP_SUB:
         c = find_short(o->short_id);
+        if (c && c->cccd) return cccd_enable(c->cccd);             /* R_FW_GATT_CACHE: known CCCD */
         if (!c || !c->end_handle) return BLE_HS_ENOENT;
         if (c->end_handle <= c->val_handle) return BLE_HS_ENOENT;   /* no descriptors */
         s_cccd = 0;
@@ -430,9 +511,9 @@ static int op_begin(struct op *o) {
 static void op_kick(void) {
     if (s_op_busy || !s_oplen) return;
     s_op_t0 = cali_uptime_ms();
+    s_op_busy = 1;                       /* before op_begin: a cached discovery finishes inside it */
     int rc = op_begin(&s_ops[s_ophead]);
-    if (rc == 0) s_op_busy = 1;
-    else op_finish(rc, NULL, 0);         /* reports the failure, pops, and kicks the next */
+    if (rc != 0) op_finish(rc, NULL, 0);   /* reports the failure, pops, and kicks the next */
 }
 
 /* ---- GAP ----------------------------------------------------------------------------------- */
@@ -543,7 +624,7 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
         if (s_probing && auth_failure(ev->disconnect.reason)) {
             cali_log("pair: the stored bond is stale (link dropped, reason 0x%02x): dropping it",
                      log_code(ev->disconnect.reason));
-            (void)ble_store_util_delete_peer(&s_probe_peer);   /* the retry pairs afresh */
+            (void)forget_peer(&s_probe_peer);   /* the retry pairs afresh */
         }
         link_reset();
         emit(CALI_TEV_DISCONNECTED, ev->disconnect.reason, 0, NULL, 0, NULL);
@@ -583,7 +664,7 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
             } else if (auth_failure(ev->enc_change.status)) {
                 cali_log("pair: the stored bond is stale (0x%02x): dropping it, pairing afresh",
                          log_code(ev->enc_change.status));
-                int rc = ble_store_util_delete_peer(&s_probe_peer);
+                int rc = forget_peer(&s_probe_peer);
                 if (rc == 0) rc = ble_gap_security_initiate(s_conn);   /* now a fresh SMP pairing */
                 if (rc != 0) emit(CALI_TEV_ENC_FAIL, rc, 0, NULL, 0, NULL);
                 return 0;
@@ -598,7 +679,13 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
     case BLE_GAP_EVENT_NOTIFY_RX: {
         if (ev->notify_rx.conn_handle != s_conn) return 0;
         struct chr *c = find_val(ev->notify_rx.attr_handle);
-        if (!c) return 0;
+        if (!c) {
+            if (s_disc_done && s_cache_valid) {   /* e.g. Service Changed: the layout may have moved */
+                cali_log("ble: notification on unknown handle 0x%04x", ev->notify_rx.attr_handle);
+                cache_drop("unknown handle notified");
+            }
+            return 0;
+        }
         uint16_t len = om_copy(ev->notify_rx.om);
         emit(CALI_TEV_NOTIFY, 0, c->short_id, s_buf, len, NULL);
         return 0;
@@ -608,7 +695,7 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
         struct ble_gap_conn_desc desc;
         s_probing = 0;
         if (ble_gap_conn_find(ev->repeat_pairing.conn_handle, &desc) == 0)
-            ble_store_util_delete_peer(&desc.peer_id_addr);
+            forget_peer(&desc.peer_id_addr);
         return BLE_GAP_REPEAT_PAIRING_RETRY;
     }
     default:
@@ -825,6 +912,7 @@ static int t_pair(void) {
     struct ble_store_key_sec key;
     struct ble_store_value_sec val;
     if (s_conn == BLE_HS_CONN_HANDLE_NONE) return BLE_HS_ENOTCONN;
+    cache_drop("pairing");
     s_probing = 0;
     if (ble_gap_conn_find(s_conn, &desc) == 0) {
         memset(&key, 0, sizeof key);
@@ -911,11 +999,12 @@ static int t_disconnect(void) {
 }
 
 static int t_remove_bond(void) {
+    cache_drop("bond removed");
     t_disconnect();
     ble_addr_t id;
     int rc;
     while ((rc = first_bond(&id)) == 0) {
-        rc = ble_store_util_delete_peer(&id);
+        rc = forget_peer(&id);
         if (rc != 0) {
             cali_log("ble: remove bond failed %d", rc);   /* the runner's RESETTING times out */
             return rc;

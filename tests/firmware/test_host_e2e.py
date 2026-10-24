@@ -9,8 +9,24 @@ on the NimBLE Linux port, talking HCI over TCP to a Bumble controller linked to 
 .. test:: Host firmware pairs and reads the fake unit end to end
    :id: T_FW_HOST_E2E
    :links: R_FW_PAIRING_SM, R_FAKE_UNIT_FIDELITY, R_FW_SESSION, R_FW_WRITE_ALLOWLIST, R_FW_IO_CAP_BEFORE_LINK
+
+.. req:: The transport caches the unit's GATT table per boot
+   :id: R_FW_GATT_CACHE
+   :status: open
+
+   A reconnect to the same bonded peer within one boot still runs the ATT MTU exchange, then takes
+   the characteristic table and each known CCCD from RAM: no ble_gattc_disc_all_chrs, no descriptor
+   search per subscription (measured 2026-10-24: 1.7 s + 3.2 s of a 7.4 s link_up -> values). Never
+   persisted. Dropped, so the next link discovers afresh, on an ATT Invalid Handle / Attribute Not
+   Found from any op, a notification on a handle outside the table, any pairing or bond deletion,
+   and a different peer.
+
+.. test:: A bond reconnect takes the GATT table from the cache; a stale handle drops it
+   :id: T_FW_GATT_CACHE
+   :links: R_FW_GATT_CACHE
 """
 
+import json
 import time
 
 import pytest
@@ -357,3 +373,65 @@ def test_link_drop_mid_read_all_reconnects(host_fw, hci_unit):
     assert set(snap["fn"]) == _first_snap_fns(hci_unit) | {"water"}
     lost = [line for line in fw.log if line.startswith("LOG session: reconnect in")]
     assert lost == ["LOG session: reconnect in 7000 ms"], lost  # one drop, one reconnect
+
+
+CACHE_HIT = "LOG ble: GATT table from cache"
+
+
+async def _subscribed(unit):
+    return unit.subscribed
+
+
+async def _stale_handle_on_read(unit, fn):
+    unit.stale_handle_on_read = fn
+
+
+def test_bond_reconnect_takes_the_gatt_table_from_the_cache(host_fw, hci_unit):
+    """T_FW_GATT_CACHE: the pairing link discovers the table (no cache line); after the unit hangs
+    up, the bond reconnect takes it from the cache, subscribes through the cached CCCDs (the new link's
+    subscriptions reach the unit, a pushed change arrives) and snaps the same function set."""
+    fn = "cooler"
+    fw = host_fw(hci_unit)
+    _pair(fw, hci_unit)
+    first = fw.expect("SNAP", timeout=60)
+    assert not any(line.startswith(CACHE_HIT) for line in fw.log)  # the first link discovers
+    hci_unit.call(_drop_link, hci_unit.unit)
+    fw.expect(CACHE_HIT, timeout=40)
+    snap = fw.expect("SNAP", timeout=60)
+    assert set(snap["fn"]) - {"water"} == set(first["fn"]) - {"water"} == _first_snap_fns(hci_unit)
+    assert not any("subscribe" in line and "failed" in line for line in fw.log)
+    assert fn in hci_unit.call(_subscribed, hci_unit.unit)  # the cached CCCD write reached this link
+    old = hci_unit.call(_served_frames, hci_unit.unit)[fn]
+    new = bytes([old[0] ^ 0xFF]) + old[1:]
+    want = protocol.decode(_funcs()[fn], new)
+    hci_unit.call(_serve_raw, hci_unit.unit, fn, new, True)
+    fw.expect("SNAP", lambda s: s["fn"].get(fn) == want, timeout=15)
+
+
+def test_stale_handle_drops_the_gatt_cache(host_fw, hci_unit):
+    """T_FW_GATT_CACHE: on a cached link the unit answers a read ATT Invalid Handle — the transport
+    logs it and drops the cache; the following reconnect discovers afresh (no cache line) and snaps
+    the full set."""
+    fw = host_fw(hci_unit)
+    _pair(fw, hci_unit)
+    fw.expect("SNAP", timeout=60)
+    hci_unit.call(_stale_handle_on_read, hci_unit.unit, "general")
+    hci_unit.call(_drop_link, hci_unit.unit)
+    fw.expect(CACHE_HIT, timeout=40)
+    fw.expect("LOG ble: GATT cache dropped (ATT handle error)", timeout=40)
+    assert any(line.startswith("LOG ble: ATT error 0x01 on 1001") for line in fw.log)
+    fw.expect("SNAP", timeout=60)  # the torn read is reported failed, the pass completes
+    mark = len(fw.log)
+    hci_unit.call(_drop_link, hci_unit.unit)
+    # fw.expect's queue may still hold SNAPs of the old link: read the log from the drop on
+    end = time.monotonic() + 60
+    while True:
+        after = fw.log[mark:]
+        bonded = [i for i, line in enumerate(after) if "connect_bonded started" in line]
+        snaps = [line for line in after[bonded[0] :] if line.startswith("SNAP")] if bonded else []
+        if snaps:
+            break
+        assert time.monotonic() < end, "\n".join(after[-40:])
+        time.sleep(0.1)
+    assert not any(line.startswith(CACHE_HIT) for line in after), after  # fresh discovery
+    assert set(json.loads(snaps[0][4:])["fn"]) - {"water"} == _first_snap_fns(hci_unit)
