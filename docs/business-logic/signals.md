@@ -169,7 +169,7 @@ items are in §6.
 ## 4. Scales — verified
 
 `signals.yaml` records a `scale`/`unit` per surfaced signal. None is `UNVERIFIED` any more (§5
-lists the ones that were); a signal without a unit is a raw level or enum, verified as such — do
+lists the ones that were); a signal without a unit is unit-less by nature (a level, an enum, a flag such as `on`) — do
 **not** label it with a unit that implies precision (the "fake percentage" trap).
 
 | signal(s) | scale | unit | basis |
@@ -194,8 +194,9 @@ subsystem is **installed and awake**, otherwise it reports a [sentinel](https://
 | constant default | `air_temp`≡20, `water_temp`≡0 (LR-heater **not fitted**) | uninstalled-function placeholder, **not a reading** — scale unlearnable here |
 
 Takeaway: **never verify a raw scale against an uninstalled/asleep subsystem** — its "values"
-are sentinels/defaults. `air_temp`/`water_temp`/`target_temp` and the solar/shore currents
-stay `UNVERIFIED` because this van can't exercise them live.
+are sentinels/defaults. Their catalog scales are resolved from the app's code (§4, §5), but
+`air_temp`/`water_temp`/`target_temp` and the solar/shore currents are not checked live: this van
+can't exercise them.
 
 ### House load (derived)
 

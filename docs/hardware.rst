@@ -221,10 +221,9 @@ physically happened).
        matches the app byte-for-byte, yet no end-to-end motor test has been run (needs
        ignition ON + an owner watching)
    * - airheater
-     - decompile-verified / partially live
-     - installed on the reference van; power capture observed; level/timer/runtime setters
-       are decompile-verified but untested end-to-end — buspi was offline during the capture
-       window, not an equipment gap
+     - live-verified
+     - installed on the reference van; power, level, runtime and departure timer driven by
+       calictl on the real unit (2026-10-11, the heater ran 30 min — evidence ledger)
    * - energy
      - decompile-verified only
      - mode setter (normal/max-charge/eco) matches the app; not live-actuated

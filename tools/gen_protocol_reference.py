@@ -29,8 +29,8 @@ How to read the tables:
   (two functions share one control class in the app) and `calictl/overrides.py` places it from the
   app's frame builder. A bare `MERGED_AMBIGUOUS` would still be unplaced; none is used by calictl.
 - **calictl** — what the [signal catalog](signal-matrix.md) decided: `name` (unit) = surfaced
-  under that name, with its verified unit if it has one (a value without a unit is a raw level or
-  enum — verified as such, see `docs/business-logic/signal-scales.md`); "omitted" = not surfaced
+  under that name, with its verified unit if it has one (a value without a unit is unit-less by
+  nature — a level, an enum or a flag; see `docs/business-logic/signal-scales.md`); "omitted" = not surfaced
   (the reason is in `protocol/signals.yaml`). Control fields are written, never surfaced: their
   column is "—" (the commands that write them: `calictl/control.py`).
 - **meaning** — the value meaning the decompile pins down, where the extractor recorded one.
