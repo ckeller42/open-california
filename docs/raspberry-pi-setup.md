@@ -434,7 +434,7 @@ and battery-guard settings are in its Satellite settings ([firmware](firmware.md
 
 ## Known issue: kernel 6.18.50 breaks BLE reconnects
 
-Raspberry Pi OS kernel **6.18.50** (rolled out 2026-09) breaks reconnecting to a bonded LE peer
+Raspberry Pi OS kernel **6.18.50** breaks reconnecting to a bonded LE peer
 that rotates its address (an RPA — the camper unit does) on controllers without LL privacy, such
 as the Pi 4's CYW43455. The failure is silent and total:
 
@@ -447,7 +447,7 @@ as the Pi 4's CYW43455. The failure is silent and total:
   resolving in the host as older kernels did. Kernel **6.18.34 works** (it connects directly to
   the resolved RPA).
 
-Diagnosed on `buspi` 2026-10-08. Until a fixed kernel is verified, pin 6.18.34:
+Until a fixed kernel is verified, pin 6.18.34:
 
 ```sh
 # && throughout: a failed copy must not leave config.txt pointing at a missing kernel image
@@ -464,7 +464,7 @@ a kernel, run `sudo tools/kernel_ble_check.sh` with the unit awake: it watches o
 `btmon` and tells OK, the regression signature (adverts seen, zero `LE Create Connection`), or
 "unit asleep, inconclusive" apart.
 
-Related pitfalls seen in the same debugging session:
+Related pitfalls:
 
 - **A removed bond can resurrect**: `bluetoothd` re-persists bonds from memory when it shuts down,
   so a bond deleted shortly before a reboot/restart may be back afterwards (and a stale bond

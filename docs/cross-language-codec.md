@@ -1,9 +1,7 @@
 # Cross-language codec (Python + C from one dictionary)
 
-The planned {term}`ESP32 satellite <Satellite>` (issue [#154](https://github.com/ckeller42/open-california/issues/154))
-reuses the reverse-engineered BLE protocol instead of forking a divergent twin
-(issue [#156](https://github.com/ckeller42/open-california/issues/156)). One
-source of truth — `protocol/dictionary.yaml` (+ `calictl/overrides.py`) —
+The {term}`ESP32 satellite <Satellite>` reuses the reverse-engineered BLE protocol instead of
+forking a divergent twin. One source of truth — `protocol/dictionary.yaml` (+ `calictl/overrides.py`) —
 feeds two consumers:
 
 - **Python**: {mod}`calictl.protocol` loads the {term}`dictionary` at runtime (unchanged,
@@ -36,19 +34,17 @@ over the `sequences` vectors. The ESP links `csrc/ports.c` — one C water guard
 (`session.c` calls it). Cross-sample state stays platform-native.
 ```
 
-The plausibility anchors and the roof {term}`SafetyCounter` were ported too (#156) and removed
-again: the ESP has no roof and runs no anchors, so they stay Python-only
-(`calictl/anchors.py`, `calictl.device`).
+The plausibility anchors and the roof {term}`SafetyCounter` are not ported: the ESP drives no
+roof and runs no anchors, so they stay Python-only (`calictl/anchors.py`, `calictl.device`).
 
-## Parked: the postcheck port (re-evaluation gate)
+## Not ported: the postcheck
 
 `calictl/postcheck.py` (the post-write applied-check) is deliberately **not**
-ported yet: `set_check` reads *interpreted* state and lazily imports
-`control`/`semantics`, so a raw-field-space check table would be a redesign,
-and the ESP's raw decoded-state store does not exist until #154 lands. The
-16-row table maps `(function, what)` to interpreted got/want pairs (cooler
-numerics additionally read the raw decode); regenerating it in raw space needs
-exactly the dictionary + the lighting zone map already recorded in
-`calictl/postcheck.py`. **Gate:** port when #154 defines its raw decoded-state
-store — generate the raw-space table from the dictionary then, test-first, same
-vector treatment.
+ported. The satellite does no readback after a write: its command answer
+carries `applied` null ({doc}`firmware`). `set_check` reads *interpreted* state
+and lazily imports `control`/`semantics`, so a raw-field-space check table would
+be a redesign. The table maps `(function, what)` to interpreted got/want pairs
+(cooler numerics additionally read the raw decode); regenerating it in raw space
+needs exactly the dictionary + the lighting zone map already recorded in
+`calictl/postcheck.py`. If the satellite gets a readback, generate the raw-space
+table from the dictionary, test-first, with the same vector treatment.
