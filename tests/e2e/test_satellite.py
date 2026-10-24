@@ -699,8 +699,8 @@ def test_firmware_answers_show_a_clear_message(stub, status, reply, locale, text
         _open(pg, "Kühlbox" if locale == "de-DE" else "Cooler")
         pg.get_by_role("switch", name="Refrigerator box").click()
         _wait_commands(pg, stub)
-        # not_connected: the page retries for CMD_LINK_WAIT_MS (25 s) before it gives up
-        expect(pg.locator(".toast")).to_have_text(text, timeout=35000 if status == 503 else 5000)
+        # not_connected: the page retries for CMD_LINK_WAIT_MS (45 s) before it gives up
+        expect(pg.locator(".toast")).to_have_text(text, timeout=55000 if status == 503 else 5000)
         browser.close()
     assert not errors, errors
 
