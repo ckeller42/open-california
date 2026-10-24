@@ -7,7 +7,7 @@ auto-extracted, live-verified protocol map).
 
 ## Layers
 
-See [`ARCHITECTURE.md`](../ARCHITECTURE.md) for how these fit together (BLE → decode → semantics →
+See [`docs/architecture.md`](../docs/architecture.md) for how these fit together (BLE → decode → semantics →
 sinks).
 
 | Module | Responsibility |

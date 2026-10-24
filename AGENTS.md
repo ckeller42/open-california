@@ -5,7 +5,7 @@ BLE (own-vehicle interoperability). Reads all vehicle telemetry; control *writes
 (armed by the `1003` liveness heartbeat — see Known state). Runs on a Raspberry Pi (`buspi`),
 feeding **Home Assistant** (MQTT) and **Grafana** (InfluxDB).
 
-**New here? Read [`ARCHITECTURE.md`](ARCHITECTURE.md)** for the data-flow overview (BLE → decode →
+**New here? Read [`docs/architecture.md`](docs/architecture.md)** for the data-flow overview (BLE → decode →
 semantics → sinks). This file is the agent-facing rules + operational state; it is not the tutorial.
 
 ## Layout

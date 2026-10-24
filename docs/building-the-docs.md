@@ -34,8 +34,7 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
   nothing is published from a PR. `tools/ci.sh` does not build the docs — run
   `sh docs/build_site.sh` locally for fast feedback.
 - **On `main`:** `.github/workflows/docs.yml` runs on a push to `main` that touches `docs/**`,
-  `ARCHITECTURE.md`, `calictl/**`, `tests/**`, `tools/gen_c_dict.py`, `tools/gen_codec_vectors.py`
-  or the workflow itself (plus a manual `workflow_dispatch`).
+  `calictl/**`, `tests/**`, `tools/gen_c_dict.py`, `tools/gen_codec_vectors.py` or the workflow itself (plus a manual `workflow_dispatch`).
 - **Deploy:** its `build` job runs `sh docs/build_site.sh docs/_build/html` (both builds, `-W`) with
   `docs/requirements.txt` on Python 3.12, uploads the result as a Pages artifact, and the `deploy`
   job publishes it with `actions/deploy-pages` to <https://ckeller42.github.io/open-california/>.
