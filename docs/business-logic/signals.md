@@ -168,10 +168,9 @@ items are in §6.
 
 ## 4. Scales — verified
 
-`signals.yaml` records a `scale`/`unit` per surfaced signal. Several are **`UNVERIFIED`**: we
-decode the raw field correctly, but the multiplier (and thus the human unit) is **not**
-confirmed against a live reference. Treat those as *trends*, not calibrated readings, and do
-**not** label them with a unit that implies precision (the "fake percentage" trap).
+`signals.yaml` records a `scale`/`unit` per surfaced signal. None is `UNVERIFIED` any more (§5
+lists the ones that were); a signal without a unit is unit-less by nature (a level, an enum, a flag such as `on`) — do
+**not** label it with a unit that implies precision (the "fake percentage" trap).
 
 | signal(s) | scale | unit | basis |
 |---|---|---|---|
@@ -195,8 +194,9 @@ subsystem is **installed and awake**, otherwise it reports a [sentinel](https://
 | constant default | `air_temp`≡20, `water_temp`≡0 (LR-heater **not fitted**) | uninstalled-function placeholder, **not a reading** — scale unlearnable here |
 
 Takeaway: **never verify a raw scale against an uninstalled/asleep subsystem** — its "values"
-are sentinels/defaults. `air_temp`/`water_temp`/`target_temp` and the solar/shore currents
-stay `UNVERIFIED` because this van can't exercise them live.
+are sentinels/defaults. Their catalog scales are resolved from the app's code (§4, §5), but
+`air_temp`/`water_temp`/`target_temp` and the solar/shore currents are not checked live: this van
+can't exercise them.
 
 ### House load (derived)
 
@@ -236,7 +236,7 @@ panel "House load" uses the same formula (7-day floor about 0.70 A, fridge cycle
 - A load on the STARTER battery is not included.
 - On calictl's page the row is absent: calictl does not read the Victron charger.
 
-## 5. Scales — UNVERIFIED (decode correct, scale not confirmed)
+## 5. Scales — formerly UNVERIFIED, all resolved
 
 | signal(s) | what we know | do NOT assume |
 |---|---|---|

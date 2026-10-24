@@ -24,8 +24,10 @@ Bit numbering is **MSB-first** (`calictl/protocol.py:to_bits`): frame-bit index 
 |---|---|---|---|---|---|---|---|---|
 | 0 | AirDistribution | AirDistribution | PermanentOperationRequest | PermanentOperationRequest | PermanentOperationConfirmation | PermanentOperationConfirmation | NormalOperationRequest | NormalOperationRequest |
 | 1 | OperationModeAirHeater | OperationModeAirHeater | OperationModeAirHeater | OperationModeAirHeater | HeatingLevel | HeatingLevel | HeatingLevel | HeatingLevel |
-
-**Ambiguous offset (not shown in map):** OperationModeCombined, RunningTime, TimerHour, TimerMin
+| 2 | · | · | · | · | OperationModeCombined | OperationModeCombined | OperationModeCombined | OperationModeCombined |
+| 3 | RunningTime | RunningTime | RunningTime | RunningTime | RunningTime | RunningTime | RunningTime | RunningTime |
+| 4 | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour |
+| 5 | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin |
 
 ## campingmode
 
@@ -39,9 +41,7 @@ Bit numbering is **MSB-first** (`calictl/protocol.py:to_bits`): frame-bit index 
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | · | · | · | · | · | · | State | State |
-
-**Ambiguous offset (not shown in map):** UsbCharger, OutsideLight, InteriorLight
+| 0 | InteriorLight | InteriorLight | OutsideLight | OutsideLight | UsbCharger | UsbCharger | State | State |
 
 ## cooler
 
@@ -64,8 +64,10 @@ Bit numbering is **MSB-first** (`calictl/protocol.py:to_bits`): frame-bit index 
 |---|---|---|---|---|---|---|---|---|
 | 0 | NightTimerSet | NightTimerSet | TimerCancel | TimerCancel | TimerStart | TimerStart | State | State |
 | 1 | Mode | Mode | Mode | Mode | Level | Level | Level | Level |
-
-**Ambiguous offset (not shown in map):** TimerHour, TimerMin, NightTimerHourOn, NightTimerHourOff
+| 2 | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour |
+| 3 | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin |
+| 4 | NightTimerHourOn | NightTimerHourOn | NightTimerHourOn | NightTimerHourOn | NightTimerHourOn | NightTimerHourOn | NightTimerHourOn | NightTimerHourOn |
+| 5 | NightTimerHourOff | NightTimerHourOff | NightTimerHourOff | NightTimerHourOff | NightTimerHourOff | NightTimerHourOff | NightTimerHourOff | NightTimerHourOff |
 
 ## energy
 
@@ -212,10 +214,9 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | · | · | · | · | · | · | · | · |
+| 0 | · | · | TemperatureWater | TemperatureWater | StateWater | StateWater | StateAir | StateAir |
 | 1 | · | · | · | · | Mode | Mode | Mode | Mode |
-
-**Ambiguous offset (not shown in map):** StateAir, StateWater, TemperatureWater, TemperatureAir
+| 2 | TemperatureAir | TemperatureAir | TemperatureAir | TemperatureAir | TemperatureAir | TemperatureAir | TemperatureAir | TemperatureAir |
 
 ## roof
 
@@ -251,8 +252,8 @@ _(no positionally-resolved fields)_
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
 | 0 | · | · | · | · | · | · | State | State |
-
-**Ambiguous offset (not shown in map):** FanSpeed, Mode, Temperature
+| 1 | Mode | Mode | Mode | Mode | FanSpeed | FanSpeed | FanSpeed | FanSpeed |
+| 2 | Temperature | Temperature | Temperature | Temperature | Temperature | Temperature | Temperature | Temperature |
 
 ## satelliteantenna
 
@@ -268,10 +269,8 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | · | · | · | · | · | · | · | · |
+| 0 | Dish | Dish | System | System | · | · | Wlan | DishStop |
 | 1 | · | · | · | · | SatelliteSelection | SatelliteSelection | SatelliteSelection | SatelliteSelection |
-
-**Ambiguous offset (not shown in map):** DishStop, Wlan, System, Dish
 
 ## stairs
 
@@ -283,9 +282,9 @@ _(no positionally-resolved fields)_
 
 ### Control frame (control_source: pg/a.java)
 
-_(no positionally-resolved fields)_
-
-**Ambiguous offset (not shown in map):** OperationMode, Movement
+| byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
+|---|---|---|---|---|---|---|---|---|
+| 0 | · | · | · | · | Movement | Movement | OperationMode | OperationMode |
 
 ## vehicle
 

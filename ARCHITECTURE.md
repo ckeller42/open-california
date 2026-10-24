@@ -569,9 +569,13 @@ what each job proves is in [simulation and testing](https://ckeller42.github.io/
 - **The guided pairing wizard is not confirmed on the real unit from buspi**
   - *Impact:* The wizard is CI-verified, and the satellite bonded to the real unit, but buspi's wizard has not paired the real unit yet. How the unit answers a stale key is unknown. The control frames themselves are confirmed: the real app's cooler (incl. `State=3`), lighting and camping frames are byte-identical to calictl's (2026-10-10).
   - *Status:* Open, issues 157 and 230.
-- **Some scales are unverified**
-  - *Impact:* Temperatures and the state-of-charge level carry no unit.
-  - *Status:* Tracked in the signal notes.
+- **Some values are checked against the app's code only**
+  - *Impact:* Every scale is resolved. Temperatures and the state-of-charge are deliberately
+    unit-less: they are coarse levels — the app never converts them either. Three values come from
+    hardware this van lacks (living-room heater air/water temperature, roof A/C target
+    temperature), so they are confirmed from the decompiled app only, and the sign of the leveling
+    angles is not yet compared with the app's display.
+  - *Status:* Per signal in the [signal catalog](https://ckeller42.github.io/open-california/protocol/signal-matrix.html).
 - **The unit deep-sleeps and the vendor firmware can change**
   - *Impact:* Access is intermittent, and a firmware update could move a field.
   - *Status:* Mitigated by firmware-drift capture and plausibility anchors, but not removable.
@@ -595,4 +599,4 @@ The terms used across these docs, including the camper unit's own vocabulary, ar
 The [documentation site](https://ckeller42.github.io/open-california/) indexes everything. Start with
 [control and actuation](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html)
 and [simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html);
-contributor rules are in [`AGENTS.md`](AGENTS.md).
+contributor rules are in the repo's [`AGENTS.md`](https://github.com/ckeller42/open-california/blob/main/AGENTS.md).

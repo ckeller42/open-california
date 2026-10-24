@@ -12,16 +12,16 @@ Totals: 228 fields catalogued, 94 surfaced, 134 omitted, 1 flagged for review.
 
 | function | category | field | decision | surfaced-name | confidence | provenance | semantic-review | omit-reason |
 |---|---|---|---|---|---|---|---|---|
-| airheater | control | AirDistribution | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| airheater | control | HeatingLevel | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| airheater | control | NormalOperationRequest | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| airheater | control | AirDistribution | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| airheater | control | HeatingLevel | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| airheater | control | NormalOperationRequest | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
 | airheater | control | OperationModeAirHeater | omit | — | — | — | — | control command field — the departure-timer arm: 3 = arm (app 'Start timer', rf/b a2), 0 = stop (j4), 7 = leave unchanged; wired as control.timer_start/timer_cancel (APP-OBSERVED 2026-09-16); the state-side field is surfaced as mode/timer_armed |
 | airheater | control | OperationModeCombined | omit | — | — | — | — | control command field — which device the departure timer drives (df/b enum ordinal+1; 1 = AIR_HEATER on this van), written alongside OperationModeAirHeater=3 by control.timer_start (APP-OBSERVED 2026-09-16); combos 2-7 are Truma/roof-A/C equipment |
-| airheater | control | PermanentOperationConfirmation | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| airheater | control | PermanentOperationRequest | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| airheater | control | RunningTime | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| airheater | control | TimerHour | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| airheater | control | TimerMin | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| airheater | control | PermanentOperationConfirmation | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| airheater | control | PermanentOperationRequest | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| airheater | control | RunningTime | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| airheater | control | TimerHour | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| airheater | control | TimerMin | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
 | airheater | state | AirDistribution | surface | air_distribution | high | — | — | — |
 | airheater | state | ErrorCode | surface | error_code | high | — | — | — |
 | airheater | state | FaultTriggerBit | omit | — | — | — | — | fault/warning/source-state bit — aggregated into the faults[] / source status, not standalone |
@@ -36,26 +36,26 @@ Totals: 228 fields catalogued, 94 surfaced, 134 omitted, 1 flagged for review.
 | airheater | state | RunningTimeinAction | omit | — | — | — | — | granular timer/mode detail — surfaced via the aggregate state, not standalone |
 | airheater | state | TimerHour | omit | — | — | — | — | control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed) |
 | airheater | state | TimerMin | omit | — | — | — | — | control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed) |
-| campingmode | control | InteriorLight | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| campingmode | control | OutsideLight | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| campingmode | control | State | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| campingmode | control | UsbCharger | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| campingmode | control | InteriorLight | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| campingmode | control | OutsideLight | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| campingmode | control | State | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| campingmode | control | UsbCharger | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
 | campingmode | state | Enable | surface | enable | high | — | — | — |
 | campingmode | state | Installed | omit | — | — | — | — | per-function feature-availability flag — surfaced as the 'installed' key |
 | campingmode | state | InteriorLight | surface | lights_on | high | — | needs-review (inverted-combined) | — |
 | campingmode | state | OutsideLight | omit | — | — | — | — | tied to InteriorLight — the app's single Lights toggle (tf/a K0) writes both together (inverted); surfaced via the combined lights_on |
 | campingmode | state | State | surface | master_on | high | — | — | — |
 | campingmode | state | UsbCharger | surface | usb_charger | high | — | — | — |
-| cooler | control | Level | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| cooler | control | Mode | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| cooler | control | NightTimerHourOff | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| cooler | control | NightTimerHourOn | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| cooler | control | NightTimerSet | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| cooler | control | State | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| cooler | control | TimerCancel | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| cooler | control | TimerHour | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| cooler | control | TimerMin | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| cooler | control | TimerStart | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| cooler | control | Level | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| cooler | control | Mode | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| cooler | control | NightTimerHourOff | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| cooler | control | NightTimerHourOn | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| cooler | control | NightTimerSet | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| cooler | control | State | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| cooler | control | TimerCancel | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| cooler | control | TimerHour | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| cooler | control | TimerMin | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| cooler | control | TimerStart | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
 | cooler | state | Error | surface | error | high | gui | — | — |
 | cooler | state | Installed | omit | — | — | — | — | per-function feature-availability flag — surfaced as the 'installed' key |
 | cooler | state | Level | surface | level | high | — | — | — |
@@ -70,7 +70,7 @@ Totals: 228 fields catalogued, 94 surfaced, 134 omitted, 1 flagged for review.
 | cooler | state | TimerHourSet | omit | — | — | — | — | granular timer/mode detail — surfaced via the aggregate state, not standalone |
 | cooler | state | TimerMinSet | omit | — | — | — | — | granular timer/mode detail — surfaced via the aggregate state, not standalone |
 | cooler | state | TimerState | surface | timer_active | high | — | — | — |
-| energy | control | DisplayRefresh | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| energy | control | DisplayRefresh | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
 | energy | control | EnergyModeSet | omit | — | — | — | — | control command field (not telemetry) — now wired as `set energy mode` (control._energy, char 1601: 0=normal 1=max_charge 2=eco, 3=leave-unchanged). Decompile-derived (xf/d.java:389 + enum bf/c.java), not yet wire/live-verified. |
 | energy | state | AgeOneBattValuesMinutes | surface | age_min | high | — | — | — |
 | energy | state | CurrentDeratingTemperature | surface | derating_temp_active | high | — | — | — |
@@ -132,26 +132,26 @@ Totals: 228 fields catalogued, 94 surfaced, 134 omitted, 1 flagged for review.
 | generalpurposesignals | state | WordZeroOne | omit | — | — | — | — | opaque general-purpose signal — no GUI widget or getter; meaning undetermined |
 | generalpurposesignals | state | WordZeroThree | omit | — | — | — | — | opaque general-purpose signal — no GUI widget or getter; meaning undetermined |
 | generalpurposesignals | state | WordZeroTwo | omit | — | — | — | — | opaque general-purpose signal — no GUI widget or getter; meaning undetermined |
-| lighting | control | BrightnessLEight | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLFive | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLFour | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLNine | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLOne | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLOneFive | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLOneFour | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLOneOne | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLOneSix | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLOneThree | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLOneTwo | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLOneZero | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLSeven | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLSix | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLThree | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | BrightnessLTwo | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | LightValue | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | Mode | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | ProfileNumber | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| lighting | control | Timestamp | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| lighting | control | BrightnessLEight | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLFive | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLFour | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLNine | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLOne | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLOneFive | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLOneFour | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLOneOne | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLOneSix | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLOneThree | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLOneTwo | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLOneZero | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLSeven | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLSix | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLThree | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | BrightnessLTwo | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | LightValue | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | Mode | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | ProfileNumber | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
+| lighting | control | Timestamp | omit | — | — | — | — | control command field — written by calictl's commands (calictl/control.py), not a read signal |
 | lighting | state | BrightnessLEight | surface | brightness_zone_8 | high | — | — | — |
 | lighting | state | BrightnessLFive | surface | brightness_zone_5 | high | — | — | — |
 | lighting | state | BrightnessLFour | surface | brightness_zone_4 | high | — | — | — |
@@ -172,11 +172,11 @@ Totals: 228 fields catalogued, 94 surfaced, 134 omitted, 1 flagged for review.
 | lighting | state | Mode | surface | mode | high | — | — | — |
 | lighting | state | ProfileNumber | surface | profile | high | — | — | — |
 | lighting | state | Timestamp | surface | wakeup | high | — | — | — |
-| livingroomheater | control | Mode | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| livingroomheater | control | StateAir | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| livingroomheater | control | StateWater | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| livingroomheater | control | TemperatureAir | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| livingroomheater | control | TemperatureWater | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| livingroomheater | control | Mode | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| livingroomheater | control | StateAir | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| livingroomheater | control | StateWater | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| livingroomheater | control | TemperatureAir | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| livingroomheater | control | TemperatureWater | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
 | livingroomheater | state | Error | surface | error | high | gui | — | — |
 | livingroomheater | state | Installed | omit | — | — | — | — | per-function feature-availability flag — surfaced as the 'installed' key |
 | livingroomheater | state | Mode | surface | mode | high | — | — | — |
@@ -185,36 +185,36 @@ Totals: 228 fields catalogued, 94 surfaced, 134 omitted, 1 flagged for review.
 | livingroomheater | state | TemperatureAir | surface | air_temp | medium | — | — | — |
 | livingroomheater | state | TemperatureWater | surface | water_temp_flag | medium | — | — | — |
 | livingroomheater | state | Variant | omit | — | — | — | — | control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed) |
-| roof | control | Down | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| roof | control | SafetyCounter | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| roof | control | Up | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| roof | control | Down | omit | — | — | — | — | control command field — written by the roof move (device.actuate_roof; the motor has never been driven), not a read signal |
+| roof | control | SafetyCounter | omit | — | — | — | — | control command field — written by the roof move (device.actuate_roof; the motor has never been driven), not a read signal |
+| roof | control | Up | omit | — | — | — | — | control command field — written by the roof move (device.actuate_roof; the motor has never been driven), not a read signal |
 | roof | state | InfoPopUp | omit | — | — | — | — | UI transient popup flag, not telemetry |
 | roof | state | Installed | omit | — | — | — | — | per-function feature-availability flag — surfaced as the 'installed' key |
 | roof | state | Position | surface | position | high | vwdoc | — | — |
 | roof | state | SafetyCounterValid | surface | safety_valid | high | — | — | — |
-| roofaircondition | control | FanSpeed | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| roofaircondition | control | Mode | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| roofaircondition | control | State | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| roofaircondition | control | Temperature | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| roofaircondition | control | FanSpeed | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| roofaircondition | control | Mode | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| roofaircondition | control | State | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| roofaircondition | control | Temperature | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
 | roofaircondition | state | Error | surface | error | high | gui | — | — |
 | roofaircondition | state | Fanspeed | surface | fan_speed | high | — | — | — |
 | roofaircondition | state | Installed | omit | — | — | — | — | per-function feature-availability flag — surfaced as the 'installed' key |
 | roofaircondition | state | Mode | surface | mode | high | — | — | — |
 | roofaircondition | state | State | surface | on | high | — | — | — |
 | roofaircondition | state | Temperature | surface | target_temp | medium | — | — | — |
-| satelliteantenna | control | Dish | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| satelliteantenna | control | DishStop | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| satelliteantenna | control | SatelliteSelection | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| satelliteantenna | control | System | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| satelliteantenna | control | Wlan | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| satelliteantenna | control | Dish | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| satelliteantenna | control | DishStop | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| satelliteantenna | control | SatelliteSelection | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| satelliteantenna | control | System | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| satelliteantenna | control | Wlan | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
 | satelliteantenna | state | Dish | surface | dish | high | — | — | — |
 | satelliteantenna | state | Error | surface | error | high | gui | — | — |
 | satelliteantenna | state | Installed | omit | — | — | — | — | per-function feature-availability flag — surfaced as the 'installed' key |
 | satelliteantenna | state | SatelliteSelection | surface | satellite | high | — | — | — |
 | satelliteantenna | state | SignalLevel | surface | signal_level | high | — | — | — |
 | satelliteantenna | state | System | surface | system_on | high | — | — | — |
-| stairs | control | Movement | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
-| stairs | control | OperationMode | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
+| stairs | control | Movement | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
+| stairs | control | OperationMode | omit | — | — | — | — | control command field — its function is not installed on this van, so no command writes it |
 | stairs | state | InfoPopUp | omit | — | — | — | — | UI transient popup flag, not telemetry |
 | stairs | state | Installed | omit | — | — | — | — | per-function feature-availability flag — surfaced as the 'installed' key |
 | stairs | state | OperationMode | surface | mode | high | — | — | — |

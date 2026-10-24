@@ -29,11 +29,22 @@ def is_placed(field) -> bool:
 
 
 def load_functions(dict_path=None) -> dict:
-    """The ``functions:`` map of ``protocol/dictionary.yaml`` (PyYAML — tools-only dep)."""
+    """The ``functions:`` map of ``protocol/dictionary.yaml`` (PyYAML — tools-only dep), with the
+    control offsets the extractor left ``MERGED_AMBIGUOUS`` placed from ``calictl/overrides.py``
+    exactly as the runtime does (``overrides.apply``); such a field gets ``override: True``. The
+    views show what calictl actually builds, not the extractor's gaps."""
     import yaml
 
+    from calictl.overrides import CONTROL_OFFSETS
+
     doc = yaml.safe_load(Path(dict_path or DICT_FILE).read_text())
-    return doc.get("functions", doc)
+    funcs = doc.get("functions", doc)
+    for fn, placed in CONTROL_OFFSETS.items():
+        for f in (funcs.get(fn) or {}).get("control_fields") or []:
+            if f.get("name") in placed:
+                f["override"] = not isinstance(f.get("offset"), int)  # filled a real extractor gap
+                f["offset"], f["width"] = placed[f["name"]]
+    return funcs
 
 
 def load_catalog(signals_path=None) -> dict:
