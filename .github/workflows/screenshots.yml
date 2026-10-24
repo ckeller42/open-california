@@ -30,7 +30,8 @@ jobs:
     timeout-minutes: 15
     # Write scope lives on the job (not the workflow): this is the only job that pushes.
     permissions:
-      contents: write
+      contents: write   # push the screenshots branch
+      actions: write    # start docs.yml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         # persist-credentials stays at its default (true) ON PURPOSE: the last step runs
@@ -55,15 +56,32 @@ jobs:
       - name: Install Chromium (browser from cache when present)
         run: python -m playwright install ${{ steps.pw-cache.outputs.cache-hit == 'true' && 'chromium' || '--with-deps chromium' }}
       - name: Render the web UI over the mock unit
-        run: python -m tools.ux_gallery --out docs/screenshots
-      - name: Commit refreshed screenshots (if any changed)
+        run: python -m tools.ux_gallery --out "$RUNNER_TEMP/shots"
+      # main is ruleset-protected (PRs only), so the shots live on their own `screenshots` branch:
+      # the README links them there and docs.yml lays them over main's copies before building.
+      - name: Commit refreshed screenshots to the screenshots branch (if any changed)
+        id: push
         run: |
+          w="$RUNNER_TEMP/branch"
+          if git fetch -q origin screenshots; then
+            git worktree add -q "$w" FETCH_HEAD
+          else
+            git worktree add -q --detach "$w" && git -C "$w" checkout -q --orphan screenshots && git -C "$w" rm -rqf .
+          fi
+          mkdir -p "$w/docs/screenshots" && cp -R "$RUNNER_TEMP/shots/." "$w/docs/screenshots/"
+          cd "$w"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/screenshots
           if git diff --cached --quiet; then
             echo "no screenshot changes"
           else
-            git commit -m "docs: refresh web-UI screenshots [skip ci]"
-            git push
+            git commit -qm "docs: refresh web-UI screenshots"
+            git push -q origin HEAD:screenshots
+            echo "changed=1" >> "$GITHUB_OUTPUT"
           fi
+      - name: Rebuild the docs site with the new shots
+        if: steps.push.outputs.changed == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --ref main -R "$GITHUB_REPOSITORY"
