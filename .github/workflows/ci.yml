@@ -98,17 +98,26 @@ jobs:
         with:
           name: coverage
           path: /tmp/coverage
-      - name: Commit the badge JSON (if it changed)
+      # main is ruleset-protected (PRs only): the badge JSON lives on its own `badges` branch
+      # (the README's shields endpoint reads it from there).
+      - name: Commit the badge JSON to the badges branch (if it changed)
         run: |
-          cp /tmp/coverage/coverage.json .github/badges/coverage.json
+          w="$RUNNER_TEMP/badges"
+          if git fetch -q origin badges; then
+            git worktree add -q "$w" FETCH_HEAD
+          else
+            git worktree add -q --detach "$w" && git -C "$w" checkout -q --orphan badges && git -C "$w" rm -rqf .
+          fi
+          mkdir -p "$w/.github/badges" && cp /tmp/coverage/coverage.json "$w/.github/badges/coverage.json"
+          cd "$w"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/badges/coverage.json
           if git diff --cached --quiet; then
             echo "coverage badge unchanged"
           else
-            git commit -m "ci: update coverage badge [skip ci]"
-            git pull --rebase -q origin main && git push origin HEAD:main
+            git commit -qm "ci: update coverage badge"
+            git push -q origin HEAD:badges
           fi
 
   # Every pre-commit-stage hook in .pre-commit-config.yaml over the whole tree (ruff + ruff format,

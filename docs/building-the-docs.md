@@ -44,8 +44,11 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
   the markdown fences instead.
 - **Screenshots** in `docs/screenshots/` are not built here: `.github/workflows/screenshots.yml`
   re-renders them over the mock unit on a push to `main` that touches `calictl/webui/**`,
-  `calictl/semantics.py`, `tools/ux_gallery.py` or `tools/mock_unit.py`, and commits them
-  back to `main` with `[skip ci]` (locally: `tools/ci.sh screenshots`).
+  `calictl/semantics.py`, `tools/ux_gallery.py` or `tools/mock_unit.py`, and commits them to
+  the `screenshots` branch (`main` takes changes only through PRs), then starts this workflow;
+  `build` lays that branch's `docs/screenshots/` over `main`'s copies, which are only the fallback
+  for a local build (locally: `tools/ci.sh screenshots`). The README links the branch's shots, and
+  the coverage badge JSON lives on the `badges` branch the same way.
 
 ## Glossary
 

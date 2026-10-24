@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ckeller42/open-california/actions/workflows/ci.yml"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fckeller42%2Fopen-california%2Fmain%2F.github%2Fbadges%2Fcoverage.json" alt="Coverage"></a>
+  <a href="https://github.com/ckeller42/open-california/actions/workflows/ci.yml"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fckeller42%2Fopen-california%2Fbadges%2F.github%2Fbadges%2Fcoverage.json" alt="Coverage"></a>
   <a href="https://github.com/ckeller42/open-california/actions/workflows/ci.yml"><img src="https://github.com/ckeller42/open-california/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://ckeller42.github.io/open-california/"><img src="https://github.com/ckeller42/open-california/actions/workflows/docs.yml/badge.svg" alt="Docs"></a>
   <a href="https://github.com/ckeller42/open-california/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue" alt="Python 3.11 | 3.12 | 3.13"></a>
@@ -35,9 +35,9 @@ discovery) and **[Grafana](calictl/deploy/GRAFANA.md)** (via InfluxDB), all self
 Raspberry Pi.
 
 <p align="center">
-  <img src="docs/screenshots/light_00_dashboard.png" width="230" alt="Dashboard — status overview + feature tiles">
-  <img src="docs/screenshots/light_06_Energy.png" width="230" alt="Energy — batteries, voltages, currents, sources">
-  <img src="docs/screenshots/light_05_Water.png" width="230" alt="Water — fresh and grey tanks">
+  <img src="https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/light_00_dashboard.png" width="230" alt="Dashboard — status overview + feature tiles">
+  <img src="https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/light_06_Energy.png" width="230" alt="Energy — batteries, voltages, currents, sources">
+  <img src="https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/light_05_Water.png" width="230" alt="Water — fresh and grey tanks">
 </p>
 
 > 🛑 **Use at your own risk.** It sends control writes to a real vehicle (heaters, roof,
