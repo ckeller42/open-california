@@ -70,3 +70,14 @@ def test_de_values_are_nonempty_strings():
     m = json.loads(out)
     bad = sorted(k for k, v in m.items() if not isinstance(v, str) or not v.strip())
     assert not bad, "empty/non-string German values: " + repr(bad)
+
+
+def test_no_duplicate_de_keys():
+    """A key written twice in strings.de.js: the object literal keeps the LAST value only, so one
+    English string silently shows another German one (the pill's "Connecting…" once read the pairing
+    wizard's "Verbindung wird aufgebaut…"). Node's Object.keys cannot see this; read the source."""
+    keys = re.findall(r'^\s*("(?:[^"\\]|\\.)*")\s*:', DE.read_text(encoding="utf-8"), re.M)
+    seen, dups = set(), set()
+    for k in (json.loads(q) for q in keys):
+        (dups if k in seen else seen).add(k)
+    assert not dups, "keys defined twice in strings.de.js: " + repr(sorted(dups))

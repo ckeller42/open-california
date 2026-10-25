@@ -172,6 +172,7 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
                 "link_ready": True,  # an older firmware without link.ready: the link alone
                 "link_rest": False,  # ... nor link.rest / rest_next_s (R_FW_BLE_REST)
                 "rest_next_s": None,
+                "link_redial": False,  # ... nor link.redial (R_FW_BLE_VIEWER_KEEP)
                 "sd": None,  # an older firmware without device.sd / device.res / device.battery
                 "res": None,
                 "battery": None,

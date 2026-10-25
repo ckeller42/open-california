@@ -53,7 +53,7 @@
  * @property {boolean} [restored]           set only by restoreLastState(): the saved offline snapshot shown until a live poll answers
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -1082,7 +1082,7 @@ let stateAt = 0;                                        // ms: STATE (its _meta.
 const connEl = /** @type {HTMLElement} */ (document.getElementById("conn"));
 let connKey = "";
 
-/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"|"satellite"|"rest"} */
+/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"|"satellite"|"rest"|"redial"} */
 function linkState() {
   if (waitingSince != null && Date.now() - waitingSince >= UNREACHABLE_MS) return "unreachable";
   const m = STATE._meta;
@@ -1094,6 +1094,11 @@ function linkState() {
       || (waitingSince != null && waitingSince - lastAnswerAt > UNREACHABLE_MS)) return "connecting";
   // satellite in power-save rest (R_UI_REST_CARD): the unit hung up with camping off; the data ages
   if (m && m.sat && m.sat.link_rest) return "rest";
+  // a planned redial (R_UI_LINK_CALM): the unit hung up to save energy and the satellite dials again
+  // for this viewer. On data younger than SAT_OFFLINE_S the pill alone says so (no banner, so no
+  // layout shift and nothing announced); older data takes the connecting banner with its age.
+  if (m && m.sat && m.sat.link_redial && !m.sat.link_ready)
+    return m.age_s != null && m.age_s + (Date.now() - stateAt) / 1000 <= SAT_OFFLINE_S ? "redial" : "connecting";
   // satellite: fresh data, but no link that takes commands yet (down, or up and still reading/arming);
   // a link that is up is connecting even when the shown data is old (right after Reconnect in rest)
   if (m && m.sat && ((m.online && !m.sat.link_ready) || (m.sat.link_up && !m.sat.link_ready))) return "connecting";
@@ -1113,7 +1118,7 @@ function backendName() {
 const LINK_PILL = { live: ["live", "ok"], asleep: ["offline", "warn"], never: ["offline", "warn"],
   unpaired: ["not paired", ""],
   connecting: ["connecting…", ""], unreachable: ["unreachable", "error"],
-  satellite: ["🛰 Satellite mode", ""], rest: ["power saving", ""] };
+  satellite: ["🛰 Satellite mode", ""], rest: ["power saving", ""], redial: ["reconnecting…", ""] };
 
 // Paint the pill + the persistent #conn banner (outside #app: a hung poll never reaches render(),
 // the 2 s tick still lands here). #conn is a role=status region: its text is replaced only when the
@@ -1141,8 +1146,8 @@ function paintLink() {
     const next = m && m.sat && m.sat.rest_next_s != null ? Math.max(1, Math.ceil(m.sat.rest_next_s / 60)) : null;
     // ticks like {ago}: outside the key, so the card (and its button's focus) survives each minute
     restNext = next == null ? "" : tf("Next reading in {next} min.", { next: next });
-    tmpl = !clock ? "Disconnected to save energy — turn on camping mode to stay connected."
-      : "Disconnected to save energy — turn on camping mode to stay connected. Last data {clock} ({ago}).";
+    tmpl = !clock ? "Turn on camping mode to stay connected."
+      : "Turn on camping mode to stay connected. Last data {clock} ({ago}).";
   } else if (s === "connecting") {
     cls += " connecting";
     tmpl = clock ? "Connecting… Last data {clock} ({ago})." : "Connecting…";
@@ -1160,11 +1165,21 @@ function paintLink() {
   const filled = tmpl ? tf(tmpl, Object.assign({}, vars, { [tick]: "\u0001" })) : "";
   const br = filled.includes("(\u0001)");
   const parts = tmpl ? filled.replace("(\u0001)", "\u0001").split("\u0001") : [];
-  const key = cls + "|" + parts.join("\u0001");
+  // the rest card is rebuilt (its screen-reader "next reading" re-read) only when that coarse bucket moves
+  const nextBucket = s !== "rest" || !restNext ? "" : m && m.sat && (m.sat.rest_next_s ?? 0) >= 600 ? "+" : "-";
+  const key = cls + "|" + parts.join("\u0001") + "|" + nextBucket;
   if (key !== connKey) {
     connKey = key;
+    // the card's button had the focus: keep it on the rebuilt card, else on the heading (not <body>)
+    const focused = connEl.contains(document.activeElement) ? /** @type {HTMLElement} */ (document.activeElement).id : null;
     connEl.className = tmpl ? cls : "";
     connEl.replaceChildren();
+    if (s === "rest") {   // the app's card: its headline, then the text
+      const hd = document.createElement("strong");
+      hd.className = "rest-head";
+      hd.textContent = /** @type {string} */ (t("Disconnected to save energy"));
+      connEl.append(hd, " ");
+    }
     if (parts.length > 1) {
       const sp = document.createElement("span");
       sp.className = "tick";
@@ -1172,15 +1187,27 @@ function paintLink() {
       connEl.append(parts[0], sp, parts[1]);
     } else if (tmpl) connEl.append(parts[0]);
     if (s === "rest") {
+      const nx = document.createElement("span");
+      nx.className = "rest-next";
+      nx.setAttribute("aria-hidden", "true");
+      // read once with the card (not each minute): the visible count ticks in the aria-hidden span
+      const once = document.createElement("span");
+      once.className = "sr-only";
+      once.textContent = restNext;
+      const acts = document.createElement("div");
+      acts.className = "acts";
+      const cm = document.createElement("button");
+      cm.type = "button"; cm.className = "btn"; cm.id = "rest-camping";
+      cm.textContent = /** @type {string} */ (t("Open camping mode"));
+      cm.onclick = () => goto("campingmode");   // the screen only: camping mode also switches lights + USB
       const b = document.createElement("button");
       b.type = "button"; b.className = "btn"; b.id = "rest-connect";
       b.textContent = /** @type {string} */ (t("Reconnect"));
       b.onclick = restConnect;
-      const nx = document.createElement("span");
-      nx.className = "rest-next";
-      nx.setAttribute("aria-hidden", "true");
-      connEl.append(" ", nx, " ", b);
+      acts.append(cm, b);
+      connEl.append(" ", nx, once, acts);
     }
+    if (focused != null) ((focused && document.getElementById(focused)) || titleEl).focus({ preventScroll: true });
   }
   const sp = connEl.querySelector("span.tick"), nx = connEl.querySelector("span.rest-next");
   if (sp) sp.textContent = br ? "(" + vars[tick] + ")" : String(vars[tick]);
@@ -1317,7 +1344,7 @@ async function processQueue() {
     // retry until it is ready, unless a newer value for this control is already queued.
     const key = inflight.key;
     if (!(res && res.error === "not_connected") || Date.now() >= until || queue.some((c) => c.key === key)) break;
-    setStatus("Connecting…", "busy");
+    setStatus("connecting…", "busy");   // the link state's own word (pill + banner say the same)
     await new Promise((r) => setTimeout(r, 2000));
   }
   const done = inflight;
@@ -1862,7 +1889,7 @@ function pairingCard() {
     const row = document.createElement("div"); row.className = "row";
     row.appendChild(spinner());
     const lbl = document.createElement("span"); lbl.className = "lbl";
-    lbl.textContent = /** @type {string} */ (t(p.state === "scanning" ? "Searching…" : "Connecting…"));
+    lbl.textContent = /** @type {string} */ (t(p.state === "scanning" ? "Searching…" : "Connecting to the unit…"));
     row.appendChild(lbl);
     card.appendChild(row);
     const btns = document.createElement("div"); btns.className = "btnrow";
@@ -2238,7 +2265,7 @@ function buildSat(v) {
   for (const n of BLE_REST_MIN) rest.append(restOpt(n));
   rest.onchange = () => satBleSet("ble-rest", "rest_poll_min");
   sq("pair").append(h("div", { class: "row", id: "ble-idle-row" }, h("label", { class: "lbl", for: "ble-idle" }, T("Connection")), idle),
-    h("p", { class: "note", id: "ble-idle-note" }, T("Between reads the satellite lets go of the unit; opening this app connects again within seconds — except in power-save mode (camping mode off): then tap Reconnect.")),
+    h("p", { class: "note", id: "ble-idle-note" }, T("Between reads the satellite lets go of the unit; opening this app connects again within seconds.")),
     h("div", { class: "row", id: "ble-rest-row" }, h("label", { class: "lbl", for: "ble-rest" }, T("Read while in power-save mode")), rest),
     satMsg("ble-msg"));
   const toggle = (/** @type {string} */ id, /** @type {string} */ path, /** @type {string} */ err, /** @type {string} */ key, /** @type {string} */ msgId) =>
@@ -3781,6 +3808,18 @@ if (PWA) {
   };
   restoreLastState();
 }
+
+// User input keeps the satellite redialling after the unit's power-save hang-up (R_FW_BLE_VIEWER_KEEP:
+// 10 min without input -> rest); a poll alone is no input. At most one report per INPUT_REPORT_MS.
+const INPUT_REPORT_MS = 30000;
+let inputAt = 0;
+function reportInput() {
+  if (!satellite() || readOnly() || Date.now() - inputAt < INPUT_REPORT_MS) return;
+  inputAt = Date.now();
+  satFetch("/api/ble", { active: true }).catch(() => { /* the next input reports again */ });
+}
+addEventListener("pointerdown", reportInput, true);
+addEventListener("keydown", reportInput, true);
 
 async function main() {
   paintLink();                // "connecting…" at once, not "…" while a hung first poll waits 8 s

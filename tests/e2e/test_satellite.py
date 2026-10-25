@@ -32,7 +32,7 @@ TILES = ("Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", 
 # + the wizard endpoint (R_FW_PAIRING_WIZARD) + the home-screen manifest/icons a browser may fetch
 # + the usage beacons (R_UX_TELEMETRY)
 ALLOWED = {"/", "/api/state", "/api/pairing", "/api/ux"} | {p for p, _, _ in gen_c_dict.pwa_assets()}
-ALLOWED_LIVE = ALLOWED | {"/api/command"}
+ALLOWED_LIVE = ALLOWED | {"/api/command", "/api/ble"}  # /api/ble: the input report (R_FW_BLE_VIEWER_KEEP)
 ELSEWHERE = "Only via buspi or the app"
 LIVE = "() => !!(STATE._meta && STATE._meta.satellite && STATE._meta.read_only === false)"
 ENABLED_CONTROLS = (
@@ -711,7 +711,7 @@ def test_firmware_answers_show_a_clear_message(stub, status, reply, locale, text
 def test_a_command_waits_for_the_link_instead_of_failing(stub):
     """Camping off: the unit ends the link every 30 s, so a tap often lands while the satellite has
     no armed link (503 not_connected). The page retries every 2 s (each try brings the link up) and
-    shows "Connecting…" meanwhile — not an error after one try."""
+    shows "connecting…" meanwhile — not an error after one try."""
 
     def link_comes_up(body):
         if len(stub.commands) >= 3:
@@ -729,7 +729,7 @@ def test_a_command_waits_for_the_link_instead_of_failing(stub):
         pg.wait_for_function(LIVE)
         _open(pg, "Cooler")
         pg.get_by_role("switch", name="Refrigerator box").click()
-        expect(pg.locator("#status")).to_have_text("Connecting…")
+        expect(pg.locator("#status")).to_have_text("connecting…")  # the link state's own word
         _wait_commands(pg, stub, 3)
         expect(pg.locator(".toast")).to_be_visible(timeout=10000)  # after the 5 s state confirm
         assert "Not connected" not in pg.locator(".toast").inner_text()
@@ -770,52 +770,172 @@ def test_live_only_once_the_link_takes_commands(stub, error_gated_page):
         expect(pg.locator("#status")).to_have_text("live")
 
 
-@pytest.mark.parametrize(
-    "locale, pill, head, nxt, button",
-    [
-        (
-            "en-US",
-            "power saving",
-            "Disconnected to save energy — turn on camping mode",
-            "Next reading in 25 min.",
-            "Reconnect",
-        ),
-        (
-            "de-DE",
-            "Energiesparen",
-            "Verbindung getrennt, um Energie zu sparen",
-            "Nächste Ablesung in 25 min.",
-            "Neu verbinden",
-        ),
-    ],
-)
-def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale, pill, head, nxt, button):
+REST_TEXT = {
+    "en-US": {
+        "pill": "power saving",
+        "head": "Disconnected to save energy",
+        "body": "Turn on camping mode to stay connected.",
+        "next": "Next reading in 25 min.",
+        "reconnect": "Reconnect",
+        "camping": "Open camping mode",
+        "camping_title": "Camping mode",
+    },
+    "de-DE": {
+        "pill": "Energiesparen",
+        "head": "Verbindung getrennt, um Energie zu sparen",
+        "body": "Schalte den Campingmodus ein, um verbunden zu bleiben.",
+        "next": "Nächste Ablesung in 25 Min.",
+        "reconnect": "Neu verbinden",
+        "camping": "Campingmodus öffnen",
+        "camping_title": "Campingmodus",
+    },
+}
+
+
+def _rest(stub):
+    link = stub.fixtures["satellite"]["/api/state"]["device"]["link"]
+    link.update(up=False, ready=False, rest=True, rest_next_s=1500, last_snap_age_ms=600000)
+    return link
+
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale):
     """Power-save rest (``device.link.rest``): the unit hung up with camping off and no shore power,
-    the satellite stays away. The banner is the app's card (neutral, not the offline warning) with
-    the last data's age and the next rest read; Reconnect posts ``{"connect":true}`` and the card
-    goes; the pill says power saving. With the rest poll off, nothing about readings.
+    the satellite stays away. The banner is the app's card (neutral, not the offline warning): its
+    headline, the text with the last data's age and the next rest read (read to a screen reader once,
+    the visible count ticks hidden), and two 44 px buttons. Reconnect posts ``{"connect":true}``, the
+    card goes and the focus moves to the page heading (not lost to <body>); the pill says power
+    saving. With the rest poll off, nothing about readings.
 
     .. test:: The rest card explains the power-save stop and reconnects on request
        :id: T_UI_REST_CARD
        :links: R_UI_REST_CARD
     """
-    link = stub.fixtures["satellite"]["/api/state"]["device"]["link"]
-    link.update(up=False, ready=False, rest=True, rest_next_s=1500, last_snap_age_ms=600000)
+    w = REST_TEXT[locale]
+    link = _rest(stub)
     with error_gated_page(stub.base, locale=locale) as pg:
         conn = pg.locator("#conn")
-        expect(conn).to_contain_text(head)
-        expect(conn).to_contain_text(nxt)
+        expect(conn.locator("strong.rest-head")).to_have_text(w["head"])
+        expect(conn).to_contain_text(w["body"])
+        expect(conn).to_contain_text(w["next"])
+        expect(conn.locator(".sr-only")).to_have_text(w["next"])
+        expect(conn.locator(".rest-next")).to_have_attribute("aria-hidden", "true")
         expect(conn).to_have_class("rest")
-        expect(pg.locator("#status")).to_have_text(pill)
-        btn = conn.get_by_role("button", name=button).element_handle()
+        expect(pg.locator("#status")).to_have_text(w["pill"])
+        for name in (w["camping"], w["reconnect"]):
+            assert conn.get_by_role("button", name=name).bounding_box()["height"] >= 44
+        btn = conn.get_by_role("button", name=w["reconnect"]).element_handle()
         link["rest_next_s"] = 1440  # a minute later: the count moves, the card is not rebuilt
-        expect(conn).to_contain_text(nxt.replace("25", "24"))
+        expect(conn.locator(".rest-next")).to_have_text(w["next"].replace("25", "24"))
         assert btn.evaluate("b => b.isConnected")
         link["rest_next_s"] = None
-        expect(conn).not_to_contain_text(nxt)
-        conn.get_by_role("button", name=button).click()
-        expect(conn).not_to_contain_text(head)
+        expect(conn).not_to_contain_text(w["next"])
+        conn.get_by_role("button", name=w["reconnect"]).focus()
+        conn.get_by_role("button", name=w["reconnect"]).click()
+        expect(conn).not_to_contain_text(w["head"])
+        expect(pg.locator("#title")).to_be_focused()
     assert ("/api/ble", {"connect": True}) in stub.posts
+
+
+def test_rest_card_open_camping_mode_only_navigates(stub, error_gated_page):
+    """The card's "Open camping mode" opens the Camping mode screen and sends nothing: camping mode
+    is a preset that also switches lights and USB, so the owner switches it there (R_UI_LINK_CALM)."""
+    _rest(stub)
+    with error_gated_page(stub.base) as pg:
+        pg.locator("#conn").get_by_role("button", name="Open camping mode").click()
+        expect(pg.locator("#title")).to_have_text("Camping mode")
+        assert pg.evaluate("location.hash") == "#campingmode"
+        pg.wait_for_timeout(500)
+    assert not stub.commands
+    assert [b for path, b in stub.posts if path != "/api/ble" or b != {"active": True}] == []
+
+
+@pytest.mark.parametrize("locale, pill", [("en-US", "reconnecting…"), ("de-DE", "verbinde neu…")])
+def test_planned_redial_is_quiet(stub, error_gated_page, locale, pill):
+    """A visible page keeps the satellite redialling after the unit's power-save hang-up
+    (``device.link.redial``). While the data is younger than 90 s the gap shows no banner: the pill
+    alone says reconnecting, the tiles do not move, and nothing is announced (the pill has no
+    aria-live; only #conn speaks). Older data brings the connecting banner with its age back.
+
+    .. test:: The planned redial is quiet: pill only, no banner, no layout shift, no announcement
+       :id: T_UI_LINK_CALM
+       :links: R_UI_LINK_CALM
+    """
+    link = stub.fixtures["satellite"]["/api/state"]["device"]["link"]
+    with error_gated_page(stub.base, locale=locale) as pg:
+        status, conn, tile = pg.locator("#status"), pg.locator("#conn"), pg.locator(".tile").first
+        expect(status).to_have_text("live")
+        assert status.get_attribute("aria-live") is None
+        expect(conn).to_have_attribute("role", "status")
+        y0 = tile.bounding_box()["y"]
+        link.update(up=False, ready=False, redial=True, last_snap_age_ms=31000)
+        expect(status).to_have_text(pill)
+        expect(conn).to_be_hidden()
+        assert tile.bounding_box()["y"] == y0
+        link.update(up=True)  # up, still reading/arming: the same calm gap
+        pg.wait_for_timeout(2500)
+        expect(status).to_have_text(pill)
+        expect(conn).to_be_hidden()
+        link.update(ready=True, redial=False, last_snap_age_ms=500)
+        expect(status).to_have_text("live")
+        assert tile.bounding_box()["y"] == y0
+        link.update(up=False, ready=False, redial=True, last_snap_age_ms=120000)
+        expect(pg.locator("#conn.connecting")).to_be_visible()
+
+
+def test_input_is_reported_at_most_every_30_s(stub, error_gated_page):
+    """User input (pointer or key) posts ``/api/ble {"active":true}``, at most once per 30 s: the
+    satellite's 10 min idle cap counts from it (R_FW_BLE_VIEWER_KEEP); a poll alone is no input."""
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_function(LIVE)
+        pg.wait_for_timeout(2500)
+        assert ("/api/ble", {"active": True}) not in stub.posts
+        pg.mouse.click(5, 300)
+        pg.keyboard.press("Shift")
+        pg.mouse.click(5, 300)
+        pg.wait_for_timeout(500)
+    assert stub.posts.count(("/api/ble", {"active": True})) == 1
+
+
+def _rgb(css):
+    """``rgb(r, g, b)`` (0-255) or ``color(srgb r g b)`` (0-1, a color-mix result) -> [0-1] * 3."""
+    srgb = css.startswith("color(srgb")
+    nums = css.split("(", 1)[1].rstrip(")").replace("srgb", "").replace(",", " ").split()[:3]
+    return [float(x) if srgb else float(x) / 255 for x in nums]
+
+
+def _contrast(a, b):
+    def lum(c):
+        c = [x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+    hi, lo = sorted((lum(_rgb(a)), lum(_rgb(b))), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_light_theme_pill_and_banner_contrast_and_pill_size(stub, error_gated_page):
+    """Light theme: the pill's texts (live, offline, power saving) and the offline banner reach
+    4.5:1 (WCAG 1.4.3), and the offline pill keeps the pill's size (the generic ``.warn`` rule
+    must not grow it)."""
+    link = stub.fixtures["satellite"]["/api/state"]["device"]["link"]
+    with error_gated_page(stub.base, color_scheme="light") as pg:
+        status = pg.locator("#status")
+        bg = pg.evaluate("getComputedStyle(document.getElementById('topbar')).backgroundColor")
+        expect(status).to_have_text("live")
+        h0 = status.bounding_box()["height"]
+        seen = [status.evaluate("e => getComputedStyle(e).color")]
+        link.update(up=False, ready=False, last_snap_age_ms=600000)
+        expect(status).to_have_text("offline")
+        assert status.bounding_box()["height"] == h0
+        seen.append(status.evaluate("e => getComputedStyle(e).color"))
+        banner = pg.locator("#conn.offline")
+        fg, back = banner.evaluate("e => [getComputedStyle(e).color, getComputedStyle(e).backgroundColor]")
+        assert _contrast(fg, back) >= 4.5, (fg, back)
+        link.update(rest=True, rest_next_s=1500)
+        expect(status).to_have_text("power saving")
+        seen.append(status.evaluate("e => getComputedStyle(e).color"))
+    for c in seen:
+        assert _contrast(c, bg) >= 4.5, (c, bg)
 
 
 def test_settings_rest_poll_select_posts_the_interval(stub, error_gated_page):
