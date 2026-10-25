@@ -189,7 +189,7 @@ WAKEUP_VARIANTS = ["seed", "empty", "wakeup_on", "wakeup_off", "wakeup_no_area",
 VARIANTS = {
     "cooler": ["seed", "empty", "fridge_on", "fridge_off", "cooler_schedule"],
     "campingmode": ["seed", "empty", "camping_off", "camping_on"],
-    "energy": ["seed", "empty", "energy_locked"],
+    "energy": ["seed", "empty", "energy_locked", "energy_pv", "energy_locked_pv"],
     "airheater": [
         "seed",
         "empty",
@@ -252,6 +252,8 @@ def _states(funcs) -> dict[str, dict]:
         "camping_off": v(campingmode={"State": 0}),
         "camping_on": v(campingmode={"State": 1}),
         "energy_locked": v(energy={"EnergyModeNotSelectable": 1}),
+        "energy_pv": v(energy={"PvInstalled": 1}),  # solar fitted: the app offers ECO
+        "energy_locked_pv": v(energy={"EnergyModeNotSelectable": 1, "PvInstalled": 1}),
         "heater_not_possible": v(airheater={"ErrorCode": 5}),
         "heater_error_4": v(airheater={"ErrorCode": 4}),  # every other code: ON still allowed
         "heater_permanent": v(airheater={"PermanentOperation": 1}),

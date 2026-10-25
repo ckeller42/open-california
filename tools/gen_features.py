@@ -84,7 +84,7 @@ FUNCTIONS = {
         "Energy",
         READ_LIVE,
         "The readings match the app on the real unit; the energy-mode command matches the app's own"
-        " frames, and the app offers ECO only on a van with solar.",
+        " frames. Like the app, calictl offers ECO only when the unit reports a solar panel.",
     ),
     "roof": (
         "Roof",

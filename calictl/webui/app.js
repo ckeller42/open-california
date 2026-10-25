@@ -176,7 +176,7 @@
  * A control's per-control confirm gate: a function returning the prompt (or null/false to skip),
  * or a bare string. The callback arg varies by kind (value for most, the action object for buttons).
  * @typedef {((v?: any, s?: FnState) => (string|null|false|undefined)) | string} ConfirmSpec
- * @typedef {{ value: string, label: string }} SelectOption
+ * @typedef {{ value: string, label: string, show?: (s: FnState) => boolean }} SelectOption
  * @typedef {{ what: string, label: string, value?: string|number|null }} ButtonAction
  * `disabled(s)` returns true/a-reason-string when the current state forbids the control
  * (greyed + blocked, mirroring the app), a falsy value when it's available.
@@ -895,7 +895,10 @@ const FEATURES = {
     title: "Energy", icon: "🔋",
     controls: [
       { what: "mode", kind: "select", label: "Energy mode",
-        options: [{ value: "normal", label: "Normal" }, { value: "max_charge", label: "Max" }, { value: "eco", label: "ECO" }],
+        // ECO only as the app offers it: when the unit reports a solar panel (PvInstalled = 1 ->
+        // solar_installed; the server refuses it otherwise — control.REASON_ENERGY_ECO_NEEDS_SOLAR).
+        options: [{ value: "normal", label: "Normal" }, { value: "max_charge", label: "Max" },
+          { value: "eco", label: "ECO", show: (s) => !!s.solar_installed }],
         current: (s) => Object.keys(CTL_ENERGY_MODES).find((k) => CTL_ENERGY_MODES[k] === s.energy_mode),
         disabled: (s) => !!s.energy_mode_locked,
         confirm: () => t("Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?") },
@@ -3480,6 +3483,7 @@ function renderControl(fn, c, s) {
     const grp = document.createElement("div");
     grp.className = "segmented";
     for (const opt of c.options) {
+      if (opt.show && !opt.show(s)) continue;
       const b = document.createElement("button");
       b.type = "button";
       b.className = "seg" + (opt.value === cur ? " on" : "");

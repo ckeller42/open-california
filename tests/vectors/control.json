@@ -962,6 +962,280 @@
     "CarLevelPitch": 35
    }
   },
+  "energy_pv": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 1,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 65534,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
+  "energy_locked_pv": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 1,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 1,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 65534,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
   "heater_not_possible": {
    "general": {
     "AmbSwVersion": 808726832,
@@ -7543,6 +7817,34 @@
    }
   },
   {
+   "id": "energy/mode/\"normal\"@energy_pv",
+   "function": "energy",
+   "what": "mode",
+   "value": "normal",
+   "state": "energy_pv",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1601",
+      "delay_ms": 0,
+      "hex": "00"
+     }
+    ]
+   }
+  },
+  {
+   "id": "energy/mode/\"normal\"@energy_locked_pv",
+   "function": "energy",
+   "what": "mode",
+   "value": "normal",
+   "state": "energy_locked_pv",
+   "expect": {
+    "kind": "refused",
+    "reason": "the unit currently does not allow changing the energy mode"
+   }
+  },
+  {
    "id": "energy/mode/\"max_charge\"@seed",
    "function": "energy",
    "what": "mode",
@@ -7588,20 +7890,42 @@
    }
   },
   {
-   "id": "energy/mode/\"eco\"@seed",
+   "id": "energy/mode/\"max_charge\"@energy_pv",
    "function": "energy",
    "what": "mode",
-   "value": "eco",
-   "state": "seed",
+   "value": "max_charge",
+   "state": "energy_pv",
    "expect": {
     "kind": "frames",
     "frames": [
      {
       "char": "1601",
       "delay_ms": 0,
-      "hex": "20"
+      "hex": "10"
      }
     ]
+   }
+  },
+  {
+   "id": "energy/mode/\"max_charge\"@energy_locked_pv",
+   "function": "energy",
+   "what": "mode",
+   "value": "max_charge",
+   "state": "energy_locked_pv",
+   "expect": {
+    "kind": "refused",
+    "reason": "the unit currently does not allow changing the energy mode"
+   }
+  },
+  {
+   "id": "energy/mode/\"eco\"@seed",
+   "function": "energy",
+   "what": "mode",
+   "value": "eco",
+   "state": "seed",
+   "expect": {
+    "kind": "refused",
+    "reason": "ECO needs a solar panel fitted — the unit reports none (or has not reported it yet), so the app would not offer ECO"
    }
   },
   {
@@ -7611,14 +7935,8 @@
    "value": "eco",
    "state": "empty",
    "expect": {
-    "kind": "frames",
-    "frames": [
-     {
-      "char": "1601",
-      "delay_ms": 0,
-      "hex": "20"
-     }
-    ]
+    "kind": "refused",
+    "reason": "ECO needs a solar panel fitted — the unit reports none (or has not reported it yet), so the app would not offer ECO"
    }
   },
   {
@@ -7633,11 +7951,11 @@
    }
   },
   {
-   "id": "energy/mode/\"ECO\"@seed",
+   "id": "energy/mode/\"eco\"@energy_pv",
    "function": "energy",
    "what": "mode",
-   "value": "ECO",
-   "state": "seed",
+   "value": "eco",
+   "state": "energy_pv",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -7650,20 +7968,36 @@
    }
   },
   {
+   "id": "energy/mode/\"eco\"@energy_locked_pv",
+   "function": "energy",
+   "what": "mode",
+   "value": "eco",
+   "state": "energy_locked_pv",
+   "expect": {
+    "kind": "refused",
+    "reason": "the unit currently does not allow changing the energy mode"
+   }
+  },
+  {
+   "id": "energy/mode/\"ECO\"@seed",
+   "function": "energy",
+   "what": "mode",
+   "value": "ECO",
+   "state": "seed",
+   "expect": {
+    "kind": "refused",
+    "reason": "ECO needs a solar panel fitted — the unit reports none (or has not reported it yet), so the app would not offer ECO"
+   }
+  },
+  {
    "id": "energy/mode/\"ECO\"@empty",
    "function": "energy",
    "what": "mode",
    "value": "ECO",
    "state": "empty",
    "expect": {
-    "kind": "frames",
-    "frames": [
-     {
-      "char": "1601",
-      "delay_ms": 0,
-      "hex": "20"
-     }
-    ]
+    "kind": "refused",
+    "reason": "ECO needs a solar panel fitted — the unit reports none (or has not reported it yet), so the app would not offer ECO"
    }
   },
   {
@@ -7678,11 +8012,11 @@
    }
   },
   {
-   "id": "energy/mode/\" eco \"@seed",
+   "id": "energy/mode/\"ECO\"@energy_pv",
    "function": "energy",
    "what": "mode",
-   "value": " eco ",
-   "state": "seed",
+   "value": "ECO",
+   "state": "energy_pv",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -7692,6 +8026,28 @@
       "hex": "20"
      }
     ]
+   }
+  },
+  {
+   "id": "energy/mode/\"ECO\"@energy_locked_pv",
+   "function": "energy",
+   "what": "mode",
+   "value": "ECO",
+   "state": "energy_locked_pv",
+   "expect": {
+    "kind": "refused",
+    "reason": "the unit currently does not allow changing the energy mode"
+   }
+  },
+  {
+   "id": "energy/mode/\" eco \"@seed",
+   "function": "energy",
+   "what": "mode",
+   "value": " eco ",
+   "state": "seed",
+   "expect": {
+    "kind": "refused",
+    "reason": "ECO needs a solar panel fitted — the unit reports none (or has not reported it yet), so the app would not offer ECO"
    }
   },
   {
@@ -7701,6 +8057,28 @@
    "value": " eco ",
    "state": "empty",
    "expect": {
+    "kind": "refused",
+    "reason": "ECO needs a solar panel fitted — the unit reports none (or has not reported it yet), so the app would not offer ECO"
+   }
+  },
+  {
+   "id": "energy/mode/\" eco \"@energy_locked",
+   "function": "energy",
+   "what": "mode",
+   "value": " eco ",
+   "state": "energy_locked",
+   "expect": {
+    "kind": "refused",
+    "reason": "the unit currently does not allow changing the energy mode"
+   }
+  },
+  {
+   "id": "energy/mode/\" eco \"@energy_pv",
+   "function": "energy",
+   "what": "mode",
+   "value": " eco ",
+   "state": "energy_pv",
+   "expect": {
     "kind": "frames",
     "frames": [
      {
@@ -7712,11 +8090,11 @@
    }
   },
   {
-   "id": "energy/mode/\" eco \"@energy_locked",
+   "id": "energy/mode/\" eco \"@energy_locked_pv",
    "function": "energy",
    "what": "mode",
    "value": " eco ",
-   "state": "energy_locked",
+   "state": "energy_locked_pv",
    "expect": {
     "kind": "refused",
     "reason": "the unit currently does not allow changing the energy mode"
@@ -7754,6 +8132,27 @@
    }
   },
   {
+   "id": "energy/mode/\"turbo\"@energy_pv",
+   "function": "energy",
+   "what": "mode",
+   "value": "turbo",
+   "state": "energy_pv",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "id": "energy/mode/\"turbo\"@energy_locked_pv",
+   "function": "energy",
+   "what": "mode",
+   "value": "turbo",
+   "state": "energy_locked_pv",
+   "expect": {
+    "kind": "refused",
+    "reason": "the unit currently does not allow changing the energy mode"
+   }
+  },
+  {
    "id": "energy/mode/null@seed",
    "function": "energy",
    "what": "mode",
@@ -7785,6 +8184,27 @@
    }
   },
   {
+   "id": "energy/mode/null@energy_pv",
+   "function": "energy",
+   "what": "mode",
+   "value": null,
+   "state": "energy_pv",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "id": "energy/mode/null@energy_locked_pv",
+   "function": "energy",
+   "what": "mode",
+   "value": null,
+   "state": "energy_locked_pv",
+   "expect": {
+    "kind": "refused",
+    "reason": "the unit currently does not allow changing the energy mode"
+   }
+  },
+  {
    "id": "energy/bogus/\"eco\"@seed",
    "function": "energy",
    "what": "bogus",
@@ -7810,6 +8230,26 @@
    "what": "bogus",
    "value": "eco",
    "state": "energy_locked",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "id": "energy/bogus/\"eco\"@energy_pv",
+   "function": "energy",
+   "what": "bogus",
+   "value": "eco",
+   "state": "energy_pv",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "id": "energy/bogus/\"eco\"@energy_locked_pv",
+   "function": "energy",
+   "what": "bogus",
+   "value": "eco",
+   "state": "energy_locked_pv",
    "expect": {
     "kind": "none"
    }

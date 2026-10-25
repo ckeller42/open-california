@@ -157,6 +157,9 @@ window.STRINGS_DE = {
   "Sliding door light off": "Schiebetür-Licht aus",
   "Opening sliding door activates the rear interior lights.":
     "Beim Öffnen der Schiebetür wird die hintere Innenbeleuchtung eingeschaltet.",
+  // no app string (the app hides ECO instead of refusing) — proposal
+  "ECO needs a solar panel fitted — the unit reports none (or has not reported it yet), so the app would not offer ECO":
+    "ECO braucht eine Solaranlage — die Einheit meldet keine (oder noch nichts), daher bietet die App ECO nicht an",
   "this favourite is empty on the unit — save it first":
     "Dieser Favorit ist auf der Einheit leer — speichere ihn zuerst",
   "the wake-up light needs at least one vehicle area":

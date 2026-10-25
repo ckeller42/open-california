@@ -615,9 +615,14 @@ static const char *gate(const char *fn, const char *what, const char *value, cal
         if (strcmp(what, "timer") == 0 && get("airheater", "OperationModeAirHeater", &x) && x == 3)
             return CALI_REASON_AIRHEATER_TIMER_ARMED;
     }
-    if (strcmp(fn, "energy") == 0 && strcmp(what, "mode") == 0 && get("energy", "EnergyModeNotSelectable", &x) &&
-        x == 1)
-        return CALI_REASON_ENERGY_LOCKED;
+    if (strcmp(fn, "energy") == 0 && strcmp(what, "mode") == 0) {
+        char k[CALI_CTL_VALUE_MAX];
+        if (get("energy", "EnergyModeNotSelectable", &x) && x == 1) return CALI_REASON_ENERGY_LOCKED;
+        /* ECO only with PvInstalled = 1, as the app offers it; unknown refuses */
+        norm(value, k, sizeof k);
+        if (strcmp(k, "eco") == 0 && !(get("energy", "PvInstalled", &x) && x == 1))
+            return CALI_REASON_ENERGY_ECO_NEEDS_SOLAR;
+    }
     /* command_precondition's favourite rule over the latch (semantics.lighting_config): refuse only a
      * slot the unit positively reported empty */
     if (lighting && strcmp(what, "profile") == 0 && py_int(value, &n) && n >= 1 && n <= 7) {
