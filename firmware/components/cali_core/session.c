@@ -188,6 +188,15 @@ static int rest_conditions(void) {
     return camping == 0 && shore >= 0 && shore != 1 && shore != 2 && cali_ac_ignition() == 0 && !cali_ac_owed();
 }
 
+/* This link's own frames show camping on (1202 State 1) or shore power active/standby (1602 StateLandAfs 1/2):
+ * only these positives, an unknown ignition on a fresh link must not end the rest. */
+static int live_unit_awake(void) {
+    int c = index_of(0x1202u), e = index_of(0x1602u);
+    int camping = c >= 0 && s_fr[c].live ? stored_field(0x1202u, "campingmode", "State") : -1;
+    int shore = e >= 0 && s_fr[e].live ? stored_field(0x1602u, "energy", "StateLandAfs") : -1;
+    return camping == 1 || shore == 1 || shore == 2;
+}
+
 /* The unit ended the link itself: HCI 0x13 "remote user terminated", raw or as NimBLE's 0x200 + code. */
 static int peer_hangup(int status) { return status == 0x13 || status == 0x213; }
 
@@ -415,6 +424,9 @@ static void link_lost(const char *why, int status) {
     int was = s_link;
     s_redial = 0;   /* each loss decides again: only the power-save hang-up below is a planned redial */
     if (s_probe) probe_end(0, why);
+    /* a rest probe cut off before its read pass ended: probe_end(1) never ran, so check the frames it got
+     * (live = this link's; a rest entered on stored frames with camping 0 and shore not 1/2 holds none stale) */
+    if (s_rest && live_unit_awake()) rest_set(0, "unit_state");
     s_why = why;
     s_why_st = status;
     link_clear();

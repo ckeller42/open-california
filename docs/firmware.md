@@ -318,7 +318,7 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    probe connects, runs one read pass, and the satellite drops its own link right after it
    (``link_down`` reason ``rest``), so the unit is woken for seconds, not for its 30 s timer. A read
    that shows camping on, shore power or the ignition on keeps the link and ends the rest. A
-   command during the probe ends the rest and keeps the link too. A probe that cannot connect stays
+   command during the probe ends the rest and keeps the link too. A probe whose link drops before its read pass ends leaves the rest when the frames it already read show camping on (``1202`` ``State`` 1) or shore power active or standby; any other drop stays in rest. A probe that cannot connect stays
    in rest and tries again at the next interval. In mode ``off`` the rest poll waits. The rest poll
    is the only wake while resting: the idle policy's and the experiment's probes are skipped.
 
