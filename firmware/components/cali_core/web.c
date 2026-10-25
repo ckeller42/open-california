@@ -186,13 +186,15 @@ static void res_json(cali_json_t *j) {
     cali_json_obj_end(j);
 }
 
-static void api_state(cali_http_resp_t *resp) {
+static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_json_t j;
     cali_status_t st;
     cali_ble_exp_activity(cali_uptime_ms());   /* a viewer: the experiment holds (R_FW_BLE_EXP) */
     /* a viewer keeps the redial (R_FW_BLE_VIEWER_KEEP); before the status, so this same reply already
-     * reports a rest it ended */
-    cali_session_viewer(cali_uptime_ms());
+     * reports a rest it ended. "?seen=1": the page's own poll after a load, a return to the page or a
+     * user action = input too */
+    if (strstr(req->query, "seen=1")) cali_session_input(cali_uptime_ms());
+    else cali_session_viewer(cali_uptime_ms());
     cali_status_get(&st, s_t, cali_uptime_ms());
 
     cali_json_begin(&j, s_json, sizeof s_json);
@@ -1522,7 +1524,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         return 1;
     }
     if (strcmp(req->path, "/api/state") == 0) {
-        if (get) api_state(resp);
+        if (get) api_state(req, resp);
         else SET_CONST(resp, 405, ERR_METHOD);
         return 1;
     }

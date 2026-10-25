@@ -111,14 +111,16 @@ int cali_session_connect(void);
 /* 1 while in power-save rest (no auto-reconnect). */
 int cali_session_rest(void);
 /* Viewer keep (R_FW_BLE_VIEWER_KEEP). A viewer = a GET /api/state within CALI_SESSION_VIEWER_MS (the page
- * polls every 2 s only while visible); its input = POST /api/ble {"active":true} or a page load, within
- * CALI_SESSION_INPUT_IDLE_MS (a viewer appearing after a gap starts that clock). While both hold, the
- * unit's power-save hang-up does not start the rest: the session redials after the cooldown with the
- * backoff at its minimum (a planned redial, cali_session_redial), and a viewer in rest leaves it at once
- * (mode off excepted). Without a viewer, or after 10 min without input, the rest runs as below. */
+ * polls every 2 s only while visible); input = POST /api/ble {"active":true}, a page load, the page's
+ * GET /api/state?seen=1, a command or Connect (wake), within CALI_SESSION_INPUT_IDLE_MS. While both hold,
+ * the unit's power-save hang-up does not start the rest: the session redials after the cooldown with
+ * the backoff at its minimum (a planned redial, cali_session_redial), and input in rest leaves it at
+ * once (mode off excepted). Without a viewer, or after 10 min without input, the rest runs as below; a
+ * reconnect out of rest that never gets a link up goes back to rest at its first failure once no
+ * viewer looks. */
 #define CALI_SESSION_VIEWER_MS 10000u
 #define CALI_SESSION_INPUT_IDLE_MS 600000u
-void cali_session_viewer(uint64_t now_ms);   /* GET /api/state */
+void cali_session_viewer(uint64_t now_ms);   /* GET /api/state (?seen=1: cali_session_input) */
 void cali_session_input(uint64_t now_ms);    /* user input on the page (also a viewer) */
 /* 1 from a planned redial's hang-up until that link takes commands again (any other loss clears it). */
 int cali_session_redial(void);

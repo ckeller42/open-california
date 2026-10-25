@@ -69,6 +69,7 @@ static uint32_t s_rest_poll_ms = CALI_SESSION_REST_POLL_DEFAULT_MIN * 60000u;
  * 0 = never (a stamp at now 0 is 1). */
 static uint64_t s_viewer_at, s_input_at;
 static int s_redial;
+static int s_rest_left;   /* the session left rest and has not had a link up since (a deep-sleeping unit) */
 static const char *const MODE_NAME[] = {"hold", "quiet", "off"};
 
 #define WATER_CHAR 0x1302u
@@ -201,6 +202,7 @@ static int viewer_active(uint64_t now) {
 
 static void rest_set(int on, const char *why) {
     if (on) s_redial = 0;
+    s_rest_left = s_rest && !on;   /* left rest: until a link comes up */
     if (s_rest == on) return;
     s_rest = on;
     s_rest_next = s_now + s_rest_poll_ms;
@@ -407,8 +409,13 @@ static void link_lost(const char *why, int status) {
     s_why_st = status;
     link_clear();
     if (was != LINK_DOWN) (void)s_t->disconnect();   /* may be down already: silent either way */
-    if (s_active && s_mode != CALI_BLE_OFF && strcmp(why, "disconnected") == 0 && peer_hangup(status) &&
-        !cali_ctl_busy() && rest_conditions()) {   /* a command in flight waits for its reconnect */
+    /* a reconnect out of rest that never got a link up (the unit deep-sleeps: connects fail or time
+     * out) and nobody looks any more: back to rest, not an endless backoff */
+    if (s_rest_left && s_active && s_mode != CALI_BLE_OFF && !cali_ctl_busy() && rest_conditions() &&
+        !viewer_active(s_now)) {
+        rest_set(1, "unreachable");
+    } else if (s_active && s_mode != CALI_BLE_OFF && strcmp(why, "disconnected") == 0 && peer_hangup(status) &&
+               !cali_ctl_busy() && rest_conditions()) {   /* a command in flight waits for its reconnect */
         if (viewer_active(s_now)) {   /* someone looks: redial after the cooldown, the backoff never grows */
             s_redial = 1;
             s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
@@ -425,6 +432,7 @@ static void link_up(void) {
     if (s_was_up) snprintf(rc_ms, sizeof rc_ms, "%llu", (unsigned long long)(s_now - s_down_at));
     cali_diag_evt("link_up", "\"reconnect_ms\":%s,\"attempts\":%u", rc_ms, s_attempts);
     s_attempts = 0;
+    s_rest_left = 0;
     io(CALI_SESSION_IO_UP, 0, NULL, 0);
     s_link = LINK_UP;
     s_up_at = s_now;
@@ -834,6 +842,7 @@ static void reconnect_soon(const char *why) {
 
 /* A command or the Connect button: hold, out of rest, and a reconnect due now (not inside the cooldown). */
 static void wake(const char *why) {
+    s_input_at = s_now ? s_now : 1;   /* a command or Reconnect is input (R_FW_BLE_VIEWER_KEEP's idle cap) */
     if (s_mode != CALI_BLE_HOLD) (void)cali_session_set_mode(CALI_BLE_HOLD, why);   /* writes need hold */
     reconnect_soon(why);
 }
@@ -851,10 +860,7 @@ int cali_session_rest(void) { return s_rest; }
 int cali_session_redial(void) { return s_redial; }
 
 void cali_session_viewer(uint64_t now_ms) {
-    uint64_t at = now_ms ? now_ms : 1;
-    /* a viewer appearing (page opened, tab back) starts the input clock: 10 min to the first input */
-    if (!within(now_ms, s_viewer_at, CALI_SESSION_VIEWER_MS)) s_input_at = at;
-    s_viewer_at = at;
+    s_viewer_at = now_ms ? now_ms : 1;
     /* out of rest at once, so this same /api/state reply reports rest false (no card flash); the mode
      * stays (an "off" set on purpose keeps the link down) */
     if (s_rest && s_active && s_mode != CALI_BLE_OFF && viewer_active(now_ms)) {

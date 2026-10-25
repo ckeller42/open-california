@@ -1,11 +1,11 @@
 :root {
   color-scheme: light dark;
-  --bg: #eef1f5; --fg: #1a1d24; --muted: #6b7280; --card: #ffffff; --border: #e2e6ee;
+  --bg: #eef1f5; --fg: #1a1d24; --muted: #5f6673; --card: #ffffff; --border: #e2e6ee;
   --accent: #2f6fed; --accent-fg: #fff; --track-off: #cdd2dc;
   --ok: #2e9e5b; --warn: #c99019; --error: #d0453b; --bar: #e6e9f0;
   --danger: #c0392b;   /* destructive actions (Unpair…); 5.4:1 on --card (WCAG AA) */
   /* text-only tones for the light theme (>= 4.5:1 on --bg and on the warn tint); borders/fills keep the hues */
-  --muted: #5f6673; --ok-text: #1e7a43; --warn-text: #8a5a00; --accent-text: #2459c9;
+  --ok-text: #1e7a43; --warn-text: #8a5a00; --accent-text: #2459c9;
   --shadow: 0 1px 2px rgba(20,24,33,.06), 0 8px 24px -16px rgba(20,24,33,.25);
 }
 @media (prefers-color-scheme: dark) {

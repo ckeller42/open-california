@@ -2765,8 +2765,9 @@ def test_state_link_reports_ready_and_rest(web_cli):
 def test_state_is_a_viewer_and_reports_the_redial(web_cli):
     """R_FW_BLE_VIEWER_KEEP: ``GET /api/state`` tells the session a viewer looks (``cali_session_viewer``)
     BEFORE it builds the reply, so a rest the viewer ends already reads ``rest: false`` in that same
-    reply; ``device.link.redial`` mirrors ``cali_session_redial()``. ``POST /api/ble {"active":true}``
-    and a page load report user input (``cali_session_input``); a poll does not.
+    reply; ``device.link.redial`` mirrors ``cali_session_redial()``. ``POST /api/ble {"active":true}``,
+    a page load and the page's deliberate poll ``GET /api/state?seen=1`` report user input
+    (``cali_session_input``); a plain poll does not.
 
     .. test:: /api/state counts as a viewer before its reply; redial and input reach the session
        :id: T_FW_BLE_VIEWER_WEB
@@ -2787,6 +2788,8 @@ def test_state_is_a_viewer_and_reports_the_redial(web_cli):
             req("POST", "/api/ble", '{"active":true}'),
             b"now 9000",
             req("GET", "/"),
+            b"now 11000",
+            req("GET", "/api/state?seen=1"),
         ],
     )
     links = [{k: r.json()["device"]["link"][k] for k in ("rest", "redial")} for r in resps[:3]]
@@ -2799,6 +2802,7 @@ def test_state_is_a_viewer_and_reports_the_redial(web_cli):
     assert [ln for ln in other if ln.startswith("INPUT ")] == [
         "INPUT 7010",
         "INPUT 9010",
+        "INPUT 11010",
     ]  # the poll ticks +10
 
 

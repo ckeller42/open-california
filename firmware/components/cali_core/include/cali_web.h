@@ -21,7 +21,7 @@
  *                                                -- ready = cali_session_ready (commands accepted); rest = the
  *                                                power-save rest (no reconnect, R_FW_BLE_REST); redial = a
  *                                                planned redial for a viewer (R_FW_BLE_VIEWER_KEEP; this GET
- *                                                is the viewer); rest_next_s = s to its next read, null = not
+ *                                                is the viewer, with ?seen=1 also input); rest_next_s = s to its next read, null = not
  *                                                resting or the poll is off
  *                                  "wifi":{"mode":"setup"|"station"|"off","ssid":"…"|null,
  *                                          "ip":"a.b.c.d"|null,"rssi":<int>|null},

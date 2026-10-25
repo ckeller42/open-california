@@ -341,13 +341,13 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    looks at the page.
 
    User input is ``POST /api/ble {"active":true}`` (the page sends it on a pointer or key press, at
-   most once per 30 s) or a page load (``GET /``, ``/app``). A ``GET /api/state`` poll alone is no
-   input. A viewer that appears after a gap starts the 10 min clock. After 10 min without input the
-   next hang-up starts the rest, also with the page visible; input then ends that rest.
-
-   Any client that polls ``/api/state`` counts as a viewer, and its first poll after a gap of more
-   than 10 s counts as input, so a script that polls the satellite (``tools/esplab/soak_report.py``)
-   keeps it redialling with camping off.
+   most once per 30 s), a page load (``GET /``, ``/app``), ``GET /api/state?seen=1``, a control
+   command or the Reconnect button. The page adds ``?seen=1`` to its deliberate polls only: the
+   first poll after the page loads, after the page becomes visible again, and after a user action. Its
+   2 s background poll and any other client's ``GET /api/state`` are no input, so a script that
+   polls the satellite now and then (``tools/esplab/soak_report.py``) counts as a viewer for 10 s but
+   never keeps it out of rest. After 10 min without input the next hang-up starts the rest, also
+   with the page visible; input then ends that rest.
 
    A viewer with recent input that arrives while the session rests ends the rest at once (not in
    mode ``off``) and reconnects after the cooldown. The ``/api/state`` reply that counts the viewer
@@ -355,6 +355,11 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    that end of the rest) until the new link takes commands; any other loss clears it. Without a
    viewer the rest and all its no-rest conditions (a command in flight, the ignition on or unknown,
    a camping restore owed, camping on, shore power active or standby) work as in ``R_FW_BLE_REST``.
+
+   When a reconnect out of the rest never brings a link up (the unit deep-sleeps, so the connects
+   fail or time out), the first such failure after the viewer is gone re-enters the rest (``evt
+   rest`` ``why`` ``unreachable``) instead of backing off without end. While the viewer stays, or a
+   command is in flight, the backoff goes on.
 
 .. req:: BLE warm-up knob (measurement)
    :id: R_FW_BLE_WARM
@@ -2129,8 +2134,9 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    banner (``role=status``) speaks, so a normal redial cycle announces nothing. Every state uses one
    word: the pill of a command that waits for the link says "connecting…" like the link state, and
    the pairing wizard says "Connecting to the unit…". While the page is visible on the satellite, a
-   pointer or key press posts ``/api/ble {"active":true}``, at most once per 30 s
-   (``R_FW_BLE_VIEWER_KEEP``). In the light theme the pill texts and the offline banner reach a
+   pointer or key press posts ``/api/ble {"active":true}``, at most once per 30 s, and the page's
+   forced state polls (page load, back to visible, after an action) ask ``/api/state?seen=1``
+   (``R_FW_BLE_VIEWER_KEEP``); the page served by calictl never adds it. In the light theme the pill texts and the offline banner reach a
    contrast of at least 4.5:1, and the offline pill keeps the pill's size.
 ```
 

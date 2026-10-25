@@ -993,7 +993,7 @@ async function api(path, opts) {
   // /api/command (+ /api/auto_camper if reported) -- never let any caller fan out to a calictl-only
   // endpoint there; refuse before any network request.
   const w = path === "/api/command" || (path === "/api/auto_camper" && hasAutoCamper());
-  if (satellite() && path !== "/api/state" && path !== "/api/pairing" && !(w && !readOnly()))
+  if (satellite() && path.split("?")[0] !== "/api/state" && path !== "/api/pairing" && !(w && !readOnly()))
     throw new Error("satellite: no " + path);
   const r = await fetch(path, opts);
   return r.json();
@@ -1030,6 +1030,9 @@ function installed(fn) {
 const readOnly = () => !STATE._meta || !!STATE._meta.read_only;
 // The ESP32 satellite (semantics.js adaptSatellite): no session API.
 const satellite = () => !!(STATE._meta && STATE._meta.satellite);
+// The satellite inlines this script into its page (no src); calictl serves it as /app.js. Known before
+// the first answer, so the first poll of a page load can already say "seen" to the satellite.
+const SAT_BUNDLE = !(/** @type {HTMLScriptElement|null} */ (document.currentScript))?.src;
 // A calictl daemon has answered (positively known; not the satellite, not still unknown).
 const isCalictl = () => !!(STATE._meta && !STATE._meta.satellite);
 // calictl, or a satellite firmware reporting device.auto_camper
@@ -1235,7 +1238,9 @@ async function refreshState(force) {
   const timer = setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
   let next;
   try {
-    next = await api("/api/state", { signal: ac.signal });
+    // a forced poll follows a page load, a return to the page or a user action: the satellite counts it
+    // as input (R_FW_BLE_VIEWER_KEEP's idle cap); the 2 s tick is a plain poll. Satellite only.
+    next = await api(force && (SAT_BUNDLE || satellite()) ? "/api/state?seen=1" : "/api/state", { signal: ac.signal });
     // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
     // unreachable clock. Checked here, not in api(): the wizard and commands read JSON error bodies.
     if (!isSatelliteBody(next) && !(next && typeof next === "object" && next._meta)) throw new Error("no state");

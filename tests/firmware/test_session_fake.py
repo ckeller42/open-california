@@ -889,7 +889,7 @@ def test_a_viewer_keeps_redialling_after_the_power_save_hang_up(fake):
        :id: T_FW_BLE_VIEWER_REDIAL
        :links: R_FW_BLE_VIEWER_KEEP
     """
-    script = [*REST_PRE, *PAIRED, *parked(), "viewer %d" % T, "DISCONNECTED 19", "redial", "rest"]
+    script = [*REST_PRE, *PAIRED, *parked(), "input %d" % T, "DISCONNECTED 19", "redial", "rest"]
     out = run(fake, *script)
     assert out[-3:] == ["LOG session: reconnect in 7000 ms", "REDIAL 1", "REST 0 -1"]
     t = T
@@ -923,7 +923,7 @@ def test_no_viewer_rests_as_before(fake):
        :id: T_FW_BLE_VIEWER_GONE
        :links: R_FW_BLE_VIEWER_KEEP
     """
-    base = [*REST_PRE, *PAIRED, *parked(), "viewer %d" % T]
+    base = [*REST_PRE, *PAIRED, *parked(), "input %d" % T]
     out = run(fake, *base, *ticks(T, T + 10000), "DISCONNECTED 19", "redial", "rest")
     assert out[-2:] == ["REDIAL 1", "REST 0 -1"]  # the last poll 10 s ago: still a viewer
     out = run(fake, *base, *ticks(T, T + 10001, 10001), "DISCONNECTED 19", "redial", "rest")
@@ -931,24 +931,27 @@ def test_no_viewer_rests_as_before(fake):
 
 
 def test_a_viewer_appearing_in_rest_leaves_it_at_once(fake):
-    """R_FW_BLE_VIEWER_KEEP: the first /api/state poll of a page opened in rest ends the rest inside
-    that call (the same reply says rest false, no card flash) and reconnects as soon as the unit's
-    cooldown allows; mode off keeps the rest.
+    """R_FW_BLE_VIEWER_KEEP: a page opened or returned to sends a deliberate poll (``?seen=1`` =
+    ``input``); in rest that call ends the rest (the same reply says rest false, no card flash) and
+    reconnects as soon as the unit's cooldown allows. A plain poll with no input in 10 min stays in
+    rest; mode off keeps the rest.
 
-    .. test:: A viewer in rest leaves it in the same call and reconnects after the cooldown
+    .. test:: A returning viewer leaves rest in the same call and reconnects after the cooldown
        :id: T_FW_BLE_VIEWER_LEAVES_REST
        :links: R_FW_BLE_VIEWER_KEEP
     """
     rest = [*REST_PRE, *PAIRED, *parked(), "DISCONNECTED 19"]
-    out = run(fake, *rest, "tick %d" % (T + 20000), "viewer %d" % (T + 20000), "rest", "redial")
+    out = run(fake, *rest, "tick %d" % (T + 20000), "viewer %d" % (T + 20000), "rest")
+    assert out[-1].startswith("REST 1 ")  # a poll alone is no input
+    out = run(fake, *rest, "tick %d" % (T + 20000), "input %d" % (T + 20000), "rest", "redial")
     assert out[-2:] == ["REST 0 -1", "REDIAL 1"]
-    out = run(fake, *rest, "tick %d" % (T + 20000), "viewer %d" % (T + 20000), "tick %d" % (T + 20100))
+    out = run(fake, *rest, "tick %d" % (T + 20000), "input %d" % (T + 20000), "tick %d" % (T + 20100))
     assert calls(after(out, "LOG session: power-save rest off (viewer)"), "connect_bonded")
-    out = run(fake, *rest, "tick %d" % (T + 3000), "viewer %d" % (T + 3000), "tick %d" % (T + 6999))
+    out = run(fake, *rest, "tick %d" % (T + 3000), "input %d" % (T + 3000), "tick %d" % (T + 6999))
     assert not calls(after(out, "LOG session: power-save rest off (viewer)"), "connect_bonded")
-    out = run(fake, *rest, "tick %d" % (T + 3000), "viewer %d" % (T + 3000), "tick %d" % (T + 7000))
+    out = run(fake, *rest, "tick %d" % (T + 3000), "input %d" % (T + 3000), "tick %d" % (T + 7000))
     assert calls(after(out, "LOG session: power-save rest off (viewer)"), "connect_bonded")
-    out = run(fake, *rest, "> ble mode off", "viewer %d" % T, "rest")
+    out = run(fake, *rest, "> ble mode off", "input %d" % T, "rest")
     assert out[-1].startswith("REST 1 ")
 
 
@@ -962,7 +965,7 @@ def test_ten_minutes_without_input_rest_despite_the_viewer(fake):
        :links: R_FW_BLE_VIEWER_KEEP
     """
     cap = 600000
-    base = [*REST_PRE, *PAIRED, *parked(), *watched(T, T + cap, 4000)]
+    base = [*REST_PRE, *PAIRED, *parked(), "input %d" % T, *watched(T, T + cap, 4000)]
     out = run(fake, *base, "viewer %d" % (T + cap + 1), "tick %d" % (T + cap + 1), "DISCONNECTED 19", "rest")
     assert out[-1].startswith("REST 1 ")
     out = run(
@@ -983,6 +986,50 @@ def test_ten_minutes_without_input_rest_despite_the_viewer(fake):
     )
     told = [line for line in out if line.startswith(("REST", "REDIAL"))]
     assert told[0].startswith("REST 1 ") and told[1:] == ["REST 0 -1", "REDIAL 1"]
+    # a 10.5 s poll stall (a slow network) is no new input: the cap still counts from T
+    stall = [*REST_PRE, *PAIRED, *parked(), "input %d" % T, *watched(T, T + 300000, 4000)]
+    stall += ["tick %d" % (T + 310500), *watched(T + 310500, T + cap, 4000)]
+    out = run(fake, *stall, "viewer %d" % (T + cap + 1), "tick %d" % (T + cap + 1), "DISCONNECTED 19", "rest")
+    assert out[-1].startswith("REST 1 ")
+
+
+def test_a_reconnect_out_of_rest_that_never_reaches_the_unit_rests_again(fake):
+    """R_FW_BLE_VIEWER_KEEP: a viewer took the session out of rest, but the unit deep-sleeps, so the
+    connects fail or time out. Once the viewer is gone the next failure re-enters the rest instead of
+    an endless backoff; while the viewer stays the backoff goes on, and a link that came up ends it.
+
+    .. test:: Failed reconnects out of rest go back to rest once nobody looks
+       :id: T_FW_BLE_VIEWER_UNREACHABLE
+       :links: R_FW_BLE_VIEWER_KEEP
+    """
+    left = [*REST_PRE, *PAIRED, *parked(), "DISCONNECTED 19", "tick %d" % (T + 7000), "input %d" % (T + 7000)]
+    left += ["tick %d" % (T + 7100)]  # connect_bonded
+    out = run(fake, *left, "tick %d" % (T + 17101), "CONNECT_FAIL", "rest")
+    assert out[-1].startswith("REST 1 ")
+    assert "LOG session: power-save rest on (unreachable)" in out
+    out = run(fake, *left, "viewer %d" % (T + 9000), "tick %d" % (T + 9000), "CONNECT_FAIL", "rest")
+    assert out[-1] == "REST 0 -1"  # the viewer still looks: keep trying
+    out = run(fake, *left, "tick %d" % (T + 7100 + 20000), "rest")  # no connect verdict at all: timeout
+    assert out[-1].startswith("REST 1 ")
+    up = [*left, "CONNECTED", "ENC_OK", *parked(at=T + 7100, first=False), "tick %d" % (T + 30000)]
+    out = run(fake, *up, "DISCONNECTED 8", "rest")  # the link came up: an ordinary loss, backoff
+    assert out[-1] == "REST 0 -1"
+
+
+def test_a_command_or_reconnect_counts_as_input(fake):
+    """R_FW_BLE_VIEWER_KEEP: a control command or the Reconnect button (``wake``) stamps the input
+    clock itself, so the idle cap does not depend on the page's input report arriving first.
+
+    .. test:: A command or Reconnect is input for the idle cap
+       :id: T_FW_BLE_VIEWER_WAKE_INPUT
+       :links: R_FW_BLE_VIEWER_KEEP
+    """
+    for act in ("connect", "submit - cooler level 2"):
+        rest = [*REST_PRE, *PAIRED, *parked(), "DISCONNECTED 19", "tick %d" % (T + 60000), act]
+        out = run(
+            fake, *rest, *watched(T + 62000, T + 66000), "CONNECTED", "ENC_OK", "DISCONNECTED 19", "redial"
+        )
+        assert out[-1] == "REDIAL 1", act  # never an input report, yet the viewer keeps the redial
 
 
 def test_command_during_the_backoff_connects_now(fake):

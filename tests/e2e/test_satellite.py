@@ -886,12 +886,21 @@ def test_planned_redial_is_quiet(stub, error_gated_page, locale, pill):
 
 
 def test_input_is_reported_at_most_every_30_s(stub, error_gated_page):
-    """User input (pointer or key) posts ``/api/ble {"active":true}``, at most once per 30 s: the
-    satellite's 10 min idle cap counts from it (R_FW_BLE_VIEWER_KEEP); a poll alone is no input."""
+    """User input (pointer or key) posts ``/api/ble {"active":true}``, at most once per 30 s, and the
+    page's deliberate polls (page load, back to visible) ask ``/api/state?seen=1``: the satellite's
+    10 min idle cap counts from them (R_FW_BLE_VIEWER_KEEP). The 2 s background poll is plain."""
     with error_gated_page(stub.base) as pg:
+        urls = []
+        pg.on("request", lambda q: urls.append(q.url.split("/", 3)[3]) if "/api/state" in q.url else None)
+        pg.reload()
         pg.wait_for_function(LIVE)
         pg.wait_for_timeout(2500)
+        assert urls[0] == "api/state?seen=1" and "api/state" in urls[1:], urls
         assert ("/api/ble", {"active": True}) not in stub.posts
+        n = len(urls)
+        pg.evaluate("document.dispatchEvent(new Event('visibilitychange'))")  # back to the page
+        pg.wait_for_timeout(300)
+        assert "api/state?seen=1" in urls[n:], urls[n:]
         pg.mouse.click(5, 300)
         pg.keyboard.press("Shift")
         pg.mouse.click(5, 300)
@@ -916,7 +925,7 @@ def _contrast(a, b):
 
 
 def test_light_theme_pill_and_banner_contrast_and_pill_size(stub, error_gated_page):
-    """Light theme: the pill's texts (live, offline, power saving) and the offline banner reach
+    """Light theme: the pill's texts (live, offline, power saving, busy) and the offline banner reach
     4.5:1 (WCAG 1.4.3), and the offline pill keeps the pill's size (the generic ``.warn`` rule
     must not grow it)."""
     link = stub.fixtures["satellite"]["/api/state"]["device"]["link"]
@@ -936,6 +945,8 @@ def test_light_theme_pill_and_banner_contrast_and_pill_size(stub, error_gated_pa
         link.update(rest=True, rest_next_s=1500)
         expect(status).to_have_text("power saving")
         seen.append(status.evaluate("e => getComputedStyle(e).color"))
+        # a command's busy pill, read in the same turn (the next 2 s tick repaints the link state)
+        seen.append(status.evaluate("e => (setStatus('Sending…', 'busy'), getComputedStyle(e).color)"))
     for c in seen:
         assert _contrast(c, bg) >= 4.5, (c, bg)
 
