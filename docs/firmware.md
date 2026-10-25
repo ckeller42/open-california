@@ -345,6 +345,10 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    input. A viewer that appears after a gap starts the 10 min clock. After 10 min without input the
    next hang-up starts the rest, also with the page visible; input then ends that rest.
 
+   Any client that polls ``/api/state`` counts as a viewer, and its first poll after a gap of more
+   than 10 s counts as input, so a script that polls the satellite (``tools/esplab/soak_report.py``)
+   keeps it redialling with camping off.
+
    A viewer with recent input that arrives while the session rests ends the rest at once (not in
    mode ``off``) and reconnects after the cooldown. The ``/api/state`` reply that counts the viewer
    already reports ``rest: false``. ``device.link.redial`` is ``true`` from such a planned hang-up (or
