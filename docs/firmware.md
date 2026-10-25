@@ -308,9 +308,9 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
 
    Rest ends on a control command (``cali_session_connect_now``) or ``POST /api/ble
    {"connect":true}`` (409 ``not_paired`` without a bond), each a reconnect after the 7 s cooldown;
-   on a rest probe whose read pass no longer meets the conditions; on pairing or a forget. A mode change
-   alone (``/api/ble`` ``mode``, ``ble mode``, the idle policy's viewer -> ``hold``) never connects
-   out of rest, so opening the page does not wake the unit.
+   on a rest probe whose read pass no longer meets the conditions; on a viewer with recent input
+   (``R_FW_BLE_VIEWER_KEEP``); on pairing or a forget. A mode change alone (``/api/ble`` ``mode``,
+   ``ble mode``, the idle policy's viewer -> ``hold``) never connects out of rest.
 
    While resting, the session runs one :term:`Probe` every ``rest_poll_min`` minutes
    (``POST /api/ble {"rest_poll_min":N}``, 0-240, stored in NVS key ``ble_rest``, read at boot;
@@ -325,6 +325,41 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    ``/api/state`` reports ``device.link.rest`` and ``device.link.rest_next_s`` (seconds to the next
    probe, ``null`` when not resting or with the poll off); ``device.ble.rest_poll_min`` the
    setting.
+
+.. req:: A visible page keeps the satellite reconnecting after the power-save hang-up
+   :id: R_FW_BLE_VIEWER_KEEP
+   :status: implemented
+   :tags: esp32
+
+   A *viewer* is a ``GET /api/state`` within the last 10 s (``CALI_SESSION_VIEWER_MS``). The web UI
+   polls every 2 s only while the page is visible, so a hidden or closed page stops counting within
+   10 s. While a viewer is active and the page had user input in the last 10 min
+   (``CALI_SESSION_INPUT_IDLE_MS``), the unit's power-save hang-up (the ``R_FW_BLE_REST`` conditions)
+   does not start the rest. The session reconnects after the unit's 7 s cooldown instead, and the
+   backoff stays at its minimum across these planned hang-ups, so one cycle is about 37 s. The app
+   does not do this: it never reconnects after that hang-up. The satellite does, only while someone
+   looks at the page.
+
+   User input is ``POST /api/ble {"active":true}`` (the page sends it on a pointer or key press, at
+   most once per 30 s), a page load (``GET /``, ``/app``), ``GET /api/state?seen=1``, a control
+   command or the Reconnect button. The page adds ``?seen=1`` to its deliberate polls only: the
+   first poll after the page loads, after the page becomes visible again, and after a user action. Its
+   2 s background poll and any other client's ``GET /api/state`` are no input, so a script that
+   polls the satellite now and then (``tools/esplab/soak_report.py``) counts as a viewer for 10 s but
+   never keeps it out of rest. After 10 min without input the next hang-up starts the rest, also
+   with the page visible; input then ends that rest.
+
+   A viewer with recent input that arrives while the session rests ends the rest at once (not in
+   mode ``off``) and reconnects after the cooldown. The ``/api/state`` reply that counts the viewer
+   already reports ``rest: false``. ``device.link.redial`` is ``true`` from such a planned hang-up (or
+   that end of the rest) until the new link takes commands; any other loss clears it. Without a
+   viewer the rest and all its no-rest conditions (a command in flight, the ignition on or unknown,
+   a camping restore owed, camping on, shore power active or standby) work as in ``R_FW_BLE_REST``.
+
+   When a reconnect out of the rest never brings a link up (the unit deep-sleeps, so the connects
+   fail or time out), the first such failure after the viewer is gone re-enters the rest (``evt
+   rest`` ``why`` ``unreachable``) instead of backing off without end. While the viewer stays, or a
+   command is in flight, the backoff goes on.
 
 .. req:: BLE warm-up knob (measurement)
    :id: R_FW_BLE_WARM
@@ -2074,13 +2109,35 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    :tags: web, esp32
 
    While the satellite reports ``device.link.rest`` the banner is neutral (not the offline
-   warning) and says "Disconnected to save energy — turn on camping mode to stay connected." (DE
-   "Verbindung getrennt, um Energie zu sparen — …"), with the last data's time and age and "Next
-   reading in N min" from ``device.link.rest_next_s`` (nothing about readings with the rest poll
-   off). Its *Reconnect* button (DE *Neu verbinden*) posts ``/api/ble {"connect":true}``. The pill
-   says "power saving". The satellite's pill says "live" only while ``device.link.ready`` is true.
+   warning). It shows the app's headline "Disconnected to save energy" (DE "Verbindung getrennt, um
+   Energie zu sparen"), then "Turn on camping mode to stay connected." with the last data's time and
+   age and "Next reading in N min." (DE "Nächste Ablesung in N Min.") from
+   ``device.link.rest_next_s`` (nothing about readings with the rest poll off). A screen reader reads
+   the next reading once with the card; the visible minute count ticks hidden from it. Two buttons,
+   each at least 44 px tall: *Open camping mode* (DE *Campingmodus öffnen*) opens the Camping mode
+   screen and sends nothing, because camping mode also switches lights and USB; *Reconnect* (DE *Neu
+   verbinden*) posts ``/api/ble {"connect":true}``. When the card goes while one of its buttons has
+   the focus, the focus moves to the page heading. The pill says "power saving". The satellite's
+   pill says "live" only while ``device.link.ready`` is true.
    Satellite settings → Camper unit has the select *Read while in power-save mode*: Off, every
    15 min, 30 min, 60 min or 2 h (``rest_poll_min``).
+
+.. req:: The web UI paints the satellite's planned redial calmly
+   :id: R_UI_LINK_CALM
+   :status: implemented
+   :tags: web, esp32
+
+   While the satellite reports ``device.link.redial`` and the link does not take commands yet, and
+   the shown data is younger than 90 s, the page shows no banner: only the pill changes to
+   "reconnecting…" (DE "verbinde neu…"), and the tiles do not move. With older data the neutral
+   "Connecting…" banner with the data's age shows as usual. The pill has no live region; only the
+   banner (``role=status``) speaks, so a normal redial cycle announces nothing. Every state uses one
+   word: the pill of a command that waits for the link says "connecting…" like the link state, and
+   the pairing wizard says "Connecting to the unit…". While the page is visible on the satellite, a
+   pointer or key press posts ``/api/ble {"active":true}``, at most once per 30 s, and the page's
+   forced state polls (page load, back to visible, after an action) ask ``/api/state?seen=1``
+   (``R_FW_BLE_VIEWER_KEEP``); the page served by calictl never adds it. In the light theme the pill texts and the offline banner reach a
+   contrast of at least 4.5:1, and the offline pill keeps the pill's size.
 ```
 
 - **`R_FW_PAIRING_SM`** (C twin of the pairing state machine, `firmware/components/cali_core/pairing_sm.c`)

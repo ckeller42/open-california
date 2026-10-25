@@ -469,6 +469,8 @@ function adaptSatellite(body, nowMs) {
       // power-save rest (R_FW_BLE_REST): the unit hung up with camping off, no reconnect until Reconnect
       link_rest: !!link.rest,
       rest_next_s: typeof link.rest_next_s === "number" ? link.rest_next_s : null,
+      // a planned redial after that hang-up while someone looks (R_FW_BLE_VIEWER_KEEP): a calm gap
+      link_redial: !!link.redial,
       sd: dev.sd || null,     // the SD log's card (R_FW_SD_LOG)
       res: dev.res || null,   // heap / PSRAM / CPU of the satellite itself
       battery: dev.battery || null,   // the CoreS3's own battery (R_FW_BATTERY)
