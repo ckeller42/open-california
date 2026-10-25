@@ -871,6 +871,31 @@ def test_rest_poll_reads_once_and_drops_the_link(fake):
     assert out[-1] == "REST 1 -1"
 
 
+def test_rest_probe_dropped_mid_pass_leaves_rest_only_on_a_positive_frame(fake):
+    """A rest probe whose link drops before its read pass ends still leaves the rest when the
+    frames it already got show camping on or shore power; with camping off it stays in rest.
+
+    .. test:: A probe cut off after a camping-on or shore frame leaves rest and reconnects; camping off stays
+       :id: T_FW_BLE_REST_DROP
+       :links: R_FW_BLE_REST
+    """
+    poll = 15 * 60000
+    rest = ["restpoll 15", *REST_PRE, *PAIRED, *parked(), "DISCONNECTED 19"]
+    head = [*rest, "tick %d" % (T + poll), "CONNECTED", "ENC_OK", "DISCOVERED 0", "READ 1004 0"]
+    cut = "tick %d" % (T + poll + WARM)
+    shore0 = ["READ 1602 0 " + energy(0), "READ 1302 0", "READ 1102 0"]
+    drops = [
+        [*shore0, "READ 1202 0 " + CAMPING_ON],
+        ["READ 1602 0 " + energy(1)],
+        ["READ 1602 0 " + energy(2)],
+    ]
+    for frames in drops:
+        out = run(fake, *head, cut, *frames, "DISCONNECTED 8", "rest")
+        assert out[-1] == "REST 0 -1" and "LOG session: reconnect in" in "\n".join(out[-4:])
+    out = run(fake, *head, cut, *shore0, "READ 1202 0 " + CAMPING_OFF, "DISCONNECTED 8", "rest")
+    assert out[-1].startswith("REST 1 ")
+
+
 def watched(t0, t1, step=2000):
     """A visible page between session times t0 and t1: a /api/state poll (``viewer``) + a tick every 2 s."""
     out = []
