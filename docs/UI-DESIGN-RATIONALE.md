@@ -13,10 +13,10 @@ It serves two purposes at once:
    a protocol field or a hardware/firmware-imposed interaction. The structure is functional: given
    the same hardware, a limited set of sensible interfaces exists (a compressor fridge needs an
    on/off + a level; a pop-top roof needs open/stop/close; tanks need fresh + waste readouts).
-2. **RE traceability** — the "Trace" column cites the decompiled symbol (`mapping.enigma` name →
-   obfuscated `file:line`) and the `protocol/dictionary.yaml` field each control derives from. This
-   traceability is kept here (and in `ui/screens/*.yaml`), as RE evidence — **by citation, never by
-   reproducing vendor code or artwork**.
+2. **RE traceability** — the "Trace" column names the `protocol/dictionary.yaml` field each
+   control derives from and the app behaviour it mirrors. The exact app symbols are kept in
+   `ui/screens/*.yaml` as RE evidence — **by citation, never by reproducing vendor code or
+   artwork**.
 
 ## Independent vs. hardware-driven — the dividing line
 
@@ -27,7 +27,7 @@ It serves two purposes at once:
 | icons (vendor drawables are **not** committed; neutral placeholders) | control *type* per field (toggle for a bit, slider for a 0–N level) |
 | layout / composition / navigation shell | value ranges + units (from the protocol field width/scale) |
 | — | safety confirmations imposed by the firmware (roof, heater) |
-| — | controls greyed (with the reason) in states the unit refuses: camping master while terminal 15 is on, camping lights/USB while master is off, roof open/close under a blocking InfoPopUp (`tf/a.java n0()`, `ig/c.java j()`), quiet mode while the refrigerator box is off, its timer while on |
+| — | controls greyed (with the reason) in states the unit or the app refuses: camping master while terminal 15 is on, camping lights/USB while master is off, roof open/close under a blocking InfoPopUp (as the app's camping and roof screens do), quiet mode while the refrigerator box is off, its timer while on |
 | — | the vocabulary itself ({term}`Immediate heating` / {term}`Continuous heating`, Manual / Automatic {term}`quiet mode`, {term}`Second battery`, Vehicle power, …) — the unit's own terms, EN + DE |
 
 The vendor's trademarks appear only nominatively, to identify the vehicle the interface controls
@@ -38,15 +38,15 @@ The vendor's trademarks appear only nominatively, to identify the vehicle the in
 Char bases per subsystem are in `docs/hardware.md`; field bit-layout is
 `protocol/dictionary.yaml`; per-feature RE notes are `docs/business-logic/*.md`.
 
-| Screen | Subsystem / `Installed` source | Core widgets → why (functional) | Trace (protocol field · decompile/enigma) |
+| Screen | Subsystem / `Installed` source | Core widgets → why (functional) | Trace (protocol field · app behaviour) |
 |---|---|---|---|
-| Cooler | `cooler` char `1100`/`1102`, `Installed` bit | on/off toggle (compressor is on/off); level slider 1–5 (setpoint is a small enum); quiet-mode toggle + schedule; cooling-timer start + Arm/Cancel | `State`/`Level`/`Mode`/`TimerHourSet`·`TimerMinSet`/`NightTimerHourOn`·`Off` · CoolerViewModel `vf/c.e()`/`g()` |
-| Camping mode | `campingmode` char `1200`/`1202` (always shown — `Installed` decoded but not wired, mirrors the app) | master toggle (greyed while terminal 15 is on — the unit refuses camping while not stationary); one combined lighting toggle + USB toggle (each an on/off load), both greyed until master is on | `State`/`InteriorLight`/`OutsideLight`/`UsbCharger`/`Enable`(=terminal 15) · `tf/a.java` (`b4()` StateFlow hardcodes visibility TRUE; `n0()` ignition gate) |
-| Lighting | `lighting` char `1500`/`1502`, `Installed` bit | per-zone brightness sliders (each zone is a 0–10 enum); profile selection | `BrightnessLOne…LOneSix`/`ProfileNumber`/`LightValue` · `eg/a.java`, brightness enum `dg/i.java` |
+| Cooler | `cooler` char `1100`/`1102`, `Installed` bit | on/off toggle (compressor is on/off); level slider 1–5 (setpoint is a small enum); quiet-mode toggle + schedule; cooling-timer start + Arm/Cancel | `State`/`Level`/`Mode`/`TimerHourSet`·`TimerMinSet`/`NightTimerHourOn`·`Off` · the app's cooler view model |
+| Camping mode | `campingmode` char `1200`/`1202` (always shown — `Installed` decoded but not wired, mirrors the app) | master toggle (greyed while terminal 15 is on — the unit refuses camping master ON while driving); one combined lighting toggle + USB toggle (each an on/off load), both greyed until master is on | `State`/`InteriorLight`/`OutsideLight`/`UsbCharger`/`Enable`(=terminal 15) · the app's camping screen (always visible; its master switch greyed on ignition) |
+| Lighting | `lighting` char `1500`/`1502`, `Installed` bit | per-zone brightness sliders (each zone is a 0–10 enum); profile selection | `BrightnessLOne…LOneSix`/`ProfileNumber`/`LightValue` · the app's lighting screen and its brightness enum |
 | Water | `water` char `1300`/`1302`, `Installed` bit | separate fresh + waste readouts (two independent tank sensors) — read-only | `Level`/`Volume` (fresh + waste) · water decode notes, `docs/business-logic/value-freshness.md` |
-| Energy | `energy` char `1600`/`1602`, `Installed` bit | battery/DC-DC/shore/solar readouts; charge-mode select (firmware exposes a mode enum) | `EnergyModeSet` + battery/current fields · `xf/d.d4()`, `pg/a.java` |
-| Air heater | `airheater` char `1700`/`1702`, `Installed` bit | power toggle; heating-level slider; timer/runtime (firmware exposes level + timer) | `NormalOperation`/`HeatingLevel`/timer fields · `rf/b.java` |
-| Roof (pop-top) | `roof` char `1400`/`1402`, live `Installed=1` | hold-to-move open / stop / close (firmware is press-and-hold with a dead-man safety counter; release anywhere = STOP) + **safety confirmation**; open/close greyed under a blocking `InfoPopUp` (1/4/5/7/10/11 or Position 15 — sensor_error 6 only warns), STOP never greyed | direction bytes open `0x01`/stop `0x00`/close `0x04`, SafetyCounter, `InfoPopUp` · `ig/c.java` `n2()`, `j()` movable-check, `w8/a`+`b1/d` |
+| Energy | `energy` char `1600`/`1602`, `Installed` bit | battery/DC-DC/shore/solar readouts; charge-mode select (firmware exposes a mode enum) | `EnergyModeSet` + battery/current fields · the app's energy setter and charging screen |
+| Air heater | `airheater` char `1700`/`1702`, `Installed` bit | power toggle; heating-level slider; timer/runtime (firmware exposes level + timer) | `NormalOperation`/`HeatingLevel`/timer fields · the app's air-heater view model |
+| Roof (pop-top) | `roof` char `1400`/`1402`, live `Installed=1` | hold-to-move open / stop / close (firmware is press-and-hold with a dead-man safety counter; release anywhere = STOP) + **safety confirmation**; open/close greyed under a blocking `InfoPopUp` (1/4/5/7/9/10/11 or Position 15 — sensor_error 6 only warns), STOP never greyed | direction bytes open `0x01`/stop `0x00`/close `0x04`, SafetyCounter, `InfoPopUp` · the app's roof screen (its movable check) and its SafetyCounter engine |
 
 **Not-installed subsystems** (stairs, roof-A/C, satellite, living-room heater on the reference van)
 have `Installed=0` and are hidden — their screens exist as specs only, never rendered.
@@ -55,7 +55,7 @@ have `Installed=0` and are hidden — their screens exist as specs only, never r
 
 Explanations do not live on the screens: a screen shows its values plus short status hints
 ("🕒 measured 3 min ago", a ⚠ alert from the unit). The *why* is one tap away, in the screen's
-**⋮ → Help** sheet (#314). The served web UI (`calictl/webui/`, also bundled into the ESP32
+**⋮ → Help** sheet. The served web UI (`calictl/webui/`, also bundled into the ESP32
 satellite) keeps all help text in one table, `HELP` in `app.js` (English), with the German text in
 `strings.de.js` under the same key. Each sheet links to the page below that carries the evidence:
 

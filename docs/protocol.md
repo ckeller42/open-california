@@ -27,7 +27,7 @@ unit's own `0x2901` descriptors label every pair "Control"/"State".
 | 1300 | FRESH_WATER (tank) | 2000 | ROOF_AIR_CONDITION |
 | 1400 | ROOF (pop-top) | 2100 | LIVING_ROOM_HEATER |
 | 1500 | **INTERIOR LIGHTING** (per-zone brightness/color/profile) | 1600 | ENERGY (battery/solar/DC-DC/shore) |
-| f000 | generic Read/Write (OTA?) | | |
+| f000 | generic Read/Write | | |
 
 > Note on 1500: command enum (`SET_BRIGHTNESS`/`SET_COLOR`/`SET_PROFILE`/`PREVIEW`/
 > `SYSTEM_TIME`/`WAKEUP_TIME`) + control fields `Mode, Timestamp, LightValue,
@@ -44,20 +44,22 @@ chosen by state-field overlap.
 
 Per field it emits: **name, bit offset, width, default, raw_range** (`0..2^w-1`).
 Control offsets come from each `f()`; state offsets from each `e()` (`subList`).
-A field placed differently across a shared model's two branches is flagged
-`offset: MERGED_AMBIGUOUS` rather than guessed; every such offset calictl uses is placed in
-`calictl/overrides.py` from the app's frame builder (the generated views show it as "(override)").
+A field placed differently across a shared model's two branches gets an {term}`ambiguous offset`
+rather than a guess; every such offset calictl uses
+is placed in `calictl/overrides.py` from the app's frame builder (the generated views show it as
+"(override)").
 A `command_enums:` section lists the app's command vocabularies (e.g. lighting's
 `SET_BRIGHTNESS`/`SET_COLOR`/`SET_PROFILE`) for `Mode`-style value semantics;
-elsewhere the extractor writes `value_semantics: UNVERIFIED` — its default, not a verification
-verdict: what is verified, and how, is the [signal catalog](protocol/signal-matrix.md).
+elsewhere the extractor leaves `value_semantics` at its unverified default, which is not a
+verification verdict: what is verified, and how, is the [signal catalog](protocol/signal-matrix.md).
 
 **Reproduce**: the decompile pipeline (apkeep → dex → jadx) + the enigma name-map are kept in a
 private own-vehicle-RE repo (they analyse the VW-copyrighted app locally); this repo ships the
 RESULT (`protocol/dictionary.yaml`). Regenerate the {term}`dictionary` from local decompiled sources with
 `python3 tools/extract_protocol.py <sources> protocol/dictionary.yaml`. The
 dictionary-driven frame builder is `calictl.protocol.encode` + `calictl/control.py`
-(they refuse to build when a required field is `MERGED_AMBIGUOUS`/`UNKNOWN`).
+(`encode` raises for a control field with no placed offset whose name is absent from `values`;
+it packs only placed fields).
 
 ## Frame format
 
@@ -82,10 +84,10 @@ The per-feature recipes live in
 per-feature status). Two rules hold for every control frame:
 
 - **Never write a whole frame of model defaults** (e.g. `fd770f1e3e1f`). It carries out-of-range
-  and conflicting action values; the unit ignored power and stored stray bytes. A control frame
+  and conflicting action values: the unit ignores the power request and stores the stray bytes. A control frame
   carries the app's leave-unchanged values in every untargeted field (2-bit fields `3`, cooler
-  `Level`/`Mode` 7, timer 30/62, night hours 31; ruling R1), exactly as the app sends them. The real
-  app's frames are byte-identical on the real unit (CAPTURE 2026-10-10). The one exception is the
+  `Level`/`Mode` 7, timer 30/62, night hours 31), exactly as the app sends them. The real app's
+  frames, captured on the real unit, are byte-identical. The one exception is the
   cooler's night hours, which carry the live schedule (the unit takes them literally).
   `calictl/control.py` builds it that way.
 - Cooler power and level are **live-actuation-verified**, armed by the `1003` heartbeat. For the

@@ -427,24 +427,26 @@ class CamperDevice:
 
     async def read_all(self, funcs: dict) -> dict[str, bytes]:
         """One session: read every function's state characteristic, under a live 1003 heartbeat
-        so the link holds and the re-read chars refresh.
+        that mirrors the app's session-long liveness.
 
         :param funcs: the loaded function table (name -> Function with ``state_char``).
         :returns: ``{function_name: raw_bytes}``; functions with no state char (or whose read
             failed) are omitted.
 
-        The 1003 liveness heartbeat keeps the link alive (dropped after ~15 s otherwise) and
-        refreshes the chars the app re-reads — the app ticks it continuously the whole time it is
-        connected, not only for actuation. So this runs the same ``_heartbeat`` for the duration of
-        the read (with a short warm-up), all within the one session held under the ``serve`` BLE
-        lock. It does NOT refresh water: that latch is measurement-gated (water system powered) and
+        calictl runs the 1003 liveness heartbeat for the duration of the read (with a short
+        warm-up), all within the one session held under the ``serve`` BLE lock; the app beats
+        ``1003`` while it is connected and in the foreground, starting after its first reads. A read right at
+        connect returns the same values as one after the heartbeat ran (evidence ledger,
+        2026-10-22), so the heartbeat does not refresh read values; whether the unit drops a link
+        without it is not settled. It does NOT refresh water: that latch is measurement-gated (water system powered) and
         guarded in ``freshness.py`` (``R_WATER_STALE_GUARD``); see ``value-freshness.md``.
 
-        .. req:: read_all keeps the link and re-read chars fresh with a live 1003 heartbeat
+        .. req:: read_all runs the 1003 liveness heartbeat while reading
             :id: R_READ_HEARTBEAT_REFRESH
 
-            The poll must run the 1003 liveness heartbeat while reading, so the link stays up and
-            the re-read chars refresh — otherwise the link is dropped mid-cycle. (Water freshness
+            The poll must run the 1003 liveness heartbeat while reading, so the link stays
+            armed (the app also beats while connected, starting after its first reads). It does not make the read values
+            fresher (a read at connect equals one after the heartbeat). (Water freshness
             is out of the heartbeat's reach; the stale-guard lives in ``freshness.py``.)
         """
         client = await self._session()

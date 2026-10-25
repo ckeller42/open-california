@@ -177,8 +177,8 @@ hardware on these points (the full list is in {doc}`simulation-and-testing`):
 
 - **Roof motion is modelled on the real app's capture, not on calictl's own drive.** The 1402
   sequence and timings (pre-open checklist `0302`, `030c`→`230c`, `2308`→`1300`/`0300`, `2303`→`2300`,
-  ~28 s open / ~23 s close, `ROOF_*` constants) follow the real unit under the real app (CAPTURE
-  2026-10-10); the ~3 s withhold of a freshly validated counter (`ROOF_WITHHOLD_S`) is still
+  ~28 s open / ~23 s close, `ROOF_*` constants) follow the real unit as captured under the real
+  app; the ~3 s withhold of a freshly validated counter (`ROOF_WITHHOLD_S`) is still
   semi-verified, and calictl has never driven the real motor.
 - **"Driving" is an explicit flag** (`driving`), not a derived predicate — the real "vehicle is
   stationary" condition is still unknown.
@@ -189,7 +189,7 @@ hardware on these points (the full list is in {doc}`simulation-and-testing`):
   all lives in the Bumble peripheral layer.
 - **Alert codes** (`InfoPopUp`, `ErrorCode` and the like) change only when a test or the FIFO
   console sets them; their real causes are not modelled.
-- **Known fake-peripheral bug (#228):** a fresh pair against a *just-rotated* fake can fail its key
+- **Known fake-peripheral bug:** a fresh pair against a *just-rotated* fake can fail its key
   exchange. Restart the fake before a fresh pair; the app lab README's "Surviving a restart" section
   covers the related reconnect-to-a-restarted-fake caveat.
 

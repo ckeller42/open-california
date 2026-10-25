@@ -27,7 +27,8 @@ map, and the downstream consumers Home Assistant and Grafana.
 ## 2. Constraints
 
 - **`hci0` on the Pi is shared with other readers** — `serve` is the single BLE owner on the Pi, holds one link to the unit, and an `asyncio.Lock` serialises all access. The unit itself accepts several centrals at once
-- **The unit expects every central to answer its ATT Exchange MTU Request** — it sends one on connect and drops the link (HCI `0x13`) when it is unanswered for 30 s. A {term}`held link <Persistent session>` without heartbeats is not dropped
+- **The unit expects every central to answer its ATT Exchange MTU Request** — it sends one on connect and drops the link (HCI `0x13`) when it is unanswered for 30 s
+- **With camping mode off, the unit does not hold a link** — it ends every central's link about 30 s after encryption, and cuts a link that starts less than 6 s after the previous one ended. With camping mode on, links hold
 - **Runtime `calictl/*` imports only the standard library at import time** — The suite runs with no BLE or MQTT installed. `bleak`, `paho`, `influxdb_client` and `yaml` import lazily
 - **The BLE codec is MSB-first and control frames are full-packet** — That is how the unit and the vendor app behave. Every field is resent, and unchanged fields carry the {term}`leave-unchanged sentinel <Sentinel>`
 - **No vendor material in the repository** — The APK, decompiled sources and manuals are never committed. VW material appears as citations only
@@ -67,7 +68,7 @@ flowchart TB
   idb --> graf
   classDef person fill:#08427b,color:#fff,stroke:#052e56
   classDef system fill:#1168bd,color:#fff,stroke:#0b4884
-  classDef ext fill:#999,color:#fff,stroke:#6b6b6b
+  classDef ext fill:#999999,color:#fff,stroke:#6b6b6b
   class owner person
   class sys,esp system
   class unit,app,ha,graf,idb ext
@@ -103,7 +104,7 @@ installed on the reference van, so they are verified statically only.
 - **Safe actuation** — Control frames are built by `control.BUILDERS`, validated by `protocol.encode` against bit widths and curated ranges, and written under the single BLE lock while the `1003` heartbeat ticks. Readback is a write-through echo, so it is never reported as proof.
 - **One BLE owner** — One daemon (`serve`) owns the connection. The web UI, MQTT and InfluxDB are sinks inside that process.
 - **Absent unit** — `serve` persists the last state with an "as of" timestamp, and the UI shows an amber "van asleep" banner (a red "not reachable" one only when calictl or the satellite itself stops answering for 15 s, `R_UI_LINK_STATE`). `freshness` holds the last plausible value for measurement-gated fields such as water.
-- **Evidence over assertion** — Every protocol claim carries a verification tier (DEVICE, CAPTURE, DECOMPILE, UNVERIFIED) in the evidence ledger.
+- **Evidence over assertion** — Every protocol claim carries a verification tier in the evidence ledger, from watched on the real unit, through captured on the wire, down to read from the app's code only or not yet verified.
 
 ## 5. Building block view
 
@@ -138,7 +139,7 @@ flowchart TB
   tools -.->|fake peripheral replaces the unit in tests| daemon
   classDef person fill:#08427b,color:#fff,stroke:#052e56
   classDef container fill:#438dd5,color:#fff,stroke:#2e6295
-  classDef ext fill:#999,color:#fff,stroke:#6b6b6b
+  classDef ext fill:#999999,color:#fff,stroke:#6b6b6b
   class owner person
   class daemon,webui,cli,esp,tools container
   class unit,mqtt,ha,idb,graf ext
@@ -239,9 +240,9 @@ One daemon (`serve.py`) owns buspi's BLE link to the unit and drives that pipeli
 
 1. **`device.py` — the BLE owner.** Holds buspi's one link to the unit (an `asyncio.Lock`), reads
    each characteristic's raw frame, and ticks the `1003` liveness heartbeat, which arms control
-   writes (a held link without it is not dropped). Water is measurement-gated, not heartbeat-driven:
+   writes. Water is measurement-gated, not heartbeat-driven:
    the unit reports 1 L whenever it is {term}`not measuring <Water latch>`, and `freshness.py` holds the last good
-   reading. Nothing else on buspi opens a second BLE connection.
+   reading until a new level has settled. Nothing else on buspi opens a second BLE connection.
 2. **`protocol.py` — the codec.** Decodes a raw frame into a field dict using the bit layout in
    `protocol/dictionary.yaml` (MSB-first), and encodes control frames the same way. `overrides.py`
    carries the few manual bit offsets the extractor cannot derive.
@@ -256,7 +257,7 @@ One daemon (`serve.py`) owns buspi's BLE link to the unit and drives that pipeli
 Supporting the daemon: `session.py` (a supervisor that holds the BLE link while the UI is active and
 releases it when idle; a roof move or STOP runs inside a live session with its `1003` heartbeat
 ticking, as the app's does, and never warms the session first — with none up it opens its own
-connection; not yet device-verified), `observer.py` / `automation.py` (passive camping observer + auto-camper),
+connection; the roof path is not yet device-verified), `observer.py` / `automation.py` (passive camping observer + auto-camper),
 `firmware.py` / `anchors.py` (firmware-drift capture + plausibility checks), `freshness.py`
 (stale-read handling).
 
@@ -267,7 +268,7 @@ ESP32-S3 (M5Stack {term}`CoreS3 <Satellite>`) satellite that pairs with the camp
 reads its state without going through buspi at all. It reuses the *design*, not the Python code —
 `calictl/pairing.py`'s state machine is ported to platform-free C (`firmware/components/cali_core`)
 against the same golden vectors, and the frame codec is the same generated C already used for
-codec parity (`csrc/`, issue #156) — so the {term}`dictionary` stays the single source of truth for both
+codec parity (`csrc/`) — so the {term}`dictionary` stays the single source of truth for both
 consumers. It writes the same control frames as calictl for five functions — cooler, camping mode,
 lighting, air heater, energy — generated from `calictl/control.py` (`csrc/control_consts.h`) and
 held byte-identical by golden vectors (`tests/vectors/control.json`, a C twin in
@@ -275,14 +276,14 @@ held byte-identical by golden vectors (`tests/vectors/control.json`, a C twin in
 other write is the `1003` heartbeat. The roof is refused ("Only via buspi or the app"); the wake-up
 light is set with the web page's clock (`local_now`) and the unit's own latched config. The read
 side and the control path are proven on a Linux host build against a fake unit, in QEMU, and on a
-real CoreS3 against the Bumble mock unit, and the satellite has been bonded to the real camper unit
-since 2026-10-08 (paired while buspi stayed connected): it sends calictl's frames for the cooler,
-camping mode, lighting, air heater and energy mode (device-verified on the real unit so far: cooler,
-wake-up light and {term}`door contact`), runs the same water guard as calictl, and answers a
-write whose link dropped after the frame went out as *unconfirmed* (#271). It holds its link while
-the van is parked: the unit's ATT MTU request is answered since NimBLE keeps its {term}`GATT server`
-(#279), so #266's paced reconnect was removed: a dropped link takes the 1 s→60 s backoff. It
-also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
+real CoreS3 against the Bumble mock unit, and the satellite is bonded to the real camper unit
+alongside buspi. Like the app, it subscribes and reads only the functions of the unit's vehicle
+variant. It sends calictl's frames for the cooler, camping mode, lighting, air heater and energy
+mode (live-verified on the real unit so far: cooler, lighting, wake-up light and
+{term}`door contact`), runs the same water guard as calictl, and answers a write whose link
+dropped after the frame went out as *unconfirmed*. It holds its link while the van is parked
+with camping mode on, because its NimBLE keeps a {term}`GATT server` that answers the unit's ATT
+MTU request; a dropped link reconnects with a 1 s→60 s backoff, never sooner than 7 s. It also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
 then it serves the calictl UI at `/` in every WiFi mode (with Device status, Satellite settings and, over the hotspot, a WiFi-setup screen), a minimal WiFi recovery page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
 from `http://calictl-esp.local` — the same platform-free C (`wifi_sm`/`wifi_run`/`http_core`/`web`)
 on the host tier, where a scripted fake WiFi stands in for the radio, and on the chip. In station mode
@@ -341,11 +342,11 @@ flowchart LR
 `control.py` builds a **full-packet** frame — every field is resent, and every field the command does
 not target carries the app's own leave-unchanged value (2-bit fields `3`, lighting zones `14`, and so
 on), so the frame equals the one the vendor app sends. The unit's current state is not copied into
-it, with one exception: the cooler's night-schedule hours, which the unit takes literally. (Writing
-*unrelated* defaults once sent a garbage command; the leave-unchanged value is what the unit
+it, with one exception: the cooler's night-schedule hours, which the unit takes literally. (A frame
+of the model's plain defaults is a garbage command; the leave-unchanged value is what the unit
 ignores.) `protocol.encode` validates each value against its bit-width and a curated semantic range
 before anything is written. `device.actuate` then writes the frame while the `1003` heartbeat ticks —
-the firmware's arm gate (issue #2). Actuation is **one-shot arm**: the load {term}`latches <Latch>`, so the heartbeat
+the firmware's arm gate. Actuation is **one-shot arm**: the load {term}`latches <Latch>`, so the heartbeat
 only needs to span the write window:
 
 ```mermaid
@@ -438,7 +439,7 @@ only the camper-unit part.
   - *How it works:* Interpretation is not auto-checked. A field whose app getter is inverted or combined is verified against the app's getter and the unit's own screen, never a naive `bool(field)`.
   - *Where:* [signals notes](https://ckeller42.github.io/open-california/business-logic/signals.html)
 - **Evidence tiers**
-  - *How it works:* Each claim is tagged DEVICE, CAPTURE, DECOMPILE or UNVERIFIED. A buildable command without a tier row fails CI, and so does an uncited app recording.
+  - *How it works:* Each claim is tagged with how it was verified: watched on the device, captured on the wire, read from the app's code, or not yet verified. A buildable command without a tier row fails CI, and so does an uncited app recording.
   - *Where:* [evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)
 - **Control safety**
   - *How it works:* {term}`Full-packet` frames, width and range validation in `protocol.encode`, preconditions per command, a single lock, and an applied-check that treats readback as an echo.
@@ -490,9 +491,9 @@ The steps (catalog → `semantics` → dashboard + Home Assistant → audit) liv
   second connection from the daemon path; the loop-created `asyncio.Lock` serializes `poll` and
   `on_command`, so a control write never races a poll.
 - **The BLE codec is MSB-first**, and control frames are full-packet (resend every field).
-- **Evidence over assertion.** Tag every protocol claim by how it was verified — DEVICE (watched on
-  hardware) / CAPTURE (on the wire) / DECOMPILE (from the app) / UNVERIFIED — and never put a unit on
-  an unverified scale. The [`evidence-ledger.md`](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html) is the
+- **Evidence over assertion.** Tag every protocol claim by how it was verified — watched on
+  hardware, captured on the wire, read from the app's code, or not yet verified — and never put a
+  unit on an unverified scale. The [`evidence-ledger.md`](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html) is the
   running record.
 
 ## 9. Architecture decisions
@@ -505,15 +506,15 @@ summarised below. Each cites the requirements it is traced to.
   - *Context:* The Pi's adapter is shared with other readers. The unit serves several centrals at once, so the rule is about the Pi, not the unit.
   - *Consequence:* A lock created inside the running loop serialises poll and command, and no other code path on the Pi may open a connection.
   - *Requirement:* `R_PERSISTENT_SESSION`, `R_SESSION_SUPERVISOR`
-- **Control writes are armed by a one-shot `1003` heartbeat** (issue 2, 2026-07-07)
-  - *Context:* Writes were ignored until a liveness counter was ticking. The load latches once armed.
+- **Control writes are armed by a one-shot `1003` heartbeat**
+  - *Context:* The unit ignores control writes unless a liveness counter ticks. The load latches once armed.
   - *Consequence:* The heartbeat only spans the write window. A roof move ticks it through the whole move. See [control and actuation](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html).
   - *Requirement:* `R_ACTUATE_ARM`, `R_ROOF_ACTUATE`
-- **Control frames follow the vendor app byte for byte** (ruling R1, 2026-10-06)
-  - *Context:* calictl once re-asserted current values in untargeted cooler fields, which differs from the app.
+- **Control frames follow the vendor app byte for byte**
+  - *Context:* Copying the unit's current values into untargeted fields would differ from what the app sends.
   - *Consequence:* Untargeted fields carry the leave-unchanged value, and the recording replay compares whole frames.
   - *Requirement:* `R_COOLER_APP_FRAMES`
-- **The ESP satellite is a second implementation, not a port of the runtime** (2026-10-06)
+- **The ESP satellite is a second implementation, not a port of the runtime**
   - *Context:* A satellite should work without buspi, next to it on the same unit, but must not drift from calictl.
   - *Consequence:* It shares the dictionary, generated constants and golden vectors, writes through one allow-list, never drives the roof, and writes only in station mode. See [firmware](https://ckeller42.github.io/open-california/firmware.html).
   - *Requirement:* `R_FW_CONTROL_TWIN`, `R_FW_WRITE_ALLOWLIST`, `R_FW_CONTROL_API`
@@ -565,10 +566,10 @@ what each job proves is in [simulation and testing](https://ckeller42.github.io/
 
 - **The roof motor has never been driven by calictl**
   - *Impact:* A protocol-correct path that has not moved real hardware. The unit withholds the motor for about 3 seconds until its safety counter validates.
-  - *Status:* Open. First owner-watched drive is tracked as issues 157 and 230.
+  - *Status:* Open. The first drive needs the owner watching at the van.
 - **The guided pairing wizard is not confirmed on the real unit from buspi**
-  - *Impact:* The wizard is CI-verified, and the satellite bonded to the real unit, but buspi's wizard has not paired the real unit yet. How the unit answers a stale key is unknown. The control frames themselves are confirmed: the real app's cooler (incl. `State=3`), lighting and camping frames are byte-identical to calictl's (2026-10-10).
-  - *Status:* Open, issues 157 and 230.
+  - *Impact:* The wizard is CI-verified, and the satellite bonded to the real unit, but buspi's wizard has not paired the real unit yet. How the unit answers a stale key is unknown. The control frames themselves are confirmed: the real app's cooler (incl. `State=3`), lighting and camping frames are byte-identical to calictl's.
+  - *Status:* Open. Needs an owner-watched session at the van.
 - **Some values are checked against the app's code only**
   - *Impact:* Every scale is resolved. Temperatures and the state-of-charge are deliberately
     unit-less: they are coarse levels — the app never converts them either. Three values come from
@@ -584,7 +585,7 @@ what each job proves is in [simulation and testing](https://ckeller42.github.io/
   - *Status:* Mitigated by the polarity procedure and the on-screen ground truth.
 - **Water readings can be a stale latch**
   - *Impact:* The unit reports 1 L whenever it is not measuring, and ramps from 1 L to the real value in about 4 seconds once it measures.
-  - *Status:* Mitigated. The guard holds the last good reading and was narrowed to the 1 L latch (#274), on buspi and the satellite. A debounce for the ramp is in progress.
+  - *Status:* Mitigated, on buspi and the satellite. The guard holds the last good reading against the 1 L latch, and adopts a new level only after it has held for 5 seconds, so a read during the ramp is not published.
 - **Grafana dashboards do not update on their own**
   - *Impact:* A new signal can be missing from the dashboards.
   - *Status:* A reminder hook and the push script. Still a manual step.
