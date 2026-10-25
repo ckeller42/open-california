@@ -1118,7 +1118,7 @@ function backendName() {
   return "calictl (" + (/^[\d.:[\]]+$/.test(h) ? h : h.split(".")[0]) + ")";
 }
 
-/** @type {Record<string, [string, string]>} */
+/** @type {Record<ReturnType<typeof linkState>, [string, string]>} every link state (tsc checks the set) */
 const LINK_PILL = { live: ["live", "ok"], asleep: ["offline", "warn"], never: ["offline", "warn"],
   unpaired: ["not paired", ""],
   connecting: ["connecting…", ""], unreachable: ["unreachable", "error"],
@@ -2078,9 +2078,10 @@ const SAT_CLOCK = { synced: "synced (SNTP) · boot {boot}", waiting: "not synced
   none: "no source · boot {boot}", unit: "from the camper unit · boot {boot}" };
 
 // The camper unit's connection, in linkState()'s words (the pill + banner): online / asleep / not paired
-/** @type {Record<string, string>} */
+/** @type {Record<ReturnType<typeof linkState>, string>} every link state (tsc checks the set) */
 const LINK_WORD = { live: "online", asleep: "asleep", never: "asleep", unpaired: "not paired",
-  connecting: "connecting…", unreachable: "unreachable", satellite: "🛰 Satellite mode", rest: "power saving" };
+  connecting: "connecting…", unreachable: "unreachable", satellite: "🛰 Satellite mode", rest: "power saving",
+  redial: "reconnecting…" };
 
 /** A Device-status card: its heading names the device (UX review 3.2: one card per device).
  * @param {string} title @returns {HTMLElement} */

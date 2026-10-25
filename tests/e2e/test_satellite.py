@@ -885,6 +885,24 @@ def test_planned_redial_is_quiet(stub, error_gated_page, locale, pill):
         expect(pg.locator("#conn.connecting")).to_be_visible()
 
 
+@pytest.mark.parametrize(
+    "locale, title, label, word",
+    [
+        ("en-US", "Device status", "Connection", "reconnecting…"),
+        ("de-DE", "Gerätestatus", "Verbindung", "verbinde neu…"),
+    ],
+)
+def test_device_status_names_the_planned_redial(stub, error_gated_page, locale, title, label, word):
+    """Device status → Camper unit → Connection uses the pill's word for the planned redial."""
+    stub.fixtures["satellite"]["/api/state"]["device"]["link"].update(
+        up=False, ready=False, redial=True, last_snap_age_ms=31000
+    )
+    with error_gated_page(stub.base + "/#devicestatus", locale=locale) as pg:
+        expect(pg.locator("#title")).to_have_text(title)
+        unit = pg.locator("#app .card").first
+        expect(_row(unit, label)).to_contain_text(word)
+
+
 def test_input_is_reported_at_most_every_30_s(stub, error_gated_page):
     """User input (pointer or key) posts ``/api/ble {"active":true}``, at most once per 30 s, and the
     page's deliberate polls (page load, back to visible) ask ``/api/state?seen=1``: the satellite's
@@ -904,7 +922,12 @@ def test_input_is_reported_at_most_every_30_s(stub, error_gated_page):
         # a forced refresh while a plain poll is on the wire: the next poll still says seen
         held = []
         pg.route("**/api/state", lambda r: held.append(r))
-        pg.wait_for_function("() => polling")
+        # a poll already on the wire when the route went in is not held: wait for one that is
+        for _ in range(60):
+            if held:
+                break
+            pg.wait_for_timeout(100)
+        assert held and pg.evaluate("polling")
         pg.evaluate("refreshState(true)")
         n = len(urls)
         held[0].continue_()

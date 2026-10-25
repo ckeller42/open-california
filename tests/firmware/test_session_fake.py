@@ -1016,6 +1016,46 @@ def test_a_reconnect_out_of_rest_that_never_reaches_the_unit_rests_again(fake):
     assert out[-1] == "REST 0 -1"
 
 
+def test_a_refused_connect_out_of_rest_rests_again_once_nobody_looks(fake):
+    """R_FW_BLE_VIEWER_KEEP: the back-to-rest rule also covers a connect the transport refuses at once
+    (``connect_bonded`` returns an error, no event follows): while the viewer looks the backoff goes
+    on; the first refusal after it left re-enters the rest.
+
+    .. test:: A refused connect out of rest rests again once no viewer looks
+       :id: T_FW_BLE_VIEWER_REFUSED
+       :links: R_FW_BLE_VIEWER_KEEP
+    """
+    left = [*REST_PRE, *PAIRED, *parked(), "DISCONNECTED 19", "tick %d" % (T + 7000), "input %d" % (T + 7000)]
+    left += ["fail connect_bonded", "tick %d" % (T + 7100), "rest"]
+    out = run(fake, *left)
+    assert "LOG session: connect_bonded failed -1" in out and out[-1] == "REST 0 -1"  # the viewer looks
+    asleep = [x for t in range(T + 8000, T + 30001, 1000) for x in ("fail connect_bonded", "tick %d" % t)]
+    out = run(fake, *left, *asleep, "rest")  # every connect refused at once
+    assert "LOG session: power-save rest on (unreachable)" in out and out[-1].startswith("REST 1 ")
+
+
+def test_mode_off_clears_the_planned_redial(fake):
+    """R_FW_BLE_VIEWER_KEEP: mode off cancels the pending reconnect, so ``redial`` goes false too
+    (/api/state never reports a redial that is not planned).
+
+    .. test:: Mode off clears the redial flag with the reconnect
+       :id: T_FW_BLE_VIEWER_OFF
+       :links: R_FW_BLE_VIEWER_KEEP
+    """
+    out = run(
+        fake,
+        *REST_PRE,
+        *PAIRED,
+        *parked(),
+        "input %d" % T,
+        "DISCONNECTED 19",
+        "redial",
+        "> ble mode off",
+        "redial",
+    )
+    assert [line for line in out if line.startswith("REDIAL")] == ["REDIAL 1", "REDIAL 0"]
+
+
 def test_rest_left_on_an_up_link_takes_the_ordinary_backoff_later(fake):
     """R_FW_BLE_VIEWER_KEEP: the "back to rest when unreachable" rule only covers a reconnect that
     never brought a link up. A rest probe whose read shows camping on ends the rest with its link up;

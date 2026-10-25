@@ -401,6 +401,16 @@ static void schedule_reconnect(void) {
 
 /* The link is unusable (for a reason already logged): drop it and try again later. why/status: the
  * link_down event's reason (a transport status, else 0). */
+/* A reconnect out of rest that never got a link up (the unit deep-sleeps: connects fail, are refused
+ * or time out) and nobody looks any more: back to rest, not an endless backoff. 1 = rests again. */
+static int rest_again(void) {
+    if (!s_rest_left || !s_active || s_mode == CALI_BLE_OFF || cali_ctl_busy() || !rest_conditions() ||
+        viewer_active(s_now))
+        return 0;
+    rest_set(1, "unreachable");
+    return 1;
+}
+
 static void link_lost(const char *why, int status) {
     int was = s_link;
     s_redial = 0;   /* each loss decides again: only the power-save hang-up below is a planned redial */
@@ -409,13 +419,8 @@ static void link_lost(const char *why, int status) {
     s_why_st = status;
     link_clear();
     if (was != LINK_DOWN) (void)s_t->disconnect();   /* may be down already: silent either way */
-    /* a reconnect out of rest that never got a link up (the unit deep-sleeps: connects fail or time
-     * out) and nobody looks any more: back to rest, not an endless backoff */
-    if (s_rest_left && s_active && s_mode != CALI_BLE_OFF && !cali_ctl_busy() && rest_conditions() &&
-        !viewer_active(s_now)) {
-        rest_set(1, "unreachable");
-    } else if (s_active && s_mode != CALI_BLE_OFF && strcmp(why, "disconnected") == 0 && peer_hangup(status) &&
-               !cali_ctl_busy() && rest_conditions()) {   /* a command in flight waits for its reconnect */
+    if (!rest_again() && s_active && s_mode != CALI_BLE_OFF && strcmp(why, "disconnected") == 0 &&
+        peer_hangup(status) && !cali_ctl_busy() && rest_conditions()) {   /* a command in flight waits for its reconnect */
         if (viewer_active(s_now)) {   /* someone looks: redial after the cooldown, the backoff never grows */
             s_redial = 1;
             s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
@@ -704,8 +709,10 @@ static void connect_now(void) {
         s_connect_started = s_now;
     } else {
         cali_log("session: connect_bonded failed %d", rc);
+        s_redial = 0;   /* trouble, not the plan */
         if (s_probe) probe_end(0, "connect_fail");
-        schedule_reconnect();
+        (void)rest_again();
+        schedule_reconnect();   /* nothing in rest */
     }
 }
 
@@ -784,6 +791,7 @@ void cali_session_tick(uint64_t now_ms) {
         s_reconnect_pending = 0;
         if (!s_t->has_bond()) {
             s_active = 0;
+            s_redial = 0;
             return;
         }
         connect_now();
@@ -800,6 +808,7 @@ int cali_session_set_mode(int mode, const char *why) {
     if (mode == CALI_BLE_HOLD) s_hb_since = s_now;   /* quiet -> hold: re-arm (cali_session_ready) */
     if (mode == CALI_BLE_OFF) {
         s_reconnect_pending = 0;
+        s_redial = 0;   /* no reconnect is planned any more */
         if (s_link != LINK_DOWN && !s_probe) {
             s_why = "ble_off";
             s_why_st = 0;
