@@ -1002,8 +1002,8 @@ never emits out-of-range values. See
 :links: R_READ_HEARTBEAT_REFRESH, R_READ_RETRY_SHARED, R_READ_LAST_FRAME_WINS, R_WATER_STALE_GUARD
 
 **Contract.** A cold per-op read ({py:meth}`calictl.device.CamperDevice.read_all`) follows the
-app's order, subscribe and then read, under the `1003` heartbeat (the app ticks it for its
-whole connection):
+app's order, subscribe and then read. calictl starts the `1003` heartbeat before it reads; the
+app starts its heartbeat after its first reads and beats while connected:
 
 * Connect, then subscribe-all with a sink. There are no `1001`/`1004` reads on this path.
 * Start the heartbeat (0.6 s) and wait `CALICTL_HEARTBEAT_WARMUP_S` (2 s).
