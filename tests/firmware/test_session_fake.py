@@ -871,6 +871,120 @@ def test_rest_poll_reads_once_and_drops_the_link(fake):
     assert out[-1] == "REST 1 -1"
 
 
+def watched(t0, t1, step=2000):
+    """A visible page between session times t0 and t1: a /api/state poll (``viewer``) + a tick every 2 s."""
+    out = []
+    for t in range(t0, t1 + 1, step):
+        out += ["viewer %d" % t, "tick %d" % t]
+    return out
+
+
+def test_a_viewer_keeps_redialling_after_the_power_save_hang_up(fake):
+    """R_FW_BLE_VIEWER_KEEP: with a page polling (a viewer), the unit's power-save hang-up does not
+    start the rest. The satellite redials after the 7 s cooldown and the backoff does not grow across
+    these planned hang-ups (without a viewer the 4th short link would wait 8 s, then 16 s). The redial
+    flag holds from the hang-up until the new link takes commands; any other loss clears it.
+
+    .. test:: A viewer turns the power-save hang-up into a redial at the cooldown, backoff not growing
+       :id: T_FW_BLE_VIEWER_REDIAL
+       :links: R_FW_BLE_VIEWER_KEEP
+    """
+    script = [*REST_PRE, *PAIRED, *parked(), "viewer %d" % T, "DISCONNECTED 19", "redial", "rest"]
+    out = run(fake, *script)
+    assert out[-3:] == ["LOG session: reconnect in 7000 ms", "REDIAL 1", "REST 0 -1"]
+    t = T
+    for _ in range(5):  # up 30 s, the unit hangs up, the next link at the cooldown
+        script += [*watched(t + 2000, t + 6000), "viewer %d" % (t + 7000), "tick %d" % (t + 7000)]
+        script += [
+            "CONNECTED",
+            "ENC_OK",
+            *parked(at=t + 7000, first=False),
+            "tick %d" % (t + 7000 + WARM + ARM),
+        ]
+        script += ["redial", *watched(t + 9000, t + 37000), "DISCONNECTED 531"]
+        t += 37000
+    out = run(fake, *script, "redial", "rest")
+    logs = [line for line in out if line.startswith("LOG session: reconnect in")]
+    assert logs == ["LOG session: reconnect in 7000 ms"] * 6
+    assert len(calls(out, "connect_bonded")) == 5
+    assert [line for line in out if line.startswith("REDIAL")] == ["REDIAL 1"] + ["REDIAL 0"] * 5 + [
+        "REDIAL 1"
+    ]
+    assert out[-1] == "REST 0 -1"
+    out = run(fake, *script, "tick %d" % (t + 7000), "CONNECT_FAIL", "redial")  # trouble, not the plan
+    assert out[-1] == "REDIAL 0"
+
+
+def test_no_viewer_rests_as_before(fake):
+    """R_FW_BLE_VIEWER_KEEP: a page hidden or closed stops polling; 10 s after its last poll the
+    hang-up starts the rest exactly as without the viewer keep.
+
+    .. test:: Without a viewer in the last 10 s the hang-up rests
+       :id: T_FW_BLE_VIEWER_GONE
+       :links: R_FW_BLE_VIEWER_KEEP
+    """
+    base = [*REST_PRE, *PAIRED, *parked(), "viewer %d" % T]
+    out = run(fake, *base, *ticks(T, T + 10000), "DISCONNECTED 19", "redial", "rest")
+    assert out[-2:] == ["REDIAL 1", "REST 0 -1"]  # the last poll 10 s ago: still a viewer
+    out = run(fake, *base, *ticks(T, T + 10001, 10001), "DISCONNECTED 19", "redial", "rest")
+    assert out[-2] == "REDIAL 0" and out[-1].startswith("REST 1 ")
+
+
+def test_a_viewer_appearing_in_rest_leaves_it_at_once(fake):
+    """R_FW_BLE_VIEWER_KEEP: the first /api/state poll of a page opened in rest ends the rest inside
+    that call (the same reply says rest false, no card flash) and reconnects as soon as the unit's
+    cooldown allows; mode off keeps the rest.
+
+    .. test:: A viewer in rest leaves it in the same call and reconnects after the cooldown
+       :id: T_FW_BLE_VIEWER_LEAVES_REST
+       :links: R_FW_BLE_VIEWER_KEEP
+    """
+    rest = [*REST_PRE, *PAIRED, *parked(), "DISCONNECTED 19"]
+    out = run(fake, *rest, "tick %d" % (T + 20000), "viewer %d" % (T + 20000), "rest", "redial")
+    assert out[-2:] == ["REST 0 -1", "REDIAL 1"]
+    out = run(fake, *rest, "tick %d" % (T + 20000), "viewer %d" % (T + 20000), "tick %d" % (T + 20100))
+    assert calls(after(out, "LOG session: power-save rest off (viewer)"), "connect_bonded")
+    out = run(fake, *rest, "tick %d" % (T + 3000), "viewer %d" % (T + 3000), "tick %d" % (T + 6999))
+    assert not calls(after(out, "LOG session: power-save rest off (viewer)"), "connect_bonded")
+    out = run(fake, *rest, "tick %d" % (T + 3000), "viewer %d" % (T + 3000), "tick %d" % (T + 7000))
+    assert calls(after(out, "LOG session: power-save rest off (viewer)"), "connect_bonded")
+    out = run(fake, *rest, "> ble mode off", "viewer %d" % T, "rest")
+    assert out[-1].startswith("REST 1 ")
+
+
+def test_ten_minutes_without_input_rest_despite_the_viewer(fake):
+    """R_FW_BLE_VIEWER_KEEP idle cap: 10 min without user input (POST /api/ble active; a page appearing
+    starts the clock, a poll alone is no input) -> the next hang-up rests even with the page visible.
+    Input resumes the redial, also out of the rest.
+
+    .. test:: Ten minutes without input rest despite a viewer; input resumes the redial
+       :id: T_FW_BLE_VIEWER_IDLE_CAP
+       :links: R_FW_BLE_VIEWER_KEEP
+    """
+    cap = 600000
+    base = [*REST_PRE, *PAIRED, *parked(), *watched(T, T + cap, 4000)]
+    out = run(fake, *base, "viewer %d" % (T + cap + 1), "tick %d" % (T + cap + 1), "DISCONNECTED 19", "rest")
+    assert out[-1].startswith("REST 1 ")
+    out = run(
+        fake, *base, "input %d" % (T + cap - 5000), "tick %d" % (T + cap + 1), "DISCONNECTED 19", "rest"
+    )
+    assert out[-1] == "REST 0 -1"
+    out = run(
+        fake,
+        *base,
+        "viewer %d" % (T + cap + 1),
+        "tick %d" % (T + cap + 1),
+        "DISCONNECTED 19",
+        "viewer %d" % (T + cap + 2000),  # a poll in rest: still idle
+        "rest",
+        "input %d" % (T + cap + 3000),
+        "rest",
+        "redial",
+    )
+    told = [line for line in out if line.startswith(("REST", "REDIAL"))]
+    assert told[0].startswith("REST 1 ") and told[1:] == ["REST 0 -1", "REDIAL 1"]
+
+
 def test_command_during_the_backoff_connects_now(fake):
     """A control command must not wait out a reconnect delay (#264): the submit still answers
     NOT_READY (there is no link), but the pending reconnect is made due as soon as the unit's cooldown

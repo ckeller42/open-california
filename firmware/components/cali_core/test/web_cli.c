@@ -32,6 +32,9 @@
  *   ready 0|1        cali_session_ready() (commands accepted; default 0)
  *   rest 0|1         cali_session_rest() (power-save rest; default 0)
  *   restnext <ms>    cali_session_rest_next_ms() (default -1 = none; "restnext -1" for none again)
+ *   redial 0|1       cali_session_redial() (a planned redial for a viewer; default 0)
+ *   viewerends 0|1   1: cali_session_viewer() ends the rest (as the session does for a viewer with input)
+ *                    cali_session_input(now) prints "INPUT <now>" (POST /api/ble active, GET /)
  *   waterheld 0|1    cali_session_water_held() (fn.water is the held last-plausible frame)
  *   watergood <ms>   cali_session_water_good_ms() (baseline adopted at; 0 = not this boot)
  *   stamp <ms>       cali_session_last_update_ms()
@@ -175,6 +178,13 @@ static int64_t s_rest_next = -1;
 int cali_session_ready(void) { return s_ready; }
 int cali_session_rest(void) { return s_rest; }
 int64_t cali_session_rest_next_ms(void) { return s_rest_next; }
+static int s_redial, s_viewer_ends;
+int cali_session_redial(void) { return s_redial; }
+void cali_session_viewer(uint64_t now_ms) {
+    (void)now_ms;
+    if (s_viewer_ends) s_rest = 0;
+}
+void cali_session_input(uint64_t now_ms) { printf("INPUT %llu\n", (unsigned long long)now_ms); }
 int cali_session_connect(void) {
     printf("CALL session_connect\n");
     return 0;
@@ -444,6 +454,8 @@ int main(void) {
         else if (strcmp(w, "ready") == 0) s_ready = (int)v;
         else if (strcmp(w, "rest") == 0) s_rest = (int)v;
         else if (strcmp(w, "restnext") == 0) s_rest_next = (int64_t)v;
+        else if (strcmp(w, "redial") == 0) s_redial = (int)v;
+        else if (strcmp(w, "viewerends") == 0) s_viewer_ends = (int)v;
         else if (strcmp(w, "waterheld") == 0) s_water_held = (int)v;
         else if (strcmp(w, "kvfail") == 0) s_kvfail = (int)v;
         else if (strcmp(w, "ctlbusy") == 0) s_ctl_busy = (int)v;

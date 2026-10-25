@@ -283,7 +283,14 @@ def esp_fixtures():
         "fn": _esp_fn(),
         "device": {
             "pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
-            "link": {"up": True, "ready": True, "rest": False, "rest_next_s": None, "last_snap_age_ms": 1200},
+            "link": {
+                "up": True,
+                "ready": True,
+                "rest": False,
+                "redial": False,
+                "rest_next_s": None,
+                "last_snap_age_ms": 1200,
+            },
             "wifi": station_wifi,
             "control": {"writes": True},
             "uptime_ms": 3912400,
@@ -320,6 +327,7 @@ def esp_fixtures():
                         "up": False,
                         "ready": False,
                         "rest": False,
+                        "redial": False,
                         "rest_next_s": None,
                         "last_snap_age_ms": None,
                     },

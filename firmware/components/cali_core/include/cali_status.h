@@ -20,6 +20,7 @@ typedef struct {
     uint8_t link_up;             /* cali_session_link_up() */
     uint8_t link_ready;          /* cali_session_ready(): commands are accepted now */
     uint8_t link_rest;           /* cali_session_rest(): power-save rest, no reconnect */
+    uint8_t link_redial;         /* cali_session_redial(): a planned redial for a viewer (R_FW_BLE_VIEWER_KEEP) */
     int64_t rest_next_ms;        /* cali_session_rest_next_ms(): -1 = none */
     int64_t snap_age_ms;         /* now - last SNAP; -1 = never */
     uint8_t wifi_mode;           /* CALI_WIFI_MODE_* */

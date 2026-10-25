@@ -38,6 +38,9 @@
  *     restpoll <min>       cali_ble_rest_set (the stored rest poll, R_FW_BLE_REST)
  *     connect              cali_session_connect (POST /api/ble {"connect":true}): prints "CONNECT <rc>"
  *     rest                 print "REST <cali_session_rest()> <cali_session_rest_next_ms()>"
+ *     viewer <now_ms>      cali_session_viewer (GET /api/state: a viewer, R_FW_BLE_VIEWER_KEEP)
+ *     input <now_ms>       cali_session_input (POST /api/ble {"active":true}: user input on the page)
+ *     redial               print "REDIAL <cali_session_redial()>"
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
  *     watergood            print "WATERGOOD <cali_session_water_held()> <cali_session_water_good_ms()>"
  *     wifi_boot            cali_wifi_run_init(fake net) + cali_wifi_run_boot() (what host_main
@@ -471,6 +474,9 @@ int main(void) {
         else if (strcmp(word, "connect") == 0) printf("CONNECT %d\n", cali_session_connect());
         else if (strcmp(word, "rest") == 0)
             printf("REST %d %lld\n", cali_session_rest(), (long long)cali_session_rest_next_ms());
+        else if (strcmp(word, "viewer") == 0) cali_session_viewer(strtoull(a1, NULL, 10));
+        else if (strcmp(word, "input") == 0) cali_session_input(strtoull(a1, NULL, 10));
+        else if (strcmp(word, "redial") == 0) printf("REDIAL %d\n", cali_session_redial());
         else if (strcmp(word, "lastupd") == 0)
             printf("LASTUPD %llu\n", (unsigned long long)cali_session_last_update_ms());
         else if (strcmp(word, "watergood") == 0)

@@ -255,6 +255,7 @@ def test_api_state_shape(web_cli):
         "up": True,
         "ready": False,
         "rest": False,
+        "redial": False,
         "rest_next_s": None,
         "last_snap_age_ms": body["t"] - 4000,
     }
@@ -272,7 +273,7 @@ _PIN_SETUP = [
 ]
 EXPECTED_DEVICE_TAIL = (
     '"device":{"pairing":{"state":"idle","address":"C0:FF:EE:CA:11:F0"},"link":{"up":true,'
-    '"ready":false,"rest":false,"rest_next_s":null,"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
+    '"ready":false,"rest":false,"redial":false,"rest_next_s":null,"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
     '"control":{"writes":true},"uptime_ms":5010,"fw":"test",'
     '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null,"channel":"stable"},'
     '"time":{"source":"none","synced":false,"boot":0,"up":5010},'
@@ -329,6 +330,7 @@ def test_api_state_nulls(web_cli):
         "up": False,
         "ready": False,
         "rest": False,
+        "redial": False,
         "rest_next_s": None,
         "last_snap_age_ms": None,
     }
@@ -2459,6 +2461,7 @@ NIGHT_MS = 1792530000000
         ('{"rest_poll_min":240}', ["CALL session_set_rest_poll 240"]),
         ('{"connect":true}', ["CALL session_connect"]),
         ('{"connect":false}', []),
+        ('{"active":true}', []),  # cali_session_input: INPUT, see test_api_ble_active_is_input
     ],
 )
 def test_api_ble_post(web_cli, body, calls):
@@ -2495,6 +2498,8 @@ def test_api_ble_post(web_cli, body, calls):
         (STATION, "POST", '{"rest_poll_min":241}', 400, "bad_value"),
         (STATION, "POST", '{"rest_poll_min":-1}', 400, "bad_json"),
         (STATION, "POST", '{"connect":1}', 400, "bad_json"),
+        (STATION, "POST", '{"active":1}', 400, "bad_json"),
+        (["wifi setup_ap"], "POST", '{"active":true}', 403, "setup_mode"),
         (STATION + ["bond 0"], "POST", '{"connect":true}', 409, "not_paired"),
         (STATION + ["bond 1", "kvfail 1"], "POST", '{"rest_poll_min":15}', 500, "store"),
         (STATION + ["kvfail 1"], "POST", '{"idle_min":5}', 500, "store"),
@@ -2755,6 +2760,46 @@ def test_state_link_reports_ready_and_rest(web_cli):
         {"up": False, "ready": False, "rest": True, "rest_next_s": 1800},
         {"up": False, "ready": False, "rest": True, "rest_next_s": None},
     ]
+
+
+def test_state_is_a_viewer_and_reports_the_redial(web_cli):
+    """R_FW_BLE_VIEWER_KEEP: ``GET /api/state`` tells the session a viewer looks (``cali_session_viewer``)
+    BEFORE it builds the reply, so a rest the viewer ends already reads ``rest: false`` in that same
+    reply; ``device.link.redial`` mirrors ``cali_session_redial()``. ``POST /api/ble {"active":true}``
+    and a page load report user input (``cali_session_input``); a poll does not.
+
+    .. test:: /api/state counts as a viewer before its reply; redial and input reach the session
+       :id: T_FW_BLE_VIEWER_WEB
+       :links: R_FW_BLE_VIEWER_KEEP
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"rest 1",
+            b"redial 1",
+            req("GET", "/api/state"),
+            b"viewerends 1",
+            req("GET", "/api/state"),
+            b"redial 0",
+            req("GET", "/api/state"),
+            b"now 7000",
+            req("POST", "/api/ble", '{"active":true}'),
+            b"now 9000",
+            req("GET", "/"),
+        ],
+    )
+    links = [{k: r.json()["device"]["link"][k] for k in ("rest", "redial")} for r in resps[:3]]
+    assert links == [
+        {"rest": True, "redial": True},
+        {"rest": False, "redial": True},  # the viewer ended the rest: this reply says so
+        {"rest": False, "redial": False},
+    ]
+    assert resps[3].status == 200 and resps[4].status == 200
+    assert [ln for ln in other if ln.startswith("INPUT ")] == [
+        "INPUT 7010",
+        "INPUT 9010",
+    ]  # the poll ticks +10
 
 
 def test_app_shell_load_is_a_viewer(web_cli):

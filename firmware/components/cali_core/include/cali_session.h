@@ -44,8 +44,9 @@
  * known off (cali_ac_ignition 0), no camping restore owed (cali_ac_owed) and no control command in
  * flight, the session does not reconnect. Every other loss, or an unknown frame, takes the backoff above. Rest ends on a
  * control command (cali_session_connect_now), cali_session_connect (the Connect button), a rest
- * probe whose read pass no longer meets the conditions, pairing, or cali_session_stop; a mode change alone
- * (the idle policy's viewer -> hold, /api/ble mode) never connects out of it. While resting, a probe
+ * probe whose read pass no longer meets the conditions, a viewer with recent input (R_FW_BLE_VIEWER_KEEP),
+ * pairing, or cali_session_stop; a mode change alone (the idle policy's viewer -> hold, /api/ble mode)
+ * never connects out of it. While resting, a probe
  * runs every rest poll interval (cali_session_set_rest_poll, 0 = none; not in mode off): connect, one read pass, then
  * the session drops its own link and rests again (or holds, when the read shows camping on / shore).
  *
@@ -109,6 +110,18 @@ void cali_session_connect_now(void);
 int cali_session_connect(void);
 /* 1 while in power-save rest (no auto-reconnect). */
 int cali_session_rest(void);
+/* Viewer keep (R_FW_BLE_VIEWER_KEEP). A viewer = a GET /api/state within CALI_SESSION_VIEWER_MS (the page
+ * polls every 2 s only while visible); its input = POST /api/ble {"active":true} or a page load, within
+ * CALI_SESSION_INPUT_IDLE_MS (a viewer appearing after a gap starts that clock). While both hold, the
+ * unit's power-save hang-up does not start the rest: the session redials after the cooldown with the
+ * backoff at its minimum (a planned redial, cali_session_redial), and a viewer in rest leaves it at once
+ * (mode off excepted). Without a viewer, or after 10 min without input, the rest runs as below. */
+#define CALI_SESSION_VIEWER_MS 10000u
+#define CALI_SESSION_INPUT_IDLE_MS 600000u
+void cali_session_viewer(uint64_t now_ms);   /* GET /api/state */
+void cali_session_input(uint64_t now_ms);    /* user input on the page (also a viewer) */
+/* 1 from a planned redial's hang-up until that link takes commands again (any other loss clears it). */
+int cali_session_redial(void);
 /* ms to the next rest probe; -1 when not resting or the rest poll is off. */
 int64_t cali_session_rest_next_ms(void);
 /* The rest poll interval in minutes (0 = none; not stored here: ble_exp_run.c stores it). */
