@@ -1016,6 +1016,26 @@ def test_a_reconnect_out_of_rest_that_never_reaches_the_unit_rests_again(fake):
     assert out[-1] == "REST 0 -1"
 
 
+def test_rest_left_on_an_up_link_takes_the_ordinary_backoff_later(fake):
+    """R_FW_BLE_VIEWER_KEEP: the "back to rest when unreachable" rule only covers a reconnect that
+    never brought a link up. A rest probe whose read shows camping on ends the rest with its link up;
+    camping then goes off on that same link and a loss the satellite saw (a supervision timeout, 8)
+    with no viewer takes the ordinary backoff, as R_FW_BLE_REST says, not the rest.
+
+    .. test:: Rest left on an up link never re-enters rest through the unreachable rule
+       :id: T_FW_BLE_VIEWER_UP_LEFT
+       :links: R_FW_BLE_VIEWER_KEEP, R_FW_BLE_REST
+    """
+    poll = 15 * 60000
+    rest = ["restpoll 15", *REST_PRE, *PAIRED, *parked(), "DISCONNECTED 19"]
+    on = [*rest, "tick %d" % (T + poll), "CONNECTED", "ENC_OK", *parked(CAMPING_ON, at=T + poll, first=False)]
+    out = run(
+        fake, *on, "NOTIFY 1202 %s" % CAMPING_OFF, "tick %d" % (T + poll + 5000), "DISCONNECTED 8", "rest"
+    )
+    assert "LOG session: power-save rest off (unit_state)" in out
+    assert out[-2:] == ["LOG session: reconnect in 7000 ms", "REST 0 -1"]
+
+
 def test_a_command_or_reconnect_counts_as_input(fake):
     """R_FW_BLE_VIEWER_KEEP: a control command or the Reconnect button (``wake``) stamps the input
     clock itself, so the idle cap does not depend on the page's input report arriving first.

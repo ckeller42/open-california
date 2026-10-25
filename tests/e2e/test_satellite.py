@@ -901,6 +901,16 @@ def test_input_is_reported_at_most_every_30_s(stub, error_gated_page):
         pg.evaluate("document.dispatchEvent(new Event('visibilitychange'))")  # back to the page
         pg.wait_for_timeout(300)
         assert "api/state?seen=1" in urls[n:], urls[n:]
+        # a forced refresh while a plain poll is on the wire: the next poll still says seen
+        held = []
+        pg.route("**/api/state", lambda r: held.append(r))
+        pg.wait_for_function("() => polling")
+        pg.evaluate("refreshState(true)")
+        n = len(urls)
+        held[0].continue_()
+        pg.unroute("**/api/state")
+        pg.wait_for_timeout(2500)
+        assert urls[n:] and urls[n] == "api/state?seen=1", urls[n:]
         pg.mouse.click(5, 300)
         pg.keyboard.press("Shift")
         pg.mouse.click(5, 300)

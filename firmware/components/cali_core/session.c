@@ -202,7 +202,7 @@ static int viewer_active(uint64_t now) {
 
 static void rest_set(int on, const char *why) {
     if (on) s_redial = 0;
-    s_rest_left = s_rest && !on;   /* left rest: until a link comes up */
+    s_rest_left = s_rest && !on && s_link != LINK_UP;   /* left rest with no link up: until one comes up */
     if (s_rest == on) return;
     s_rest = on;
     s_rest_next = s_now + s_rest_poll_ms;

@@ -1068,6 +1068,7 @@ function toast(msg, kind, ms = 4000) {
 
 let polling = false;     // a state poll is on the wire
 let forceNext = false;   // a forced refresh arrived while one was: repaint when that one lands
+let seenNext = false;    // ... and the next poll that goes out tells the satellite "seen" (R_FW_BLE_VIEWER_KEEP)
 
 // --- link state (R_UI_LINK_STATE): one linkState() drives the status pill AND the #conn banner ----
 // "Unreachable" after this long with no answer: longer than the satellite's 4 s command stall plus a
@@ -1231,7 +1232,9 @@ async function refreshState(force) {
   // most ONE poll at a time -- Chromium/Firefox hold a second same-URL GET behind the first anyway,
   // WebKit (Safari, iPhone) does not and would stack a connection per 2 s tick on the stalled core,
   // then drain them oldest-first (tests/e2e/test_satellite.py pins "at most one waiting", both engines).
-  if (polling) { forceNext = forceNext || !!force; return; }
+  if (polling) { forceNext = forceNext || !!force; seenNext = seenNext || !!force; return; }
+  const seen = !!force || seenNext;
+  seenNext = false;
   polling = true;
   if (waitingSince == null) waitingSince = Date.now();
   const ac = new AbortController();
@@ -1240,7 +1243,7 @@ async function refreshState(force) {
   try {
     // a forced poll follows a page load, a return to the page or a user action: the satellite counts it
     // as input (R_FW_BLE_VIEWER_KEEP's idle cap); the 2 s tick is a plain poll. Satellite only.
-    next = await api(force && (SAT_BUNDLE || satellite()) ? "/api/state?seen=1" : "/api/state", { signal: ac.signal });
+    next = await api(seen && (SAT_BUNDLE || satellite()) ? "/api/state?seen=1" : "/api/state", { signal: ac.signal });
     // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
     // unreachable clock. Checked here, not in api(): the wizard and commands read JSON error bodies.
     if (!isSatelliteBody(next) && !(next && typeof next === "object" && next._meta)) throw new Error("no state");
