@@ -105,6 +105,7 @@ static const uint8_t CALI_LIGHT_REQUEST_CONFIG[16] = {0x0d, 0x0c, 0x00, 0x00, 0x
 #define CALI_REASON_CAMPING_NEEDS_MASTER "camping lights and USB need camping mode on (turn the camping master on first)"
 #define CALI_REASON_COOLER_STATE_UNKNOWN "the cooler's current schedule is not known yet (no cooler state read) \342\200\224 refusing to overwrite it"
 #define CALI_REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
+#define CALI_REASON_ENERGY_ECO_NEEDS_SOLAR "ECO needs a solar panel fitted \342\200\224 the unit reports none (or has not reported it yet), so the app would not offer ECO"
 #define CALI_REASON_ENERGY_LOCKED "the unit currently does not allow changing the energy mode"
 #define CALI_REASON_FAVOURITE_EMPTY "this favourite is empty on the unit \342\200\224 save it first"
 #define CALI_REASON_NOT_ONOFF "the value must be on or off (or true/false, 1/0) \342\200\224 anything else is refused, never read as off"

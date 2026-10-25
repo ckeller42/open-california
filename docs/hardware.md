@@ -197,7 +197,9 @@ applied.
 
 **Energy mode.** `calictl` builds Normal, Max and ECO. The app's Normal and Max frames are
 recorded and match `calictl`'s. The app offers ECO only when the unit reports `PvInstalled`
-(solar fitted), which this van does not, so the ECO frame is not app-recorded.
+(solar fitted), which this van does not, so the ECO frame is not app-recorded. `calictl` does
+the same: the web UI shows ECO only when the unit reports `PvInstalled` = 1, and the daemon, the
+CLI and the ESP satellite refuse an ECO write otherwise, also while `PvInstalled` is not known.
 
 **Cooler quiet mode.** The quiet mode and its hours are live-verified on the unit's own
 screen; the unit takes the quiet-hour bytes literally.

@@ -1783,3 +1783,16 @@ def test_two_govees_each_lead_their_rows_with_their_alias(stub, error_gated_page
             ("Innen Temperature", "21.0 °C"),
             ("Innen Humidity", "48 %"),
         ]
+
+
+@pytest.mark.parametrize("pv, want", [(0, ["Normal", "Max"]), (1, ["Normal", "Max", "ECO"])])
+def test_energy_mode_offers_eco_only_with_solar_like_the_app(stub, error_gated_page, pv, want):
+    """The app offers ECO only when the unit reports a solar panel (1602 PvInstalled = 1); the
+    energy-mode selector does the same (the server refuses ECO otherwise)."""
+    stub.fixtures["satellite"]["/api/state"]["fn"]["energy"]["PvInstalled"] = pv
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        _open(pg, "Energy")
+        seg = pg.locator(".segmented").first
+        expect(seg.locator(".seg").first).to_be_visible()
+        assert seg.locator(".seg").all_text_contents() == want

@@ -239,12 +239,40 @@ def test_command_precondition_mirrors_the_remaining_web_ui_gates():
     # the master switch itself is never gated here (the firmware refuses it while driving)
     assert control.command_precondition("campingmode", "master", "on", master_off) is None
 
-    assert control.command_precondition("energy", "mode", "eco", {"energy": {"EnergyModeNotSelectable": 1}})
+    assert control.command_precondition(
+        "energy", "mode", "max_charge", {"energy": {"EnergyModeNotSelectable": 1}}
+    )
     assert (
-        control.command_precondition("energy", "mode", "eco", {"energy": {"EnergyModeNotSelectable": 0}})
+        control.command_precondition(
+            "energy", "mode", "max_charge", {"energy": {"EnergyModeNotSelectable": 0}}
+        )
         is None
     )
-    assert control.command_precondition("energy", "mode", "eco", {}) is None
+    assert control.command_precondition("energy", "mode", "max_charge", {}) is None
+
+
+def test_energy_eco_only_with_solar_like_the_app():
+    """ECO is refused unless the unit reports ``PvInstalled`` = 1 (unknown refuses); Normal/Max are
+    never gated by it; the lock still wins over a fitted panel.
+
+    .. test:: ECO only with PvInstalled = 1
+       :id: T_ENERGY_ECO_LIKE_APP
+       :links: R_ENERGY_ECO_LIKE_APP
+    """
+    from calictl import control
+
+    no_pv, pv = {"energy": {"PvInstalled": 0}}, {"energy": {"PvInstalled": 1}}
+    for v in ("eco", "ECO", " eco "):
+        assert (
+            control.command_precondition("energy", "mode", v, no_pv) == control.REASON_ENERGY_ECO_NEEDS_SOLAR
+        )
+        assert control.command_precondition("energy", "mode", v, {}) == control.REASON_ENERGY_ECO_NEEDS_SOLAR
+        assert control.command_precondition("energy", "mode", v, pv) is None
+    for v in ("normal", "max_charge"):
+        assert control.command_precondition("energy", "mode", v, no_pv) is None
+        assert control.command_precondition("energy", "mode", v, {}) is None
+    locked_pv = {"energy": {"PvInstalled": 1, "EnergyModeNotSelectable": 1}}
+    assert control.command_precondition("energy", "mode", "eco", locked_pv) == control.REASON_ENERGY_LOCKED
 
 
 def test_command_precondition_roof_move_blocked_but_stop_never_is():

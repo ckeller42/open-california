@@ -149,7 +149,7 @@ def test_vectors_cover_every_outcome():
     kinds = {c["expect"]["kind"] for c in V["cases"]}
     assert kinds == {"frames", "refused", "bad", "none", "elsewhere"}
     reasons = {c["expect"]["reason"] for c in V["cases"] if c["expect"]["kind"] == "refused"}
-    assert len(reasons) == 13, sorted(reasons)
+    assert len(reasons) == 14, sorted(reasons)
     assert {len(c["expect"].get("frames", [])) for c in V["cases"]} >= {1, 2, 4}
     assert V["app"], "no app-recorded action in the vectors"
 

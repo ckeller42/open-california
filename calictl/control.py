@@ -197,8 +197,8 @@ def _camping(funcs, what, value, last):
 # a one-shot actuate, no commit/preamble). Mode ordinals match the read side (semantics.energy
 # `energy_mode`, enum bf/c.java). Normal `00` / Max `10` are APP-RECORDED (2026-10-05,
 # tests/vectors/app/energy-mode.jsonl, byte-equal on the targeted field); ECO is offered by the app
-# only when 1602 `PvInstalled` = 1 (not on this van), so it is DECOMPILE-only. calictl has never
-# sent an energy frame to the real unit (evidence-ledger.md).
+# only when 1602 `PvInstalled` = 1 (not on this van), so it is DECOMPILE-only and command_precondition
+# refuses it unless the unit reports PvInstalled = 1 (REASON_ENERGY_ECO_NEEDS_SOLAR).
 ENERGY_MODES = {"normal": 0, "max_charge": 1, "eco": 2}
 ENERGY_MODE_UNCHANGED = 3  # 2-bit leave-unchanged sentinel (pg/a v())
 
@@ -211,7 +211,8 @@ def _energy(funcs, what, value, last):
     ``EnergyModeSet`` = the mode ordinal, ``DisplayRefresh`` stays 0) and the shared
     ``EnergyMode`` enum (``bf/c.java``). Normal/Max match the app's recorded frames
     (``tests/vectors/app/energy-mode.jsonl``); ECO is DECOMPILE-only (the app offers it only with
-    ``PvInstalled``). Not yet sent to the real unit."""
+    ``PvInstalled``; :func:`command_precondition` refuses it otherwise). On the real unit
+    (2026-10-24, ``PvInstalled`` 0) an ECO and a Max write were ACKed but ``EnergyMode`` stayed 0."""
     if what != "mode":
         return None
     key = str(value).strip().lower()
@@ -477,6 +478,12 @@ REASON_QUIET_NEEDS_FRIDGE_ON = (
 )
 REASON_CAMPING_NEEDS_MASTER = "camping lights and USB need camping mode on (turn the camping master on first)"
 REASON_ENERGY_LOCKED = "the unit currently does not allow changing the energy mode"
+# ECO, as the app offers it: only when the unit reports a solar panel (1602 `PvInstalled` = 1, the
+# observable source of the app's `zj/c.N0`, ak/a.java:712-716). Unknown -> refused, never sent.
+REASON_ENERGY_ECO_NEEDS_SOLAR = (
+    "ECO needs a solar panel fitted — the unit reports none (or has not reported it yet), so the app"
+    " would not offer ECO"
+)
 REASON_FAVOURITE_EMPTY = "this favourite is empty on the unit — save it first"
 REASON_WAKEUP_NO_AREA = "the wake-up light needs at least one vehicle area"
 # Air heater (app 5.4.0, DECOMPILE + APP-OBSERVED + REAL PHONE 2026-10-11): the app writes nothing on
@@ -541,6 +548,17 @@ def command_precondition(function, what, value, states):
        always passes); ``runtime`` with :data:`REASON_AIRHEATER_RUNTIME_PERMANENT` while
        ``PermanentOperation`` is on; ``timer`` with :data:`REASON_AIRHEATER_TIMER_ARMED` while the
        departure timer is armed (``OperationModeAirHeater`` 3). Same texts in the ESP's C twin.
+
+    .. req:: ECO is offered only as the app offers it
+       :id: R_ENERGY_ECO_LIKE_APP
+       :status: implemented
+       :tags: control, energy
+
+       The app offers the ECO energy mode only when ``zj/c.N0`` is true (``ak/a.java:712-716``),
+       and ``N0`` follows the unit's 1602 ``PvInstalled`` bit (APP-OBSERVED 2026-10-06). An
+       ``energy mode eco`` write shall be refused with :data:`REASON_ENERGY_ECO_NEEDS_SOLAR` unless
+       the unit reports ``PvInstalled`` = 1 — unknown refuses too. Normal and Max are not gated by
+       it. Same text in the ESP's C twin; the web UI shows ECO only with ``solar_installed``.
     """
     if (function, what) in ONOFF_COMMANDS and not is_onoff(value):
         return REASON_NOT_ONOFF
@@ -586,6 +604,9 @@ def command_precondition(function, what, value, states):
     if function == "energy" and what == "mode":
         if (states.get("energy") or {}).get("EnergyModeNotSelectable") == 1:
             return REASON_ENERGY_LOCKED
+        # ECO only with PvInstalled = 1 (unknown refuses: never send what the app would not offer).
+        if str(value).strip().lower() == "eco" and (states.get("energy") or {}).get("PvInstalled") != 1:
+            return REASON_ENERGY_ECO_NEEDS_SOLAR
     # Roof MOVES (never "stop" — a stop must always get through; it is the safety action and the web
     # UI never greys it either) are refused under the same alert set the GUI blocks on
     # (`ROOF_MOVE_BLOCK` in webui/app.js) plus a Position the unit reports as `error`. The unit

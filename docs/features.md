@@ -160,7 +160,7 @@ Nothing to control.
 
 ## Energy (Energie)
 
-**Proof:** readings live-verified; controls verified against the app only ([evidence](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). The readings match the app on the real unit; the energy-mode command matches the app's own frames, and the app offers ECO only on a van with solar.
+**Proof:** readings live-verified; controls verified against the app only ([evidence](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). The readings match the app on the real unit; the energy-mode command matches the app's own frames. Like the app, calictl offers ECO only when the unit reports a solar panel.
 
 **You can see:**
 
