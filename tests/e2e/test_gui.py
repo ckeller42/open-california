@@ -868,6 +868,21 @@ def test_menu_a11y_escape_closes_and_lang_syncs(page):
     page.keyboard.press("Escape")
     expect(page.locator(".menupop")).to_have_count(0)
     expect(menu).to_have_attribute("aria-expanded", "false")
+    assert page.evaluate("document.activeElement.id") == "menu"  # focus returns to ⋮
+    # a click outside closes it
+    menu.click()
+    expect(page.locator(".menupop")).to_be_visible()
+    page.evaluate(
+        "new Promise((r) => setTimeout(r))"
+    )  # the outside-click listener arms one task after opening
+    page.mouse.click(5, 400)
+    expect(page.locator(".menupop")).to_have_count(0)
+    expect(menu).to_have_attribute("aria-expanded", "false")
+    # the ⋮ button toggles it shut again
+    menu.click()
+    expect(page.locator(".menupop")).to_be_visible()
+    menu.click()
+    expect(page.locator(".menupop")).to_have_count(0)
     # language toggle keeps <html lang> honest
     assert page.evaluate("document.documentElement.lang") == "en"
     menu.click()
