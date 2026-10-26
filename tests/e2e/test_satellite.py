@@ -1603,6 +1603,19 @@ def test_house_load_guards(stub, error_gated_page, batt2_raw, age, want):
         assert dict(_readouts(pg))["House load"] == want
 
 
+def test_house_load_needs_a_fresh_unit_reading(stub, error_gated_page):
+    """In a power-save rest the unit's last frame is minutes old while the charger is live: their
+    difference is no load, so "—"."""
+    _house(stub, "mppt", batt2_raw=65531)["victron_mppt"]["battery_current"] = 1.9
+    stub.fixtures["satellite"]["/api/state"]["device"]["link"].update(
+        up=False, ready=False, rest=True, rest_next_s=1500, last_snap_age_ms=300000
+    )
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        _open(pg, "Energy")
+        assert dict(_readouts(pg))["House load"] == "—"
+
+
 @pytest.mark.parametrize("locale", ["en-US", "de-DE"])
 def test_govee_readings_on_the_vehicle_screen_and_tile(stub, error_gated_page, locale):
     """The Govee's temperature + humidity follow the vehicle clock; its own battery is no row; the
