@@ -868,6 +868,21 @@ def test_menu_a11y_escape_closes_and_lang_syncs(page):
     page.keyboard.press("Escape")
     expect(page.locator(".menupop")).to_have_count(0)
     expect(menu).to_have_attribute("aria-expanded", "false")
+    assert page.evaluate("document.activeElement.id") == "menu"  # focus returns to ⋮
+    # a click outside closes it
+    menu.click()
+    expect(page.locator(".menupop")).to_be_visible()
+    page.evaluate(
+        "new Promise((r) => setTimeout(r))"
+    )  # the outside-click listener arms one task after opening
+    page.mouse.click(5, 400)
+    expect(page.locator(".menupop")).to_have_count(0)
+    expect(menu).to_have_attribute("aria-expanded", "false")
+    # the ⋮ button toggles it shut again
+    menu.click()
+    expect(page.locator(".menupop")).to_be_visible()
+    menu.click()
+    expect(page.locator(".menupop")).to_have_count(0)
     # language toggle keeps <html lang> honest
     assert page.evaluate("document.documentElement.lang") == "en"
     menu.click()
@@ -1598,7 +1613,7 @@ def test_calictl_page_has_no_house_load_row(page, base_url):
 
 def test_battery_rows_read_w_a_v_like_the_solar_row(page, base_url):
     """One row per battery in the solar row's order, "<W> W · <A> A · <V> V" (owner 2026-10-15); W is
-    V × A rounded. The starter's missing reading (the mock's sleeping starter) keeps its slots as "—"."""
+    V × A rounded. The starter's missing reading (the mock's sleeping starter) is one "—"."""
     page.goto(base_url)
     page.locator(".tile", has_text="Energy").first.click()
     rows = dict(
@@ -1611,9 +1626,9 @@ def test_battery_rows_read_w_a_v_like_the_solar_row(page, base_url):
     m = re.fullmatch(r"(-?\d+) W · (-?[\d.]+) A · ([\d.]+) V", rows["Second battery power"])
     assert m, rows["Second battery power"]
     assert int(m[1]) == round(float(m[2]) * float(m[3]))
-    assert re.fullmatch(r"(—|-?\d+) W · (—|-?[\d.]+) A · (—|[\d.]+) V", rows["Starter power"]), rows[
-        "Starter power"
-    ]
+    assert rows["Starter power"] == "—" or re.fullmatch(
+        r"-?\d+ W · -?[\d.]+ A · [\d.]+ V", rows["Starter power"]
+    ), rows["Starter power"]
 
 
 # --- navigation on a phone (UX review "navigation" 2026-10-15: C1, H1, H3, M1, M3) ---------------

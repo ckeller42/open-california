@@ -472,7 +472,9 @@ const onoff = (b) => /** @type {string} */ (t(b ? "On" : "Off"));
 /** @type {(v: number|null|undefined, u: string) => string} */
 const withUnit = (v, u) => (v == null ? "—" : `${v} ${u}`);
 /** "<W> W · <A> A · <V> V", W = V × A rounded; "—" for a missing part. @param {number|null|undefined} v @param {number|null|undefined} a */
-const wav = (v, a) => `${v != null && a != null ? Math.round(v * a) : "—"} W · ${a ?? "—"} A · ${v ?? "—"} V`;
+// no reading at all (a sleeping starter: semantics sends both null) is one "—", not "— W · — A · — V"
+const wav = (v, a) => (v == null && a == null ? "—"
+  : `${v != null && a != null ? Math.round(v * a) : "—"} W · ${a ?? "—"} A · ${v ?? "—"} V`);
 /** "HH:MM" @type {(h: number, m: number) => string} */
 const hhmm = (h, m) => String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
 /** @type {(t: Tank|null|undefined) => string} */
