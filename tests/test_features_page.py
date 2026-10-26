@@ -80,7 +80,7 @@ def test_satellite_column_matches_the_c_twin():
 
 def test_ui_labels_are_the_web_uis_and_name_shown_values():
     """Every "You can see" label is a label string in the web UI, on a value calictl shows."""
-    from tools._view_common import load_catalog
+    from tools.catalog import load_catalog
 
     app = (ROOT / "calictl" / "webui" / "app.js").read_text()
     catalog = load_catalog(None)

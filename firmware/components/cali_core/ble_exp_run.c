@@ -60,8 +60,6 @@ void cali_ble_exp_activity(uint64_t now_ms) {
     cali_bi_activity(&s_bi);
 }
 
-unsigned cali_ble_idle_min(void) { return s_bi.probe_min; }
-
 int cali_ble_idle_set(unsigned min) {
     uint8_t b = (uint8_t)min;
     if (min > CALI_BI_MAX_MIN || cali_kv_set(CALI_BI_KEY, &b, 1) != 0) return -1;

@@ -487,11 +487,7 @@ def load_cursor(path):
 
 
 def save_cursor(path, seq, state):
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"seq": seq, "state": state}, f)
-    os.replace(tmp, path)  # atomic: a crash leaves the old cursor, never half a file
+    serve.atomic_write_json(path, {"seq": seq, "state": state})
 
 
 def _funcs():

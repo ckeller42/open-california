@@ -35,7 +35,7 @@ import re
 from pathlib import Path
 
 from calictl import control, mqtt
-from tools._view_common import load_catalog
+from tools.catalog import load_catalog
 from tools.gen_c_dict import ESP_CONTROL_FUNCTIONS, ESP_ELSEWHERE_REASON
 
 ROOT = Path(__file__).resolve().parent.parent

@@ -13,8 +13,8 @@ class SchemaError(Exception):
     pass
 
 
-def load_catalog(path=_DEFAULT) -> dict:
-    with open(path) as fh:
+def load_catalog(path=None) -> dict:
+    with open(path or _DEFAULT) as fh:
         data = yaml.safe_load(fh) or {}
     for fn, kinds in data.items():
         for kind, fields in (kinds or {}).items():

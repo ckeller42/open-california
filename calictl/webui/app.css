@@ -221,7 +221,6 @@ label.row { cursor: pointer; }
 .lg-roof { fill: var(--muted); opacity: .7; }
 .lg-glass { fill: var(--card); opacity: .85; }
 .lg-tyre { fill: #1d2027; stroke: var(--muted); stroke-width: 1; }   /* dark rubber in both themes */
-.lg-hub { fill: var(--muted); }
 .lg-light { fill: var(--error); }
 .lg-val { fill: var(--fg); font-size: 15px; font-weight: 600; text-anchor: middle; font-variant-numeric: tabular-nums; }
 .lg-label { font-size: .82rem; color: var(--muted); }

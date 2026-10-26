@@ -14,7 +14,6 @@ from calictl.protocol import _char_uuid
 
 ROOT = Path(__file__).resolve().parent.parent
 DICT_FILE = ROOT / "protocol" / "dictionary.yaml"
-SIGNALS_FILE = ROOT / "protocol" / "signals.yaml"
 
 
 def char_uuid(short) -> str:
@@ -45,10 +44,3 @@ def load_functions(dict_path=None) -> dict:
                 f["override"] = not isinstance(f.get("offset"), int)  # filled a real extractor gap
                 f["offset"], f["width"] = placed[f["name"]]
     return funcs
-
-
-def load_catalog(signals_path=None) -> dict:
-    """The signal catalog (``protocol/signals.yaml``)."""
-    import yaml
-
-    return yaml.safe_load(Path(signals_path or SIGNALS_FILE).read_text()) or {}

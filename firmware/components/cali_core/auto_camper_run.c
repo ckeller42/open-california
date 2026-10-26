@@ -109,8 +109,6 @@ void cali_ac_init(void) {
     cali_log("auto-camper: %s%s", s_on ? "on" : "off", S.owe ? " (restore owed)" : "");
 }
 
-int cali_ac_enabled(void) { return s_on; }
-
 int cali_ac_set_enabled(int on) {
     uint8_t b = (uint8_t)(on != 0);
     /* AutoCamper.set_enabled: off clears the debt; so does off -> on, in case an earlier off's
