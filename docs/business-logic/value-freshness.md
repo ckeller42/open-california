@@ -128,6 +128,17 @@ recorded per-poll in `poll_outcomes.jsonl` and classified by `tools.analyze_batt
 - **Unit Bluetooth DISABLED** (in the unit's own settings) — persistent `DeviceNotFound` that
   **will NOT self-resolve** until re-enabled; then buspi reconnects on the next poll. Shows as a
   long unbroken `ble_error` run (observed 2026-08-18). NOT a buspi fault.
+- **[Power-save hang-up](https://ckeller42.github.io/open-california/glossary.html#term-Power-save-hang-up)** (camping master off, no shore power) — the unit ends every link ~30.7 s
+  after encryption (HCI 0x13, NimBLE status 19/531), heartbeat and reads or not, and cuts a link
+  that starts < 6 s after its last hang-up ~1.2 s in (51/51 vs 0/47 for ≥ 6 s). Camping on: links
+  hold for hours. Live, no shore power ever connected: 87 satellite drops in 30 min camping-off
+  (2026-10-22); `btmon` A/B with an idle BlueZ link on buspi, held 75 s camping-on vs ended at
+  encryption +30.7 s camping-off (2026-10-23); the < 6 s cut split (2026-10-23). Shore power
+  (1602 `StateLandAfs` 1/2) keeping the link = the app's reconnect rule, decompile only
+  (2026-10-24); ignition on + camping off untested. Satellite: 7 s cooldown + power-save rest
+  (`R_FW_BLE_REST`, `R_FW_BLE_VIEWER_KEEP`). buspi's `serve` has no cooldown/camping rule: a held
+  session (web UI active) is re-checked every `--interval` and reconnected at that check; idle,
+  it does short cold connect-read-release polls. Spec `S_SEQ_POWER_SAVE_HANGUP`.
 - **Daemon down / Pi reboot** — no `poll_outcomes` rows at all for the window.
 - **Influx-write failure** — polls succeed (`outcome: ok`) but nothing is stored: a *false* gap.
 
