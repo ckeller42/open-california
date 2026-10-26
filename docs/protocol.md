@@ -45,7 +45,7 @@ sequence is {need}`S_SEQ_POWER_SAVE_HANGUP`. The measurements are in the
 | Camping master on (`1202` `State` 1) | Keeps the link for hours. | Live-verified on the real unit |
 | Camping master off, no shore power | Ends every link about 30.7 s after encryption (HCI `0x13` remote user terminated, NimBLE status 19 or 531), with or without the `1003` heartbeat or reads. This is the {term}`power-save hang-up <Power-save hang-up>`. | Live-verified on the real unit |
 | Camping master off, a link that starts less than 6 s after the unit ended the previous one | Cuts it about 1.2 s in. A link that starts 6 s or later holds until the hang-up. | Live-verified on the real unit |
-| Shore power active or standby (`1602` `StateLandAfs` 1 or 2) | Keeps the link, by the app's reconnect rule. | Verified against the app's code only |
+| Shore power active or standby (`1602` `StateLandAfs` 1 or 2) | The app keeps reconnecting after a lost link. Whether the unit itself keeps the link is not known. | App behaviour verified against the app's code; unit side untested |
 | Ignition on, camping master off | Unknown. | Untested |
 
 The hang-up is the unit's own timer. Before it, the unit sends no request except the ATT Exchange

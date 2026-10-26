@@ -128,7 +128,7 @@ recorded per-poll in `poll_outcomes.jsonl` and classified by `tools.analyze_batt
 - **Unit Bluetooth DISABLED** (in the unit's own settings) — persistent `DeviceNotFound` that
   **will NOT self-resolve** until re-enabled; then buspi reconnects on the next poll. Shows as a
   long unbroken `ble_error` run (observed 2026-08-18). NOT a buspi fault.
-- **Power-save hang-up** (camping master off, no shore power) — the unit ends every link ~30.7 s
+- **[Power-save hang-up](https://ckeller42.github.io/open-california/glossary.html#term-Power-save-hang-up)** (camping master off, no shore power) — the unit ends every link ~30.7 s
   after encryption (HCI 0x13, NimBLE status 19/531), heartbeat and reads or not, and cuts a link
   that starts < 6 s after its last hang-up ~1.2 s in (51/51 vs 0/47 for ≥ 6 s). Camping on: links
   hold for hours. Live, no shore power ever connected: 87 satellite drops in 30 min camping-off

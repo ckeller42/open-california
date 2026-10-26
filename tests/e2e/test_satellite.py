@@ -825,7 +825,8 @@ def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale):
         for name in (w["camping"], w["reconnect"]):
             assert conn.get_by_role("button", name=name).bounding_box()["height"] >= 44
         # the stub's fixed age makes "Last data HH:MM" move at each minute: stay clear of that rebuild
-        pg.wait_for_function("() => new Date().getSeconds() < 50", timeout=15000)
+        # (30 s of margin: a slow CI runner needs more than one 2 s poll + the expect below)
+        pg.wait_for_function("() => new Date().getSeconds() < 30", timeout=35000)
         btn = conn.get_by_role("button", name=w["reconnect"]).element_handle()
         link["rest_next_s"] = 1440  # a minute later: the count moves, the card is not rebuilt
         expect(conn.locator(".rest-next")).to_have_text(w["next"].replace("25", "24"))

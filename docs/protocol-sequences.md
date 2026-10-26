@@ -1217,8 +1217,9 @@ in. With camping master on, links hold for hours.
 * **The ESP32 satellite** enters the {term}`power-save rest <Power-save rest>` (no redial, one
   short reading every `rest_poll_min` minutes, *Reconnect*). While a page is visibly in use, it
   redials instead. Every reconnect waits at least 7 s after the lost link.
-* **Shore power** active or standby (`1602` `StateLandAfs` 1 or 2) keeps the app reconnecting.
-  That the unit keeps the link with shore power is verified against the app's code only.
+* **Shore power** active or standby (`1602` `StateLandAfs` 1 or 2) keeps the app reconnecting
+  (verified against the app's code). Whether the unit itself keeps the link with shore power is
+  untested.
 ```
 
 ```mermaid
