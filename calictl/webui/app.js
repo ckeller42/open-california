@@ -472,7 +472,9 @@ const onoff = (b) => /** @type {string} */ (t(b ? "On" : "Off"));
 /** @type {(v: number|null|undefined, u: string) => string} */
 const withUnit = (v, u) => (v == null ? "—" : `${v} ${u}`);
 /** "<W> W · <A> A · <V> V", W = V × A rounded; "—" for a missing part. @param {number|null|undefined} v @param {number|null|undefined} a */
-const wav = (v, a) => `${v != null && a != null ? Math.round(v * a) : "—"} W · ${a ?? "—"} A · ${v ?? "—"} V`;
+// no reading at all (a sleeping starter: semantics sends both null) is one "—", not "— W · — A · — V"
+const wav = (v, a) => (v == null && a == null ? "—"
+  : `${v != null && a != null ? Math.round(v * a) : "—"} W · ${a ?? "—"} A · ${v ?? "—"} V`);
 /** @type {(t: Tank|null|undefined) => string} */
 const tank = (t) => (t && t.percent != null ? `${t.percent}%  (${t.liters}/${t.capacity_l} L)` : "—");
 // dg/i brightness enum -> display: 0-10 are real levels, 11=device default, >=13 is no-reading
