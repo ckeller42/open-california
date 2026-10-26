@@ -34,6 +34,42 @@ unit's own `0x2901` descriptors label every pair "Control"/"State".
 > BrightnessL1…L16` (16 per-zone fields) = the interior LED lighting. There is **no** BLE
 > control for the unit's own touchscreen/panel brightness (that's a local setting).
 
+## Connection lifetime
+
+How long the unit keeps a {term}`central`'s link depends on camping mode and shore power. The
+sequence is {need}`S_SEQ_POWER_SAVE_HANGUP`. The measurements are in the
+[evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html).
+
+| Condition | What the unit does | Evidence |
+|---|---|---|
+| Camping master on (`1202` `State` 1) | Keeps the link for hours. | Live-verified on the real unit |
+| Camping master off, no shore power | Ends every link about 30.7 s after encryption (HCI `0x13` remote user terminated, NimBLE status 19 or 531), with or without the `1003` heartbeat or reads. This is the {term}`power-save hang-up <Power-save hang-up>`. | Live-verified on the real unit |
+| Camping master off, a link that starts less than 6 s after the unit ended the previous one | Cuts it about 1.2 s in. A link that starts 6 s or later holds until the hang-up. | Live-verified on the real unit |
+| Shore power active or standby (`1602` `StateLandAfs` 1 or 2) | Keeps the link, by the app's reconnect rule. | Verified against the app's code only |
+| Ignition on, camping master off | Unknown. | Untested |
+
+The hang-up is the unit's own timer. Before it, the unit sends no request except the ATT Exchange
+MTU Request right after connect. It ends an idle BlueZ link at the same time.
+
+**Reconnect cooldown.** After the unit ended a link, wait at least 7 s before the next connect. A
+sooner link is cut about 1.2 s in.
+
+**How the centrals react:**
+
+- **The app** (verified against the app's code only) keeps reconnecting after an unexpected
+  disconnect only on a connection timeout, with shore power active or standby, or in the
+  foreground when the unit did not end the link itself. Otherwise it stops and shows
+  "Disconnected to save energy" with the hint to turn on camping mode to stay connected. The user
+  reconnects by hand.
+- **The ESP32 satellite** waits the 7 s cooldown before any reconnect. After the hang-up it enters
+  the {term}`power-save rest <Power-save rest>`: no redial, one short reading every
+  `rest_poll_min` minutes, and a *Reconnect* button. While a page is visibly in use, it redials
+  after the cooldown instead. See {doc}`firmware`.
+- **buspi's `calictl serve`** has no camping or shore-power rule and no cooldown. It holds a
+  session only while its web UI is active, checks it every `--interval` (default 30 s) and
+  reconnects a dropped one at that check. With the web UI idle it reads with short
+  connect-read-release polls every `--interval`.
+
 ## Machine-readable dictionary
 
 The full per-function field map is auto-extracted from the app by

@@ -75,6 +75,9 @@ traceability table on the index page):
 * - {need}`S_SEQ_SLEEP`
   - Reachability / deep-sleep
   - A parked unit stops advertising, the daemon serves the last known state.
+* - {need}`S_SEQ_POWER_SAVE_HANGUP`
+  - Power-save hang-up
+  - Camping off, no shore power: the unit ends each link 30 s in, the 7 s reconnect cooldown.
 * - {need}`S_SEQ_MQTT`
   - Home Assistant over MQTT
   - Discovery, state publish and command-in via `serve.on_command`.
@@ -1190,14 +1193,61 @@ BlueZ and Android answer it. The satellite answers it because its NimBLE is buil
 {term}`GATT server` (in ESP-IDF, `BT_NIMBLE_GATT_SERVER` needs `BT_NIMBLE_ROLE_PERIPHERAL`; the
 satellite's `sdkconfig` enables both), so its parked link holds too while camping mode is on.
 
-**Camping mode off.** While camping master is off, the unit ends every held central link (HCI
-`0x13`) about 30.7 s after encryption, with or without a heartbeat or reads, and cuts a link
-that starts less than 6 s after it ended the previous one about 1.2 s in. With camping master on,
-links hold. The satellite therefore waits at least 7 s before a reconnect
-({need}`S_SEQ_ESP_PAIRING`); buspi's supervisor reconnects with its own backoff.
+**Camping mode off.** With camping master off and no shore power, the unit ends every link about
+30.7 s after encryption: the {term}`power-save hang-up <Power-save hang-up>`
+({need}`S_SEQ_POWER_SAVE_HANGUP`). With camping master on, links hold.
 
 The connection failure modes are in [value-freshness.md](https://ckeller42.github.io/open-california/business-logic/value-freshness.html) ("Connection
 failure modes").
+
+## Power-save hang-up
+
+```{spec} The unit ends a link 30 s in while camping mode is off
+:id: S_SEQ_POWER_SAVE_HANGUP
+:status: live-verified
+:links: R_FW_BLE_REST, R_FW_BLE_VIEWER_KEEP, R_FW_SESSION
+
+**Contract.** With camping master off (`1202` `State` 0) and no shore power, the unit ends every
+central's link about 30.7 s after encryption (HCI `0x13`), with or without the `1003` heartbeat
+or reads. It cuts a link that starts less than 6 s after it ended the previous one about 1.2 s
+in. With camping master on, links hold for hours.
+
+* **The app** stops reconnecting after this hang-up and shows "Disconnected to save energy" with
+  the hint to turn on camping mode. The user reconnects by hand.
+* **The ESP32 satellite** enters the {term}`power-save rest <Power-save rest>` (no redial, one
+  short reading every `rest_poll_min` minutes, *Reconnect*). While a page is visibly in use, it
+  redials instead. Every reconnect waits at least 7 s after the lost link.
+* **Shore power** active or standby (`1602` `StateLandAfs` 1 or 2) keeps the app reconnecting.
+  That the unit keeps the link with shore power is verified against the app's code only.
+```
+
+```mermaid
+sequenceDiagram
+    participant C as Central (app or satellite)
+    participant U as Camper unit
+    Note over U: camping master off, no shore power
+    C->>U: connect, encrypt by bond
+    U->>C: ATT Exchange MTU Request
+    C-->>U: MTU response, reads and heartbeat as usual
+    Note over U: about 30.7 s after encryption
+    U--xC: disconnect, HCI 0x13 remote user terminated
+    alt the app
+        Note over C: stops, card Disconnected to save energy, user taps Connect
+    else satellite, no page in use
+        Note over C: power-save rest, one short reading every rest_poll_min
+    else satellite, page visibly in use
+        Note over C: redials after the cooldown
+    end
+    Note over C: no reconnect before 7 s
+    C->>U: connect again
+    Note over U: a link sooner than 6 s after the hang-up is cut about 1.2 s in
+```
+
+**Evidence.** Live-verified on the real unit for camping master off with no shore power: an idle
+BlueZ link held with camping on and was ended 30.7 s after encryption with camping off, and the
+satellite's links ended at the same time with heartbeat and reads. The app's reaction and the
+shore-power rule are verified against the app's code only. Ignition on with camping off is
+untested. See the [evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html).
 
 ## Home Assistant over MQTT
 
