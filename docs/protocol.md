@@ -51,8 +51,9 @@ sequence is {need}`S_SEQ_POWER_SAVE_HANGUP`. The measurements are in the
 The hang-up is the unit's own timer. Before it, the unit sends no request except the ATT Exchange
 MTU Request right after connect. It ends an idle BlueZ link at the same time.
 
-**Reconnect cooldown.** After the unit ended a link, wait at least 7 s before the next connect. A
-sooner link is cut about 1.2 s in.
+**Reconnect cooldown.** After the unit ended a link, wait at least 7 s before the next connect.
+The unit cuts a link that starts less than 6 s after it, about 1.2 s in; the satellite's 7 s
+keeps a margin.
 
 **How the centrals react:**
 
