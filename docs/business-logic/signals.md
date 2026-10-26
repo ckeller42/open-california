@@ -230,8 +230,10 @@ panel "House load" uses the same formula (7-day floor about 0.70 A, fridge cycle
 **Limits.**
 
 - The inputs come from two independent pollers (camper unit, Victron BLE), so readings taken seconds
-  apart can give false spikes. The UI shows "—" when a charger reading is older than 60 s, shows a
-  result from -0.5 A to 0 as 0, and "—" below -0.5 A.
+  apart can give false spikes. The UI shows "—" when a charger reading or the unit's reading is older
+  than 60 s, shows a result from -0.5 A to 0 as 0, and "—" below -0.5 A. The unit's age matters on
+  the satellite: in a power-save rest it keeps the unit's last frame for many minutes while the
+  Victron charger stays live, and their difference is no load.
 - 0.1 A resolution is about +-1.3 W.
 - A load on the STARTER battery is not included.
 - On calictl's page the row is absent: calictl does not read the Victron charger.

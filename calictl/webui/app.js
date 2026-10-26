@@ -2937,16 +2937,19 @@ const EXT_TYPES = {
   ] },
 };
 
-/** Age limit (s) of a charger reading in the house-load sum: the two pollers are independent. */
+/** Age limit (s) of each reading in the house-load sum (charger and unit): the pollers are independent. */
 const HOUSE_LOAD_MAX_AGE_S = 60;
 /**
  * House load = Σ charger battery-side currents − the second battery's net current, "<W> W · <A> A".
- * "—" when an installed source or the battery reading is missing, a charger reading is stale, or
- * the result is below −0.5 A (a measurement mismatch); −0.5…0 A shows as 0.
+ * "—" when an installed source or the battery reading is missing, a charger reading or the unit's
+ * reading is stale (a power-save rest keeps the unit's last frame for many minutes, while the chargers
+ * stay live), or the result is below −0.5 A (a measurement mismatch); −0.5…0 A shows as 0.
  * @param {FnState} s the energy state
  * @returns {string}
  */
 function houseLoad(s) {
+  const m = STATE._meta;
+  if (!m || m.age_s == null || m.age_s + (Date.now() - stateAt) / 1000 > HOUSE_LOAD_MAX_AGE_S) return "—";
   let sum = 0;
   for (const [, e] of extEntries("victron_mppt")) {
     if (typeof e.age_s !== "number" || e.age_s > HOUSE_LOAD_MAX_AGE_S || typeof e.battery_current !== "number") return "—";
