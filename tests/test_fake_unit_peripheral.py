@@ -419,7 +419,9 @@ def test_a_second_connection_is_numbered_and_restarts_t_ms(tmp_path):
     evs = _events(rec)
     assert [e["conn"] for e in evs if e["ev"] == "connect"] == [1, 2]
     second = [e for e in evs if e["conn"] == 2]
-    assert second[0]["ev"] == "connect" and second[0]["t_ms"] <= 1
+    # restarted: without it the second link's clock would read >= 250 ms (two waits of 50 + 200 ms);
+    # a loaded CI runner can take a few ms to log the connect, so not "<= 1"
+    assert second[0]["ev"] == "connect" and second[0]["t_ms"] < 100
     assert [e["ev"] for e in evs].count("disconnect") == 2
 
 
