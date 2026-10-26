@@ -1598,7 +1598,7 @@ def test_calictl_page_has_no_house_load_row(page, base_url):
 
 def test_battery_rows_read_w_a_v_like_the_solar_row(page, base_url):
     """One row per battery in the solar row's order, "<W> W · <A> A · <V> V" (owner 2026-10-15); W is
-    V × A rounded. The starter's missing reading (the mock's sleeping starter) keeps its slots as "—"."""
+    V × A rounded. The starter's missing reading (the mock's sleeping starter) is one "—"."""
     page.goto(base_url)
     page.locator(".tile", has_text="Energy").first.click()
     rows = dict(
@@ -1611,9 +1611,9 @@ def test_battery_rows_read_w_a_v_like_the_solar_row(page, base_url):
     m = re.fullmatch(r"(-?\d+) W · (-?[\d.]+) A · ([\d.]+) V", rows["Second battery power"])
     assert m, rows["Second battery power"]
     assert int(m[1]) == round(float(m[2]) * float(m[3]))
-    assert re.fullmatch(r"(—|-?\d+) W · (—|-?[\d.]+) A · (—|[\d.]+) V", rows["Starter power"]), rows[
-        "Starter power"
-    ]
+    assert rows["Starter power"] == "—" or re.fullmatch(
+        r"-?\d+ W · -?[\d.]+ A · [\d.]+ V", rows["Starter power"]
+    ), rows["Starter power"]
 
 
 # --- navigation on a phone (UX review "navigation" 2026-10-15: C1, H1, H3, M1, M3) ---------------
