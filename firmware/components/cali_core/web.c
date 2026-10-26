@@ -328,7 +328,7 @@ static void api_wifi_get(cali_http_resp_t *resp) {
     if (st.wifi_mode == CALI_WIFI_MODE_SETUP || st.wifi_state == WIFI_ONLINE) cali_wifi_run_scan_auto();
 }
 
-/* ---- the fixed-shape {"ssid":"…","psk":"…"} parser ---- */
+/* ---- the POST-body parser: one flat JSON object of known keys (parse_obj) ---- */
 
 typedef struct {
     const char *p, *end;
@@ -368,29 +368,60 @@ static int parse_str(cursor_t *c, char *out, size_t cap, size_t *len) {
     return 0;
 }
 
+static int index_of(const char *s, const char *const *set, size_t n) {
+    for (size_t i = 0; i < n; i++)
+        if (strcmp(s, set[i]) == 0) return (int)i;
+    return -1;
+}
+
+/* parses keys[i]'s value at c into ctx: 0 ok, nonzero malformed */
+typedef int (*field_fn)(cursor_t *c, int i, void *ctx);
+
+/* One object {"key":value,...} whose keys are all in keys[0..n) (n <= 16), each at most once; field
+ * parses each value. The keys seen (bit i = keys[i]; {} = 0), or -1 not that shape. Every POST body
+ * goes through here: each handler keeps only its values and its own rules on which keys it needs. */
+static int parse_obj(cursor_t *c, const char *const *keys, size_t n, field_fn field, void *ctx) {
+    int seen = 0;
+    if (expect(c, '{') != 0) return -1;
+    if (expect(c, '}') == 0) return 0;
+    for (;;) {
+        char key[16];   /* the longest key (halt_after_min) fits; a longer one is unknown */
+        size_t klen;
+        int i;
+        if (parse_str(c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(c, ':') != 0) return -1;
+        if ((i = index_of(key, keys, n)) < 0 || (seen & 1 << i) || field(c, i, ctx) != 0) return -1;
+        seen |= 1 << i;
+        if (expect(c, ',') == 0) continue;
+        return expect(c, '}') == 0 ? seen : -1;
+    }
+}
+
+/* parse_obj over the whole body: nothing but whitespace may follow the object */
+static int parse_body(const char *body, size_t body_len, const char *const *keys, size_t n, field_fn field,
+                      void *ctx) {
+    cursor_t c = {body, body + body_len};
+    int seen = parse_obj(&c, keys, n, field, ctx);
+    skip_ws(&c);
+    return c.p == c.end ? seen : -1;
+}
+
+typedef struct {
+    char *ssid, *psk;
+    size_t *ssid_len, *psk_len;
+} creds_t;
+
+static int creds_field(cursor_t *c, int i, void *ctx) {
+    creds_t *k = ctx;
+    return i == 0 ? parse_str(c, k->ssid, NET_SSID_MAX + 1, k->ssid_len)
+                  : parse_str(c, k->psk, NET_PSK_MAX + 1, k->psk_len);
+}
+
 /* 0 ok (ssid/psk filled, lengths set), -1 not exactly {"ssid":"…","psk":"…"} in either order. */
 static int parse_creds(const char *body, size_t body_len, char *ssid, size_t *ssid_len, char *psk,
                        size_t *psk_len) {
-    cursor_t c = {body, body + body_len};
-    int seen_ssid = 0, seen_psk = 0;
-    if (expect(&c, '{') != 0) return -1;
-    for (int m = 0; m < 2; m++) {
-        char key[8];
-        size_t klen;
-        if (parse_str(&c, key, sizeof key, &klen) != 0 || expect(&c, ':') != 0) return -1;
-        if (klen == 4 && strcmp(key, "ssid") == 0 && !seen_ssid) {
-            seen_ssid = 1;
-            if (parse_str(&c, ssid, NET_SSID_MAX + 1, ssid_len) != 0) return -1;
-        } else if (klen == 3 && strcmp(key, "psk") == 0 && !seen_psk) {
-            seen_psk = 1;
-            if (parse_str(&c, psk, NET_PSK_MAX + 1, psk_len) != 0) return -1;
-        } else {
-            return -1;
-        }
-        if (expect(&c, m == 0 ? ',' : '}') != 0) return -1;
-    }
-    skip_ws(&c);
-    return c.p == c.end ? 0 : -1;
+    static const char *const KEYS[] = {"ssid", "psk"};
+    creds_t k = {ssid, psk, ssid_len, psk_len};
+    return parse_body(body, body_len, KEYS, N_OF(KEYS), creds_field, &k) == 3 ? 0 : -1;
 }
 
 static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
@@ -522,54 +553,24 @@ static int parse_local_now(cursor_t *c, cmd_t *cmd) {
     return 0;
 }
 
+static int command_field(cursor_t *c, int i, void *ctx) {
+    cmd_t *cmd = ctx;
+    size_t vlen;
+    switch (i) {
+    case 0: return parse_str(c, cmd->fn, sizeof cmd->fn, &vlen) != 0 || vlen >= sizeof cmd->fn;
+    case 1: return parse_str(c, cmd->what, sizeof cmd->what, &vlen) != 0 || vlen >= sizeof cmd->what;
+    case 2: return parse_value(c, cmd->value, sizeof cmd->value);
+    case 3: return parse_bool(c, &cmd->confirm);
+    default: return parse_local_now(c, cmd);
+    }
+}
+
 /* 0 ok, -1 not one object of the five known keys (each at most once; an over-long function, what
  * or value is malformed too — calictl would answer "unknown function"/CommandError, both a 4xx). */
 static int parse_command(const char *body, size_t body_len, cmd_t *cmd) {
-    cursor_t c = {body, body + body_len};
-    unsigned seen = 0;
+    static const char *const KEYS[] = {"function", "what", "value", "confirm", "local_now"};
     memset(cmd, 0, sizeof *cmd);
-    if (expect(&c, '{') != 0) return -1;
-    skip_ws(&c);
-    if (c.p < c.end && *c.p == '}') {
-        c.p++;
-    } else {
-        for (;;) {
-            char key[12];
-            size_t klen, vlen;
-            unsigned bit;
-            int bad;
-            if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
-            if (strcmp(key, "function") == 0) {
-                bit = 1;
-                bad = parse_str(&c, cmd->fn, sizeof cmd->fn, &vlen) != 0 || vlen >= sizeof cmd->fn;
-            } else if (strcmp(key, "what") == 0) {
-                bit = 2;
-                bad = parse_str(&c, cmd->what, sizeof cmd->what, &vlen) != 0 || vlen >= sizeof cmd->what;
-            } else if (strcmp(key, "value") == 0) {
-                bit = 4;
-                bad = parse_value(&c, cmd->value, sizeof cmd->value) != 0;
-            } else if (strcmp(key, "confirm") == 0) {
-                bit = 8;
-                bad = parse_bool(&c, &cmd->confirm) != 0;
-            } else if (strcmp(key, "local_now") == 0) {
-                bit = 16;
-                bad = parse_local_now(&c, cmd) != 0;
-            } else {
-                return -1;
-            }
-            if (bad || (seen & bit)) return -1;
-            seen |= bit;
-            skip_ws(&c);
-            if (c.p < c.end && *c.p == ',') {
-                c.p++;
-                continue;
-            }
-            if (expect(&c, '}') != 0) return -1;
-            break;
-        }
-    }
-    skip_ws(&c);
-    return c.p == c.end ? 0 : -1;
+    return parse_body(body, body_len, KEYS, N_OF(KEYS), command_field, cmd) < 0 ? -1 : 0;
 }
 
 /* The one command the single-connection core can have open: its function (echoed in the answer)
@@ -668,51 +669,22 @@ typedef struct {
     int value_str, confirm;
 } pair_req_t;
 
+static int pairing_field(cursor_t *c, int i, void *ctx) {
+    pair_req_t *r = ctx;
+    char other[CALI_CTL_VALUE_MAX];
+    if (i == 0) return parse_str(c, r->action, sizeof r->action, &r->action_len);
+    if (i == 2) return parse_bool(c, &r->confirm);
+    skip_ws(c);
+    r->value_str = c->p < c->end && *c->p == '"';
+    return r->value_str ? parse_str(c, r->value, sizeof r->value, &r->value_len) : parse_value(c, other, sizeof other);
+}
+
 /* 0 ok, -1 not one object of the keys action (string), value (string, integer or null), confirm
  * (bool), each at most once. */
 static int parse_pairing(const char *body, size_t body_len, pair_req_t *r) {
-    cursor_t c = {body, body + body_len};
-    unsigned seen = 0;
+    static const char *const KEYS[] = {"action", "value", "confirm"};
     memset(r, 0, sizeof *r);
-    if (expect(&c, '{') != 0) return -1;
-    skip_ws(&c);
-    if (c.p < c.end && *c.p == '}') {
-        c.p++;
-    } else {
-        for (;;) {
-            char key[10], other[CALI_CTL_VALUE_MAX];
-            size_t klen;
-            unsigned bit;
-            int bad;
-            if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
-            skip_ws(&c);
-            if (strcmp(key, "action") == 0) {
-                bit = 1;
-                bad = parse_str(&c, r->action, sizeof r->action, &r->action_len) != 0;
-            } else if (strcmp(key, "value") == 0) {
-                bit = 2;
-                r->value_str = c.p < c.end && *c.p == '"';
-                bad = r->value_str ? parse_str(&c, r->value, sizeof r->value, &r->value_len) != 0
-                                   : parse_value(&c, other, sizeof other) != 0;
-            } else if (strcmp(key, "confirm") == 0) {
-                bit = 4;
-                bad = parse_bool(&c, &r->confirm) != 0;
-            } else {
-                return -1;
-            }
-            if (bad || (seen & bit)) return -1;
-            seen |= bit;
-            skip_ws(&c);
-            if (c.p < c.end && *c.p == ',') {
-                c.p++;
-                continue;
-            }
-            if (expect(&c, '}') != 0) return -1;
-            break;
-        }
-    }
-    skip_ws(&c);
-    return c.p == c.end ? 0 : -1;
+    return parse_body(body, body_len, KEYS, N_OF(KEYS), pairing_field, r) < 0 ? -1 : 0;
 }
 
 /* calictl's pairing_snapshot(): the console's STATE members + radio_busy (always false here: no
@@ -774,34 +746,39 @@ static void api_pairing(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
-/* {"channel":"<s>"} exactly: 0 (the value in out, NUL-terminated, *len its whole length), -1 not that shape. */
-static int parse_channel(const char *body, size_t body_len, char *out, size_t cap, size_t *len) {
-    cursor_t c = {body, body + body_len};
-    char key[8];
-    size_t klen;
-    if (expect(&c, '{') != 0 || parse_str(&c, key, sizeof key, &klen) != 0 || klen != 7 ||
-        strcmp(key, "channel") != 0 || expect(&c, ':') != 0 || parse_str(&c, out, cap, len) != 0 ||
-        expect(&c, '}') != 0)
-        return -1;
-    skip_ws(&c);
-    return c.p == c.end ? 0 : -1;
+typedef struct {
+    char v[8];
+    size_t len;   /* the whole decoded length (may exceed sizeof v - 1) */
+} chan_t;
+
+static int channel_field(cursor_t *c, int i, void *ctx) {
+    chan_t *ch = ctx;
+    (void)i;
+    return parse_str(c, ch->v, sizeof ch->v, &ch->len);
 }
+
+/* the one-key {"<key>":<bool>} bodies: the bool into *(int *)ctx */
+static int bool_field(cursor_t *c, int i, void *ctx) {
+    (void)i;
+    return parse_bool(c, ctx);
+}
+
+static const char *const K_CHANNEL[] = {"channel"}, *const K_ENABLED[] = {"enabled"}, *const K_SENSORS[] = {"sensors"};
 
 /* ---- POST /api/ota {"action":"check"|"install"} | {"channel":"stable"|"latest"} (R_FW_OTA): station
  * mode only, like /api/command. The channel is stored at once (the next check uses it), even on a
  * build without OTA I/O; it never starts the OTA task. ---- */
 static void api_ota(const cali_http_req_t *req, cali_http_resp_t *resp) {
     static pair_req_t r;   /* the same {"action":…} shape as /api/pairing */
-    char ch[8];
-    size_t chlen;
+    chan_t ch;
     int rc;
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {   /* never over the setup hotspot */
         SET_CONST(resp, 403, ERR_SETUP_MODE);
-    } else if (parse_channel(req->body, req->body_len, ch, sizeof ch, &chlen) == 0) {
-        int latest = chlen == 6 && strcmp(ch, "latest") == 0;
-        if (!latest && !(chlen == 6 && strcmp(ch, "stable") == 0)) SET_CONST(resp, 400, ERR_BAD_VALUE);
+    } else if (parse_body(req->body, req->body_len, K_CHANNEL, 1, channel_field, &ch) == 1) {   /* {"channel":"<s>"} */
+        int latest = ch.len == 6 && strcmp(ch.v, "latest") == 0;
+        if (!latest && !(ch.len == 6 && strcmp(ch.v, "stable") == 0)) SET_CONST(resp, 400, ERR_BAD_VALUE);
         else if (cali_ota_set_channel(latest) != 0) SET_CONST(resp, 500, ERR_STORE);
         else SET_CONST(resp, 200, OK_BODY);   /* the choice: /api/state device.ota.channel */
     } else if (parse_pairing(req->body, req->body_len, &r) != 0) {
@@ -819,16 +796,12 @@ static void api_ota(const cali_http_req_t *req, cali_http_resp_t *resp) {
 
 /* ---- POST /api/auto_camper {"enabled":<bool>} (R_FW_AUTO_CAMPER, serve's endpoint): station mode only ---- */
 static void api_auto_camper(const cali_http_req_t *req, cali_http_resp_t *resp) {
-    cursor_t c = {req->body, req->body + req->body_len};
-    char key[8];
-    size_t klen;
     int on;
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
         SET_CONST(resp, 403, ERR_SETUP_MODE);
-    } else if (expect(&c, '{') != 0 || parse_str(&c, key, sizeof key, &klen) != 0 || klen != 7 || strcmp(key, "enabled") != 0 ||
-               expect(&c, ':') != 0 || parse_bool(&c, &on) != 0 || expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end)) {
+    } else if (parse_body(req->body, req->body_len, K_ENABLED, 1, bool_field, &on) != 1) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
     } else if (cali_ac_set_enabled(on) != 0) {
         SET_CONST(resp, 500, ERR_STORE);
@@ -881,43 +854,40 @@ static void api_pi_halt(const cali_http_req_t *req, cali_http_resp_t *resp) {
  * {"connect":true} (out of rest, reconnect now after the cooldown; 409 not_paired without a bond),
  * {"active":true} (user input on the page: the viewer keep's idle cap, R_FW_BLE_VIEWER_KEEP) —
  * keys combinable, each at most once; answers device.ble ---- */
+typedef struct {
+    unsigned num[10];   /* by key index; from/to default 22/6 */
+    int mode, probe, conn, active;   /* mode -1 absent, -2 not a mode (bad_value) */
+} ble_req_t;
+
+static int ble_field(cursor_t *c, int i, void *ctx) {
+    ble_req_t *b = ctx;
+    if (i == 0) {
+        char val[8];
+        size_t vlen;
+        if (parse_str(c, val, sizeof val, &vlen) != 0) return -1;
+        b->mode = vlen >= sizeof val ? -2
+                  : strcmp(val, "hold") == 0  ? CALI_BLE_HOLD
+                  : strcmp(val, "quiet") == 0 ? CALI_BLE_QUIET
+                  : strcmp(val, "off") == 0   ? CALI_BLE_OFF
+                                              : -2;
+        return 0;
+    }
+    return i == 1 ? parse_bool(c, &b->probe) : i == 8 ? parse_bool(c, &b->conn) : i == 9 ? parse_bool(c, &b->active)
+                                                                                         : parse_uint(c, &b->num[i]);
+}
+
 static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
     if (strcmp(req->method, "GET") != 0) {
         static const char *const KEYS[10] = {"mode", "probe", "exp_min", "from", "to", "idle_min", "warm_ms",
                                              "rest_poll_min", "connect", "active"};
-        cursor_t c = {req->body, req->body + req->body_len};
-        unsigned num[10] = {0, 0, 0, 22, 6, 0, 0, 0, 0, 0};
-        int seen = 0, mode = -1, probe = 0, conn = 0, active = 0, bad = expect(&c, '{') != 0;
+        ble_req_t b = {{0, 0, 0, 22, 6, 0, 0, 0, 0, 0}, -1, 0, 0, 0};
+        unsigned *num = b.num;
+        int seen, mode, probe, conn, active;
         if (strcmp(req->method, "POST") != 0) { SET_CONST(resp, 405, ERR_METHOD); return; }
         if (wifi_mode() != CALI_WIFI_MODE_STATION) { SET_CONST(resp, 403, ERR_SETUP_MODE); return; }
-        while (!bad) {
-            char key[16], val[8];
-            size_t klen, vlen;
-            int i;
-            if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) { bad = 1; break; }
-            for (i = 0; i < 10 && strcmp(key, KEYS[i]) != 0; i++) {}
-            if (i == 10 || (seen & (1 << i))) { bad = 1; break; }
-            seen |= 1 << i;
-            if (i == 0) {
-                if (parse_str(&c, val, sizeof val, &vlen) != 0) { bad = 1; break; }
-                mode = vlen >= sizeof val ? -2
-                       : strcmp(val, "hold") == 0  ? CALI_BLE_HOLD
-                       : strcmp(val, "quiet") == 0 ? CALI_BLE_QUIET
-                       : strcmp(val, "off") == 0   ? CALI_BLE_OFF
-                                                   : -2;
-            } else if ((i == 1   ? parse_bool(&c, &probe)
-                        : i == 8 ? parse_bool(&c, &conn)
-                        : i == 9 ? parse_bool(&c, &active)
-                                 : parse_uint(&c, &num[i])) != 0) {
-                bad = 1;
-                break;
-            }
-            skip_ws(&c);
-            if (c.p < c.end && *c.p == ',') { c.p++; continue; }
-            if (expect(&c, '}') != 0) bad = 1;
-            break;
-        }
-        if (bad || (skip_ws(&c), c.p != c.end) || !(seen & 999)) { SET_CONST(resp, 400, ERR_BAD_JSON); return; }
+        seen = parse_body(req->body, req->body_len, KEYS, 10, ble_field, &b);
+        if (seen < 0 || !(seen & 999)) { SET_CONST(resp, 400, ERR_BAD_JSON); return; }
+        mode = b.mode, probe = b.probe, conn = b.conn, active = b.active;
         if (mode == -2 || num[2] > 720 || num[3] > 23 || num[4] > 23 || num[5] > CALI_BI_MAX_MIN || num[6] > 5000 ||
             num[7] > CALI_SESSION_REST_POLL_MAX_MIN) {
             SET_CONST(resp, 400, ERR_BAD_VALUE);
@@ -947,33 +917,31 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
 
 /* {"enabled"?:<bool>,"halt_after_min"?:0..1440,"halt_soc_pct"?:0..100}, at least one, each once:
  * *on / *min / *soc = the value or -1 when absent. 0 ok, -1 bad JSON, -2 a number out of range. */
+typedef struct {
+    int v[3], range;   /* enabled, halt_after_min, halt_soc_pct (clamped); range: one was past its max */
+} pi_set_t;
+
+static int pi_setting_field(cursor_t *c, int i, void *ctx) {
+    static const unsigned MAX[3] = {1, CALI_PH_MIN_MAX, 100};
+    pi_set_t *s = ctx;
+    int b;
+    unsigned v;
+    if ((i == 0 ? parse_bool(c, &b) : parse_uint(c, &v)) != 0) return -1;
+    if (i == 0) v = (unsigned)b;
+    if (v > MAX[i]) s->range = 1;
+    s->v[i] = (int)(v > MAX[i] ? MAX[i] : v);
+    return 0;
+}
+
 static int parse_pi_setting(const char *body, size_t body_len, int *on, int *min, int *soc) {
     static const char *const KEYS[3] = {"enabled", "halt_after_min", "halt_soc_pct"};
-    static const unsigned MAX[3] = {1, CALI_PH_MIN_MAX, 100};
-    int *dst[3] = {on, min, soc};
-    cursor_t c = {body, body + body_len};
-    int range = 0;
-    *on = *min = *soc = -1;
-    if (expect(&c, '{') != 0) return -1;
-    for (;;) {
-        char key[16];
-        size_t klen;
-        int i, b;
-        unsigned v;
-        if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
-        for (i = 0; i < 3 && strcmp(key, KEYS[i]) != 0; i++) {}
-        if (i == 3 || *dst[i] != -1 || (i == 0 ? parse_bool(&c, &b) : parse_uint(&c, &v)) != 0) return -1;
-        if (i == 0) v = (unsigned)b;
-        if (v > MAX[i]) range = 1;
-        *dst[i] = (int)(v > MAX[i] ? MAX[i] : v);
-        skip_ws(&c);
-        if (c.p < c.end && *c.p == ',') { c.p++; continue; }
-        if (expect(&c, '}') != 0) return -1;
-        break;
-    }
-    skip_ws(&c);
-    if (c.p != c.end) return -1;
-    return range ? -2 : 0;
+    pi_set_t s = {{-1, -1, -1}, 0};
+    int seen = parse_body(body, body_len, KEYS, 3, pi_setting_field, &s);
+    *on = s.v[0];
+    *min = s.v[1];
+    *soc = s.v[2];
+    if (seen <= 0) return -1;
+    return s.range ? -2 : 0;
 }
 
 /* ---- POST /api/pi_wake_setting (R_FW_PI_WAKE, R_FW_PI_HALT): wake on ignition, the halt timer and
@@ -1015,34 +983,29 @@ static int parse_pct(cursor_t *c, int *out, int sign) {   /* [-]1-3 digits; a 4t
 /* Merges the given members into *d; "dfs" (a bool, not a setting) into *dfs (-1 when absent);
  * *only_dfs = the body held nothing but "dfs" (then there is no setting to store).
  * 0 ok, -1 not an object of those keys (each at most once). */
+typedef struct {
+    cali_display_cfg_t *d;
+    int dfs;
+} disp_req_t;
+
+static int display_field(cursor_t *c, int i, void *ctx) {
+    disp_req_t *r = ctx;
+    cali_display_cfg_t *d = r->d;
+    uint8_t *dst[6] = {&d->auto_on, &d->prox_wake, &d->min_pct, &d->max_pct, (uint8_t *)&d->offset, &d->motion_wake};
+    int v;
+    if ((i < 2 || i >= 5 ? parse_bool(c, &v) : parse_pct(c, &v, i == 4)) != 0) return -1;
+    if (i == 6) r->dfs = v;
+    else *dst[i] = (uint8_t)(int8_t)v;
+    return 0;
+}
+
 static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *d, int *dfs, int *only_dfs) {
     static const char *const KEYS[7] = {"auto", "prox_wake", "min", "max", "offset", "motion_wake", "dfs"};
-    uint8_t *dst[6] = {&d->auto_on, &d->prox_wake, &d->min_pct, &d->max_pct, (uint8_t *)&d->offset, &d->motion_wake};
-    cursor_t c = {body, body + body_len};
-    int seen = 0;
-    *dfs = -1;
-    if (expect(&c, '{') != 0) return -1;
-    skip_ws(&c);
-    if (c.p < c.end && *c.p == '}') c.p++;
-    else for (;;) {
-        char key[12];
-        size_t klen;
-        int i, v;
-        if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
-        for (i = 0; i < 7 && strcmp(key, KEYS[i]) != 0; i++) {}
-        if (i == 7 || (seen & (1 << i)) || (i < 2 || i >= 5 ? parse_bool(&c, &v) : parse_pct(&c, &v, i == 4)) != 0)
-            return -1;
-        seen |= 1 << i;
-        if (i == 6) *dfs = v;
-        else *dst[i] = (uint8_t)(int8_t)v;
-        skip_ws(&c);
-        if (c.p < c.end && *c.p == ',') { c.p++; continue; }
-        if (expect(&c, '}') != 0) return -1;
-        break;
-    }
-    skip_ws(&c);
+    disp_req_t r = {d, -1};
+    int seen = parse_body(body, body_len, KEYS, 7, display_field, &r);
+    *dfs = r.dfs;
     *only_dfs = seen == 1 << 6;
-    return c.p == c.end ? 0 : -1;
+    return seen < 0 ? -1 : 0;
 }
 
 static void api_display(const cali_http_req_t *req, cali_http_resp_t *resp) {
@@ -1138,12 +1101,6 @@ typedef struct {
     int ua, origin, standalone;
 } ux_hdr_t;
 
-static int index_of(const char *s, const char *const *set, size_t n) {
-    for (size_t i = 0; i < n; i++)
-        if (strcmp(s, set[i]) == 0) return (int)i;
-    return -1;
-}
-
 /* a string member value that is one of set: its index, else -1 */
 static int parse_enum(cursor_t *c, const char *const *set, size_t n) {
     char v[16];
@@ -1178,39 +1135,30 @@ static int parse_ux_int(cursor_t *c, long *out) {
     return 0;
 }
 
+typedef struct {
+    char id[3][33], msg[UX_MSG_MAX + 1], value[UX_VALUE_MAX + 1];
+    long num[3];
+    int type;
+} ux_ev_t;
+
+static int ux_event_field(cursor_t *c, int k, void *ctx) {
+    ux_ev_t *e = ctx;
+    size_t len;
+    if (k <= 2)   /* screen / fn / control */
+        return parse_str(c, e->id[k], sizeof e->id[k], &len) != 0 || ux_chars(e->id[k], len, 32, 1) != 0;
+    if (k <= 5) return parse_ux_int(c, &e->num[k - 3]);   /* ttfb / dcl / tiles */
+    if (k == 6) return parse_str(c, e->msg, sizeof e->msg, &len) != 0 || ux_chars(e->msg, len, UX_MSG_MAX, 0) != 0;
+    if (k == 7) return (e->type = parse_enum(c, UX_TYPES, N_OF(UX_TYPES))) < 0;
+    return parse_str(c, e->value, sizeof e->value, &len) != 0 || ux_chars(e->value, len, UX_VALUE_MAX, 0) != 0;
+}
+
 /* One event object. emit: write its SD record (h complete). 0 ok, -1 not the shape. */
 static int ux_event(cursor_t *c, const ux_hdr_t *h, int emit) {
-    char id[3][33], msg[UX_MSG_MAX + 1], value[UX_VALUE_MAX + 1], key[8];
-    long num[3] = {0, 0, 0};
-    unsigned seen = 0;
-    int type = -1;
-    if (expect(c, '{') != 0) return -1;
-    for (;;) {
-        size_t klen, len;
-        int k;
-        if (parse_str(c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(c, ':') != 0) return -1;
-        k = index_of(key, UX_KEYS, N_OF(UX_KEYS));
-        if (k < 0 || (seen & (1u << k))) return -1;
-        seen |= 1u << k;
-        if (k <= 2) {   /* screen / fn / control */
-            if (parse_str(c, id[k], sizeof id[k], &len) != 0 || ux_chars(id[k], len, 32, 1) != 0) return -1;
-        } else if (k <= 5) {   /* ttfb / dcl / tiles */
-            if (parse_ux_int(c, &num[k - 3]) != 0) return -1;
-        } else if (k == 6) {
-            if (parse_str(c, msg, sizeof msg, &len) != 0 || ux_chars(msg, len, UX_MSG_MAX, 0) != 0) return -1;
-        } else if (k == 7) {
-            if ((type = parse_enum(c, UX_TYPES, N_OF(UX_TYPES))) < 0) return -1;
-        } else if (parse_str(c, value, sizeof value, &len) != 0 || ux_chars(value, len, UX_VALUE_MAX, 0) != 0) {
-            return -1;
-        }
-        skip_ws(c);
-        if (c->p < c->end && *c->p == ',') {
-            c->p++;
-            continue;
-        }
-        if (expect(c, '}') != 0) return -1;
-        break;
-    }
+    ux_ev_t e = {.type = -1};
+    char *msg = e.msg, *value = e.value;
+    int sn = parse_obj(c, UX_KEYS, N_OF(UX_KEYS), ux_event_field, &e), type = e.type;
+    unsigned seen = (unsigned)sn;
+    if (sn < 0) return -1;
     if (type < 0 || ((seen & UX_VALUE) && type != 1)) return -1;   /* a value is only a control's, and optional */
     if ((seen & ~UX_VALUE) != (UX_TYPE | UX_NEEDS[type])) return -1;
     if (emit) {
@@ -1238,8 +1186,8 @@ static int ux_event(cursor_t *c, const ux_hdr_t *h, int emit) {
             for (int k = 0; k <= 6; k++) {
                 if (!(seen & (1u << k))) continue;
                 cali_json_key(&j, UX_KEYS[k]);
-                if (k <= 2) cali_json_str(&j, id[k]);
-                else if (k <= 5) cali_json_int(&j, num[k - 3]);
+                if (k <= 2) cali_json_str(&j, e.id[k]);
+                else if (k <= 5) cali_json_int(&j, e.num[k - 3]);
                 else cali_json_str(&j, msg);
             }
             if (seen & UX_VALUE) {
@@ -1258,51 +1206,36 @@ static int ux_event(cursor_t *c, const ux_hdr_t *h, int emit) {
     return 0;
 }
 
+typedef struct {
+    ux_hdr_t *h;
+    int emit;
+} ux_ctx_t;
+
+static int ux_field(cursor_t *c, int k, void *ctx) {
+    ux_hdr_t *h = ((ux_ctx_t *)ctx)->h;
+    size_t len;
+    if (k == 0) {
+        if (parse_str(c, h->sid, sizeof h->sid, &len) != 0 || len < 8 || len > 32) return -1;
+        for (size_t i = 0; i < len; i++)
+            if (!((h->sid[i] >= '0' && h->sid[i] <= '9') || (h->sid[i] >= 'a' && h->sid[i] <= 'f'))) return -1;
+        return 0;
+    }
+    if (k == 1) return (h->ua = parse_enum(c, UX_UA, N_OF(UX_UA))) < 0;
+    if (k == 2) return parse_bool(c, &h->standalone);
+    if (k == 3) return (h->origin = parse_enum(c, UX_ORIGIN, N_OF(UX_ORIGIN))) < 0;
+    if (expect(c, '[') != 0) return -1;   /* events */
+    for (int n = 1;; n++) {
+        if (n > UX_EVENTS_MAX || ux_event(c, h, ((ux_ctx_t *)ctx)->emit) != 0) return -1;
+        if (expect(c, ',') != 0) break;
+    }
+    return expect(c, ']');
+}
+
 /* The whole beacon; emit: write each event's record. 0 ok, -1 not the shape. */
 static int ux_parse(const char *body, size_t body_len, ux_hdr_t *h, int emit) {
-    cursor_t c = {body, body + body_len};
-    unsigned seen = 0;
-    if (expect(&c, '{') != 0) return -1;
-    for (;;) {
-        char key[12];
-        size_t klen, len;
-        int k;
-        static const char *const KEYS[] = {"sid", "ua_class", "standalone", "origin", "events"};
-        if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
-        k = index_of(key, KEYS, N_OF(KEYS));
-        if (k < 0 || (seen & (1u << k))) return -1;
-        seen |= 1u << k;
-        if (k == 0) {
-            if (parse_str(&c, h->sid, sizeof h->sid, &len) != 0 || len < 8 || len > 32) return -1;
-            for (size_t i = 0; i < len; i++)
-                if (!((h->sid[i] >= '0' && h->sid[i] <= '9') || (h->sid[i] >= 'a' && h->sid[i] <= 'f'))) return -1;
-        } else if (k == 1) {
-            if ((h->ua = parse_enum(&c, UX_UA, N_OF(UX_UA))) < 0) return -1;
-        } else if (k == 2) {
-            if (parse_bool(&c, &h->standalone) != 0) return -1;
-        } else if (k == 3) {
-            if ((h->origin = parse_enum(&c, UX_ORIGIN, N_OF(UX_ORIGIN))) < 0) return -1;
-        } else {
-            int n = 0;
-            if (expect(&c, '[') != 0) return -1;
-            for (;;) {
-                if (++n > UX_EVENTS_MAX || ux_event(&c, h, emit) != 0) return -1;
-                skip_ws(&c);
-                if (c.p == c.end || *c.p != ',') break;
-                c.p++;
-            }
-            if (expect(&c, ']') != 0) return -1;
-        }
-        skip_ws(&c);
-        if (c.p < c.end && *c.p == ',') {
-            c.p++;
-            continue;
-        }
-        if (expect(&c, '}') != 0) return -1;
-        break;
-    }
-    skip_ws(&c);
-    return seen == 31u && c.p == c.end ? 0 : -1;
+    static const char *const KEYS[] = {"sid", "ua_class", "standalone", "origin", "events"};
+    ux_ctx_t x = {h, emit};
+    return parse_body(body, body_len, KEYS, N_OF(KEYS), ux_field, &x) == 31 ? 0 : -1;
 }
 
 static void api_ux(const cali_http_req_t *req, cali_http_resp_t *resp) {
@@ -1325,16 +1258,12 @@ static void api_ux(const cali_http_req_t *req, cali_http_resp_t *resp) {
 
 /* ---- POST /api/ux_setting {"enabled":<bool>}: the Satellite settings "Send usage data" switch, station only ---- */
 static void api_ux_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
-    cursor_t c = {req->body, req->body + req->body_len};
-    char key[8];
-    size_t klen;
     int on;
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
         SET_CONST(resp, 403, ERR_SETUP_MODE);
-    } else if (expect(&c, '{') != 0 || parse_str(&c, key, sizeof key, &klen) != 0 || klen != 7 || strcmp(key, "enabled") != 0 ||
-               expect(&c, ':') != 0 || parse_bool(&c, &on) != 0 || expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end)) {
+    } else if (parse_body(req->body, req->body_len, K_ENABLED, 1, bool_field, &on) != 1) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
     } else {
         uint8_t b = (uint8_t)on;
@@ -1351,16 +1280,12 @@ static void api_ux_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
 
 /* ---- POST /api/experimental {"sensors":<bool>}: the Satellite settings sensor-track switch, station only ---- */
 static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp) {
-    cursor_t c = {req->body, req->body + req->body_len};
-    char key[8];
-    size_t klen;
     int on;
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
         SET_CONST(resp, 403, ERR_SETUP_MODE);
-    } else if (expect(&c, '{') != 0 || parse_str(&c, key, sizeof key, &klen) != 0 || klen != 7 || strcmp(key, "sensors") != 0 ||
-               expect(&c, ':') != 0 || parse_bool(&c, &on) != 0 || expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end)) {
+    } else if (parse_body(req->body, req->body_len, K_SENSORS, 1, bool_field, &on) != 1) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
     } else if (cali_exp_sensors_set(on) != 0) {
         SET_CONST(resp, 500, ERR_STORE);
@@ -1375,28 +1300,25 @@ static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp)
 
 enum { S_ADD = 1, S_REMOVE = 2, S_ID = 4, S_ALIAS = 8, S_KEY = 16 };
 
+typedef struct {
+    unsigned id;
+    char alias[17], key[33];
+    size_t alias_len, key_len;   /* the whole decoded lengths */
+} sens_req_t;
+
+static int sensors_field(cursor_t *c, int i, void *ctx) {
+    sens_req_t *r = ctx;
+    return (1 << i) == S_ALIAS ? parse_str(c, r->alias, sizeof r->alias, &r->alias_len)
+           : (1 << i) == S_KEY ? parse_str(c, r->key, sizeof r->key, &r->key_len)
+                               : parse_uint(c, &r->id);
+}
+
 /* {"add":<id>,"alias"?,"key"?} | {"remove":<id>} | {"id":<id>,"alias":…}, any order, each key once:
- * the keys present (S_*), or -1 not that shape. *alias_len / *key_len = the whole decoded lengths. */
-static int sensors_parse(const char *body, size_t body_len, unsigned *id, char alias[17], size_t *alias_len,
-                         char key[33], size_t *key_len) {
+ * the keys present (S_*), or -1 not that shape. */
+static int sensors_parse(const char *body, size_t body_len, sens_req_t *r) {
     static const char *const NAMES[] = {"add", "remove", "id", "alias", "key"};
-    cursor_t c = {body, body + body_len};
-    int seen = 0;
-    if (expect(&c, '{') != 0) return -1;
-    do {
-        char name[8];
-        size_t len, i;
-        if (parse_str(&c, name, sizeof name, &len) != 0 || expect(&c, ':') != 0) return -1;
-        for (i = 0; i < N_OF(NAMES) && (len != strlen(NAMES[i]) || strcmp(name, NAMES[i]) != 0); i++) {}
-        if (i == N_OF(NAMES) || (seen & 1 << i)) return -1;
-        seen |= 1 << i;
-        if ((1 << i) == S_ALIAS ? parse_str(&c, alias, 17, alias_len)
-            : (1 << i) == S_KEY ? parse_str(&c, key, 33, key_len)
-                                : parse_uint(&c, id))
-            return -1;
-        skip_ws(&c);
-    } while (c.p < c.end && *c.p == ',' && c.p++);
-    if (expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end)) return -1;
+    int seen = parse_body(body, body_len, NAMES, N_OF(NAMES), sensors_field, r);
+    if (seen < 0) return -1;
     if ((seen & S_ADD) ? (seen & (S_REMOVE | S_ID)) != 0 : seen != S_REMOVE && seen != (S_ID | S_ALIAS)) return -1;
     return seen;
 }
@@ -1406,9 +1328,7 @@ static void api_sensors(const cali_http_req_t *req, cali_http_resp_t *resp) {
         "{\"ok\":false,\"error\":\"bad_alias\"}", "{\"ok\":false,\"error\":\"bad_key\"}",
         "{\"ok\":false,\"error\":\"key_mismatch\"}", "{\"ok\":false,\"error\":\"unknown_id\"}",
         "{\"ok\":false,\"error\":\"full\"}"};
-    char alias[17], key[33];
-    size_t alias_len = 0, key_len = 0;
-    unsigned id = 0;
+    sens_req_t r = {0};
     int keys, rc;
     if (!cali_exp_sensors()) {
         SET_CONST(resp, 404, ERR_DISABLED);
@@ -1420,14 +1340,14 @@ static void api_sensors(const cali_http_req_t *req, cali_http_resp_t *resp) {
         SET_CONST(resp, 405, ERR_METHOD);
         return;
     } else {
-        keys = sensors_parse(req->body, req->body_len, &id, alias, &alias_len, key, &key_len);
+        keys = sensors_parse(req->body, req->body_len, &r);
         if (keys < 0) rc = 1;   /* bad_json */
-        else if ((keys & S_ALIAS) && alias_len > 16) rc = CALI_SENS_E_ALIAS;
-        else if ((keys & S_KEY) && key_len > 32) rc = CALI_SENS_E_KEY;
-        else if (keys & S_ADD) rc = cali_sensors_add((uint16_t)id, keys & S_ALIAS ? alias : NULL, keys & S_KEY ? key : NULL, cali_uptime_ms());
-        else if (keys & S_REMOVE) rc = cali_sensors_remove((uint16_t)id);
-        else rc = cali_sensors_rename((uint16_t)id, alias);
-        memset(key, 0, sizeof key);   /* no key copy left on the stack */
+        else if ((keys & S_ALIAS) && r.alias_len > 16) rc = CALI_SENS_E_ALIAS;
+        else if ((keys & S_KEY) && r.key_len > 32) rc = CALI_SENS_E_KEY;
+        else if (keys & S_ADD) rc = cali_sensors_add((uint16_t)r.id, keys & S_ALIAS ? r.alias : NULL, keys & S_KEY ? r.key : NULL, cali_uptime_ms());
+        else if (keys & S_REMOVE) rc = cali_sensors_remove((uint16_t)r.id);
+        else rc = cali_sensors_rename((uint16_t)r.id, r.alias);
+        memset(r.key, 0, sizeof r.key);   /* no key copy left on the stack */
         if (rc == 1) {
             SET_CONST(resp, 400, ERR_BAD_JSON);
             return;
