@@ -76,6 +76,16 @@ PAIRING_START_WAIT_S = 2.0
 _WEBUI_DIR = str(Path(__file__).resolve().parent / "webui")
 
 
+def atomic_write_json(path, obj):
+    """Write ``obj`` as JSON to ``path`` via a temp file + rename: a crash leaves the old file,
+    never half a file."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f)
+    os.replace(tmp, path)
+
+
 def installed_from(states: dict) -> set:
     """Functions whose interpreted state reports `installed` truthy."""
     return {fn for fn, i in states.items() if i.get("installed")}
@@ -515,23 +525,19 @@ class Server:
            never a blank or a stale number dressed as live. Diagram: :need:`S_SEQ_POLL`.
         """
         try:
-            os.makedirs(os.path.dirname(self._state_cache), exist_ok=True)
-            tmp = self._state_cache + ".tmp"
-            with open(tmp, "w") as f:
-                json.dump(
-                    {
-                        "ts": self._last_ok_ts,
-                        "last": self._last,
-                        "water_good": self._water_good,
-                        "water_stale_since": self._water_stale_since,
-                        "water_measured_at": self._water_measured_at,
-                        "auto_camper": self._autocamper.enabled,
-                        "auto_camper_state": self._autocamper.to_state_dict(),
-                        "fw_seen": list(self._fw_seen) if self._fw_seen else None,
-                    },
-                    f,
-                )
-            os.replace(tmp, self._state_cache)
+            atomic_write_json(
+                self._state_cache,
+                {
+                    "ts": self._last_ok_ts,
+                    "last": self._last,
+                    "water_good": self._water_good,
+                    "water_stale_since": self._water_stale_since,
+                    "water_measured_at": self._water_measured_at,
+                    "auto_camper": self._autocamper.enabled,
+                    "auto_camper_state": self._autocamper.to_state_dict(),
+                    "fw_seen": list(self._fw_seen) if self._fw_seen else None,
+                },
+            )
         except OSError:
             pass
 
@@ -612,10 +618,6 @@ class Server:
         if not self._ble_enabled:  # satellite mode: no session to connect or release
             return {"ok": False, "mode": "off", "session": "satellite"}
         return await self._sessions.set_mode(action)
-
-    def _nudge_session(self):
-        """Keep-warm: a command wants to actuate — wake the supervisor to reconnect NOW if down."""
-        self._sessions.nudge()
 
     def set_auto_camper(self, on):
         """Toggle the auto-camper feature (persisted). Disabling clears any owed restore. Returns the

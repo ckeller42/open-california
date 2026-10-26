@@ -87,7 +87,6 @@ int cali_ble_exp_start(unsigned phase_min, int from_h, int to_h);
 void cali_ble_exp_stop(void);                 /* no-op when off; else back to hold ("exp_off") */
 void cali_ble_exp_activity(uint64_t now_ms);  /* a viewer (GET /, /app, /api/state): cut the phase, hold 10 min */
 #define CALI_BI_KEY "ble_idle"   /* kv, 1 byte: the idle policy's probe_min 0..CALI_BI_MAX_MIN; missing = 0 (hold) */
-unsigned cali_ble_idle_min(void);
 /* Store + apply the idle policy (0 = hold); 0 ok, -1 out of range or the store failed (nothing changed). */
 int cali_ble_idle_set(unsigned min);
 #define CALI_BR_KEY "ble_rest"   /* kv, 1 byte: the rest poll's minutes 0..240 (R_FW_BLE_REST); missing = 30 */

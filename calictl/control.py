@@ -200,7 +200,6 @@ def _camping(funcs, what, value, last):
 # only when 1602 `PvInstalled` = 1 (not on this van), so it is DECOMPILE-only and command_precondition
 # refuses it unless the unit reports PvInstalled = 1 (REASON_ENERGY_ECO_NEEDS_SOLAR).
 ENERGY_MODES = {"normal": 0, "max_charge": 1, "eco": 2}
-ENERGY_MODE_UNCHANGED = 3  # 2-bit leave-unchanged sentinel (pg/a v())
 
 
 def _energy(funcs, what, value, last):
@@ -649,11 +648,6 @@ def command_precondition(function, what, value, states):
     # page on its onboarding model, not on BLE; this T7 reads CarVariant=0 (raw 0 T7 / 1 GC / 2 Next,
     # qg/e.java:357-363; feature-availability.md).
     return None
-
-
-# Back-compat alias (older callers used the lighting-only name).
-def lighting_precondition(what, value, states):
-    return command_precondition("lighting", what, value, states)
 
 
 def _all_real_zones(zone_fields, b):

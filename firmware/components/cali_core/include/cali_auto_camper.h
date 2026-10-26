@@ -72,7 +72,6 @@ void cali_ac_init(void);                 /* owner task, after cali_platform_init
 void cali_ac_tick(uint64_t now_ms);      /* owner task, after cali_session_tick */
 int cali_ac_set_enabled(int on);         /* persisted; off, and off -> on, clear the debt. 0 ok, -1 not saved
                                           * (a failed debt write stores no toggle) */
-int cali_ac_enabled(void);
 /* This link's ignition: vehicle TerminalOneFive OR campingmode Enable; -1 when neither is read here.
  * The step's input, shared with the Pi wake (cali_pi_wake.h). */
 int cali_ac_ignition(void);

@@ -731,13 +731,3 @@ def apply_sw_corrections(states: dict) -> dict:
     ):
         en["dcdc_current"] = en["dcdc_current"] + 2
     return states
-
-
-def is_installed(function: str, decoded: dict) -> bool | None:
-    """Whether the vehicle actually has this feature (per-function Installed
-    bit). None if the function has no Installed field to judge by."""
-    if "Installed" in decoded:
-        return bool(decoded["Installed"])
-    if function == "energy":
-        return True
-    return None

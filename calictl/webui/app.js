@@ -473,6 +473,8 @@ const onoff = (b) => /** @type {string} */ (t(b ? "On" : "Off"));
 const withUnit = (v, u) => (v == null ? "—" : `${v} ${u}`);
 /** "<W> W · <A> A · <V> V", W = V × A rounded; "—" for a missing part. @param {number|null|undefined} v @param {number|null|undefined} a */
 const wav = (v, a) => `${v != null && a != null ? Math.round(v * a) : "—"} W · ${a ?? "—"} A · ${v ?? "—"} V`;
+/** "HH:MM" @type {(h: number, m: number) => string} */
+const hhmm = (h, m) => String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
 /** @type {(t: Tank|null|undefined) => string} */
 const tank = (t) => (t && t.percent != null ? `${t.percent}%  (${t.liters}/${t.capacity_l} L)` : "—");
 // dg/i brightness enum -> display: 0-10 are real levels, 11=device default, >=13 is no-reading
@@ -754,7 +756,7 @@ const FEATURES = {
         confirm: (h) => tf("Set the automatic quiet mode end to {h}:00? Not verified on the van. Continue?", { h: String(h).padStart(2, "0") }) },
       { what: "timer_set", kind: "time", label: "Cooling starts at",
         current: (s) => (s.timer_hour != null && s.timer_min != null)
-          ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null,
+          ? hhmm(s.timer_hour, s.timer_min) : null,
         disabled: (s) => optOn("cooler", "power", !!s.on) && "Switch the refrigerator box off first",
         confirm: (v) => tf("Set the timer so cooling starts at {t}? Not yet verified on the van. Continue?", { t: v }) },
       { what: "__cooltimer", kind: "buttons", label: "Timer",
@@ -833,7 +835,7 @@ const FEATURES = {
       // Greyed while the departure timer is armed (the app's row does nothing on tap then).
       { what: "timer", kind: "time", label: "Start heating at",
         current: (s) => (s.timer_hour != null && s.timer_min != null)
-          ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null,
+          ? hhmm(s.timer_hour, s.timer_min) : null,
         disabled: (s) => !!s.timer_armed && "Stop the timer first" },
       // The app's timer widget: "Start timer" arms the departure timer (OperationModeAirHeater=3 +
       // OperationModeCombined=1, frame 3f3b017f1f3f), "Stop" clears it (Mode=0, 3f0b007f1f3f) —
@@ -850,7 +852,7 @@ const FEATURES = {
       { label: "Remaining", get: (s) => (s.running ? withUnit(s.running_time_remaining, "min") : "—") },
       // The unit's own "Timer: On/Off" row: armed = Mode 3 (semantics.timer_armed), not merely a set time.
       { label: "Timer", get: (s) => (s.timer_armed && s.timer_hour != null && s.timer_min != null)
-        ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : onoff(false) },
+        ? hhmm(s.timer_hour, s.timer_min) : onoff(false) },
       { label: "Error", get: (s) => (s.error ? `${t(AIRHEATER_ERROR_MSG[/** @type {string} */ (s.error)] || String(s.error))} (${s.error_code})` : t("none")) },
     ],
     warn: (s) => (s.error ? AIRHEATER_ERROR_MSG[/** @type {string} */ (s.error)] || `⚠ Heater error ${s.error_code}` : null),
@@ -860,7 +862,7 @@ const FEATURES = {
       if (s.error) return /** @type {string} */ (t(AIRHEATER_ERROR_MSG[/** @type {string} */ (s.error)] || "⚠ Heater error"));
       // "• Timer: HH:MM" only while ARMED (the app drops it after "Stop" even with a time set).
       const timer = (s.timer_armed && s.timer_hour != null && s.timer_min != null)
-        ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null;
+        ? hhmm(s.timer_hour, s.timer_min) : null;
       if (s.running) {
         if (s.permanent) return timer ? tf("Active • Continuous heating • Timer starts in {t}", { t: timer }) : `${t("Active")} • ${t("Continuous heating")}`;
         if (s.running_time_remaining != null) {

@@ -37,7 +37,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from tools._view_common import load_catalog
+from tools.catalog import load_catalog
 
 ROOT = Path(__file__).resolve().parent.parent
 SIGNALS_FILE = ROOT / "protocol" / "signals.yaml"

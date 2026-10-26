@@ -25,7 +25,7 @@ def test_observer_logs_transitions_and_bursts_on_engine_start(capsys):
         "campingmode": {"master_on": True, "usb_charger": True, "lights_on": False, "enable": False},
     }
     obs.observe(base)  # baseline poll -> nothing logged, no burst
-    assert obs.bursting is False
+    assert obs.poll_interval(30) == 30  # no burst
     assert capsys.readouterr().out == ""
     # engine start: ignition + dcdc rise, camping sheds -> one log line + a burst armed
     started = {
@@ -36,7 +36,7 @@ def test_observer_logs_transitions_and_bursts_on_engine_start(capsys):
     obs.observe(started)
     out = capsys.readouterr().out
     assert "camping-watch:" in out and "master_on 1->0" in out and "ignition 0->1" in out
-    assert obs.bursting is True  # fast-poll burst armed by the engine-start edge
+    assert obs.poll_interval(30) == 3  # fast-poll burst armed by the engine-start edge (3 s default)
 
 
 def test_push_observer_logs_camping_change(capsys, monkeypatch):

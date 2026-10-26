@@ -154,8 +154,3 @@ class CampingObserver:
             return min(default, self._burst_interval)
         self._burst_until = None  # window elapsed -> back to the normal cadence
         return default
-
-    @property
-    def bursting(self):
-        """True while a fast-poll burst window is active (for tests / introspection)."""
-        return self._burst_until is not None
