@@ -16,7 +16,10 @@
    is up, so a parked latch served at connect is corrected without a reconnect. A 1003 heartbeat runs every
    ``CODEC_HEARTBEAT_PERIOD_MS`` from ``CODEC_HEARTBEAT_START`` while the link is up; a lost link —
    drop, failed connect/encryption/discovery, a heartbeat that cannot be written or fails —
-   reconnects by bond after 1 s, doubling to 60 s. ``console.c`` is the line protocol (``pair`` /
+   reconnects by bond on a backoff that starts at 1 s and doubles to 60 s, resets only after a link
+   held ``CALI_SESSION_STABLE_MS`` (60 s), and never fires sooner than ``CALI_SESSION_UNIT_COOLDOWN_MS``
+   (7 s) after a lost link (the unit cuts a sooner one); the unit's power-save hang-up instead rests
+   or redials per ``R_FW_BLE_REST`` / ``R_FW_BLE_VIEWER_KEEP``. ``console.c`` is the line protocol (``pair`` /
    ``passkey N`` / ``forget`` / ``status`` / ``quit`` in; ``STATE`` / ``SNAP`` / ``LOG`` out); a
    passkey outside ``waiting_passkey`` is ignored. (C comments are not autodoc'd: this docstring is
    the sphinx-needs shim, like ``test_runner_fake``.)
