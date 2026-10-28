@@ -377,8 +377,8 @@ never fails the verdict.
 
 Requirement `R_SOAK_REPORT` (in the script's docstring, `docs/api.md`).
 
-**Gate rule.** The stable firmware must be green for 72 h; then install the experimental sensors
-build and run another 72 h; then 72 h with it off again, then 72 h on. Only a green window counts.
+**Gate rule.** The stable firmware must be green for 72 h; then switch the sensors on
+and run another 72 h; then 72 h with it off again, then 72 h on. Only a green window counts.
 
 **The timer (not installed by `install.sh`).** Same shape as the ingest timer, daily at 08:00:
 

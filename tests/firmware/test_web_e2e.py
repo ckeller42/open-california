@@ -658,7 +658,7 @@ def test_firmware_channel_select(host_fw, hci_unit, tmp_path):
 def test_experimental_box_toggles(host_fw, hci_unit, tmp_path, locale, lang):
     """Station mode (the toggle is hidden over the setup hotspot, like the channel select).
 
-    .. test:: Satellite settings' Experimental switch sets exp_sensors
+    .. test:: Satellite settings' Sensors switch sets exp_sensors
        :id: T_FW_EXPERIMENTAL_UI
        :links: R_FW_EXPERIMENTAL
     """
@@ -676,12 +676,12 @@ def test_experimental_box_toggles(host_fw, hci_unit, tmp_path, locale, lang):
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto("http://127.0.0.1:%d/#satsettings" % fw.http_port)
         page.wait_for_selector("#exp-toggle", state="visible", timeout=15000)
-        assert page.inner_text("#exp h2") == tr("Experimental", lang)
-        assert page.inner_text("#exp-status") == tr("Sensors (experimental): off", lang)
+        assert page.inner_text("#exp h2") == tr("Sensors", lang)
+        assert page.inner_text("#exp-status") == tr("Sensors: off", lang)
         page.click("#exp-toggle")
         page.wait_for_function(
             "t => document.getElementById('exp-status').textContent === t",
-            arg=tr("Sensors (experimental): on", lang),
+            arg=tr("Sensors: on", lang),
             timeout=5000,
         )
         browser.close()
@@ -714,7 +714,6 @@ def test_sensors_box_add_and_remove(host_fw, hci_unit, tmp_path, locale, lang):
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto("http://127.0.0.1:%d/#satsettings" % fw.http_port)
         page.wait_for_selector("#sens-seen .row", timeout=90_000)  # the first window finds it
-        assert page.inner_text("#sens h2") == tr("Sensors", lang)
         assert "GVH5074" in page.inner_text("#sens-seen .row")
         page.click("#sens-seen .row button")  # Add: opens the (optional) name field
         page.click("#sens-seen .row button:text-is('%s')" % tr("Add", lang))  # no name: "govee"

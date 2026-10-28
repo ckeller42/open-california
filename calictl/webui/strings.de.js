@@ -546,7 +546,7 @@ window.STRINGS_DE = {
     + "here: a reset of the unit's Bluetooth ends it; unpair, then pair again.\n\n"
     + "Satellite (on the ESP satellite): its firmware, WiFi network, uptime, clock, microSD log, battery "
     + "and free memory. Satellite settings › opens its settings: WiFi (change the network there), restore "
-    + "camping after you park, screen, firmware update, usage data and experimental sensors.\n\n"
+    + "camping after you park, screen, firmware update, usage data and sensors.\n\n"
     + "buspi (on the Pi): the calictl backend that serves this page, and whether control writes are on."]:
     "Camper-Einheit: Die Verbindung ist online, solange die Bluetooth-Verbindung zur Einheit steht; "
     + "im Ruhezustand heißt meist, dass die geparkte Einheit schläft; nicht gekoppelt heißt, dass noch "
@@ -557,7 +557,7 @@ window.STRINGS_DE = {
     + "Satellit (auf dem ESP-Satelliten): seine Firmware, sein WLAN, Laufzeit, Uhr, das microSD-Log, Akku "
     + "und freier Speicher. Satellit-Einstellungen › öffnet seine Einstellungen: WLAN (dort wechselst du das "
     + "Netzwerk), Campingmodus nach dem Parken wiederherstellen, Bildschirm, Firmware-Update, "
-    + "Nutzungsdaten und experimentelle Sensoren.\n\n"
+    + "Nutzungsdaten und Sensoren.\n\n"
     + "buspi (auf dem Pi): der calictl-Dienst, der diese Seite liefert, und ob Steuerbefehle an sind.",
   ["Switch the refrigerator box on or off and set its cooling level.\n\n"
     + "Quiet mode: Off, Manual or Automatic. Manual runs quiet mode for up to 23 hours; Automatic runs it "
@@ -691,8 +691,8 @@ window.STRINGS_DE = {
   "from the camper unit · boot {boot}": "von der Camper-Einheit · Start Nr. {boot}",
   "Send usage data: on": "Nutzungsdaten senden: an",
   "Send usage data: off": "Nutzungsdaten senden: aus",
-  "Sensors (experimental): on": "Sensoren (experimentell): an",
-  "Sensors (experimental): off": "Sensoren (experimentell): aus",
+  "Sensors: on": "Sensoren: an",
+  "Sensors: off": "Sensoren: aus",
   "Scan paused while pairing": "Suche pausiert während der Kopplung",
   "No other sensors nearby (the scan runs every minute).": "Keine weiteren Sensoren in der Nähe (Suche jede Minute).",
   "No sensors found yet (the scan runs every minute).": "Noch keine Sensoren gefunden (die Suche läuft jede Minute).",
@@ -720,9 +720,8 @@ window.STRINGS_DE = {
   "Couldn't change the switch": "Schalter konnte nicht geändert werden",
   "Couldn't change usage data": "Nutzungsdaten konnten nicht geändert werden",
   "Darker": "Dunkler",
-  "Enables the sensor scan and setup. Stable features do not depend on it.": "Schaltet Sensorsuche und -einrichtung frei. Stabile Funktionen hängen nicht davon ab.",
+  "Reads add-on Bluetooth sensors (Govee, Victron) once a minute.": "Liest Bluetooth-Zusatzsensoren (Govee, Victron) einmal pro Minute.",
   "Encryption key (32 hex digits)": "Verschlüsselungsschlüssel (32 Hex-Zeichen)",
-  "Experimental": "Experimentell",
   "Firmware update": "Firmware-Update",
   "Install {sha}": "{sha} installieren",
   "Join {ssid} with this phone, then open:": "Verbinde dieses Handy mit {ssid} und öffne dann:",
@@ -815,8 +814,8 @@ window.STRINGS_DE = {
     + "room light, wake when a hand is near or on motion, and a brightness offset (− / +).\n\nFirmware "
     + "update: the running build and its channel; stable is tested, latest gets every change. Check "
     + "looks for an update, Install loads it and restarts the satellite.\n\nAdvanced: Send usage data "
-    + "sends which screens and controls are used (never values). Experimental turns on the scan for "
-    + "add-on Bluetooth sensors; under Sensors add the ones that are yours (a Victron needs its "
+    + "sends which screens and controls are used (never values). Sensors turns on the scan for "
+    + "add-on Bluetooth sensors; below it add the ones that are yours (a Victron needs its "
     + "encryption key), rename or remove them.\n\nOver the setup hotspot these switches need the home "
     + "WiFi."]:
     "WLAN: das Netzwerk, in dem der Satellit ist. Netzwerk wechseln… listet die Netzwerke, die er "
@@ -830,8 +829,8 @@ window.STRINGS_DE = {
     + "+).\n\nFirmware-Update: der laufende Stand und sein Kanal; stabil ist getestet, neueste bekommt "
     + "jede Änderung. Nach Update suchen prüft, ob es ein Update gibt; installieren lädt es und startet "
     + "den Satelliten neu.\n\nErweitert: Nutzungsdaten senden schickt, welche Seiten und Bedienelemente "
-    + "genutzt werden (nie Werte). Experimentell schaltet die Suche nach Bluetooth-Zusatzsensoren ein; "
-    + "unter Sensoren fügst du deine hinzu (ein Victron braucht seinen Verschlüsselungsschlüssel), "
+    + "genutzt werden (nie Werte). Sensoren schaltet die Suche nach Bluetooth-Zusatzsensoren ein; "
+    + "darunter fügst du deine hinzu (ein Victron braucht seinen Verschlüsselungsschlüssel), "
     + "benennst sie um oder entfernst sie.\n\nÜber den Einrichtungs-Hotspot brauchen diese Schalter das "
     + "Heim-WLAN.",
   ["The satellite runs its setup hotspot: it has no home WiFi yet, or cannot reach it. Choose the "
