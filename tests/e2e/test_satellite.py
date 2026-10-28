@@ -1704,9 +1704,12 @@ def test_an_unchanged_state_costs_a_304(stub, error_gated_page):
        :links: R_FW_STATE_ETAG
     """
     with error_gated_page(stub.base) as pg:
+        failed = []  # a 304's empty body is read, so the request ends normally (no ERR_ABORTED)
+        pg.on("requestfailed", lambda r: failed.append(r.failure) if "/api/state" in r.url else None)
         pg.wait_for_selector(".tilegrid .tile")
         pg.wait_for_timeout(5000)  # two more 2 s polls
         assert stub.state_status[0] == 200 and 304 in stub.state_status[1:], stub.state_status
+        assert failed == []
         expect(pg.locator(".tile", has_text="Cooler").first).to_be_visible()
 
 

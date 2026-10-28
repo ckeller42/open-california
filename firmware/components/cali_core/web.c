@@ -166,13 +166,13 @@ static void finish_json(cali_json_t *j, cali_http_resp_t *resp) {
     resp->cache_control = "no-store";   /* live state: never a cached copy, no validator */
 }
 
-/* The plain /api/state members that tick on their own (ages, countdowns, uptime, the CoreS3 battery's
- * jitter), left out of its ETag (R_FW_STATE_ETAG) so an unchanged state answers 304; the page counts
+/* The plain /api/state members that tick on their own (ages, countdowns, uptime, the jitter of the
+ * WiFi RSSI and the CoreS3 battery), left out of its ETag (R_FW_STATE_ETAG) so an unchanged state answers 304; the page counts
  * them on from its own clock. Scalar values only. Same set as calictl/web.py STATE_TICKING
  * (tests/test_state_etag_parity.py). */
 static const char *const STATE_TICKING[] = {"uptime_ms", "last_snap_age_ms", "rest_next_s", "halt_last_s",
                                             "halt_in_s", "last_s", "age_s", "water_held_age_ms",
-                                            "remaining_ms", "mv", "pct", "runtime_min"};
+                                            "remaining_ms", "rssi", "mv", "pct", "runtime_min"};
 
 static int ticking(const char *key, size_t n) {
     for (size_t i = 0; i < sizeof STATE_TICKING / sizeof *STATE_TICKING; i++)

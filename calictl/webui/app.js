@@ -1089,7 +1089,8 @@ const UNREACHABLE_MS = 15000;
 // iOS's ~75 s connect timeout.
 const POLL_TIMEOUT_MS = 8000;
 // A state older than this is polled without its ETag: a full reply refreshes the members the ETag
-// leaves out that no clock counts on (the CoreS3 battery's mv/pct), ~4.5 KB a minute (R_FW_STATE_ETAG).
+// leaves out that no clock counts on (the WiFi RSSI, the CoreS3 battery's mv/pct), ~4.5 KB a minute
+// (R_FW_STATE_ETAG).
 const STATE_REFRESH_MS = 60000;
 let waitingSince = /** @type {number|null} */ (null);   // ms: the oldest unanswered poll was sent
 let lastAnswerAt = /** @type {number|null} */ (null);   // ms: the backend last answered (restored: saved)
@@ -1269,7 +1270,8 @@ async function refreshState(force) {
     // the ETag itself and handles the 304
     const res = await fetch("/api/state" + (q.length ? "?" + q.join("&") : ""), { signal: ac.signal, cache: "no-store",
       headers: !diagAsked && stateEtag && Date.now() - stateAt < STATE_REFRESH_MS ? { "If-None-Match": stateEtag } : {} });
-    if (res.status === 304 && lastBody) next = null;   // unchanged: keep STATE
+    if (res.status === 304 && lastBody) { await res.text(); next = null; }   // unchanged: keep STATE (the empty body
+    // read to its end, so the request finishes instead of being cancelled)
     else {
       next = await res.json();
       // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the

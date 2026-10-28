@@ -154,13 +154,13 @@ def ux_batch(obj):
     return obj
 
 
-# The /api/state members that tick on their own (ages, countdowns, uptime, the satellite battery's
-# jitter), left out of its ETag (R_FW_STATE_ETAG) so an unchanged state answers 304; the page counts
+# The /api/state members that tick on their own (ages, countdowns, uptime, the jitter of the satellite's
+# WiFi RSSI and battery), left out of its ETag (R_FW_STATE_ETAG) so an unchanged state answers 304; the page counts
 # them on from its own clock. Scalar values only. Same set as the firmware's STATE_TICKING (web.c;
 # tests/test_state_etag_parity.py).
 STATE_TICKING = frozenset(
     {"uptime_ms", "last_snap_age_ms", "rest_next_s", "halt_last_s", "halt_in_s", "last_s", "age_s"}
-    | {"water_held_age_ms", "remaining_ms", "mv", "pct", "runtime_min"}
+    | {"water_held_age_ms", "remaining_ms", "rssi", "mv", "pct", "runtime_min"}
 )
 
 

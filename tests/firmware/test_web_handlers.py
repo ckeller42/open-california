@@ -2913,6 +2913,7 @@ def test_state_etag_ignores_the_ticking_members_and_answers_304(web_cli):
             b"linkup 1",
             req("GET", "/api/state", headers=_inm(etag)),
             b"now 9000",  # uptime_ms + last_snap_age_ms move on: still the same content
+            b"wifi online minsel 192.168.1.23 -62",  # and the RSSI jitters by 1 dBm
             req("GET", "/api/state", headers=_inm(etag)),
             req("GET", "/api/state"),
             b"linkup 0",  # a real change
