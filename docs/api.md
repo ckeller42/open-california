@@ -108,6 +108,7 @@ traceability is generated from the source, not maintained separately.
 .. autoclass:: calictl.web._NoResolveHTTPServer
   :no-members:
 .. autofunction:: calictl.web.ux_batch
+.. autofunction:: calictl.web.state_etag
 .. autoclass:: calictl.session.SessionSupervisor
   :members: attach, live_session, note_activity, set_mode, claim_intent, nudge, supervise, mode
 ```
@@ -177,6 +178,8 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.e2e.test_satsettings
 .. automodule:: tests.e2e.test_satsettings_sensors
 .. autofunction:: tests.test_web.test_ux_beacon_recorded_any_content_type
+.. autofunction:: tests.test_web.test_api_state_etag_ignores_the_ticking_members_and_answers_304
+.. autofunction:: tests.test_state_etag_parity.test_the_ticking_members_are_the_same_on_calictl_and_the_satellite
 .. autofunction:: tests.test_influx_fields.test_serve_backend_ux_logs_and_writes
 .. autofunction:: tests.test_influx_fields.test_ux_points_identical_events_of_one_beacon_stay_distinct
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
