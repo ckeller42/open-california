@@ -15,7 +15,8 @@
  *         0 (the unit's all-zero clock) or in the DST-ambiguous hour (last Sunday of October,
  *         02:00-02:59 local) is skipped: the previous anchor, if any, keeps counting.
  *
- * device.time (cali_time_json): {"source":"sntp"|"unit"|"none","synced":<bool>,"boot":<int>,"up":<ms>}.
+ * device.time (cali_time_json): {"source":"sntp"|"unit"|"none","synced":<bool>,"boot":<int>}, with diag (/api/state?diag=1)
+ * also "up":<ms>.
  * source = what the next record would use: "sntp" once synced, else "unit" while a unit anchor is
  * held, else "sntp" while SNTP runs but has not synced yet (synced false), else "none".
  * synced comes only from the SNTP callback of THIS boot (RAM flag, never a "clock > 2020" check):
@@ -64,7 +65,7 @@ int cali_time_berlin_hour(int64_t epoch_ms);
 /* The best timestamp now: CALI_TSRC_NTP / CALI_TSRC_UNIT and *out = epoch ms, or CALI_TSRC_NONE. */
 int cali_time_ts(int64_t *out);
 /* The device.time object (a value: call cali_json_key first). */
-void cali_time_json(cali_json_t *j);
+void cali_time_json(cali_json_t *j, int diag);
 
 #ifdef __cplusplus
 }

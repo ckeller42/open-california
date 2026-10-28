@@ -287,7 +287,7 @@ const viewUrl = (v) => location.pathname + location.search + (v === "home" ? "" 
  * and consumed. A deep link wins over the setup landing. */
 function openFromHash() {
   const h = location.hash.slice(1);
-  const screen = h === "devicestatus" || ORDER.includes(h) || (SAT_VIEWS.includes(h) && satellite());
+  const screen = h === "devicestatus" || ORDER.includes(h) || ((SAT_VIEWS.includes(h) || h === "satdiag") && satellite());
   if (!STATE._meta || !(screen || h === "pair" || SAT_VIEWS.includes(h))) return;
   landChecked = true;
   if (h === "pair") {
@@ -618,9 +618,10 @@ const HELP = {
     + "Pairing says whether calictl or the satellite is paired with a unit (Details shows its Bluetooth "
     + "address). Pair… and Unpair… are here. Still offline while the van is in use? Check the pairing "
     + "here: a reset of the unit's Bluetooth ends it; unpair, then pair again.\n\n"
-    + "Satellite (on the ESP satellite): its firmware, WiFi network, uptime, clock, microSD log, battery "
-    + "and free memory. Satellite settings › opens its settings: WiFi (change the network there), restore "
-    + "camping after you park, screen, firmware update, usage data and sensors.\n\n"
+    + "Satellite (on the ESP satellite): its firmware, WiFi network, uptime, clock, microSD log and "
+    + "battery. Satellite settings › opens its settings: WiFi (change the network there), restore "
+    + "camping after you park, screen, firmware update, usage data and sensors. Diagnostics › shows its "
+    + "raw values for troubleshooting (memory, CPU, log number, screen sensors).\n\n"
     + "buspi (on the Pi): the calictl backend that serves this page, and whether control writes are on."],
   satsettings: ["firmware.html",
     "WiFi: the network the satellite is on. Change network… lists the networks it finds (Search again "
@@ -1243,6 +1244,7 @@ async function refreshState(force) {
   const seen = !!force || seenNext;
   seenNext = false;
   polling = true;
+  const diagAsked = view === "satdiag";
   if (waitingSince == null) waitingSince = Date.now();
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
@@ -1250,7 +1252,9 @@ async function refreshState(force) {
   try {
     // a forced poll follows a page load, a return to the page or a user action: the satellite counts it
     // as input (R_FW_BLE_VIEWER_KEEP's idle cap); the 2 s tick is a plain poll. Satellite only.
-    next = await api(seen && (SAT_BUNDLE || satellite()) ? "/api/state?seen=1" : "/api/state", { signal: ac.signal });
+    // the Diagnostics screen adds ?diag=1 (R_FW_STATE_DIAG): the members the plain poll leaves out
+    const q = [seen && (SAT_BUNDLE || satellite()) ? "seen=1" : "", diagAsked ? "diag=1" : ""].filter(Boolean);
+    next = await api("/api/state" + (q.length ? "?" + q.join("&") : ""), { signal: ac.signal });
     // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
     // unreachable clock. Checked here, not in api(): the wizard and commands read JSON error bodies.
     if (!isSatelliteBody(next) && !(next && typeof next === "object" && next._meta)) throw new Error("no state");
@@ -1267,6 +1271,8 @@ async function refreshState(force) {
   forceNext = false;
   // The ESP32 satellite answers RAW decoded fields ({t, fn, device}); interpret them in the browser.
   STATE = isSatelliteBody(next) ? /** @type {State} */ (adaptSatellite(next, Date.now())) : next;
+  // Diagnostics opened while a plain poll was out: fetch its ?diag=1 values now, not on the next tick
+  if (view === "satdiag" && !diagAsked) setTimeout(() => refreshState(false), 0);
   if (PWA) try { localStorage.setItem(LAST_STATE_KEY, JSON.stringify({ at: Date.now(), state: STATE })); } catch (e) { /* storage blocked/full */ }
   // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the
   // Device status's "Unpair…". Taken the first time a `_meta` answers (calictl or the satellite) -- also when
@@ -1471,6 +1477,7 @@ function goto(v) {
  * @param {string} v @param {number|null} y */
 function show(v, y) {
   view = v;
+  if (v === "satdiag") refreshState(false);   // its values come only with ?diag=1: fetch them at once
   ux({ type: "view", screen: uxId(v) });
   lastRender = "";
   render();
@@ -1481,7 +1488,7 @@ function show(v, y) {
 window.addEventListener("popstate", (ev) => {
   if (!ev.state && location.hash) return;   // a followed or typed deep link: hashchange -> openFromHash
   const s = ev.state || {};
-  const v = s.v && (!SAT_VIEWS.includes(s.v) || satellite()) ? s.v : "home";
+  const v = s.v && (!(SAT_VIEWS.includes(s.v) || s.v === "satdiag") || satellite()) ? s.v : "home";
   if (SAT_VIEWS.includes(v)) satDom = null;
   closeMenu();
   show(v, s.y || 0);
@@ -1490,7 +1497,7 @@ window.addEventListener("popstate", (ev) => {
 /** ‹: the screen before when this app pushed this entry, else the screen's parent. */
 function back() {
   if (history.state && history.state.pushed) history.back();
-  else goto(view === "satsettings" ? "devicestatus" : "home");
+  else goto(view === "satsettings" || view === "satdiag" ? "devicestatus" : "home");
 }
 
 /**
@@ -2027,6 +2034,7 @@ function render() {
   }
   if (view === "home") renderDashboard();
   else if (view === "devicestatus") renderDeviceStatus();
+  else if (view === "satdiag") renderSatDiag();
   else if (SAT_VIEWS.includes(view)) renderSat();
   else renderFeature(view);
   roofViewSync();
@@ -2051,17 +2059,7 @@ function sdText(sd) {
   const gb = (mb) => ((mb || 0) / 1024).toFixed(1);
   const parts = [sd.state === "ok" ? tf("SD {free} of {total} GB free", { free: gb(sd.free_mb), total: gb(sd.total_mb) })
     : /** @type {string} */ (t(sd.state === "error" ? "SD card error" : "No SD card"))];
-  if (sd.state === "ok" && sd.last_seq != null) parts.push(tf("log #{seq}", { seq: sd.last_seq }));
   if (sd.dropped > 0) parts.push(tf("{n} records dropped", { n: sd.dropped }));
-  return parts.join(" · ");
-}
-
-/** RAM / PSRAM / CPU of the satellite; "" when it reports none. @param {SatRes} r @returns {string} */
-function resText(r) {
-  const parts = [];
-  if (r.heap_free_kb != null) parts.push(tf("RAM {free} KB free (lowest {min})", { free: r.heap_free_kb, min: r.heap_min_kb ?? "?" }));
-  if (r.psram_free_kb != null) parts.push(tf("PSRAM {free} KB free", { free: r.psram_free_kb }));
-  if (r.cpu_pct != null) parts.push(tf("CPU {pct} %", { pct: r.cpu_pct }));
   return parts.join(" · ");
 }
 
@@ -2153,13 +2151,31 @@ function renderDeviceStatus() {
     if (sat.sd) card.appendChild(sumRow(/** @type {string} */ (t("Storage")), sdText(sat.sd)));
     const batt = sat.battery && batteryText(sat.battery);
     if (batt) card.appendChild(sumRow(/** @type {string} */ (t("Battery")), batt));
-    const res = sat.res && resText(sat.res);
-    if (res) card.appendChild(sumRow(/** @type {string} */ (t("Resources")), res));
-    dsButtons(card, [[/** @type {string} */ (t("Satellite settings ›")), () => goto("satsettings")]]);
+    dsButtons(card, [[/** @type {string} */ (t("Satellite settings ›")), () => goto("satsettings")],
+      [/** @type {string} */ (t("Diagnostics ›")), () => goto("satdiag")]]);
   } else {   // calictl on the Pi: which backend serves this page, and whether it may write
     const card = dsCard("buspi");
     card.appendChild(sumRow(/** @type {string} */ (t("Backend")), backendName()));
     card.appendChild(sumRow(/** @type {string} */ (t("Control writes")), /** @type {string} */ (t(m.read_only ? "off" : "on"))));
+  }
+}
+
+// --- Diagnostics (the ESP satellite only): the /api/state?diag=1 members, raw (R_FW_STATE_DIAG) ----
+// The plain 2 s poll leaves them out (they tick on their own, nothing the page acts on); while this
+// screen is open refreshState asks with ?diag=1. By the device object that holds them, as web.c sends
+// them: null = every member of that object.
+/** @type {[string, string[]|null][]} */
+const SAT_DIAG = [["res", null], ["sd", ["last_seq"]], ["time", ["up"]], ["ble", ["probing", "unit_adv_seen_ms_ago"]],
+  ["display", ["lux", "prox", "motion", "dfs", "pm"]]];
+
+function renderSatDiag() {
+  titleEl.textContent = /** @type {string} */ (t("Diagnostics"));
+  const sat = /** @type {Record<string, any>} */ ((STATE._meta && STATE._meta.sat) || {});
+  const card = dsCard(/** @type {string} */ (t("Satellite")));
+  for (const [obj, keys] of SAT_DIAG) {
+    const o = sat[obj];
+    if (!o || typeof o !== "object") continue;
+    for (const k of keys || Object.keys(o)) if (k in o) card.appendChild(sumRow(obj + "." + k, String(o[k])));
   }
 }
 
@@ -2515,7 +2531,7 @@ function satRenderScreen(p, st) {
   sq("scr").hidden = !p || p.state === null;
   if (!p || p.state === null) return;
   sq("scr-status").textContent = [T(SAT_SCR_STATE[p.state] || p.state), p.brightness_pct + " % (" + p.min + "–" + p.max + ")",
-    p.lux === null ? "" : p.lux + " lx", p.sensor === "ok" ? "" : T("no light sensor reading"),
+    p.sensor === "ok" ? "" : T("no light sensor reading"),
     st ? "" : T(SAT_STATION_ONLY)].filter(Boolean).join(" · ");
   for (const [id, k, l] of SAT_SCR_ROWS) {
     const on = !!(/** @type {Record<string, unknown>} */ (p))[k];

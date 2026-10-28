@@ -91,7 +91,7 @@ void cali_sdlog_tick(uint64_t now_ms) {
     }
 }
 
-void cali_sdlog_json(cali_json_t *j) {
+void cali_sdlog_json(cali_json_t *j, int diag) {
     static const char *const STATE[] = {"absent", "error", "ok"};
     int st = __atomic_load_n(&s_state, __ATOMIC_ACQUIRE);
     uint32_t last = __atomic_load_n(&s_last_seq, __ATOMIC_RELAXED);
@@ -102,8 +102,10 @@ void cali_sdlog_json(cali_json_t *j) {
     if (st == CALI_SD_OK) cali_json_int(j, __atomic_load_n(&s_total_mb, __ATOMIC_RELAXED)); else cali_json_null(j);
     cali_json_key(j, "free_mb");
     if (st == CALI_SD_OK) cali_json_int(j, __atomic_load_n(&s_free_mb, __ATOMIC_RELAXED)); else cali_json_null(j);
-    cali_json_key(j, "last_seq");
-    if (last) cali_json_int(j, last); else cali_json_null(j);
+    if (diag) {
+        cali_json_key(j, "last_seq");
+        if (last) cali_json_int(j, last); else cali_json_null(j);
+    }
     cali_json_key(j, "dropped");
     cali_json_int(j, __atomic_load_n(&s_dropped, __ATOMIC_RELAXED));
     cali_json_obj_end(j);

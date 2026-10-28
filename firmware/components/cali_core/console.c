@@ -260,7 +260,7 @@ static void ble_cmd(char *sub) {
         cali_json_t js;
         cali_json_begin(&js, j, sizeof j);
         cali_json_key(&js, "ble");
-        cali_ble_exp_json(&js);
+        cali_ble_exp_json(&js, 1);
         cali_log("ble: %s", cali_json_end(&js) < 0 ? "?" : j);
     } else if (strcmp(op, "exp") == 0 && arg != NULL && strcmp(arg, "off") == 0) {
         cali_ble_exp_stop();

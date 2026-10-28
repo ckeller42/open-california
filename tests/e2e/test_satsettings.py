@@ -249,7 +249,7 @@ def test_device_status_shows_the_clock_row(station, locale, lang):
         expect(row).to_contain_text(tr("no source · boot {boot}", lang, boot=17))
         pg.get_by_role("button", name=tr("Satellite settings ›", lang)).click()
         _title(pg, lang)
-        for gone in ("Storage", "Resources", "Clock"):
+        for gone in ("Storage", "Clock"):
             expect(pg.locator("#app").get_by_text(tr(gone, lang), exact=True)).to_have_count(0)
 
 
@@ -455,7 +455,7 @@ def test_screen_box_rows_and_brightness_stepper(station, locale, lang):
     disp = station.fixtures["station"]["/api/state"]["device"]["display"]
     with _settings(station, locale=locale) as pg:
         status = pg.locator("#scr-status")
-        expect(status).to_have_text(tr("on", lang) + " · 68 % (8–100) · 42 lx")
+        expect(status).to_have_text(tr("on", lang) + " · 68 % (8–100)")  # room light: Diagnostics only
         expect(pg.locator("#scr-auto-status")).to_have_text(row("Brightness from room light", True))
         _expect_switch(pg, "scr-auto", True)
         expect(pg.locator("#scr-prox-status")).to_have_text(row("Wake when a hand is near", True))

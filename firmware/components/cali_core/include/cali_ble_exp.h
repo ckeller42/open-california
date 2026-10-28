@@ -96,9 +96,9 @@ void cali_ble_exp_tick(uint64_t now_ms);      /* the owner tick: step + act (set
 /* device.ble = {"mode","probing","exp","idle_min","rest_poll_min","unit_adv_seen_ms_ago"} (a value: the caller writes the key
  * first); the last = ms since the unit's advert was last seen (any time, not only in the experiment;
  * null = never since boot) — the live check of the sighting, no address */
-void cali_ble_exp_json(cali_json_t *j);
+void cali_ble_exp_json(cali_json_t *j, int diag);
 /* the same members without the braces: /api/ble's top level */
-void cali_ble_exp_fields(cali_json_t *j);
+void cali_ble_exp_fields(cali_json_t *j, int diag);
 
 #ifdef __cplusplus
 }

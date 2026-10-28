@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
             cali_json_t j;
             cali_json_begin(&j, buf, sizeof buf);
             cali_json_key(&j, "sd");
-            cali_sdlog_json(&j);
+            cali_sdlog_json(&j, 1);
             if (cali_json_end(&j) < 0) return 3;
             printf("JSON %s\n", buf);
         } else {

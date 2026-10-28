@@ -92,6 +92,17 @@ def test_health_record_fits_at_its_longest_and_nulls_the_unknown(cli):
     }  # fmt: skip
 
 
+def test_screen_record_carries_the_raw_sensors_and_nulls_the_unknown(cli):
+    """``{"ev":"screen"}``: the screen's raw light / proximity / motion readings, the calibration
+    values ``/api/state`` leaves to ``?diag=1`` (R_FW_STATE_DIAG); an unknown one is ``null``."""
+    out = run(cli, "screen 65535 65535 65535", "screen 12 -1 3")
+    assert out.count("RC 0") == 2
+    assert recs(out) == [
+        {"ev": "screen", "lux": 65535, "prox": 65535, "motion": 65535},
+        {"ev": "screen", "lux": 12, "prox": None, "motion": 3},
+    ]
+
+
 def test_touch_record_context_fits_at_its_longest_and_nulls_the_unknown(cli):
     """``evt touch``: the count, the last error name and the context of the last failure (CPU MHz,
     USB / charging, screen state, the owner task's last I2C device + ms since, the FT5x06 power

@@ -25,8 +25,12 @@ from tools.wifi_consts import CONSTS
 from .api_shape import (
     AP_KEYS,
     BATTERY_KEYS,
+    BLE_DIAG_KEYS,
+    BLE_KEYS,
     CONTROL_KEYS,
+    DEVICE_DIAG_KEYS,
     DEVICE_KEYS,
+    DISPLAY_DIAG_KEYS,
     DISPLAY_KEYS,
     EXT_ENTRY_KEYS,
     LINK_KEYS,
@@ -34,11 +38,14 @@ from .api_shape import (
     PAIRING_API_KEYS,
     PAIRING_KEYS,
     RES_KEYS,
+    SD_DIAG_KEYS,
     SD_KEYS,
     SENSOR_CFG_KEYS,
     SENSOR_SEEN_KEYS,
     SENSORS_KEYS,
+    STATE_DIAG_KEYS,
     STATE_KEYS,
+    TIME_DIAG_KEYS,
     TIME_KEYS,
     WIFI_GET_KEYS,
     WIFI_KEYS,
@@ -220,23 +227,17 @@ def test_api_state_shape(web_cli):
         "channel": "stable",
     }
     assert set(body["device"]["ota"]) == OTA_KEYS
-    assert body["device"]["time"] == {
-        "source": "none",
-        "synced": False,
-        "boot": 0,
-        "up": 5010,
-    }  # no cali_time_init
+    assert body["device"]["time"] == {"source": "none", "synced": False, "boot": 0}  # no cali_time_init
     assert set(body["device"]["time"]) == TIME_KEYS
     # no card on the host (cali_sdlog_init never called), no resource stats (web.c's weak stub)
     assert body["device"]["sd"] == {
         "state": "absent",
         "total_mb": None,
         "free_mb": None,
-        "last_seq": None,
         "dropped": 0,
     }
     assert set(body["device"]["sd"]) == SD_KEYS
-    assert body["device"]["res"] == dict.fromkeys(RES_KEYS)
+    assert set(body["device"]["ble"]) == BLE_KEYS
     assert body["device"]["battery"] == dict.fromkeys(
         BATTERY_KEYS
     )  # no power chip on the host (R_FW_BATTERY)
@@ -249,7 +250,7 @@ def test_api_state_shape(web_cli):
     assert body["fn"]["cooler"]["Level"] == 3
     assert body["fn"]["roof"] == {"Position": 1, "Installed": 1, "SafetyCounterValid": 0, "InfoPopUp": 0}
     d = body["device"]
-    assert d["uptime_ms"] == body["t"] and 5000 < body["t"] < 5100 and d["fw"] == "test"
+    assert 5000 < d["uptime_ms"] < 5100 and d["fw"] == "test"
     assert d["pairing"] == {"state": "idle", "address": IDENTITY}
     assert d["link"] == {
         "up": True,
@@ -257,9 +258,33 @@ def test_api_state_shape(web_cli):
         "rest": False,
         "redial": False,
         "rest_next_s": None,
-        "last_snap_age_ms": body["t"] - 4000,
+        "last_snap_age_ms": d["uptime_ms"] - 4000,
     }
     assert d["wifi"] == {"mode": "station", "ssid": "minsel", "ip": "192.168.1.23", "rssi": -61}
+
+
+def test_api_state_diag_adds_the_diagnostics_only_on_request(web_cli):
+    """``?diag=1`` adds the members the page never shows (the clock, RAM/CPU, the log's sequence, the
+    BLE probe + advert age, the raw screen sensors); the default reply leaves them out, so the
+    page's 2 s poll carries only what it shows and stays unchanged while nothing real changes.
+
+    .. test:: /api/state leaves the diagnostics out unless ?diag=1 asks for them
+       :id: T_FW_STATE_DIAG
+       :links: R_FW_STATE_DIAG
+    """
+    plain = json.loads(get(web_cli, "/api/state", setup=["now 5000"]))
+    diag = json.loads(get(web_cli, "/api/state?diag=1", setup=["now 5000"]))
+    for keys, a, b in [
+        (STATE_DIAG_KEYS, plain, diag),
+        (DEVICE_DIAG_KEYS, plain["device"], diag["device"]),
+        (TIME_DIAG_KEYS, plain["device"]["time"], diag["device"]["time"]),
+        (SD_DIAG_KEYS, plain["device"]["sd"], diag["device"]["sd"]),
+        (BLE_DIAG_KEYS, plain["device"]["ble"], diag["device"]["ble"]),
+        (DISPLAY_DIAG_KEYS, plain["device"]["display"], diag["device"]["display"]),
+    ]:
+        assert not keys & set(a) and set(b) == set(a) | keys, keys
+    assert diag["device"]["res"] == dict.fromkeys(RES_KEYS)  # web.c's weak stub: no stats on the host
+    assert 5000 < diag["t"] == diag["device"]["uptime_ms"] < 5100
 
 
 # Pinned before the cali_status refactor (Task 2): the device block + /api/wifi bytes must not move.
@@ -276,16 +301,15 @@ EXPECTED_DEVICE_TAIL = (
     '"ready":false,"rest":false,"redial":false,"rest_next_s":null,"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
     '"control":{"writes":true},"uptime_ms":5010,"fw":"test",'
     '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null,"channel":"stable"},'
-    '"time":{"source":"none","synced":false,"boot":0,"up":5010},'
-    '"sd":{"state":"absent","total_mb":null,"free_mb":null,"last_seq":null,"dropped":0},'
-    '"res":{"heap_free_kb":null,"heap_min_kb":null,"psram_free_kb":null,"cpu_pct":null},'
+    '"time":{"source":"none","synced":false,"boot":0},'
+    '"sd":{"state":"absent","total_mb":null,"free_mb":null,"dropped":0},'
     '"battery":{"pct":null,"mv":null,"usb":null,"charging":null,"runtime_min":null},'
     '"auto_camper":{"enabled":true,"state":"idle"},'
     '"pi_wake":{"enabled":true,"last_s":null,"reason":null,"halt_after_min":30,"halt_soc_pct":30,'
     '"halt_in_s":1795,"halted":false,"halt_last_s":null,"halt_reason":null,"batt_low":false},'
-    '"ble":{"mode":"hold","probing":false,"exp":null,"idle_min":0,"rest_poll_min":30,"unit_adv_seen_ms_ago":null},'
-    '"display":{"state":null,"lux":null,"prox":null,"motion":null,"brightness_pct":null,"sensor":null,'
-    '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0,"dfs":null,"pm":null},'
+    '"ble":{"mode":"hold","exp":null,"idle_min":0,"rest_poll_min":30},'
+    '"display":{"state":null,"brightness_pct":null,"sensor":null,'
+    '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0},'
     '"ux":{"enabled":true},'
     '"experimental":{"sensors":false},'
     '"water_held":false}}'
@@ -2298,7 +2322,7 @@ def test_display_motion_wake_switch_persists_and_shows_in_state(web_cli):
         [
             *(s.encode() for s in STATION),
             req("POST", "/api/display", '{"motion_wake":false}'),
-            req("GET", "/api/state"),
+            req("GET", "/api/state?diag=1"),
             b"kv disp_motion",
         ],
     )
@@ -2329,7 +2353,7 @@ def test_display_dfs_knob_is_applied_at_once_never_stored_and_reads_the_live_pm_
             *(s.encode() for s in STATION),
             req("POST", "/api/display", '{"dfs":false}'),
             req("POST", "/api/display", '{"dfs":true,"min":9}'),
-            req("GET", "/api/state"),
+            req("GET", "/api/state?diag=1"),
             b"kv dfs",
             b"kv disp_dfs",
         ],
@@ -2562,17 +2586,25 @@ def test_api_ble_errors(web_cli, setup, method, body, status, error):
 
 
 def test_api_ble_get_and_state_carry_device_ble(web_cli):
-    """GET /api/ble and /api/state's device.ble are one object (cali_ble_exp_json).
+    """GET /api/ble and /api/state?diag=1's device.ble are one object (cali_ble_exp_json); the
+    default /api/state leaves out its diagnostics (R_FW_STATE_DIAG).
 
-    .. test:: GET /api/ble = /api/state device.ble
+    .. test:: GET /api/ble = /api/state?diag=1 device.ble
        :id: T_FW_BLE_API_GET
        :links: R_FW_BLE_EXP
     """
     resps, _ = drive(
-        web_cli, [*(s.encode() for s in STATION), req("GET", "/api/ble"), req("GET", "/api/state")]
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("GET", "/api/ble"),
+            req("GET", "/api/state?diag=1"),
+            req("GET", "/api/state"),
+        ],
     )
-    assert resps[-2].json() == BLE_IDLE
-    assert resps[-1].json()["device"]["ble"] == BLE_IDLE
+    assert resps[-3].json() == BLE_IDLE
+    assert resps[-2].json()["device"]["ble"] == BLE_IDLE
+    assert resps[-1].json()["device"]["ble"] == {k: v for k, v in BLE_IDLE.items() if k not in BLE_DIAG_KEYS}
 
 
 def test_api_ble_experiment_runs_and_a_viewer_cuts_the_phase(web_cli):
