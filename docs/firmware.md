@@ -519,8 +519,16 @@ with them on any build, a dirty local one included. A `GET` whose `If-None-Match
 `Content-Type`/`Content-Length`, `ETag` and `Cache-Control` kept. The HTML and the manifest stay
 `no-cache` (revalidated on every load, so an OTA shows at once; an unchanged UI costs a ~200 B
 304 instead of the whole bundle). Dynamic JSON (`/api/state`, `/api/wifi`, `/api/pairing`) is
-`Cache-Control: no-store`, never an `ETag`. buspi's `calictl/web.py` does the same for its static
-`calictl/webui/` files (a SHA-256 prefix tag, `no-cache`); its `/api/*` stays `no-cache`.
+`Cache-Control: no-store`, so the browser cache never answers for it. The plain `/api/state` (not
+`?diag=1`) also carries a **weak `ETag`** (`R_FW_STATE_ETAG`): FNV-1a 64 over the reply without the
+values of the members that tick on their own (`STATE_TICKING` in `web.c`: `uptime_ms`,
+`last_snap_age_ms`, `rest_next_s`, `halt_last_s`, `halt_in_s`, `last_s`, `age_s`,
+`water_held_age_ms`, `remaining_ms` and the CoreS3 battery's `mv`, `pct`, `runtime_min`). A poll whose
+`If-None-Match` still matches gets the body-less 304, after the viewer and `?seen=1` input reached
+the session as for a 200, so an unchanged state costs headers only. buspi's `calictl/web.py` does the
+same for its static `calictl/webui/` files (a SHA-256 prefix tag, `no-cache`) and for `/api/state`
+(the same `STATE_TICKING`, `tests/test_state_etag_parity.py`, `no-store`), and gzips its JSON API
+replies for a client that sends `Accept-Encoding: gzip` (`Vary: Accept-Encoding`).
 
 | Method + path | Answer |
 |---|---|
@@ -2093,7 +2101,8 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    Every static page and asset carries a strong ``ETag`` derived from its exact bytes, and a
    matching ``If-None-Match`` is answered ``304 Not Modified`` without a body; the pages and the
    manifest stay ``Cache-Control: no-cache`` (always revalidated, so a new firmware's UI shows on
-   the next load), and ``/api/*`` is never cached.
+   the next load), and ``/api/*`` is never cached; an unchanged ``/api/state`` answers 304 by its
+   weak ``ETag`` (``R_FW_STATE_ETAG``).
 
 .. req:: The shared web UI opens instantly and offline on a secure origin, and is installable
    :id: R_UI_PWA_OFFLINE

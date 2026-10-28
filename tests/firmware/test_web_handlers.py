@@ -13,6 +13,7 @@ clock, log and the WiFi runtime. Every assertion is on the bytes the core sent.
 
 import gzip
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -735,8 +736,12 @@ def test_root_etag_is_the_same_in_every_mode(web_cli):
     assert s.status == 304
 
 
-def test_api_state_is_never_cached(web_cli):
+def test_api_state_is_never_cached_by_the_browser(web_cli):
+    """no-store on the 200 and the 304 alike: the page revalidates itself (R_FW_STATE_ETAG), the
+    browser cache never answers for live state."""
     r = cond(web_cli, "/api/state", "*")
+    assert r.status == 304 and r.headers["cache-control"] == "no-store" and r.headers["etag"]
+    r = cond(web_cli, "/api/state?diag=1", "*")
     assert r.status == 200 and "etag" not in r.headers and r.headers["cache-control"] == "no-store"
 
 
@@ -2879,6 +2884,60 @@ def test_state_is_a_viewer_and_reports_the_redial(web_cli):
         "INPUT 9010",
         "INPUT 11010",
     ]  # the poll ticks +10
+
+
+def _inm(etag):
+    return "If-None-Match: %s\r\n" % etag
+
+
+def test_state_etag_ignores_the_ticking_members_and_answers_304(web_cli):
+    """R_FW_STATE_ETAG: the plain ``/api/state`` carries a weak ETag over its content without the
+    members that tick on their own (ages, countdowns, uptime, the CoreS3 battery's jitter); a poll
+    whose If-None-Match still matches gets a body-less 304, also after time moved on; a real change
+    (the link going down) is a new ETag, and ``?diag=1`` has none.
+
+    .. test:: /api/state: a weak ETag without the ticking members, 304 while it matches
+       :id: T_FW_STATE_ETAG
+       :links: R_FW_STATE_ETAG
+    """
+    first, _ = drive(
+        web_cli, [*(s.encode() for s in STATION), b"stamp 4000", b"linkup 1", req("GET", "/api/state")]
+    )
+    etag = first[-1].headers["etag"]
+    assert re.fullmatch(r'W/"[0-9a-f]{16}"', etag) and first[-1].headers["cache-control"] == "no-store"
+    resps, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"stamp 4000",
+            b"linkup 1",
+            req("GET", "/api/state", headers=_inm(etag)),
+            b"now 9000",  # uptime_ms + last_snap_age_ms move on: still the same content
+            req("GET", "/api/state", headers=_inm(etag)),
+            req("GET", "/api/state"),
+            b"linkup 0",  # a real change
+            req("GET", "/api/state", headers=_inm(etag)),
+            req("GET", "/api/state?diag=1", headers=_inm(etag)),
+        ],
+    )
+    assert [r.status for r in resps] == [304, 304, 200, 200, 200]
+    assert resps[0].body == b"" and resps[0].headers["etag"] == etag
+    assert resps[2].headers["etag"] == etag and resps[2].json()["device"]["uptime_ms"] > 9000
+    assert resps[3].headers["etag"] != etag
+    assert "etag" not in resps[4].headers
+
+
+def test_state_304_still_counts_the_viewer_and_the_input(web_cli):
+    """A poll answered 304 has the same side effects as a 200: the viewer and, with ?seen=1, the
+    user input reach the session before the reply (R_FW_BLE_VIEWER_KEEP)."""
+    first, _ = drive(web_cli, [*(s.encode() for s in STATION), req("GET", "/api/state")])
+    etag = first[-1].headers["etag"]
+    resps, other = drive(
+        web_cli,
+        [*(s.encode() for s in STATION), b"now 11000", req("GET", "/api/state?seen=1", headers=_inm(etag))],
+    )
+    assert resps[-1].status == 304
+    assert [ln for ln in other if ln.startswith("INPUT ")] == ["INPUT 11010"]
 
 
 def test_app_shell_load_is_a_viewer(web_cli):

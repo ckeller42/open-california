@@ -7,6 +7,7 @@ assets in calictl/webui/ plus a small JSON API. Stdlib-only.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -153,23 +154,104 @@ def ux_batch(obj):
     return obj
 
 
+# The /api/state members that tick on their own (ages, countdowns, uptime, the satellite battery's
+# jitter), left out of its ETag (R_FW_STATE_ETAG) so an unchanged state answers 304; the page counts
+# them on from its own clock. Scalar values only. Same set as the firmware's STATE_TICKING (web.c;
+# tests/test_state_etag_parity.py).
+STATE_TICKING = frozenset(
+    {"uptime_ms", "last_snap_age_ms", "rest_next_s", "halt_last_s", "halt_in_s", "last_s", "age_s"}
+    | {"water_held_age_ms", "remaining_ms", "mv", "pct", "runtime_min"}
+)
+
+
+def _steady(o):
+    """``o`` without its ticking scalar members (STATE_TICKING), recursively."""
+    if isinstance(o, dict):
+        return {
+            k: _steady(v)
+            for k, v in o.items()
+            if not (k in STATE_TICKING and not isinstance(v, (dict, list)))
+        }
+    if isinstance(o, list):
+        return [_steady(v) for v in o]
+    return o
+
+
+def state_etag(state):
+    """The weak ETag of a /api/state body: a hash of its content without the ticking members.
+
+    .. req:: An unchanged state poll answers 304; JSON is gzipped on request
+       :id: R_FW_STATE_ETAG
+       :status: implemented
+       :tags: web, esp32, data
+
+       ``GET /api/state`` (calictl and the satellite's plain reply) shall carry a weak ETag over its
+       content without the members that tick on their own (``STATE_TICKING``), with
+       ``Cache-Control: no-store``, and answer a matching ``If-None-Match`` with a body-less 304.
+       calictl shall gzip its JSON API replies for a client that accepts it.
+
+    :param state: the state dict as served
+    :returns: ``W/"<16 hex>"``
+    """
+    body = json.dumps(_steady(state), sort_keys=True, separators=(",", ":")).encode()
+    return 'W/"%s"' % hashlib.sha256(body).hexdigest()[:16]
+
+
+def accepts_gzip(header):
+    """Whether an ``Accept-Encoding`` value offers gzip with q > 0 (``gzip;q=0`` refuses it).
+
+    :param header: the header value ("" when absent)
+    :returns: bool
+    """
+    for part in header.split(","):
+        name, _, params = part.partition(";")
+        if name.strip().lower() != "gzip":
+            continue
+        q = params.strip()
+        if not q.lower().startswith("q="):
+            return True
+        try:
+            return float(q[2:]) > 0
+        except ValueError:
+            return False
+    return False
+
+
 def make_handler(backend, webui_dir):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_a):
             pass  # quiet; serve owns logging
 
-        def _send_json(self, obj, status=200):
+        def _send_json(self, obj, status=200, etag=None, cache="no-cache"):
+            if etag and status == 200 and self._inm_matches(etag):
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", cache)
+                self.send_header("Vary", "Accept-Encoding")
+                self.end_headers()
+                return
             body = json.dumps(obj).encode()
+            gz = accepts_gzip(self.headers.get("Accept-Encoding", ""))
+            if gz:
+                body = gzip.compress(body, compresslevel=6, mtime=0)
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Cache-Control", cache)
+            self.send_header("Vary", "Accept-Encoding")
+            if gz:
+                self.send_header("Content-Encoding", "gzip")
+            if etag:
+                self.send_header("ETag", etag)
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_bytes(self, body, ctype, status=200, etag=None):
+        def _inm_matches(self, etag):
             inm = self.headers.get("If-None-Match", "")
-            if etag and (inm.strip() == "*" or etag in inm):  # the client's copy is current
+            return inm.strip() == "*" or etag in inm
+
+        def _send_bytes(self, body, ctype, status=200, etag=None):
+            if etag and self._inm_matches(etag):  # the client's copy is current
                 self.send_response(304)
                 self.send_header("ETag", etag)
                 self.send_header("Cache-Control", "no-cache")
@@ -190,7 +272,8 @@ def make_handler(backend, webui_dir):
             path = self.path.split("?", 1)[0]
             if path == "/api/state":
                 try:
-                    return self._send_json(backend.state())
+                    st = backend.state()
+                    return self._send_json(st, etag=state_etag(st), cache="no-store")
                 except Exception as e:  # log server-side only; never leak exception text to client
                     log.warning("web: state failed: %r" % (e,))
                     return self._send_json({"error": "state_failed"}, 500)

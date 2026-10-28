@@ -1,5 +1,7 @@
+import gzip
 import http.client
 import json
+import re
 import urllib.request
 from pathlib import Path
 
@@ -248,9 +250,10 @@ def test_responses_are_no_cache(server):
     import urllib.request
 
     _, base = server
-    for path in ("/", "/api/state"):
-        with urllib.request.urlopen(base + path) as r:
-            assert r.headers.get("Cache-Control") == "no-cache", path
+    with urllib.request.urlopen(base + "/") as r:
+        assert r.headers.get("Cache-Control") == "no-cache"
+    with urllib.request.urlopen(base + "/api/state") as r:  # live state: never a cached copy
+        assert r.headers.get("Cache-Control") == "no-store"
 
 
 def _cond_get(base, path, inm=None):
@@ -279,10 +282,54 @@ def test_static_etag_and_if_none_match(server):
         assert status == 200 and body, path
 
 
-def test_api_state_has_no_etag(server):
+def test_api_state_etag_ignores_the_ticking_members_and_answers_304(server):
+    """R_FW_STATE_ETAG on buspi: /api/state carries a weak ETag over its content without the members
+    that tick on their own (``_meta.age_s``, sensor ``age_s``, …), ``no-store`` so the browser cache
+    never answers for it; a matching If-None-Match is a body-less 304, a real change a new ETag.
+
+    .. test:: calictl /api/state: a weak ETag without the ticking members, 304 while it matches
+       :id: T_WEB_STATE_ETAG
+       :links: R_FW_STATE_ETAG
+    """
+    be, base = server
+    be._state["_meta"] = {"age_s": 3, "last_seen": 1793198800.0, "online": True}
+    status, h, body = _cond_get(base, "/api/state")
+    tag = h["etag"]
+    assert status == 200 and re.fullmatch(r'W/"[0-9a-f]{16}"', tag) and h["cache-control"] == "no-store"
+    assert _cond_get(base, "/api/state", tag)[::2] == (304, b"")
+    be._state["_meta"]["age_s"] = 9  # time moved on: the same content
+    status, h304, _ = _cond_get(base, "/api/state", tag)
+    assert status == 304 and h304["etag"] == tag and h304["cache-control"] == "no-store"
+    be._state["cooler"]["level"] = 4  # a real change
+    status, h, body = _cond_get(base, "/api/state", tag)
+    assert status == 200 and h["etag"] != tag and json.loads(body)["cooler"]["level"] == 4
+
+
+def test_api_json_is_gzipped_when_the_client_accepts_it(server):
+    """The JSON API answers gzip-compressed to a client that accepts it (the state poll: about a
+    third of the bytes), plain otherwise; ``Vary: Accept-Encoding`` either way."""
     _, base = server
-    status, h, _ = _cond_get(base, "/api/state", "*")
-    assert status == 200 and "etag" not in h and h["cache-control"] == "no-cache"
+    plain = _cond_get(base, "/api/state")
+    conn = http.client.HTTPConnection(base.split("//", 1)[1])
+    conn.request("GET", "/api/state", headers={"Accept-Encoding": "gzip, deflate, br"})
+    r = conn.getresponse()
+    h, raw = {k.lower(): v for k, v in r.getheaders()}, r.read()
+    conn.close()
+    assert h["content-encoding"] == "gzip" and gzip.decompress(raw) == plain[2]
+    assert int(h["content-length"]) == len(raw) and h["vary"] == "Accept-Encoding"
+    assert "content-encoding" not in plain[1] and plain[1]["vary"] == "Accept-Encoding"
+
+
+@pytest.mark.parametrize("accept", ["gzip;q=0", "identity", "br, gzip ; q=0.0", "x-gzip-not"])
+def test_api_json_stays_plain_when_gzip_is_not_offered(server, accept):
+    """``gzip;q=0`` refuses gzip (RFC 9110 12.5.3): only a gzip offer with q > 0 compresses."""
+    _, base = server
+    conn = http.client.HTTPConnection(base.split("//", 1)[1])
+    conn.request("GET", "/api/state", headers={"Accept-Encoding": accept})
+    r = conn.getresponse()
+    h, raw = {k.lower(): v for k, v in r.getheaders()}, r.read()
+    conn.close()
+    assert "content-encoding" not in h and json.loads(raw)["cooler"]["installed"] is True
 
 
 def test_pwa_manifest_and_icons_served_with_correct_types(server):

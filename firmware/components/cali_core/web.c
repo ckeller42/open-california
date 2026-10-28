@@ -166,6 +166,45 @@ static void finish_json(cali_json_t *j, cali_http_resp_t *resp) {
     resp->cache_control = "no-store";   /* live state: never a cached copy, no validator */
 }
 
+/* The plain /api/state members that tick on their own (ages, countdowns, uptime, the CoreS3 battery's
+ * jitter), left out of its ETag (R_FW_STATE_ETAG) so an unchanged state answers 304; the page counts
+ * them on from its own clock. Scalar values only. Same set as calictl/web.py STATE_TICKING
+ * (tests/test_state_etag_parity.py). */
+static const char *const STATE_TICKING[] = {"uptime_ms", "last_snap_age_ms", "rest_next_s", "halt_last_s",
+                                            "halt_in_s", "last_s", "age_s", "water_held_age_ms",
+                                            "remaining_ms", "mv", "pct", "runtime_min"};
+
+static int ticking(const char *key, size_t n) {
+    for (size_t i = 0; i < sizeof STATE_TICKING / sizeof *STATE_TICKING; i++)
+        if (strlen(STATE_TICKING[i]) == n && memcmp(STATE_TICKING[i], key, n) == 0) return 1;
+    return 0;
+}
+
+/* A weak ETag W/"<16 hex>" of body (cali_json's compact output): FNV-1a 64 over every byte except a
+ * ticking member's value (a "key": whose key is in STATE_TICKING drops the scalar up to its , or }). */
+static void state_etag(const char *b, size_t n, char out[24]) {
+    uint64_t h = 1469598103934665603ull;
+    size_t i = 0, key = 0;
+    int in_str = 0;
+    while (i < n) {
+        char c = b[i];
+        if (in_str) {
+            if (c == '\\') { h = (h ^ (uint8_t)c) * 1099511628211ull; c = b[++i]; }
+            else if (c == '"') in_str = 0;
+        } else if (c == '"') {
+            in_str = 1;
+            key = i + 1;
+        } else if (c == ':' && i > key && b[i - 1] == '"' && ticking(b + key, i - 1 - key)) {
+            h = (h ^ (uint8_t)c) * 1099511628211ull;
+            while (++i < n && b[i] != ',' && b[i] != '}') {}
+            continue;
+        }
+        h = (h ^ (uint8_t)c) * 1099511628211ull;
+        i++;
+    }
+    snprintf(out, 24, "W/\"%016llx\"", (unsigned long long)h);
+}
+
 __attribute__((weak)) void cali_res_stats(cali_res_t *r) {
     r->heap_free_kb = r->heap_min_kb = r->psram_free_kb = r->cpu_pct = -1;
 }
@@ -298,6 +337,11 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
         cali_json_obj_end(&j);
     }
     finish_json(&j, resp);
+    static char etag[24];
+    if (!diag && resp->status == 200) {   /* the core answers a matching If-None-Match 304 */
+        state_etag(resp->body, resp->body_len, etag);
+        resp->etag = etag;
+    }
 }
 
 static void api_wifi_get(cali_http_resp_t *resp) {
