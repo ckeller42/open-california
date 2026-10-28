@@ -864,8 +864,9 @@ def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale):
     """
     w = REST_TEXT[locale]
     link = _rest(stub)
+    link["rest_next_s"] = 1450  # still "25 min", 10 s from "24"
     with error_gated_page(stub.base, locale=locale) as pg:
-        pg.clock.install()  # the minute below passes on the page clock
+        pg.clock.install()  # the 20 s below pass on the page clock
         pg.reload()
         conn = pg.locator("#conn")
         expect(conn.locator("strong.rest-head")).to_have_text(w["head"])
@@ -883,9 +884,9 @@ def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale):
             "() => { const s = new Date().getSeconds(); return s >= 10 && s < 45; }", timeout=35000
         )
         btn = conn.get_by_role("button", name=w["reconnect"]).element_handle()
-        # a minute later: the state is unchanged (each poll a 304, R_FW_STATE_ETAG) and the page counts
-        # the rest down itself; the count moves, the card is not rebuilt
-        pg.clock.run_for(60000)
+        # 20 s later: the state is unchanged (each poll a 304, R_FW_STATE_ETAG) and the page counts the
+        # rest down itself; the count moves, the card is not rebuilt
+        pg.clock.run_for(20000)
         expect(conn.locator(".rest-next")).to_have_text(w["next"].replace("25", "24"))
         assert btn.evaluate("b => b.isConnected")
         link["rest_next_s"] = None  # the rest poll switched off: a real change (rest_poll_min)
@@ -1709,11 +1710,28 @@ def test_an_unchanged_state_costs_a_304(stub, error_gated_page):
         expect(pg.locator(".tile", has_text="Cooler").first).to_be_visible()
 
 
+def test_a_full_poll_at_least_every_minute(stub, error_gated_page):
+    """The members outside the ETag that do not count on by the clock (the CoreS3 battery's ``mv``,
+    ``pct``) refresh too: a state over a minute old is polled without If-None-Match, so a 200
+    brings them although nothing else changed."""
+    with error_gated_page(stub.base) as pg:
+        pg.clock.install()
+        pg.reload()
+        pg.wait_for_selector(".tilegrid .tile")
+        n = len(stub.state_status)
+        for _ in range(14):  # 70 s of 2 s ticks
+            pg.clock.run_for(5000)
+            pg.wait_for_timeout(250)
+        got = stub.state_status[n:]
+        assert 304 in got and 200 in got, got
+
+
 def test_a_kept_state_counts_its_ages_on(stub, error_gated_page):
     """On a 304 the page keeps the state it has, so an age in it (a sensor's ``age_s``) counts on
-    from the page clock: 11 minutes of unchanged polls later the Govee reading is marked stale
-    (🕒, over the 10 min limit) although every reply was a 304."""
+    from the page clock: a Govee reading 590 s old turns stale (🕒, over the 10 min limit) 30 s of
+    unchanged polls later, although every reply was a 304."""
     _ext(stub, "all")
+    stub.fixtures["satellite"]["/api/state"]["ext"]["govee"]["age_s"] = 590
     screen = VEHICLE["en-US"][0]
     with error_gated_page(stub.base) as pg:
         pg.clock.install()
@@ -1722,8 +1740,8 @@ def test_a_kept_state_counts_its_ages_on(stub, error_gated_page):
         _open(pg, screen)
         expect(pg.locator("#app").get_by_text("🕒")).to_have_count(0)
         n = len(stub.state_status)  # the reloaded page's first poll had no ETag yet: a 200
-        for _ in range(11):  # 11 min of 2 s ticks; each minute's first poll lands in real time
-            pg.clock.run_for(60000)
+        for _ in range(6):  # 30 s of 2 s ticks, inside the 1 min refresh: 304s only
+            pg.clock.run_for(5000)
             pg.wait_for_timeout(250)
         assert stub.state_status[n:] and set(stub.state_status[n:]) == {304}, stub.state_status
         expect(pg.locator("#app").get_by_text(re.compile("🕒")).first).to_be_visible()

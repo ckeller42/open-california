@@ -1088,6 +1088,9 @@ const UNREACHABLE_MS = 15000;
 // hung TCP connection (dead Tailscale peer) fails and the next tick retries instead of waiting out
 // iOS's ~75 s connect timeout.
 const POLL_TIMEOUT_MS = 8000;
+// A state older than this is polled without its ETag: a full reply refreshes the members the ETag
+// leaves out that no clock counts on (the CoreS3 battery's mv/pct), ~4.5 KB a minute (R_FW_STATE_ETAG).
+const STATE_REFRESH_MS = 60000;
 let waitingSince = /** @type {number|null} */ (null);   // ms: the oldest unanswered poll was sent
 let lastAnswerAt = /** @type {number|null} */ (null);   // ms: the backend last answered (restored: saved)
 let stateAt = 0;                                        // ms: STATE (its _meta.age_s) was taken
@@ -1265,7 +1268,7 @@ async function refreshState(force) {
     // no-store: the browser cache never answers (a cached 200 would reset every age); the page sends
     // the ETag itself and handles the 304
     const res = await fetch("/api/state" + (q.length ? "?" + q.join("&") : ""), { signal: ac.signal, cache: "no-store",
-      headers: !diagAsked && stateEtag ? { "If-None-Match": stateEtag } : {} });
+      headers: !diagAsked && stateEtag && Date.now() - stateAt < STATE_REFRESH_MS ? { "If-None-Match": stateEtag } : {} });
     if (res.status === 304 && lastBody) next = null;   // unchanged: keep STATE
     else {
       next = await res.json();
