@@ -523,14 +523,16 @@ with them on any build, a dirty local one included. A `GET` whose `If-None-Match
 `?diag=1`) also carries a **weak `ETag`** (`R_FW_STATE_ETAG`): FNV-1a 64 over the reply without the
 values of the members that tick on their own (`STATE_TICKING` in `web.c`: `uptime_ms`,
 `last_snap_age_ms`, `rest_next_s`, `halt_last_s`, `halt_in_s`, `last_s`, `age_s`,
-`water_held_age_ms`, `remaining_ms` and the CoreS3 battery's `mv`, `pct`, `runtime_min`). A poll whose
+`water_held_age_ms`, `remaining_ms`, the WiFi `rssi` and the CoreS3 battery's `mv`, `pct`,
+`runtime_min`: the RSSI jitters by a dBm on almost every poll). A poll whose
 `If-None-Match` still matches gets the body-less 304, after the viewer and `?seen=1` input reached
 the session as for a 200, so an unchanged state costs headers only. The shared UI sends the ETag it
 got from its second poll on (a `?diag=1` poll none); on a 304 it keeps its state and counts every
 age and countdown in it on from its own clock (repainted every 10 s), so a sensor still turns stale
 and the Pi's shutdown countdown still runs while every poll is a 304. A state over a minute old is
 polled without its ETag (`STATE_REFRESH_MS`): the full reply refreshes the members no clock counts on
-(the CoreS3 battery's `mv`, `pct`, `runtime_min`), at about 4.5 KB a minute. buspi's `calictl/web.py` does the
+(the WiFi `rssi`, the CoreS3 battery's `mv`, `pct`, `runtime_min`), at about 4.5 KB a minute. The
+page reads a 304's empty body to its end, so the request finishes normally. buspi's `calictl/web.py` does the
 same for its static `calictl/webui/` files (a SHA-256 prefix tag, `no-cache`) and for `/api/state`
 (the same `STATE_TICKING`, `tests/test_state_etag_parity.py`, `no-store`), and gzips its JSON API
 replies for a client that sends `Accept-Encoding: gzip` (`Vary: Accept-Encoding`).
