@@ -971,12 +971,12 @@ boot).
      The unit clock runs a few seconds behind NTP ([evidence ledger](business-logic/evidence-ledger.md)).
   3. none → `"ts": null, "tsrc": null`.
 
-`device.time` in `/api/state`: `{"source": "sntp"|"unit"|"none", "synced": <bool>, "boot": <int>, "up": <ms>}` —
+`device.time` in `/api/state`: `{"source": "sntp"|"unit"|"none", "synced": <bool>, "boot": <int>}` (with `?diag=1`
+also `"up": <ms>`, the log's `up` now) —
 `source` is what the next record would use: `sntp` once synced, else `unit` while a unit anchor is
 held, else `sntp` with `synced: false` while SNTP runs but has not synced yet, else `none`. `synced`
 only from this boot's SNTP callback (a RAM flag; never a "clock looks plausible" check, so a clock
-that survived a reset is not synced); `boot` + `up` let buspi anchor the running boot from its own
-clock; `none` on the host build and the QEMU image (no SNTP, no unit frames; the host build never
+that survived a reset is not synced); `none` on the host build and the QEMU image (no SNTP, no unit frames; the host build never
 counts boots, `boot` 0 there). Device status' Satellite card shows it as its *Clock* row (*synced (SNTP) · boot
 17*, …).
 

@@ -15,7 +15,8 @@
  *         0 (the unit's all-zero clock) or in the DST-ambiguous hour (last Sunday of October,
  *         02:00-02:59 local) is skipped: the previous anchor, if any, keeps counting.
  *
- * device.time (cali_time_json): {"source":"sntp"|"unit"|"none","synced":<bool>,"boot":<int>,"up":<ms>}.
+ * device.time (cali_time_json): {"source":"sntp"|"unit"|"none","synced":<bool>,"boot":<int>}, with diag (/api/state?diag=1)
+ * also "up":<ms>.
  * source = what the next record would use: "sntp" once synced, else "unit" while a unit anchor is
  * held, else "sntp" while SNTP runs but has not synced yet (synced false), else "none".
  * synced comes only from the SNTP callback of THIS boot (RAM flag, never a "clock > 2020" check):
