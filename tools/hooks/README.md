@@ -117,3 +117,37 @@ Register it like the others (`.claude/settings.local.json`, `PostToolUse`, match
 command `python3 "$CLAUDE_PROJECT_DIR/tools/hooks/docs-sync-reminder.py"`).
 
 Test: `echo '{"tool_input":{"file_path":"x/firmware/components/a.c"}}' | python3 tools/hooks/docs-sync-reminder.py`
+
+## block-no-verify.py (PreToolUse: Bash)
+
+Refuses a git command that skips the git hooks: `--no-verify` on `commit`/`push`/`merge`/
+`cherry-pick`/`rebase`/`am`, and `git commit -n` (alone or in a cluster like `-qn`; `push -n` is a
+dry run and passes). The pre-commit hooks are the local copy of CI's lint/format/type gates; a
+bypassed commit is how ruff-format, mypy and markdownlint failures still reached CI. Each command
+of a `&&`/`;`/`|` chain is checked on its own; quoted text (`echo '… --no-verify'`) is not a command.
+Exit 2 + reason on stderr blocks the call; fails open on a malformed event.
+
+```json
+{ "hooks": { "PreToolUse": [
+  { "matcher": "Bash",
+    "hooks": [ { "type": "command",
+      "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/hooks/block-no-verify.py\"" } ] } ] } }
+```
+
+Test: `echo '{"tool_input":{"command":"git commit -n -m x"}}' | python3 tools/hooks/block-no-verify.py; echo $?` (want `2`)
+
+## ruff-on-edit.py (PostToolUse: Edit|Write)
+
+Runs `ruff check --fix` and `ruff format` on the edited `.py` file with the repo's config, so a
+format or autofixable lint finding is fixed at the edit instead of at the commit hook (or in CI).
+What ruff cannot fix comes back as `additionalContext`. Silent for other files or without ruff
+(`python3 -m ruff`, from `requirements-dev.txt`).
+
+```json
+{ "hooks": { "PostToolUse": [
+  { "matcher": "Edit|Write",
+    "hooks": [ { "type": "command",
+      "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/hooks/ruff-on-edit.py\"" } ] } ] } }
+```
+
+Both are tested in `tests/test_agent_hooks.py`.

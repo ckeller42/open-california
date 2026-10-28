@@ -4,7 +4,7 @@
 #
 # `tools/ci.sh` (= `ci`) runs: `pre-commit run --all-files` (ci.yml `pre-commit`: ruff + ruff
 # format, markdownlint, gitleaks, actionlint + zizmor, whitespace/YAML checks, the vendor/MAC/VIN guard over every
-# tracked file, import-clean, doc-offset, screens.json freshness, codec vector/C-header freshness
+# tracked file, import-clean, doc-offset, needs-trace, screens.json freshness, codec vector/C-header freshness
 # and the web-UI tsc/node check), then the whole pytest suite on ONE local python (ci.yml `test`
 # runs it on 3.11/3.12/3.13) and the signal audit. The pytest suite also covers `codec-parity` (C
 # header + vector freshness always; the C parity tests only if a C compiler is present), the Bumble
@@ -21,7 +21,7 @@
 # (re-renders docs/screenshots and commits them to main with [skip ci]).
 #
 #   tools/ci.sh              # run the local gate (see above for what it does NOT cover)
-#   tools/ci.sh test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|screenshots|import-clean|vendor-check
+#   tools/ci.sh test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|screenshots|import-clean|vendor-check
 #   tools/ci.sh dev          # install dev tooling + the pre-commit/pre-push hooks (pre-commit framework)
 #
 # The single-check subcommands are also the entries of the repo-local hooks in
@@ -108,6 +108,7 @@ vendor_check() {   # whole tracked tree: vendor paths, the real vehicle MAC, VIN
   echo "no vendor material, vehicle MAC, or VIN committed"
 }
 doc_offset() { "$PY" -m pytest tests/test_doc_offset_consistency.py -q -p no:cacheprovider; }
+needs_trace() { "$PY" -m pytest tests/test_needs_docstrings.py -q -p no:cacheprovider; }   # every need is autodoc'd
 codec_fresh() {   # golden vectors + generated C headers match protocol/dictionary.yaml + overrides
                   # (+ the ESP32 WiFi SM vectors / net_consts.h from tools/wifi_sm_ref.py + wifi_consts.py)
   "$PY" -m tools.gen_codec_vectors --check \
@@ -169,9 +170,10 @@ case "${1:-ci}" in
   web-fresh)     web_fresh;;
   codec-fresh)   codec_fresh;;
   doc-offset)    doc_offset;;
+  needs-trace)   needs_trace;;
   screenshots)   screenshots;;
   import-clean)  import_clean;;
   vendor-check)  vendor_check;;
   dev)           dev;;
-  *) echo "usage: tools/ci.sh [ci|test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|screenshots|import-clean|vendor-check|dev]"; exit 2;;
+  *) echo "usage: tools/ci.sh [ci|test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|screenshots|import-clean|vendor-check|dev]"; exit 2;;
 esac

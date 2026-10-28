@@ -136,9 +136,11 @@ protection matches these strings. Workflows: every `uses:` is SHA-pinned with a 
 **Git hooks = the pre-commit framework** (`.pre-commit-config.yaml`; the old `.githooks/` is retired —
 `git config --unset core.hooksPath` on an old clone). On **commit**: ruff + ruff format (Python only),
 markdownlint-cli2 (`.markdownlint-cli2.jsonc`), gitleaks, actionlint + zizmor (workflow lint, `--offline`), whitespace/YAML checks and the repo guards
-(vendor/MAC/VIN, import-clean, doc-offset, and — when their inputs are staged — web-fresh, codec
-vectors + C headers, the webui `tsc` check). On **push**: the full pytest suite + `audit_signals`
-(skip once with `SKIP=pytest,audit-signals git push`). Tool versions live only in that config (keep
+(vendor/MAC/VIN, import-clean, doc-offset, the needs trace, and — when their inputs are staged — web-fresh, codec
+vectors + C headers, the webui `tsc` check). On **push**: the full pytest suite + `audit_signals` + the
+gitleaks working-tree scan (skip once with `SKIP=pytest,audit-signals git push`). For agents, two Claude Code
+hooks in `tools/hooks/` close the gap before the commit: `ruff-on-edit.py` formats and fixes each edited `.py`
+file, `block-no-verify.py` refuses `--no-verify` / `git commit -n` (wiring: `tools/hooks/README.md`). Tool versions live only in that config (keep
 `ruff==` in `requirements-dev.txt` in step).
 
 When the daemon is up it OWNS buspi's BLE adapter — read live state via its web API `/api/state`
