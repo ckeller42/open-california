@@ -320,6 +320,18 @@ def test_api_json_is_gzipped_when_the_client_accepts_it(server):
     assert "content-encoding" not in plain[1] and plain[1]["vary"] == "Accept-Encoding"
 
 
+@pytest.mark.parametrize("accept", ["gzip;q=0", "identity", "br, gzip ; q=0.0", "x-gzip-not"])
+def test_api_json_stays_plain_when_gzip_is_not_offered(server, accept):
+    """``gzip;q=0`` refuses gzip (RFC 9110 12.5.3): only a gzip offer with q > 0 compresses."""
+    _, base = server
+    conn = http.client.HTTPConnection(base.split("//", 1)[1])
+    conn.request("GET", "/api/state", headers={"Accept-Encoding": accept})
+    r = conn.getresponse()
+    h, raw = {k.lower(): v for k, v in r.getheaders()}, r.read()
+    conn.close()
+    assert "content-encoding" not in h and json.loads(raw)["cooler"]["installed"] is True
+
+
 def test_pwa_manifest_and_icons_served_with_correct_types(server):
     # Installable web app: the manifest + icons must serve with correct content-types, and
     # index.html must link them (else "Add to Home Screen" gets no name/icon).

@@ -197,6 +197,26 @@ def state_etag(state):
     return 'W/"%s"' % hashlib.sha256(body).hexdigest()[:16]
 
 
+def accepts_gzip(header):
+    """Whether an ``Accept-Encoding`` value offers gzip with q > 0 (``gzip;q=0`` refuses it).
+
+    :param header: the header value ("" when absent)
+    :returns: bool
+    """
+    for part in header.split(","):
+        name, _, params = part.partition(";")
+        if name.strip().lower() != "gzip":
+            continue
+        q = params.strip()
+        if not q.lower().startswith("q="):
+            return True
+        try:
+            return float(q[2:]) > 0
+        except ValueError:
+            return False
+    return False
+
+
 def make_handler(backend, webui_dir):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_a):
@@ -211,7 +231,7 @@ def make_handler(backend, webui_dir):
                 self.end_headers()
                 return
             body = json.dumps(obj).encode()
-            gz = "gzip" in self.headers.get("Accept-Encoding", "")
+            gz = accepts_gzip(self.headers.get("Accept-Encoding", ""))
             if gz:
                 body = gzip.compress(body, compresslevel=6, mtime=0)
             self.send_response(status)
