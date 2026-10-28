@@ -144,7 +144,7 @@
  *   POST /api/ux_setting  {"enabled":<bool>} (exactly that object): the Satellite settings switch -> NVS ux_on,
  *                     200 {"ok":true,"ux":<bool>}; station mode only (403), 400 bad_json, 500 store, 405.
  *   POST /api/experimental  {"sensors":<bool>} (exactly that object; R_FW_EXPERIMENTAL): the Satellite settings
- *                     "Sensors (experimental)" switch -> cali_exp_sensors_set (NVS exp_sensors, applied at
+ *                     "Sensors" switch -> cali_exp_sensors_set (NVS exp_sensors, applied at
  *                     once, LOG exp: sensors on|off) -> 200 {"ok":true,"sensors":<bool>}; station mode
  *                     only (403 setup_mode), 400 bad_json, 500 store, 405 for another method.
  *   GET|POST /api/sensors  (R_FW_SENSORS, cali_sensors.h) every WiFi mode; 404 {"ok":false,"error":

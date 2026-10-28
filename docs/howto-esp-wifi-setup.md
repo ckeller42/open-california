@@ -121,7 +121,7 @@ Device and WiFi details are in the ⋮ menu, **Device status**, one card per dev
 (firmware, WiFi network · IP · signal, uptime, storage, battery, resources). Its **Satellite
 settings ›** button opens the satellite's own settings (**<http://calictl-esp.local/#satsettings>**): WiFi
 (**Change network…**), restore camping after you park, screen, the firmware update, usage data and
-experimental sensors.
+sensors.
 
 **The name doesn't resolve?** Some devices (older Android phones in particular) can't open
 `.local` names. Find the satellite's address instead:

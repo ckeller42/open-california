@@ -271,7 +271,7 @@ def test_boxes_in_order_and_camper_unit_links_to_device_status(station, locale, 
                     "Screen",
                     "Firmware update",
                     "Advanced",
-                    "Experimental",
+                    "Sensors",
                 )
             ]
         )
@@ -345,11 +345,11 @@ def test_auto_camper_usage_data_and_experimental_switch(station, locale, lang):
         _expect_switch(pg, "ux", False)
         assert _posts(station, "/api/ux_setting") == [{"enabled": False}]
 
-        expect(pg.locator("#exp-status")).to_have_text(tr("Sensors (experimental): off", lang))
+        expect(pg.locator("#exp-status")).to_have_text(tr("Sensors: off", lang))
         expect(pg.locator("#sens")).to_be_hidden()
         station.fixtures["station"]["/api/sensors"] = {"configured": [], "seen": [], "scan": "ok"}
         pg.click("#exp-toggle")
-        expect(pg.locator("#exp-status")).to_have_text(tr("Sensors (experimental): on", lang))
+        expect(pg.locator("#exp-status")).to_have_text(tr("Sensors: on", lang))
         assert _posts(station, "/api/experimental") == [{"sensors": True}]
         expect(pg.locator("#sens")).to_be_visible()  # the Sensors box follows the switch
 

@@ -620,7 +620,7 @@ const HELP = {
     + "here: a reset of the unit's Bluetooth ends it; unpair, then pair again.\n\n"
     + "Satellite (on the ESP satellite): its firmware, WiFi network, uptime, clock, microSD log, battery "
     + "and free memory. Satellite settings › opens its settings: WiFi (change the network there), restore "
-    + "camping after you park, screen, firmware update, usage data and experimental sensors.\n\n"
+    + "camping after you park, screen, firmware update, usage data and sensors.\n\n"
     + "buspi (on the Pi): the calictl backend that serves this page, and whether control writes are on."],
   satsettings: ["firmware.html",
     "WiFi: the network the satellite is on. Change network… lists the networks it finds (Search again "
@@ -632,8 +632,8 @@ const HELP = {
     + "room light, wake when a hand is near or on motion, and a brightness offset (− / +).\n\nFirmware "
     + "update: the running build and its channel; stable is tested, latest gets every change. Check "
     + "looks for an update, Install loads it and restarts the satellite.\n\nAdvanced: Send usage data "
-    + "sends which screens and controls are used (never values). Experimental turns on the scan for "
-    + "add-on Bluetooth sensors; under Sensors add the ones that are yours (a Victron needs its "
+    + "sends which screens and controls are used (never values). Sensors turns on the scan for "
+    + "add-on Bluetooth sensors; below it add the ones that are yours (a Victron needs its "
     + "encryption key), rename or remove them.\n\nOver the setup hotspot these switches need the home "
     + "WiFi."],
   wifisetup: ["firmware.html",
@@ -2312,9 +2312,9 @@ function buildSat(v) {
   root.append(satCard("fw", T("Firmware update"), h("p", { id: "fw-status" }), h("div", { class: "btnrow" }, install, check),
     h("div", { class: "row", id: "fw-ch-row" }, h("label", { class: "lbl", for: "fw-channel" }, T("Channel")), ch), satMsg("fw-msg")));
   root.append(h("h2", { class: "sec" }, T("Advanced")), satCard("ux", null, satSwitchRow("ux"), satMsg("ux-msg")),
-    satCard("exp", T("Experimental"), h("p", { class: "note" }, T("Enables the sensor scan and setup. Stable features do not depend on it.")),
+    satCard("exp", T("Sensors"), h("p", { class: "note" }, T("Reads add-on Bluetooth sensors (Govee, Victron) once a minute.")),
       satSwitchRow("exp"), satMsg("exp-msg")),
-    satCard("sens", T("Sensors"), h("p", { class: "note" }, T("Nearby sensors appear below; add the ones that are yours.")),
+    satCard("sens", null, h("p", { class: "note" }, T("Nearby sensors appear below; add the ones that are yours.")),
       h("div", { id: "sens-cfg" }), h("div", { id: "sens-seen" }), h("p", { class: "warn", id: "sens-msg", "aria-live": "polite" })));
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
   toggle("pw", "/api/pi_wake_setting", "Couldn't change the Pi wake", "enabled", "pw-msg");
@@ -2367,7 +2367,7 @@ function satUpdate() {
     satPiHaltUpdate(p, st);
   }
   satRow("ux", [T(m.ux ? "Send usage data: on" : "Send usage data: off")], !!m.ux, st);
-  satRow("exp", [T(s.experimental ? "Sensors (experimental): on" : "Sensors (experimental): off")], !!s.experimental, st);
+  satRow("exp", [T(s.experimental ? "Sensors: on" : "Sensors: off")], !!s.experimental, st);
   satRenderScreen(s.display || null, st);
   satRenderFw(s.ota || null, s.fw, st);
   sq("sens").hidden = !s.experimental;
@@ -2753,7 +2753,7 @@ function satAsk(acts, nodes, okText, okCls, ok, msgId) {
   (nodes[0] instanceof HTMLInputElement ? nodes[0] : c).focus();
 }
 
-// --- Sensors (R_FW_SENSORS): shown while Experimental is on; its own 10 s poll (a GET kicks a scan window)
+// --- Sensors (R_FW_SENSORS): shown while the Sensors switch is on; its own 10 s poll (a GET kicks a scan window)
 /** @type {Record<string, string>} type -> its name */
 const SENS_TYPE = { govee: "Thermo-hygrometer (Govee)", victron_mppt: "Solar charger (Victron)", victron_battery: "Battery sense (Victron)" };
 /** @type {Record<string, string>} */
