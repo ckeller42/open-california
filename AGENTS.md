@@ -100,6 +100,7 @@ CALICTL_BLE_TRACE=~/ble.jsonl python3 -m calictl serve …   # record every noti
 python3 -m tools.trace_compare ~/ble.jsonl           # replay that trace through the mock: round-trip, cadence, dynamics
 python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_runner_fake.py tests/firmware/test_session_fake.py tests/firmware/test_control_parity.py -v   # firmware pure-C tiers, no BLE, macOS OK
 python3 -m tools.gen_control_vectors --check && python3 -m tools.gen_c_dict --check   # ESP control vectors + control_consts.h fresh (regenerate after any calictl.control change)
+tools/ci.sh linux                                    # the C tests in CI's gcc (Linux amd64 + -m32, Docker): catches what Apple clang lets through
 make -C firmware/host cali-host && python -m pytest tests/firmware -v   # firmware host+NimBLE tier (Linux only; tools/ci.sh firmware)
 docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build'   # firmware QEMU tier build
 python -m tools.ux_gallery --esp --out docs/screenshots   # ESP page shots for the docs (stub + fixtures, no firmware)

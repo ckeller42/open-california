@@ -34,10 +34,9 @@ touches `firmware/` C, a `cali_core/test/*_cli.c`, or docs (the gitleaks working
 on every push as a pre-push hook):
 
 ```sh
-# 1) the host test CLIs compile with gcc -Werror on Linux (clang skips -Wformat-truncation:
-#    snprintf(buf, sizeof buf, "%s", tok) from a longer token → use a precision, "%.17s")
-docker run --rm --platform linux/amd64 -v "$PWD":/repo -w /repo python:3.13 bash -c \
-  'pip install -q pytest pyyaml; python -m pytest tests/firmware/test_sensors.py tests/firmware/test_web_handlers.py -q -p no:cacheprovider'
+# 1) the C tests in CI's gcc -Werror (Linux amd64 + -m32; clang skips -Wformat-truncation:
+#    snprintf(buf, sizeof buf, "%s", tok) from a longer token → use a precision, "%.17s"); ~40 s
+tools/ci.sh linux
 # 2) the gitleaks WORKING-TREE scan (pre-push + CI; the commit hook scans only staged hunks):
 #    a hex alphabet or any literal next to a word like key/token trips generic-api-key →
 #    a named constant (static const char HEXDIGITS[] = "0123…") away from the word
