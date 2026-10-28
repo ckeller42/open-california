@@ -209,6 +209,23 @@ def test_diagnostics_screen_polls_the_diag_state_only_while_open(sat, stub):
     assert stub.queries[n:] and "/api/state?diag=1" not in stub.queries[n:]
 
 
+def test_diagnostics_fetches_its_values_on_entry(sat, stub):
+    """Opening Diagnostics fetches ?diag=1 at once: with the page clock frozen no 2 s poll runs, so
+    the values can only come from the entry's own fetch (CodeRabbit, the empty-card window)."""
+    sat.clock.install()
+    sat.reload()
+    expect(sat.get_by_text("Satellite — display only")).to_be_visible()
+    sat.clock.pause_at(datetime.datetime.now() + datetime.timedelta(seconds=1))  # no 2 s tick from here
+    sat.click("#menu")
+    sat.locator(".menupop").get_by_text("Device status").click()
+    n = len(stub.queries)
+    sat.wait_for_timeout(2500)
+    assert not [q for q in stub.queries[n:] if q.startswith("/api/state")]  # the clock is frozen
+    _ds_card(sat, "Satellite").get_by_role("button", name="Diagnostics ›").click()
+    expect(_row(sat.locator("#app"), "res.cpu_pct")).to_contain_text("4")
+    assert "/api/state?diag=1" in stub.queries[n:]
+
+
 def test_device_status_in_german(stub, error_gated_page):
     _display_only(stub)
     with error_gated_page(stub.base, locale="de-DE") as pg:

@@ -1244,6 +1244,7 @@ async function refreshState(force) {
   const seen = !!force || seenNext;
   seenNext = false;
   polling = true;
+  const diagAsked = view === "satdiag";
   if (waitingSince == null) waitingSince = Date.now();
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
@@ -1252,7 +1253,7 @@ async function refreshState(force) {
     // a forced poll follows a page load, a return to the page or a user action: the satellite counts it
     // as input (R_FW_BLE_VIEWER_KEEP's idle cap); the 2 s tick is a plain poll. Satellite only.
     // the Diagnostics screen adds ?diag=1 (R_FW_STATE_DIAG): the members the plain poll leaves out
-    const q = [seen && (SAT_BUNDLE || satellite()) ? "seen=1" : "", view === "satdiag" ? "diag=1" : ""].filter(Boolean);
+    const q = [seen && (SAT_BUNDLE || satellite()) ? "seen=1" : "", diagAsked ? "diag=1" : ""].filter(Boolean);
     next = await api("/api/state" + (q.length ? "?" + q.join("&") : ""), { signal: ac.signal });
     // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
     // unreachable clock. Checked here, not in api(): the wizard and commands read JSON error bodies.
@@ -1270,6 +1271,8 @@ async function refreshState(force) {
   forceNext = false;
   // The ESP32 satellite answers RAW decoded fields ({t, fn, device}); interpret them in the browser.
   STATE = isSatelliteBody(next) ? /** @type {State} */ (adaptSatellite(next, Date.now())) : next;
+  // Diagnostics opened while a plain poll was out: fetch its ?diag=1 values now, not on the next tick
+  if (view === "satdiag" && !diagAsked) setTimeout(() => refreshState(false), 0);
   if (PWA) try { localStorage.setItem(LAST_STATE_KEY, JSON.stringify({ at: Date.now(), state: STATE })); } catch (e) { /* storage blocked/full */ }
   // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the
   // Device status's "Unpair…". Taken the first time a `_meta` answers (calictl or the satellite) -- also when
@@ -1474,6 +1477,7 @@ function goto(v) {
  * @param {string} v @param {number|null} y */
 function show(v, y) {
   view = v;
+  if (v === "satdiag") refreshState(false);   // its values come only with ?diag=1: fetch them at once
   ux({ type: "view", screen: uxId(v) });
   lastRender = "";
   render();
