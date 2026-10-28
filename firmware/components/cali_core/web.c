@@ -196,10 +196,15 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     if (strstr(req->query, "seen=1")) cali_session_input(cali_uptime_ms());
     else cali_session_viewer(cali_uptime_ms());
     cali_status_get(&st, s_t, cali_uptime_ms());
+    /* "?diag=1": also the diagnostics the page never shows (R_FW_STATE_DIAG); left out by default, so
+     * the 2 s poll carries only what the page shows */
+    int diag = strstr(req->query, "diag=1") != NULL;
 
     cali_json_begin(&j, s_json, sizeof s_json);
-    cali_json_key(&j, "t");
-    cali_json_int(&j, (long long)st.uptime_ms);
+    if (diag) {
+        cali_json_key(&j, "t");
+        cali_json_int(&j, (long long)st.uptime_ms);
+    }
     cali_json_key(&j, "fn");
     cali_json_obj_begin(&j);
     cali_snapshot_fn(&j);
@@ -251,11 +256,13 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_json_key(&j, "ota");   /* POST /api/ota's progress (R_FW_OTA) */
     cali_ota_json(&j);
     cali_json_key(&j, "time");   /* the SD log's clock (R_FW_TIME) */
-    cali_time_json(&j);
+    cali_time_json(&j, diag);
     cali_json_key(&j, "sd");   /* the SD log (R_FW_SD_LOG) */
-    cali_sdlog_json(&j);
-    cali_json_key(&j, "res");
-    res_json(&j);
+    cali_sdlog_json(&j, diag);
+    if (diag) {
+        cali_json_key(&j, "res");
+        res_json(&j);
+    }
     cali_json_key(&j, "battery");   /* the CoreS3's own battery (R_FW_BATTERY) */
     cali_battery_json(&j);
     cali_json_key(&j, "auto_camper");   /* restore camping after park (R_FW_AUTO_CAMPER) */
@@ -263,9 +270,9 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_json_key(&j, "pi_wake");   /* wake the halted Pi over GPIO9 (R_FW_PI_WAKE) */
     cali_pw_json(&j);
     cali_json_key(&j, "ble");   /* the BLE link mode + the night experiment (R_FW_BLE_MODE, R_FW_BLE_EXP) */
-    cali_ble_exp_json(&j);
+    cali_ble_exp_json(&j, diag);
     cali_json_key(&j, "display");   /* screen state + settings (R_FW_DISPLAY_WAKE) */
-    cali_display_json(&j);
+    cali_display_json(&j, diag);
     cali_json_key(&j, "ux");   /* the web UI's usage beacons (R_UX_TELEMETRY) */
     cali_json_obj_begin(&j);
     cali_json_key(&j, "enabled");
@@ -911,7 +918,7 @@ static void api_ble(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
     cali_json_t j;
     cali_json_begin(&j, s_json, sizeof s_json);   /* the top level is device.ble's object */
-    cali_ble_exp_fields(&j);
+    cali_ble_exp_fields(&j, 1);
     finish_json(&j, resp);
 }
 

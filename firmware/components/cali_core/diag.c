@@ -76,6 +76,12 @@ int cali_diag_health(const cali_diag_health_t *h) {
                          h->uptime_s);
 }
 
+int cali_diag_screen(int lux, int prox, int motion) {
+    char v[3][24];
+    return cali_diag_rec("screen", "\"lux\":%s,\"prox\":%s,\"motion\":%s", num(v[0], sizeof v[0], lux, lux >= 0),
+                         num(v[1], sizeof v[1], prox, prox >= 0), num(v[2], sizeof v[2], motion, motion >= 0));
+}
+
 int cali_diag_boot(const char *reset_reason, const char *fw, unsigned long boot, long prev_up_s) {
     char f[44], p[24];
     return cali_diag_evt("boot", "\"reset_reason\":\"%s\",\"fw\":%s,\"boot\":%lu,\"prev_up_s\":%s", reset_reason,

@@ -53,6 +53,12 @@ int cali_display_cfg_set(const cali_display_cfg_t *c) {
     return 0;
 }
 
+void cali_display_sensors(int *lux, int *prox, int *motion) {
+    *lux = s_has_live && s_live.lux >= 0 ? s_live.lux : -1;
+    *prox = s_has_live && s_live.prox >= 0 ? s_live.prox : -1;
+    *motion = s_has_live && s_live.motion >= 0 ? s_live.motion : -1;
+}
+
 void cali_display_publish(const cali_display_view_t *v) {
     s_live = *v;
     s_has_live = 1;
@@ -63,14 +69,16 @@ static void int_or_null(cali_json_t *j, const char *key, int ok, long long v) {
     if (ok) cali_json_int(j, v); else cali_json_null(j);
 }
 
-void cali_display_json(cali_json_t *j) {
+void cali_display_json(cali_json_t *j, int diag) {
     const cali_display_cfg_t *c = cali_display_cfg();
     cali_json_obj_begin(j);
     cali_json_key(j, "state");
     if (s_has_live) cali_json_str(j, STATE_NAMES[s_live.state]); else cali_json_null(j);
-    int_or_null(j, "lux", s_has_live && s_live.lux >= 0, s_live.lux);
-    int_or_null(j, "prox", s_has_live && s_live.prox >= 0, s_live.prox);
-    int_or_null(j, "motion", s_has_live && s_live.motion >= 0, s_live.motion);
+    if (diag) {   /* the raw sensors: calibration only */
+        int_or_null(j, "lux", s_has_live && s_live.lux >= 0, s_live.lux);
+        int_or_null(j, "prox", s_has_live && s_live.prox >= 0, s_live.prox);
+        int_or_null(j, "motion", s_has_live && s_live.motion >= 0, s_live.motion);
+    }
     int_or_null(j, "brightness_pct", s_has_live, s_live.brightness_pct);
     cali_json_key(j, "sensor");
     if (s_has_live) cali_json_str(j, SENSOR_NAMES[s_live.sensor]); else cali_json_null(j);
@@ -86,7 +94,7 @@ void cali_display_json(cali_json_t *j) {
     cali_json_int(j, c->max_pct);
     cali_json_key(j, "offset");
     cali_json_int(j, c->offset);
-    {   /* the live PM config (never a stored flag): is DFS really active in this boot? (#346) */
+    if (diag) {   /* the live PM config (never a stored flag): is DFS really active in this boot? (#346) */
         char pm[16];
         int d = cali_pm_dfs(-1, pm, sizeof pm);
         cali_json_key(j, "dfs");

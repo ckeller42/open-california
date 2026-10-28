@@ -28,19 +28,16 @@ window.STRINGS_DE = {
   "{d} d {h} h": "{d} Tg {h} Std",
   "Storage": "Speicher",
   "SD {free} of {total} GB free": "SD {free} von {total} GB frei",
-  "log #{seq}": "Log Nr. {seq}",
   "No SD card": "Keine SD-Karte",
   "SD card error": "SD-Kartenfehler",
   "{n} records dropped": "{n} Einträge verworfen",
-  "Resources": "Ressourcen",
-  "RAM {free} KB free (lowest {min})": "RAM {free} KB frei (Minimum {min})",
-  "PSRAM {free} KB free": "PSRAM {free} KB frei",
-  "CPU {pct} %": "CPU {pct} %",
   "on USB": "an USB",
   "on USB, charging": "an USB, lädt",
   "on battery": "im Akkubetrieb",
   "~{time} left": "noch ~{time}",
   "Satellite settings ›": "Satellit-Einstellungen ›",
+  "Diagnostics ›": "Diagnose ›",
+  "Diagnostics": "Diagnose",
   "Connection": "Verbindung",
   "asleep": "im Ruhezustand",
   "Pairing": "Kopplung",
@@ -544,9 +541,10 @@ window.STRINGS_DE = {
     + "Pairing says whether calictl or the satellite is paired with a unit (Details shows its Bluetooth "
     + "address). Pair… and Unpair… are here. Still offline while the van is in use? Check the pairing "
     + "here: a reset of the unit's Bluetooth ends it; unpair, then pair again.\n\n"
-    + "Satellite (on the ESP satellite): its firmware, WiFi network, uptime, clock, microSD log, battery "
-    + "and free memory. Satellite settings › opens its settings: WiFi (change the network there), restore "
-    + "camping after you park, screen, firmware update, usage data and sensors.\n\n"
+    + "Satellite (on the ESP satellite): its firmware, WiFi network, uptime, clock, microSD log and "
+    + "battery. Satellite settings › opens its settings: WiFi (change the network there), restore "
+    + "camping after you park, screen, firmware update, usage data and sensors. Diagnostics › shows its "
+    + "raw values for troubleshooting (memory, CPU, log number, screen sensors).\n\n"
     + "buspi (on the Pi): the calictl backend that serves this page, and whether control writes are on."]:
     "Camper-Einheit: Die Verbindung ist online, solange die Bluetooth-Verbindung zur Einheit steht; "
     + "im Ruhezustand heißt meist, dass die geparkte Einheit schläft; nicht gekoppelt heißt, dass noch "
@@ -554,10 +552,11 @@ window.STRINGS_DE = {
     + "zeigt, ob calictl oder der Satellit mit einer Einheit gekoppelt ist (Details zeigt ihre "
     + "Bluetooth-Adresse). Koppeln… und Entkoppeln… findest du hier. Trotz benutztem Fahrzeug offline? "
     + "Prüfe hier die Kopplung: ein Bluetooth-Reset der Einheit beendet sie; entkoppeln, dann neu koppeln.\n\n"
-    + "Satellit (auf dem ESP-Satelliten): seine Firmware, sein WLAN, Laufzeit, Uhr, das microSD-Log, Akku "
-    + "und freier Speicher. Satellit-Einstellungen › öffnet seine Einstellungen: WLAN (dort wechselst du das "
+    + "Satellit (auf dem ESP-Satelliten): seine Firmware, sein WLAN, Laufzeit, Uhr, das microSD-Log und "
+    + "der Akku. Satellit-Einstellungen › öffnet seine Einstellungen: WLAN (dort wechselst du das "
     + "Netzwerk), Campingmodus nach dem Parken wiederherstellen, Bildschirm, Firmware-Update, "
-    + "Nutzungsdaten und Sensoren.\n\n"
+    + "Nutzungsdaten und Sensoren. Diagnose › zeigt seine Rohwerte zur Fehlersuche (Speicher, CPU, "
+    + "Log-Nummer, Bildschirmsensoren).\n\n"
     + "buspi (auf dem Pi): der calictl-Dienst, der diese Seite liefert, und ob Steuerbefehle an sind.",
   ["Switch the refrigerator box on or off and set its cooling level.\n\n"
     + "Quiet mode: Off, Manual or Automatic. Manual runs quiet mode for up to 23 hours; Automatic runs it "

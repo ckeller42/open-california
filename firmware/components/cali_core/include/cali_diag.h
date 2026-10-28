@@ -11,6 +11,7 @@
  *   {"ev":"evt","kind":"<kind>",…}   boot | link_up | link_down | wifi_up | wifi_down | net | cmd |
  *                                    ota | auto_camper | sd | ble_mode | probe | ble_exp | ble_phase | unit_adv | panic | touch (cali_diag_touch, #346) | display (the display-wake PR:
  *                                    cali_diag_evt("display", "\"state\":\"on\",\"src\":\"tap\""))
+ *   {"ev":"screen","lux":…,"prox":…,"motion":…}  the screen's raw sensors (app_main, every 60 s once read)
  *   {"ev":"perf","route":"/api/state","status":200,"bytes":4711,"ms":100}   every HTTP response
  *   {"ev":"perf","char":"1602","op":"read","ms":84}                         BLE ops (read/write/hb/disc/sub), sampled
  *   {"ev":"log","lvl":"W","tag":"wifi","msg":"…"} / {"ev":"log","dropped":n} ESP_LOGW/E, rate-limited
@@ -70,6 +71,9 @@ typedef struct {
     unsigned long uptime_s;
 } cali_diag_health_t;
 int cali_diag_health(const cali_diag_health_t *h);   /* {"ev":"diag",…} */
+/* {"ev":"screen","lux":…,"prox":…,"motion":…}: the screen's raw sensors, the calibration values
+ * /api/state shows only with ?diag=1 (R_FW_STATE_DIAG); each < 0 -> null. */
+int cali_diag_screen(int lux, int prox, int motion);
 /* {"ev":"evt","kind":"boot","reset_reason":…,"fw":…,"boot":n,"prev_up_s":n|null}: prev_up_s = the
  * previous boot's last diag uptime (< 0: unknown, e.g. after a power-on). */
 int cali_diag_boot(const char *reset_reason, const char *fw, unsigned long boot, long prev_up_s);

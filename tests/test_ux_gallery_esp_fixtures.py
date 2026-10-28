@@ -19,8 +19,12 @@ import pytest
 from tests.firmware.api_shape import (
     AP_KEYS,
     BATTERY_KEYS,
+    BLE_DIAG_KEYS,
+    BLE_KEYS,
     CONTROL_KEYS,
+    DEVICE_DIAG_KEYS,
     DEVICE_KEYS,
+    DISPLAY_DIAG_KEYS,
     DISPLAY_KEYS,
     EXT_ENTRY_KEYS,
     LINK_KEYS,
@@ -28,10 +32,13 @@ from tests.firmware.api_shape import (
     PAIRING_API_KEYS,
     PAIRING_KEYS,
     RES_KEYS,
+    SD_DIAG_KEYS,
     SD_KEYS,
     SENSOR_CFG_KEYS,
     SENSORS_KEYS,
+    STATE_DIAG_KEYS,
     STATE_KEYS,
+    TIME_DIAG_KEYS,
     TIME_KEYS,
     WIFI_GET_KEYS,
     WIFI_KEYS,
@@ -46,21 +53,23 @@ def fixtures():
 
 @pytest.mark.parametrize("mode", ["setup", "station", "satellite"])
 def test_state_fixture_shape(fixtures, mode):
+    """The fixtures are the ``?diag=1`` reply (R_FW_STATE_DIAG): the plain members + the diagnostics."""
     state = fixtures[mode]["/api/state"]
     d = state["device"]
-    assert set(state) == STATE_KEYS | (
+    assert set(state) == STATE_KEYS | STATE_DIAG_KEYS | (
         {"ext"} if d["experimental"]["sensors"] else set()
     )  # ext only while on
-    assert set(d) == DEVICE_KEYS
+    assert set(d) == DEVICE_KEYS | DEVICE_DIAG_KEYS
+    assert set(d["ble"]) == BLE_KEYS | BLE_DIAG_KEYS
     assert set(d["pairing"]) == PAIRING_KEYS
     assert set(d["link"]) == LINK_KEYS
     assert set(d["ota"]) == OTA_KEYS
-    assert set(d["time"]) == TIME_KEYS
+    assert set(d["time"]) == TIME_KEYS | TIME_DIAG_KEYS
     assert (
-        set(d["sd"]) == SD_KEYS
+        set(d["sd"]) == SD_KEYS | SD_DIAG_KEYS
         and set(d["res"]) == RES_KEYS
         and set(d["battery"]) == BATTERY_KEYS
-        and set(d["display"]) == DISPLAY_KEYS
+        and set(d["display"]) == DISPLAY_KEYS | DISPLAY_DIAG_KEYS
     )
     assert set(d["control"]) == CONTROL_KEYS and d["control"]["writes"] is (mode != "setup")
     assert set(d["wifi"]) == WIFI_KEYS and d["wifi"]["mode"] == ("station" if mode == "satellite" else mode)
@@ -114,11 +123,25 @@ def test_stub_serves_like_the_firmware(fixtures):
             assert r.headers["Content-Encoding"] == "gzip" and r.read() == bundle
         with urllib.request.urlopen(stub.base + "/device", timeout=5) as r:
             assert r.read() == page
-        for path in ("/api/state", "/api/wifi"):
+        for path in ("/api/state?diag=1", "/api/wifi"):
             with urllib.request.urlopen(stub.base + path, timeout=5) as r:
-                assert json.load(r) == json.loads(json.dumps(fixtures["station"][path]))
+                assert json.load(r) == json.loads(json.dumps(fixtures["station"][path.split("?")[0]]))
+        with urllib.request.urlopen(stub.base + "/api/state", timeout=5) as r:  # the plain poll: no diag
+            assert json.load(r) == ux_gallery.state_without_diag(fixtures["station"]["/api/state"])
         stub.mode = "setup"  # web.c: the UI bundle at / in every mode, the recovery page at /device
         with urllib.request.urlopen(stub.base + "/", timeout=5) as r:
             assert r.headers["Content-Encoding"] == "gzip" and r.read() == bundle
         with urllib.request.urlopen(stub.base + "/device", timeout=5) as r:
             assert r.read() == page
+
+
+def test_stub_diag_split_is_the_firmwares():
+    """The stub strips from a plain /api/state exactly the members web.c sends only with ?diag=1."""
+    assert ux_gallery.STATE_DIAG == {
+        (): STATE_DIAG_KEYS,
+        ("device",): DEVICE_DIAG_KEYS,
+        ("device", "time"): TIME_DIAG_KEYS,
+        ("device", "sd"): SD_DIAG_KEYS,
+        ("device", "ble"): BLE_DIAG_KEYS,
+        ("device", "display"): DISPLAY_DIAG_KEYS,
+    }

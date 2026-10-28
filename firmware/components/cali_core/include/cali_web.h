@@ -13,8 +13,9 @@
  *   GET /device       200 text/html: the WiFi recovery page (firmware/web/index_gen.html, rendered
  *                     from index.html by tools/gen_c_dict.py; strings_gen.h's WEB_INDEX_HTML byte
  *                     array), in every mode — a way back onto WiFi if the UI fails
- *   GET /api/state    200 application/json:
- *                       {"t":<uptime_ms>,"fn":{<the SNAP "fn" object, cali_snapshot_fn>},
+ *   GET /api/state    200 application/json ([diag] = only with ?diag=1, R_FW_STATE_DIAG: the diagnostics the
+ *                     page never shows; the plain 2 s poll carries only what it shows):
+ *                       {"t":<uptime_ms> [diag],"fn":{<the SNAP "fn" object, cali_snapshot_fn>},
  *                        "device":{"pairing":{"state":"<PAIR_STATE_NAMES>","address":"…"|null},
  *                                  "link":{"up":<bool>,"ready":<bool>,"rest":<bool>,"redial":<bool>,
  *                                          "rest_next_s":<int>|null,"last_snap_age_ms":<int>|null},
@@ -28,9 +29,9 @@
  *                                  "control":{"writes":<bool>},   -- POST /api/command accepted (station mode)
  *                                  "uptime_ms":<int>,"fw":"<cali_fw_version()>",
  *                                  "ota":{"state","available_sha","progress_pct","error","channel"},   -- cali_ota.h
- *                                  "time":{"source","synced","boot","up"},   -- cali_time.h (R_FW_TIME)
- *                                  "sd":{"state","total_mb","free_mb","last_seq","dropped"},   -- cali_sdlog.h
- *                                  "res":{"heap_free_kb","heap_min_kb","psram_free_kb","cpu_pct"},
+ *                                  "time":{"source","synced","boot","up" [diag]},   -- cali_time.h (R_FW_TIME)
+ *                                  "sd":{"state","total_mb","free_mb","last_seq" [diag],"dropped"},   -- cali_sdlog.h
+ *                                  "res":{"heap_free_kb","heap_min_kb","psram_free_kb","cpu_pct"} [diag],
  *                                        -- cali_res_stats; each an int or null (unknown: host, no PSRAM)
  *                                  "battery":{"pct","mv","usb","charging","runtime_min"},   -- cali_battery.h
  *                                        (R_FW_BATTERY); each null when unknown (host, QEMU, no AXP2101)
@@ -41,17 +42,17 @@
  *                                             "halt_in_s":<int>|null,"halted":<bool>,"halt_last_s":<int>|null,
  *                                             "halt_reason":"timer"|"battery"|"manual"|null,"batt_low":<bool>},
  *                                                -- cali_pi_wake.h (R_FW_PI_WAKE, R_FW_PI_HALT); last_s = s since the last pulse
- *                                  "ble":{"mode":"hold"|"quiet"|"off","probing":<bool>,"exp":null|{"on":true,
+ *                                  "ble":{"mode":"hold"|"quiet"|"off","probing":<bool> [diag],"exp":null|{"on":true,
  *                                         "phase_min","from","to","phase":"hold"|"quiet"|"off"|null,
  *                                         "remaining_ms":<int>|null},"idle_min":0..60,"rest_poll_min":0..240,
- *                                         "unit_adv_seen_ms_ago":<int>|null},
+ *                                         "unit_adv_seen_ms_ago":<int>|null [diag]},
  *                                                -- cali_ble_exp.h (R_FW_BLE_MODE, R_FW_BLE_EXP, R_FW_BLE_IDLE); a
  *                                                GET of /api/state is a viewer: it holds the experiment and the
  *                                                idle policy
- *                                  "display":{"state":"on"|"dim"|"off","lux","prox","motion","brightness_pct",
+ *                                  "display":{"state":"on"|"dim"|"off","lux","prox","motion" [diag],"brightness_pct",
  *                                             "sensor":"ok"|"absent"|"error","auto":<bool>,
  *                                             "prox_wake":<bool>,"motion_wake":<bool>,"min","max","offset",
- *                                             "dfs":<bool>|null,"pm":"<min>-<max>"|null (the live esp_pm config)}
+ *                                             "dfs":<bool>|null,"pm":"<min>-<max>"|null [diag] (the live esp_pm config)}
  *                                             -- R_FW_DISPLAY_WAKE; motion = mg, null without a BMI270 reading;
  *                                             the live members are null without a screen (host, QEMU)
  *                                  "ux":{"enabled":<bool>},   -- "Send usage data" (NVS ux_on, default on;

@@ -62,6 +62,10 @@ int main(void) {
                 }
             }
             printf("RC %d\n", cali_diag_health(&h));
+        } else if (strncmp(line, "screen ", 7) == 0) {
+            int l = -1, p = -1, m = -1;
+            sscanf(line + 7, "%d %d %d", &l, &p, &m);
+            printf("RC %d\n", cali_diag_screen(l, p, m));
         } else if (strncmp(line, "touch ", 6) == 0) {
             cali_diag_touch_t t = {0, NULL, -1, -1, -1, NULL, NULL, -1, -1};
             if (strcmp(line + 6, "max") == 0)   /* every field at its longest */

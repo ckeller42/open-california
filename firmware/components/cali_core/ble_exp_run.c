@@ -184,24 +184,27 @@ static void exp_json(cali_json_t *j) {
     cali_json_obj_end(j);
 }
 
-void cali_ble_exp_fields(cali_json_t *j) {
+void cali_ble_exp_fields(cali_json_t *j, int diag) {
     cali_json_key(j, "mode");
     cali_json_str(j, cali_session_mode_name(cali_session_mode()));
-    cali_json_key(j, "probing");
-    cali_json_bool(j, cali_session_probing());
+    if (diag) {
+        cali_json_key(j, "probing");
+        cali_json_bool(j, cali_session_probing());
+    }
     cali_json_key(j, "exp");
     exp_json(j);
     cali_json_key(j, "idle_min");   /* the idle policy: 0 = hold, else a probe every n min (R_FW_BLE_IDLE) */
     cali_json_int(j, s_bi.probe_min);
     cali_json_key(j, "rest_poll_min");   /* power-save rest: a read every n min, 0 = none (R_FW_BLE_REST) */
     cali_json_int(j, cali_session_rest_poll_min());
+    if (!diag) return;
     cali_json_key(j, "unit_adv_seen_ms_ago");   /* the tick clock: the sighting's stamp is the runner's */
     if (!s_adv_any) cali_json_null(j);
     else cali_json_int(j, (long long)(s_tick_at > s_adv_at ? s_tick_at - s_adv_at : 0));
 }
 
-void cali_ble_exp_json(cali_json_t *j) {
+void cali_ble_exp_json(cali_json_t *j, int diag) {
     cali_json_obj_begin(j);
-    cali_ble_exp_fields(j);
+    cali_ble_exp_fields(j, diag);
     cali_json_obj_end(j);
 }

@@ -109,7 +109,7 @@ int cali_time_ts(int64_t *out) {
     return CALI_TSRC_NONE;
 }
 
-void cali_time_json(cali_json_t *j) {
+void cali_time_json(cali_json_t *j, int diag) {
     cali_json_obj_begin(j);
     cali_json_key(j, "source");
     cali_json_str(j, synced() ? "sntp" : s_unit ? "unit" : s_epoch ? "sntp" : "none");
@@ -117,8 +117,10 @@ void cali_time_json(cali_json_t *j) {
     cali_json_bool(j, synced());
     cali_json_key(j, "boot");
     cali_json_int(j, (long long)s_boot);
-    cali_json_key(j, "up");   /* the log's `up` now: buspi anchors this boot from its own clock */
-    cali_json_int(j, (long long)cali_uptime_ms());
+    if (diag) {
+        cali_json_key(j, "up");   /* the log's `up` now */
+        cali_json_int(j, (long long)cali_uptime_ms());
+    }
     cali_json_obj_end(j);
 }
 

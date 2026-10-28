@@ -96,6 +96,7 @@
 #include "cali_captive.h"
 #include "cali_console.h"
 #include "cali_diag.h"
+#include "cali_display_model.h"
 #if CONFIG_CALI_DISPLAY
 #include "cali_display.h"
 #include "cali_sdcard_esp.h"
@@ -242,6 +243,9 @@ static void diag_tick(uint64_t now) {
     h.ble_rssi = h.link_up ? cali_ble_nimble_rssi() : 0;
     h.uptime_s = (unsigned long)(now / 1000);
     cali_diag_health(&h);
+    int lux, prox, motion;
+    cali_display_sensors(&lux, &prox, &motion);
+    if (lux >= 0 || prox >= 0 || motion >= 0) cali_diag_screen(lux, prox, motion);   /* no screen yet: no record */
 }
 
 #if CONFIG_CALI_QEMU_PROBE

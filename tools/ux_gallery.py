@@ -182,6 +182,30 @@ def calictl_state(fn):
     return out
 
 
+# The /api/state members the firmware sends only with ?diag=1 (web.c, R_FW_STATE_DIAG), by the object
+# that holds them; the fixtures below are the ?diag=1 reply, the stub strips these from a plain poll.
+STATE_DIAG = {
+    (): {"t"},
+    ("device",): {"res"},
+    ("device", "time"): {"up"},
+    ("device", "sd"): {"last_seq"},
+    ("device", "ble"): {"probing", "unit_adv_seen_ms_ago"},
+    ("device", "display"): {"lux", "prox", "motion", "dfs", "pm"},
+}
+
+
+def state_without_diag(state):
+    """A ``?diag=1`` /api/state reply as the plain poll gets it (a copy; ``state`` is untouched)."""
+    out = json.loads(json.dumps(state))
+    for path, keys in STATE_DIAG.items():
+        obj = out
+        for k in path:
+            obj = obj.get(k) if isinstance(obj, dict) else None
+        for k in keys if isinstance(obj, dict) else ():
+            obj.pop(k, None)
+    return out
+
+
 OTA_IDLE = {
     "state": "idle",
     "available_sha": None,
@@ -492,6 +516,7 @@ class EspStub:
         self.mode = mode
         self.fixtures = esp_fixtures()
         self.requests = []  # request paths, in order
+        self.queries = []  # the same with their query strings (?seen=1, ?diag=1)
         self.fail_state = 0  # the next N GET /api/state answer 503
         self.fail_pairing = 0  # the next N GET /api/pairing answer 503
         self.commands = []  # POST /api/command bodies, in order
@@ -593,6 +618,7 @@ class EspStub:
             def do_GET(self):  # noqa: N802 (http.server API)
                 path = self.path.split("?", 1)[0]
                 stub.requests.append(path)
+                stub.queries.append(self.path)
                 if stub.down:
                     return
                 fx = stub.fixtures[stub.mode]
@@ -628,6 +654,8 @@ class EspStub:
                     body, ctype, enc = bundle, "text/html; charset=utf-8", "gzip"
                 elif path == "/device":  # the recovery page
                     body, ctype = page, "text/html; charset=utf-8"
+                elif path == "/api/state" and "diag=1" not in self.path:  # web.c: the plain poll
+                    body, ctype = json.dumps(state_without_diag(fx[path])).encode(), "application/json"
                 elif path in fx:
                     body, ctype = json.dumps(fx[path]).encode(), "application/json"
                 elif path in pwa:  # web.c: the manifest + icons, every mode

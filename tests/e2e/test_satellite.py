@@ -163,9 +163,9 @@ def test_menu_device_status_screen(sat, stub):
     expect(unit.get_by_role("button", name="Pair…", exact=True)).to_have_count(0)
     expect(_row(s, "Firmware")).to_contain_text("bef07f1")  # satellite firmware (device.fw)
     expect(_row(s, "WiFi")).to_contain_text("HomeNet · 192.168.1.57 · -58 dBm")
-    # the SD log's card (R_FW_SD_LOG, device.sd) and the satellite's own resources (device.res)
-    expect(_row(s, "Storage")).to_contain_text("SD 28.1 of 29.7 GB free · log #1042")
-    expect(_row(s, "Resources")).to_contain_text("RAM 61 KB free (lowest 38) · PSRAM 7302 KB free · CPU 4 %")
+    # the SD log's card (R_FW_SD_LOG, device.sd); its sequence number and RAM/CPU only in Diagnostics ›
+    expect(_row(s, "Storage")).to_have_text(re.compile(r"SD 28\.1 of 29\.7 GB free$"))
+    expect(_row(s, "Resources")).to_have_count(0)
     # the satellite's own battery (R_FW_BATTERY, device.battery)
     expect(_row(s, "Battery")).to_contain_text("64 % · 3.89 V · on battery · ~2 h 10 min left")
     assert sat.get_by_text("BLE link").count() == 0
@@ -173,6 +173,40 @@ def test_menu_device_status_screen(sat, stub):
     s.get_by_role("button", name="Satellite settings ›").click()  # satellite-only link
     expect(sat.locator("#title")).to_have_text("Satellite settings")
     assert "/device" not in stub.requests
+
+
+def test_diagnostics_screen_polls_the_diag_state_only_while_open(sat, stub):
+    """Device status › Satellite › Diagnostics ›: the values /api/state leaves out by default
+    (R_FW_STATE_DIAG) — RAM/CPU, the log's sequence, the BLE probe + advert age, the raw screen
+    sensors — fetched with ?diag=1 while the screen is open, and only then.
+
+    .. test:: the Diagnostics screen shows the ?diag=1 values while open, the 2 s poll stays plain
+       :id: T_UI_SAT_DIAG
+       :links: R_FW_STATE_DIAG
+    """
+    sat.click("#menu")
+    sat.locator(".menupop").get_by_text("Device status").click()
+    expect(sat.locator("#title")).to_have_text("Device status")
+    assert "/api/state?diag=1" not in stub.queries
+    _ds_card(sat, "Satellite").get_by_role("button", name="Diagnostics ›").click()
+    expect(sat.locator("#title")).to_have_text("Diagnostics")
+    for label, value in [
+        ("res.cpu_pct", "4"),
+        ("res.heap_free_kb", "61"),
+        ("sd.last_seq", "1042"),
+        ("display.lux", "42"),
+        ("display.prox", "12"),
+        ("display.motion", "3"),
+        ("display.pm", "40-240"),
+        ("ble.probing", "false"),
+    ]:
+        expect(_row(sat.locator("#app"), label)).to_contain_text(value)
+    assert "/api/state?diag=1" in stub.queries
+    sat.click("#back")
+    expect(sat.locator("#title")).to_have_text("Device status")
+    n = len(stub.queries)
+    sat.wait_for_timeout(2500)  # one 2 s poll
+    assert stub.queries[n:] and "/api/state?diag=1" not in stub.queries[n:]
 
 
 def test_device_status_in_german(stub, error_gated_page):
