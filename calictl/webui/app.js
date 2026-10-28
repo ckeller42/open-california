@@ -1088,9 +1088,20 @@ const UNREACHABLE_MS = 15000;
 // hung TCP connection (dead Tailscale peer) fails and the next tick retries instead of waiting out
 // iOS's ~75 s connect timeout.
 const POLL_TIMEOUT_MS = 8000;
+// A state older than this is polled without its ETag: a full reply refreshes the members the ETag
+// leaves out that no clock counts on (the CoreS3 battery's mv/pct), ~4.5 KB a minute (R_FW_STATE_ETAG).
+const STATE_REFRESH_MS = 60000;
 let waitingSince = /** @type {number|null} */ (null);   // ms: the oldest unanswered poll was sent
 let lastAnswerAt = /** @type {number|null} */ (null);   // ms: the backend last answered (restored: saved)
 let stateAt = 0;                                        // ms: STATE (its _meta.age_s) was taken
+// The last plain /api/state's ETag and body (R_FW_STATE_ETAG): the next poll sends the ETag, and a 304
+// confirms that body, so STATE and stateAt stay and every age in it counts on from the page clock.
+let stateEtag = /** @type {string|null} */ (null);
+let lastBody = /** @type {any} */ (null);
+/** An age in s from STATE, as of now (a kept state counts on). @param {number|null|undefined} s */
+const ageNow = (s) => (typeof s === "number" ? s + (Date.now() - stateAt) / 1000 : s ?? null);
+/** A countdown in s from STATE, as of now. @param {number|null|undefined} s */
+const leftNow = (s) => (typeof s === "number" ? Math.max(0, s - (Date.now() - stateAt) / 1000) : s ?? null);
 const connEl = /** @type {HTMLElement} */ (document.getElementById("conn"));
 let connKey = "";
 
@@ -1155,7 +1166,7 @@ function paintLink() {
     tmpl = clock ? "🛰 Satellite mode — Pi data from {clock} ({ago})." : "";
   } else if (s === "rest") {
     cls = "rest";   // neutral, not the offline warning: the satellite stays away on purpose
-    const next = m && m.sat && m.sat.rest_next_s != null ? Math.max(1, Math.ceil(m.sat.rest_next_s / 60)) : null;
+    const next = m && m.sat && m.sat.rest_next_s != null ? Math.max(1, Math.ceil(/** @type {number} */ (leftNow(m.sat.rest_next_s)) / 60)) : null;
     // ticks like {ago}: outside the key, so the card (and its button's focus) survives each minute
     restNext = next == null ? "" : tf("Next reading in {next} min.", { next: next });
     tmpl = !clock ? "Turn on camping mode to stay connected."
@@ -1178,7 +1189,7 @@ function paintLink() {
   const br = filled.includes("(\u0001)");
   const parts = tmpl ? filled.replace("(\u0001)", "\u0001").split("\u0001") : [];
   // the rest card is rebuilt (its screen-reader "next reading" re-read) only when that coarse bucket moves
-  const nextBucket = s !== "rest" || !restNext ? "" : m && m.sat && (m.sat.rest_next_s ?? 0) >= 600 ? "+" : "-";
+  const nextBucket = s !== "rest" || !restNext ? "" : m && m.sat && (leftNow(m.sat.rest_next_s) ?? 0) >= 600 ? "+" : "-";
   const key = cls + "|" + parts.join("\u0001") + "|" + nextBucket;
   if (key !== connKey) {
     connKey = key;
@@ -1254,10 +1265,18 @@ async function refreshState(force) {
     // as input (R_FW_BLE_VIEWER_KEEP's idle cap); the 2 s tick is a plain poll. Satellite only.
     // the Diagnostics screen adds ?diag=1 (R_FW_STATE_DIAG): the members the plain poll leaves out
     const q = [seen && (SAT_BUNDLE || satellite()) ? "seen=1" : "", diagAsked ? "diag=1" : ""].filter(Boolean);
-    next = await api("/api/state" + (q.length ? "?" + q.join("&") : ""), { signal: ac.signal });
-    // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
-    // unreachable clock. Checked here, not in api(): the wizard and commands read JSON error bodies.
-    if (!isSatelliteBody(next) && !(next && typeof next === "object" && next._meta)) throw new Error("no state");
+    // no-store: the browser cache never answers (a cached 200 would reset every age); the page sends
+    // the ETag itself and handles the 304
+    const res = await fetch("/api/state" + (q.length ? "?" + q.join("&") : ""), { signal: ac.signal, cache: "no-store",
+      headers: !diagAsked && stateEtag && Date.now() - stateAt < STATE_REFRESH_MS ? { "If-None-Match": stateEtag } : {} });
+    if (res.status === 304 && lastBody) next = null;   // unchanged: keep STATE
+    else {
+      next = await res.json();
+      // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
+      // unreachable clock
+      if (!isSatelliteBody(next) && !(next && typeof next === "object" && next._meta)) throw new Error("no state");
+      if (!diagAsked) { stateEtag = res.headers.get("ETag"); lastBody = next; }
+    }
   } catch (e) {
     paintLink();   // a failure alone changes nothing: unreachable is time-based (UNREACHABLE_MS)
     return;
@@ -1266,14 +1285,16 @@ async function refreshState(force) {
     polling = false;
   }
   waitingSince = null;
-  lastAnswerAt = stateAt = Date.now();
+  const kept = next === null;   // a 304: STATE and stateAt stay
+  lastAnswerAt = Date.now();
+  if (!kept) stateAt = lastAnswerAt;
   force = force || forceNext;
   forceNext = false;
   // The ESP32 satellite answers RAW decoded fields ({t, fn, device}); interpret them in the browser.
-  STATE = isSatelliteBody(next) ? /** @type {State} */ (adaptSatellite(next, Date.now())) : next;
+  if (!kept) STATE = isSatelliteBody(next) ? /** @type {State} */ (adaptSatellite(next, Date.now())) : next;
   // Diagnostics opened while a plain poll was out: fetch its ?diag=1 values now, not on the next tick
   if (view === "satdiag" && !diagAsked) setTimeout(() => refreshState(false), 0);
-  if (PWA) try { localStorage.setItem(LAST_STATE_KEY, JSON.stringify({ at: Date.now(), state: STATE })); } catch (e) { /* storage blocked/full */ }
+  if (PWA && !kept) try { localStorage.setItem(LAST_STATE_KEY, JSON.stringify({ at: Date.now(), state: STATE })); } catch (e) { /* storage blocked/full */ }
   // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the
   // Device status's "Unpair…". Taken the first time a `_meta` answers (calictl or the satellite) -- also when
   // the first poll failed (daemon restarting) -- and never on an unknown runtime.
@@ -1304,7 +1325,8 @@ async function refreshState(force) {
   if (!force && ae && (ae.type === "range" || ae.type === "time" || ae.tagName === "SELECT"
       || ae.id === "pairing-passkey")) return;   // don't clobber a mid-typed pairing passkey either
   if (roofHold) return;                          // never rebuild the screen under a held roof button
-  const sig = view + "|" + JSON.stringify(next);
+  // a kept state repaints every 10 s, so its ages visibly count on
+  const sig = view + "|" + JSON.stringify(kept ? lastBody : next) + "|" + Math.floor((Date.now() - stateAt) / 10000);
   if (!force && sig === lastRender) return; // nothing changed -> no flicker
   lastRender = sig;
   render();
@@ -2116,7 +2138,7 @@ function renderDeviceStatus() {
   const m = STATE._meta || /** @type {Meta} */ ({});
   const unit = dsCard(/** @type {string} */ (t("Camper unit")));
   unit.appendChild(sumRow(/** @type {string} */ (t("Connection")), /** @type {string} */ (t(LINK_WORD[linkState()]))));
-  unit.appendChild(sumRow(/** @type {string} */ (t("Last update")), agoText(m.age_s)));
+  unit.appendChild(sumRow(/** @type {string} */ (t("Last update")), agoText(ageNow(m.age_s))));
   // "Not paired" only from a fetched snapshot that says so; a failed/absent fetch is unknown ("—").
   const addr = PAIRING && PAIRING.address;
   unit.appendChild(sumRow(/** @type {string} */ (t("Pairing")),
@@ -2144,7 +2166,7 @@ function renderDeviceStatus() {
     if (w && w.ssid) card.appendChild(sumRow(/** @type {string} */ (t("WiFi")),
       [w.ssid, w.ip, typeof w.rssi === "number" ? w.rssi + " dBm" : ""].filter(Boolean).join(" · ")));
     if (sat.uptime_ms != null)
-      card.appendChild(sumRow(/** @type {string} */ (t("Uptime")), uptimeText(sat.uptime_ms)));
+      card.appendChild(sumRow(/** @type {string} */ (t("Uptime")), uptimeText(sat.uptime_ms + (Date.now() - stateAt))));
     const tm = sat.time;   // the clock the SD log stamps with (R_FW_TIME), with the boot number
     if (tm) card.appendChild(sumRow(/** @type {string} */ (t("Clock")), tf(SAT_CLOCK[tm.source === "none" || tm.source === "unit"
       ? tm.source : tm.synced ? "synced" : "waiting"], { boot: tm.boot })));
@@ -2379,7 +2401,7 @@ function satUpdate() {
     satRow("pw", [T("Wake on ignition") + ": " + T(p.enabled ? "on" : "off")], p.enabled, st);
     sq("pw-wake").hidden = !st;
     sq("pw-last").textContent = p.last_s === null ? ""
-      : tf("Last wake: {n} s ago ({reason})", { n: p.last_s, reason: T(p.reason === "ignition" ? "Ignition" : "Manual") });
+      : tf("Last wake: {n} s ago ({reason})", { n: Math.round(/** @type {number} */ (ageNow(p.last_s))), reason: T(p.reason === "ignition" ? "Ignition" : "Manual") });
     satPiHaltUpdate(p, st);
   }
   satRow("ux", [T(m.ux ? "Send usage data: on" : "Send usage data: off")], !!m.ux, st);
@@ -2488,9 +2510,9 @@ function satPiHaltUpdate(p, st) {
   satPiSelectSet("pw-after", p.halt_after_min);
   satPiSelectSet("pw-soc", p.halt_soc_pct);
   const parts = [];
-  if (has && p.halt_in_s != null) parts.push(tf("Shutdown in {n} min", { n: Math.ceil(p.halt_in_s / 60) }));
+  if (has && p.halt_in_s != null) parts.push(tf("Shutdown in {n} min", { n: Math.ceil(/** @type {number} */ (leftNow(p.halt_in_s)) / 60) }));
   else if (has && p.halted && p.halt_last_s != null)
-    parts.push(tf("Shut down {n} min ago ({reason})", { n: Math.floor(p.halt_last_s / 60), reason: T(PI_HALT_REASON[p.halt_reason || ""] || "Manual") }));
+    parts.push(tf("Shut down {n} min ago ({reason})", { n: Math.floor(/** @type {number} */ (ageNow(p.halt_last_s)) / 60), reason: T(PI_HALT_REASON[p.halt_reason || ""] || "Manual") }));
   if (has && p.batt_low) parts.push(T("Battery low"));
   sq("pw-halt-st").textContent = parts.join(" · ");
 }
@@ -2932,7 +2954,7 @@ const fix = (v, digits, unit = "") => (typeof v === "number" ? v.toFixed(digits)
 /** @param {unknown} v @returns {string} the raw value, else "—" */
 const raw = (v) => (typeof v === "number" ? String(v) : "—");
 /** @param {SensorReading} e */
-const extStale = (e) => typeof e.age_s !== "number" || e.age_s > SENSOR_STALE_S;
+const extStale = (e) => typeof e.age_s !== "number" || /** @type {number} */ (ageNow(e.age_s)) > SENSOR_STALE_S;
 
 /** Rows per external sensor type: [label, value of one entry]. Labels go through t() on render.
  * @type {Record<string, { rows: [string, (e: SensorReading) => string][] }>} */
@@ -2972,7 +2994,7 @@ function houseLoad(s) {
   if (!m || m.age_s == null || m.age_s + (Date.now() - stateAt) / 1000 > HOUSE_LOAD_MAX_AGE_S) return "—";
   let sum = 0;
   for (const [, e] of extEntries("victron_mppt")) {
-    if (typeof e.age_s !== "number" || e.age_s > HOUSE_LOAD_MAX_AGE_S || typeof e.battery_current !== "number") return "—";
+    if (typeof e.age_s !== "number" || /** @type {number} */ (ageNow(e.age_s)) > HOUSE_LOAD_MAX_AGE_S || typeof e.battery_current !== "number") return "—";
     sum += e.battery_current;
   }
   /** @type {[boolean|undefined, number|null|undefined][]} */
@@ -3014,7 +3036,7 @@ function expandReadouts(readouts, s) {
       const bare = entries.length === 1 && alias === r.ext && !rows.some(([l]) => own.has(l));
       return rows.map(([label, get]) => ({
         label: (bare ? "" : cap(alias) + " ") + t(label),
-        get: () => get(e) + (extStale(e) ? ` 🕒 ${agoText(/** @type {number|null} */ (e.age_s))}` : ""),
+        get: () => get(e) + (extStale(e) ? ` 🕒 ${agoText(ageNow(/** @type {number|null} */ (e.age_s)))}` : ""),
       }));
     });
   });
@@ -3053,7 +3075,7 @@ function renderSensors() {
   card.setAttribute("role", "group");
   card.setAttribute("aria-label", /** @type {string} */ (t("Sensors")));
   for (const [alias, r] of unknown) {
-    const age = typeof r.age_s === "number" ? r.age_s : null;
+    const age = typeof r.age_s === "number" ? ageNow(r.age_s) : null;
     const stale = age != null && age > SENSOR_STALE_S;
     const row = document.createElement("div");
     row.className = "row sensor" + (stale ? " stale" : "");
@@ -3584,7 +3606,7 @@ function startClockTicker(el) {
   stopClockTicker();
   const base = parseClock(/** @type {FnState} */ (STATE.vehicle || {}).car_clock);
   if (base == null) { el.textContent = "—"; return; }
-  const anchor = Date.now() - (STATE._meta && STATE._meta.age_s ? STATE._meta.age_s * 1000 : 0);
+  const anchor = stateAt - (STATE._meta && STATE._meta.age_s ? STATE._meta.age_s * 1000 : 0);
   const paint = () => { el.textContent = fmtClock(base + (Date.now() - anchor)); };
   paint();
   clockTimer = setInterval(paint, 1000);
