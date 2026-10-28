@@ -14,7 +14,7 @@ merge commit on buspi and the ESP. Buspi mechanics (live reads, address, tailsca
 |---|---|
 | Work | Fresh scratch clone + branch, never the owner's checkout. `python3.13` (bare `python3` = 3.9). |
 | Gate | `tools/ci.sh ci` (= lint + tests + audit), `tools/ci.sh webcheck`, `~/Library/Python/3.13/bin/pre-commit run --all-files` (ALL files: CI runs the hooks that way; `--files` misses a reformat elsewhere) — **before** the push, then `git status`: a hook that reformats leaves the fix uncommitted, and the pushed commit fails CI's pre-commit. Never `--no-verify`. |
-| CI-only gates | Firmware/C or anything near a secret: the three checks below that only CI runs — gcc `-Werror`, the gitleaks working-tree scan, `sphinx -W`. |
+| CI-only gates | Firmware/C or docs: the checks below that the Mac's hooks miss — gcc `-Werror`, `sphinx -W` (the gitleaks working-tree scan now runs on every push). |
 | Push | `git -c credential.helper='!gh auth git-credential' push` (MacPorts hang). End commits/PR body with the attribution lines. |
 | Wait | `gh pr checks N --watch`, then read `gh pr view N --comments` + `gh api repos/ckeller42/open-california/pulls/N/comments`. |
 | Bots | CodeRabbit rate-limited → comment `@coderabbitai review` later. claude-review infra failure → `gh run rerun <id>`. |
@@ -29,15 +29,16 @@ merge commit on buspi and the ESP. Buspi mechanics (live reads, address, tailsca
 
 ## CI-only gates (green on the Mac, red in CI)
 
-The Mac's clang and the staged-only hooks miss three things CI enforces. Run them before pushing
-a PR that touches `firmware/` C, a `cali_core/test/*_cli.c`, a key/token-shaped literal, or docs:
+The Mac's clang and the commit hooks miss these CI gates. Run them before pushing a PR that
+touches `firmware/` C, a `cali_core/test/*_cli.c`, or docs (the gitleaks working-tree scan, 2), runs
+on every push as a pre-push hook):
 
 ```sh
 # 1) the host test CLIs compile with gcc -Werror on Linux (clang skips -Wformat-truncation:
 #    snprintf(buf, sizeof buf, "%s", tok) from a longer token → use a precision, "%.17s")
 docker run --rm --platform linux/amd64 -v "$PWD":/repo -w /repo python:3.13 bash -c \
   'pip install -q pytest pyyaml; python -m pytest tests/firmware/test_sensors.py tests/firmware/test_web_handlers.py -q -p no:cacheprovider'
-# 2) the gitleaks WORKING-TREE scan (manual stage; the commit hook scans only staged hunks):
+# 2) the gitleaks WORKING-TREE scan (pre-push + CI; the commit hook scans only staged hunks):
 #    a hex alphabet or any literal next to a word like key/token trips generic-api-key →
 #    a named constant (static const char HEXDIGITS[] = "0123…") away from the word
 ~/Library/Python/3.13/bin/pre-commit run --hook-stage manual gitleaks-dir --all-files
@@ -162,7 +163,7 @@ table, `ota_data_initial.bin`, app at `ota_0`; NVS untouched). Link timing over 
 | Merged on green CI before reading bot comments | Read both comment endpoints first |
 | `--delete-branch` on a base with stacked child PRs (closes them) | Retarget the children first |
 | CodeRabbit check "pass" | Often means skipped (rate limit); look for its review, re-trigger |
-| Local gate green, CI `test`/`pre-commit`/`docs` red | A CI-only gate: gcc `-Werror`, gitleaks working tree, `sphinx -W` (section above) |
+| Local gate green, CI `test`/`pre-commit`/`docs` red | A CI-only gate: gcc `-Werror`, `sphinx -W` (section above) |
 | `ota_deploy.sh main` right after a merge | `firmware-release` must finish first (the manifest still names the previous merge) |
 | `ota_deploy.sh main` waits for ever | `main`'s head is the `[skip ci]` screenshot commit: no release names it. Pin the merge sha: `ota_deploy.sh <merge-sha7>` |
 | Merged while a check was still pending | Gate the merge on `jq -e 'all(pass\|skipping)'` (Quick reference), not on a printed count |
