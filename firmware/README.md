@@ -319,8 +319,9 @@ every `wifi …` line answers `LOG wifi: not enabled` and `status` has no `wifi`
 **CI's gcc on a Mac: `tools/ci.sh linux`.** The C tests compile their CLIs with `-Wall -Wextra
 -Werror`, and Apple clang lets through what CI's gcc rejects (`-Wformat-truncation`: `snprintf(small,
 sizeof small, "id=%s", tok)` from a longer `tok`). `tools/ci.sh linux` runs every test that compiles C
-(`tests/firmware` without the host tier, the csrc parity) in CI's toolchain: Linux amd64, gcc and the
-`-m32` multilib (`tools/docker/linux.Dockerfile`). The image builds on the first run (about 1.5 min),
+(`tests/firmware` without the NimBLE host tier, control parity's `-m32` leg, the csrc parity) in CI's
+toolchain: Ubuntu 24.04 amd64 like `ubuntu-latest`, gcc 13 with the `-m32` multilib
+(`tools/docker/linux.Dockerfile`). The image builds on the first run (about 1.5 min),
 then a run takes about 40 s under emulation on Apple Silicon; arguments replace the pytest arguments
 (`tools/ci.sh linux tests/firmware/test_diag.py`).
 

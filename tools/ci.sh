@@ -115,9 +115,11 @@ linux() {   # CI's C toolchain (tools/docker/linux.Dockerfile: Linux amd64, gcc 
   command -v docker >/dev/null || { echo "linux: needs Docker" >&2; exit 1; }
   tar -c tools/docker/linux.Dockerfile requirements-dev.txt \
     | docker build -q --platform linux/amd64 -t oc-linux -f tools/docker/linux.Dockerfile - >/dev/null
-  [ $# -gt 0 ] || set -- -n auto -m "not linux_only" tests/firmware tests/test_codec_parity.py tests/test_ports_parity.py
-  docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" -v "$PWD":/w -w /w oc-linux \
-    python -m pytest -q -p no:cacheprovider "$@"
+  local run=(docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" -v "$PWD":/w -w /w oc-linux
+    python3 -m pytest -q -p no:cacheprovider)
+  if [ $# -gt 0 ]; then "${run[@]}" "$@"; return; fi
+  "${run[@]}" -n auto -m "not linux_only" tests/firmware tests/test_codec_parity.py tests/test_ports_parity.py
+  "${run[@]}" -m linux_only tests/firmware/test_control_parity.py   # its -m32 leg (no NimBLE needed)
 }
 doc_offset() { "$PY" -m pytest tests/test_doc_offset_consistency.py -q -p no:cacheprovider; }
 needs_trace() { "$PY" -m pytest tests/test_needs_docstrings.py -q -p no:cacheprovider; }   # every need is autodoc'd
