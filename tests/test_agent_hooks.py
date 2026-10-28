@@ -23,6 +23,8 @@ def run_hook(name, event):
         "git commit --no-verify -m x",
         "git commit -n -m x",
         "git commit -qn -F msg.txt",
+        'git commit -nm "msg"',
+        'git commit -anm "msg"',
         "cd /tmp/w && git push --no-verify origin b",
         "git -C /tmp/w commit -am x --no-verify",
         "git merge --no-verify main",
@@ -37,6 +39,9 @@ def test_block_no_verify_refuses_a_hook_bypass(cmd):
     "cmd",
     [
         "git commit -q -F msg.txt",
+        'git commit -am "fix n"',
+        "git commit -mnew-message",  # an attached message: its letters are not flags
+        "git commit --amend --no-edit",
         "git push -n origin b",  # push -n is a dry run, not a bypass
         "grep -n -- --no-verify docs/x.md",
         "echo 'never git commit --no-verify'",

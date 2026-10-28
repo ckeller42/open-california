@@ -28,8 +28,9 @@ def bypasses(tokens):
     sub, rest = tokens[i], tokens[i + 1 :]
     if "--no-verify" in rest:
         return True
-    # commit's short -n (alone or in a cluster like -qn); push -n is --dry-run, not a bypass
-    return sub == "commit" and any(re.fullmatch(r"-[A-Za-z]*n[A-Za-z]*", t) and "m" not in t for t in rest)
+    # commit's short -n, alone or in a cluster (-qn, -nm "msg"): the cluster's flags end at its first
+    # m, whose message may be attached (-mnew); push -n is --dry-run, not a bypass
+    return sub == "commit" and any(re.match(r"-[A-Za-z]", t) and "n" in t[1:].split("m", 1)[0] for t in rest)
 
 
 try:
