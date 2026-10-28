@@ -34,7 +34,9 @@ for how strongly each fact is proven.
 | ESP firmware, QEMU + board | the real esp32s3 image in QEMU; a CoreS3 on the bench against the fake unit on a dongle | boot, console, NVS; the real radio stack and the screen (read side, and the control path vs the mock) | `firmware-qemu`; bench (manual) |
 
 `tools/ci.sh` runs most of this locally. It skips `gui-e2e` without Playwright and the C tests
-without a compiler, and it never runs the real-BlueZ VM job. The git hooks (`tools/ci.sh dev`
+without a compiler, and it never runs the real-BlueZ VM job. `tools/ci.sh linux` runs the C tests
+in CI's own toolchain (Linux amd64, gcc with the `-m32` multilib) in Docker, so a gcc-only warning
+that Apple clang lets through fails on the Mac too. The git hooks (`tools/ci.sh dev`
 installs them from `.pre-commit-config.yaml`) run the fast guards and linters on every commit and
 the full suite plus the signal audit on every push. The notes on the `tools/ci.sh` line
 in the repo's [`AGENTS.md`](https://github.com/ckeller42/open-california/blob/main/AGENTS.md) list exactly what only GitHub runs.

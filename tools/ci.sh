@@ -21,7 +21,7 @@
 # (re-renders docs/screenshots and commits them to main with [skip ci]).
 #
 #   tools/ci.sh              # run the local gate (see above for what it does NOT cover)
-#   tools/ci.sh test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|screenshots|import-clean|vendor-check
+#   tools/ci.sh test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|linux|screenshots|import-clean|vendor-check
 #   tools/ci.sh dev          # install dev tooling + the pre-commit/pre-push hooks (pre-commit framework)
 #
 # The single-check subcommands are also the entries of the repo-local hooks in
@@ -107,6 +107,18 @@ vendor_check() {   # whole tracked tree: vendor paths, the real vehicle MAC, VIN
   "$PY" tools/check_vendor_material.py --all
   echo "no vendor material, vehicle MAC, or VIN committed"
 }
+linux() {   # CI's C toolchain (tools/docker/linux.Dockerfile: Linux amd64, gcc + -m32 multilib) via Docker:
+            # the gcc -Werror builds Apple clang lets through. Default: every test that compiles C
+            # (tests/firmware without the host tier, the csrc parity); args replace the pytest args,
+            # e.g. `tools/ci.sh linux tests/firmware/test_diag.py`. The image builds once (~2 min), then
+            # a run takes ~30 s under emulation on Apple Silicon.
+  command -v docker >/dev/null || { echo "linux: needs Docker" >&2; exit 1; }
+  tar -c tools/docker/linux.Dockerfile requirements-dev.txt \
+    | docker build -q --platform linux/amd64 -t oc-linux -f tools/docker/linux.Dockerfile - >/dev/null
+  [ $# -gt 0 ] || set -- -n auto -m "not linux_only" tests/firmware tests/test_codec_parity.py tests/test_ports_parity.py
+  docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" -v "$PWD":/w -w /w oc-linux \
+    python -m pytest -q -p no:cacheprovider "$@"
+}
 doc_offset() { "$PY" -m pytest tests/test_doc_offset_consistency.py -q -p no:cacheprovider; }
 needs_trace() { "$PY" -m pytest tests/test_needs_docstrings.py -q -p no:cacheprovider; }   # every need is autodoc'd
 codec_fresh() {   # golden vectors + generated C headers match protocol/dictionary.yaml + overrides
@@ -171,9 +183,10 @@ case "${1:-ci}" in
   codec-fresh)   codec_fresh;;
   doc-offset)    doc_offset;;
   needs-trace)   needs_trace;;
+  linux)         shift; linux "$@";;
   screenshots)   screenshots;;
   import-clean)  import_clean;;
   vendor-check)  vendor_check;;
   dev)           dev;;
-  *) echo "usage: tools/ci.sh [ci|test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|screenshots|import-clean|vendor-check|dev]"; exit 2;;
+  *) echo "usage: tools/ci.sh [ci|test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|linux|screenshots|import-clean|vendor-check|dev]"; exit 2;;
 esac
