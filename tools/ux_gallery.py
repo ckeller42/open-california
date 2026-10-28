@@ -517,6 +517,7 @@ class EspStub:
         self.fixtures = esp_fixtures()
         self.requests = []  # request paths, in order
         self.queries = []  # the same with their query strings (?seen=1, ?diag=1)
+        self.state_status = []  # each plain /api/state answer: 200 or 304 (R_FW_STATE_ETAG)
         self.fail_state = 0  # the next N GET /api/state answer 503
         self.fail_pairing = 0  # the next N GET /api/pairing answer 503
         self.commands = []  # POST /api/command bodies, in order
@@ -622,7 +623,7 @@ class EspStub:
                 if stub.down:
                     return
                 fx = stub.fixtures[stub.mode]
-                enc = None
+                enc, extra = None, {}
                 if path == "/api/pairing" and stub.pairing_get_delay_s:
                     with stub._count:
                         stub._pairing_gets += 1
@@ -655,7 +656,20 @@ class EspStub:
                 elif path == "/device":  # the recovery page
                     body, ctype = page, "text/html; charset=utf-8"
                 elif path == "/api/state" and "diag=1" not in self.path:  # web.c: the plain poll
-                    body, ctype = json.dumps(state_without_diag(fx[path])).encode(), "application/json"
+                    plain = state_without_diag(fx[path])
+                    from calictl import web
+
+                    etag = web.state_etag(plain)  # the same ticking members left out as web.c
+                    if etag in self.headers.get("If-None-Match", ""):
+                        stub.state_status.append(304)
+                        self.send_response(304)
+                        self.send_header("ETag", etag)
+                        self.send_header("Cache-Control", "no-store")
+                        self.end_headers()
+                        return
+                    stub.state_status.append(200)
+                    body, ctype = json.dumps(plain).encode(), "application/json"
+                    extra = {"ETag": etag, "Cache-Control": "no-store"}
                 elif path in fx:
                     body, ctype = json.dumps(fx[path]).encode(), "application/json"
                 elif path in pwa:  # web.c: the manifest + icons, every mode
@@ -671,6 +685,8 @@ class EspStub:
                     self.send_header("Cache-Control", "no-cache")
                 elif path in pwa:
                     self.send_header("Cache-Control", "max-age=86400")  # web.c's PWA assets
+                for k, v in extra.items():
+                    self.send_header(k, v)
                 self.end_headers()
                 self.wfile.write(body)
 
