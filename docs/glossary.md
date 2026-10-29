@@ -270,4 +270,13 @@ Quiet mode
 Zweitbatterie
 Second battery
   The camper's house battery, as the unit labels it (vs the vehicle battery).
+
+NTP
+  Network Time Protocol: how buspi learns the real time. Without a battery-backed clock, a woken
+  Pi shows its shutdown time until NTP answers, about a minute after the network is up.
+
+time-sync.target
+  The systemd target that services order themselves after to start on a correct clock.
+  `systemd-time-wait-sync` makes it mean "the clock is synchronised", bounded to two minutes so a
+  van without internet still starts them.
 ```
