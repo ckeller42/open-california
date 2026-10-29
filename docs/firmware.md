@@ -1233,6 +1233,13 @@ that through a wire.
 - **A running Pi:** a pulse while buspi runs only holds GPIO3 (I2C1 SCL) low for 200 ms. If a
   `gpio-shutdown` overlay is ever put on GPIO3, a pulse would **halt** a running Pi: do not combine
   the two (the shutdown has its own wire on GPIO17, below).
+- **The clock after a wake:** buspi has no battery-backed clock, so a woken Pi starts with the time of
+  its shutdown and steps to the real time once NTP answers (about a minute after the network). A
+  service that stamps data "now" must not start before that step, or its first points land at the
+  halt time. `calictl.service` and the other writers to InfluxDB order themselves after
+  `time-sync.target`; `systemd-time-wait-sync` makes that target mean "synchronised", with
+  `TimeoutStartSec=120` so a van without internet starts them on the old clock after two minutes
+  instead of never.
 
 ## Pi halt (`R_FW_PI_HALT`)
 
