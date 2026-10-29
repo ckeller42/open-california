@@ -1,7 +1,7 @@
 [Unit]
 Description=VW California Camper Unit (BLE) -> InfluxDB + MQTT (Home Assistant)
-After=bluetooth.target influxdb.service mosquitto.service network-online.target
-Wants=bluetooth.target network-online.target
+After=bluetooth.target influxdb.service mosquitto.service network-online.target time-sync.target
+Wants=bluetooth.target network-online.target time-sync.target
 
 [Service]
 ExecStart=/home/pi/solix-env/bin/python -m calictl serve
