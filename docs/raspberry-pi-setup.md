@@ -419,6 +419,31 @@ On the Pi:
 `pi hold 3000` does the same for the wake line (pin 5). The satellite's "Shut down after parking"
 and battery-guard settings are in its Satellite settings ([firmware](firmware.md#pi-halt-r_fw_pi_halt)).
 
+## Battery-backed clock (optional)
+
+A Pi has no {term}`RTC`. After a halt it boots with the clock of its shutdown and steps to the real time
+once {term}`NTP` answers ([the clock after a wake](firmware.md#pi-wake-r_fw_pi_wake)); with no internet it
+stays on that old time. A DS3231 module keeps the time through both.
+
+| Module pin | Pi header | |
+|---|---|---|
+| VCC | pin 17 (3V3) | 3.3 V only |
+| SDA | pin 16 ({term}`GPIO`23) | |
+| SCL | pin 18 (GPIO24) | |
+| GND | pin 20 (GND) | |
+
+The module does not use the Pi's I2C1 pins 3 and 5: pin 5 (GPIO3) carries the satellite's wake pulse,
+and 200 ms of SCL held low would break every RTC read. The overlay runs the bus in software on GPIO23
+and GPIO24 instead. With a CR2032, remove the module's charging resistor (or fit a LIR2032): the common
+boards charge the cell through it.
+
+1. `/boot/firmware/config.txt`: add `dtoverlay=i2c-rtc-gpio,ds3231,i2c_gpio_sda=23,i2c_gpio_scl=24`, then reboot.
+2. `dmesg | grep -i rtc` shows `rtc0`; `sudo hwclock -r` reads it.
+3. With the clock synchronised, `sudo hwclock --systohc --utc` sets the RTC once.
+4. `sudo systemctl enable --now rtc-save.timer` (unit files in the buspi-config repo) copies the clock to the
+   RTC 5 min after boot and daily, and only while `timedatectl` reports it as NTP-synchronised, so a stale clock
+   never reaches the RTC.
+
 ## Troubleshooting
 
 - **`VWCAMPER` not found** — make sure the camper is on its "Connect device" screen (it only

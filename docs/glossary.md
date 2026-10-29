@@ -275,6 +275,10 @@ NTP
   Network Time Protocol: how buspi learns the real time. Without a battery-backed clock, a woken
   Pi shows its shutdown time until NTP answers, about a minute after the network is up.
 
+RTC
+  Real-time clock: a small chip with its own battery that keeps the date and time while the Pi is halted or
+  unpowered. A Pi 4 has none; the optional DS3231 module adds one ([battery-backed clock](raspberry-pi-setup.md)).
+
 time-sync.target
   The systemd target that services order themselves after to start on a correct clock.
   `systemd-time-wait-sync` makes it mean "the clock is synchronised", bounded to two minutes so a
