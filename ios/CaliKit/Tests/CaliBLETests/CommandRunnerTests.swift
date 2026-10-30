@@ -38,6 +38,11 @@ private func until(_ what: String, _ cond: () async -> Bool) async throws {
     Issue.record("timed out waiting for \(what)")
 }
 
+private actor ResultBox {
+    var value: CommandResult?
+    func set(_ v: CommandResult) { value = v }
+}
+
 private struct Rig {
     let clock = TestClock()
     let fake: FakeCamperTransport
@@ -57,16 +62,23 @@ private struct Rig {
         try await s.ensureConnected(timeout: .seconds(10))
         try await until("first beat") { await s.sinceFirstBeat != nil }
         clock.advance(by: CamperGATT.armDelay)
+        // The beat this advance released is written: no heartbeat write is pending any more.
+        try await until("second beat") { await heartbeats().count == 2 }
     }
 
     func start(_ cmd: Command) -> Task<CommandResult, Never> { Task { await s.run(cmd) } }
 
-    /// Moves the clock past the command deadline in small steps, then returns the result.
+    /// Moves the clock in 100 ms steps until the command has its result (at most 60 s of clock).
+    /// It never stops at a fixed time: a sleep the runner registers late would otherwise never end.
     func finish(_ t: Task<CommandResult, Never>) async throws -> CommandResult {
-        for _ in 0..<50 {
+        let box = ResultBox()
+        Task { await box.set(await t.value) }
+        for _ in 0..<600 {
+            if let v = await box.value { return v }
             clock.advance(by: .milliseconds(100))
-            try await Task.sleep(for: .milliseconds(2))
+            try await Task.sleep(for: .milliseconds(1))
         }
+        Issue.record("the command did not finish")
         return await t.value
     }
 }
@@ -83,18 +95,20 @@ struct CommandRunnerTests {
         #expect(await r.commandWrites() == [.init(char: Fx.coolerCtl, bytes: [0xfd, 0x77, 0x1e, 0x3e, 0x1f, 0x1f])])
         _ = try await r.finish(cooler)
 
-        let lights = r.start(Command(function: "lighting", what: "power", value: "on"))
-        try await until("SET frame") { await r.commandWrites().count == 2 }
-        try await until("heartbeat + 300 ms delay sleepers") { r.clock.sleeperCount == 2 }
-        r.clock.advance(by: .milliseconds(299))
-        #expect(r.clock.sleeperCount == 2)  // the delay did not end
-        #expect(await r.commandWrites().count == 2)
-        r.clock.advance(by: .milliseconds(1))
-        try await until("commit frame") { await r.commandWrites().count == 3 }
-        let w = await r.commandWrites()
-        #expect(w[1].char == Fx.lightingCtl && w[1].bytes.first == 0x0c)  // SET_PROFILE
-        #expect(w[2].char == Fx.lightingCtl && w[2].bytes.first == 0x0e)  // commit
-        #expect(try await r.finish(lights) == .sent)
+        let l = Rig()
+        try await l.warm()  // the clock stands at 3.0 s
+        let lights = l.start(Command(function: "lighting", what: "power", value: "on"))
+        try await until("SET frame") { await l.commandWrites().count == 1 }
+        try await until("the 300 ms delay") { l.clock.deadlines.contains(.milliseconds(3300)) }
+        l.clock.advance(by: .milliseconds(299))
+        #expect(l.clock.deadlines.contains(.milliseconds(3300)))  // the delay did not end
+        #expect(await l.commandWrites().count == 1)
+        l.clock.advance(by: .milliseconds(1))
+        try await until("commit frame") { await l.commandWrites().count == 2 }
+        let w = await l.commandWrites()
+        #expect(w[0].char == Fx.lightingCtl && w[0].bytes.first == 0x0c)  // SET_PROFILE
+        #expect(w[1].char == Fx.lightingCtl && w[1].bytes.first == 0x0e)  // commit
+        #expect(try await l.finish(lights) == .sent)
     }
 
     /// A link that came up for the command: the first frame waits 3.0 s after the first beat.
@@ -103,10 +117,10 @@ struct CommandRunnerTests {
     @Test func coldCommandWaitsArmDelay() async throws {
         let r = Rig()
         let t = r.start(Fx.coolerOnCmd)
-        try await until("first beat + arm wait") { await !r.heartbeats().isEmpty && r.clock.sleeperCount == 2 }
+        try await until("the arm wait") { r.clock.deadlines.contains(CamperGATT.armDelay) }
         #expect(await r.heartbeats().first == [0x00, 0x10, 0x00, 0x00])
         r.clock.advance(by: .milliseconds(2900))
-        try await until("second beat, arm wait still pending") { await r.heartbeats().count == 2 && r.clock.sleeperCount == 2 }
+        #expect(r.clock.deadlines.contains(CamperGATT.armDelay))  // still waiting at 2.9 s
         #expect(await r.commandWrites().isEmpty)
         r.clock.advance(by: .milliseconds(100))
         try await until("frame at 3.0 s") { await r.commandWrites().count == 1 }
@@ -168,6 +182,7 @@ struct CommandRunnerTests {
         let t = r.start(Fx.lightsAll5)
         try await until("SET frame") { await r.commandWrites().count == 1 }
         await r.fake.hangUp(after: .zero)
+        try await until("link down before the commit's delay ends") { await r.s.isReady == false }
         r.clock.advance(by: .milliseconds(300))
         #expect(await t.value == .unconfirmed)
         #expect(await r.commandWrites().count == 1)
@@ -180,7 +195,7 @@ struct CommandRunnerTests {
     @Test func hangUpBeforeFrameIsFailed() async throws {
         let r = Rig()
         let t = r.start(Fx.coolerOnCmd)
-        try await until("arm wait") { await !r.heartbeats().isEmpty && r.clock.sleeperCount == 2 }
+        try await until("the arm wait") { r.clock.deadlines.contains(CamperGATT.armDelay) }
         await r.fake.hangUp(after: .zero)
         try await until("link lost") { await r.s.isReady == false }
         r.clock.advance(by: CamperGATT.armDelay)
@@ -248,6 +263,7 @@ struct CommandRunnerTests {
         try await until("wake-up edit") { await r.commandWrites().count == 5 }
         #expect(await r.commandWrites()[4].bytes[1] == 0x14)  // Mode 20
         #expect(try await r.finish(again) == .sent)  // a config echo proves nothing
+        #expect(await r.s.pushSubscriberCount == 0)  // the pull's stream and the command's
     }
 
     /// The unit's own Mode-20 frame latches the wake-up config: the next edit plans without a pull.
@@ -272,5 +288,96 @@ struct CommandRunnerTests {
         r.clock.advance(by: .seconds(7))
         try await r.s.ensureConnected(timeout: .seconds(10))
         #expect(await r.s.state.lightConfig.isEmpty)  // the read returned a lamp frame, no config
+    }
+
+    /// Two commands at once: one runs, the other is busy at once; their frames never interleave.
+    /// - Test: T_IOS_CMD_BUSY
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
+    @Test func secondCommandIsBusyAndFramesNeverInterleave() async throws {
+        let r = Rig()
+        try await r.warm()
+        let a = r.start(Command(function: "lighting", what: "power", value: "on"))
+        let b = r.start(Fx.coolerOnCmd)
+        let results = [try await r.finish(a), try await r.finish(b)]
+        #expect(results.filter { $0 == .busy }.count == 1)
+        #expect(results.contains(.sent))
+        let chars = Set(await r.commandWrites().map(\.char))
+        #expect(chars.count == 1)  // only the command that ran wrote
+        #expect(await r.commandWrites().count == (chars == [Fx.lightingCtl] ? 2 : 1))
+        #expect(await r.s.commands == 0)
+        #expect(try await r.finish(r.start(Fx.coolerOnCmd)) == .sent)  // free again
+    }
+
+    /// The push stream of a command ends with it, whatever the result.
+    /// - Test: T_IOS_CMD_NO_SUBSCRIBER_LEAK
+    /// - Verifies: R_IOS_TESTED
+    @Test func noPushSubscriberLeftOnAnyPath() async throws {
+        let r = Rig()
+        try await r.warm()
+        let applied = r.start(Fx.coolerOnCmd)
+        try await until("frame") { await r.commandWrites().count == 1 }
+        await r.fake.pushForeign(char: Fx.cooler, bytes: Fx.coolerOn)
+        #expect(await applied.value == .applied)
+        #expect(await r.s.pushSubscriberCount == 0)
+
+        await r.fake.rejectNextWrite()
+        guard case .failed = await r.s.run(Fx.coolerOnCmd) else { Issue.record("not failed"); return }
+        #expect(await r.s.pushSubscriberCount == 0)
+
+        await r.fake.dropLinkDuringNextWrite(to: Fx.coolerCtl)
+        #expect(await r.s.run(Fx.coolerOnCmd) == .unconfirmed)
+        #expect(await r.s.pushSubscriberCount == 0)
+    }
+
+    /// A write issued and then lost with the link (no ACK) may have landed: unconfirmed, not failed.
+    /// - Test: T_IOS_CMD_LINK_LOST_IN_FLIGHT
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
+    @Test func linkLostDuringWriteIsUnconfirmed() async throws {
+        let r = Rig()
+        try await r.warm()
+        await r.fake.dropLinkDuringNextWrite(to: Fx.coolerCtl)
+        #expect(await r.s.run(Fx.coolerOnCmd) == .unconfirmed)
+        #expect(await r.commandWrites() == [.init(char: Fx.coolerCtl, bytes: [0xfd, 0x77, 0x1e, 0x3e, 0x1f, 0x1f])])
+    }
+
+    /// The one cooler frame is ACKed, then the unit hangs up before any push: unconfirmed.
+    /// - Test: T_IOS_CMD_HANGUP_BEFORE_PUSH
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST, R_IOS_POWER_SAVE
+    @Test func hangUpAfterAckBeforePushIsUnconfirmed() async throws {
+        let r = Rig()
+        try await r.warm()
+        let t = r.start(Fx.coolerOnCmd)
+        try await until("frame") { await r.commandWrites().count == 1 }
+        await r.fake.hangUp(after: .zero)
+        #expect(await t.value == .unconfirmed)
+        #expect(await r.s.pushSubscriberCount == 0)
+    }
+
+    /// Frames of an earlier link do not count: the gate needs this link's `general`, the command
+    /// this link's frame of its function (control_run.c `cali_session_frame_live`).
+    /// - Test: T_IOS_CMD_THIS_LINK_ONLY
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST, R_IOS_V2_ONLY
+    @Test func onlyFramesOfThisLinkCount() async throws {
+        let r = Rig()
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        // The next link offers no cooler frame.
+        await r.fake.remove(Fx.cooler)
+        try await reconnect(r)
+        #expect(await r.s.state.fields["cooler"] != nil)  // kept from the earlier link
+        #expect(try await r.finish(r.start(Fx.coolerOnCmd)) == .notReady)
+
+        // The next link offers no general frame: the old V2 gate does not count.
+        await r.fake.remove(Fx.general)
+        try await reconnect(r)
+        #expect(await r.s.state.gate == .supported)  // the stored frame says V2 …
+        #expect(try await r.finish(r.start(Fx.coolerOnCmd)) == .notSupported)  // … but not on this link
+        #expect(await r.commandWrites().isEmpty)
+    }
+
+    private func reconnect(_ r: Rig) async throws {
+        await r.fake.dropLink()
+        try await until("link down") { await r.s.isReady == false }
+        r.clock.advance(by: .seconds(7))
+        try await r.s.ensureConnected(timeout: .seconds(10))
     }
 }

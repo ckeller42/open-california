@@ -11,13 +11,18 @@ public enum CommandResult: Sendable, Equatable {
     case sent
     case refused(String)
     case elsewhere(String)
-    /// The unit does not speak CommunicationVersion 2 (or has not said which one yet).
+    /// The unit does not speak CommunicationVersion 2, or this link has no `general` frame yet.
     case notSupported
+    /// Another command is still running (control_run.c `CALI_CTL_BUSY`); nothing was written.
+    case busy
+    /// This link has no frame of the command's function yet (control_run.c `CALI_CTL_NOT_READY`).
+    case notReady
     /// Nothing reached the unit.
     case failed(String)
     /// The frames did not go out before the deadline.
     case timeout
-    /// The link dropped after a frame went out: the unit may have acted on it.
+    /// A frame went out and the unit may have acted on it, but no answer can come: the link dropped
+    /// after a frame was issued, or a later frame was rejected after an earlier one was ACKed.
     case unconfirmed
 }
 
@@ -38,15 +43,21 @@ extension CamperSession {
     /// Runs one command: connect when needed, plan it over this link's state, write its frames in
     /// order, and report what the unit confirmed (`S_SEQ_ACTUATE`, `control_run.c`).
     ///
-    /// The `1003` heartbeat is the session's. A link that is younger than `CamperGATT.armDelay`
-    /// since its first beat (it came up for this command) waits until then before the first frame;
-    /// an older one writes at once. Each frame waits its `delayMs` after the previous write's ACK.
-    /// The deadline `CaliControl.deadline` counts from the first frame.
+    /// One command at a time: while one runs (from its first await to its result), another returns
+    /// `.busy` at once. The `1003` heartbeat is the session's. A link that is younger than
+    /// `CamperGATT.armDelay` since its first beat (it came up for this command) waits until then
+    /// before the first frame; an older one writes at once. Each frame waits its `delayMs` after the
+    /// previous write's ACK. The deadline `CaliControl.deadline` counts from the first frame.
     ///
     /// - Parameter connectTimeout: the budget of `ensureConnected` when the link is not ready.
     /// - Requirement: R_IOS_HONEST, R_IOS_NO_ROOF, R_IOS_V2_ONLY, R_IOS_FUNCTIONS, R_IOS_POWER_SAVE
     public func run(_ cmd: Command, connectTimeout: Duration = .seconds(10)) async -> CommandResult {
         if cmd.function == "roof" { return .refused("This app does not move the roof.") }
+        // Single flight (control_run.c CALI_CTL_BUSY). It also keeps a hang-up during the command
+        // from starting the power-save rest (session.c `!cali_ctl_busy()`).
+        guard commands == 0 else { return .busy }
+        beginCommand()
+        defer { endCommand() }
         do {
             try await ensureConnected(timeout: connectTimeout)
         } catch SessionError.inRest(let after) {
@@ -56,45 +67,48 @@ extension CamperSession {
         } catch {
             return .failed("The camper unit is not reachable.")
         }
-        guard state.gate == .supported else { return .notSupported }
+        // Only frames of this link count (control_run.c cali_session_frame_live): the gate needs this
+        // link's `general`, the command its own function's frame.
+        guard liveFunctions.contains("general"), state.gate == .supported else { return .notSupported }
+        guard liveFunctions.contains(cmd.function) else { return .notReady }
 
-        // A hang-up during the command reconnects instead of resting (session.c `!cali_ctl_busy()`).
-        beginCommand()
-        defer { endCommand() }
         let since = sinceFirstBeat ?? .zero
         if since < CamperGATT.armDelay { try? await clock.sleep(for: CamperGATT.armDelay - since) }
         guard isReady else { return .failed("The camper unit ended the link.") }
 
-        let localNow = Int64(Date().timeIntervalSince1970) + Int64(TimeZone.current.secondsFromGMT())
-        var plan = CaliControl.plan(function: cmd.function, what: cmd.what, value: cmd.value, localNow: localNow, state: state.planFields)
-        if plan == .needsLightConfig {
+        // The phone's wall clock read as UTC, taken at each plan (control_run.c adds the time waited).
+        let plan: @Sendable (CamperState) -> PlanResult = { st in
+            let localNow = Int64(Date().timeIntervalSince1970) + Int64(TimeZone.current.secondsFromGMT())
+            return CaliControl.plan(function: cmd.function, what: cmd.what, value: cmd.value, localNow: localNow, state: st.planFields)
+        }
+        var planned = plan(state)
+        if planned == .needsLightConfig {
             // Pull the unit's lighting config, then plan once more over its reply (serve._pull_lighting_config).
-            let pull = CaliControl.pullPlan()
-            let pushes = pushes()
-            if let r = await write(pull, until: clock.countdown(CaliControl.deadline)) {
+            let (id, pushes) = pushes()
+            defer { unsubscribePushes(id) }
+            if let r = await write(CaliControl.pullPlan(), until: clock.countdown(CaliControl.deadline)) {
+                // No command frame went out (control_run.c: `sent = !O.pull && …`).
                 return r == .unconfirmed ? .failed("The camper unit ended the link.") : r
-            }
-            let replan: @Sendable (CamperState) -> PlanResult = { st in
-                CaliControl.plan(function: cmd.function, what: cmd.what, value: cmd.value, localNow: localNow, state: st.planFields)
             }
             try? await race(clock, CaliControl.configPull) {
                 for await p in pushes {
                     switch p {
                     case .linkDown: throw SessionError.unreachable
-                    case .frame(function: "lighting", state: let st) where replan(st) != .needsLightConfig: return
+                    case .frame(function: "lighting", state: let st) where plan(st) != .needsLightConfig: return
                     case .frame: continue
                     }
                 }
             }
             guard isReady else { return .failed("The camper unit ended the link.") }
-            plan = replan(state)
-            if plan == .needsLightConfig { return .refused(CaliControl.wakeupUnknown) }
+            planned = plan(state)
+            if planned == .needsLightConfig { return .refused(CaliControl.wakeupUnknown) }
         }
 
-        switch plan {
+        switch planned {
         case .frames(let frames):
             // Only pushes from the first frame on count: an earlier one cannot be this command's effect.
-            let pushes = pushes()
+            let (id, pushes) = pushes()
+            defer { unsubscribePushes(id) }
             let left = clock.countdown(CaliControl.deadline)
             if let r = await write(frames, until: left) { return r }
             return await confirm(cmd, pushes: pushes, within: left())
@@ -106,7 +120,7 @@ extension CamperSession {
     }
 
     /// Writes `frames` in order within the time `left` gives; nil when every frame was ACKed, else
-    /// the result. A frame to a char this app never writes refuses the whole command before any write.
+    /// the result. A frame outside the write allow-list refuses the whole command before any write.
     func write(_ frames: [ControlFrame], until left: @Sendable () -> Duration) async -> CommandResult? {
         // The satellite's allow-list (cali_ctl_write_ok); the V3 deny-list stays as an extra check.
         if let bad = frames.first(where: { !CaliControl.writeOK($0.char, $0.data.count) || CamperGATT.forbiddenWrites.contains($0.char) }) {
@@ -122,8 +136,12 @@ extension CamperSession {
                 acked = true
             } catch SessionError.unreachable {
                 return .timeout  // the write hung past the deadline
+            } catch TransportError.linkLost {
+                return .unconfirmed  // issued, then the link went: it may have landed (control_run.c:176-181)
             } catch {
-                // Rejected or not connected: nothing more goes out. After an ACKed frame the unit may have acted.
+                // Not issued (notConnected) or refused by the unit (writeRejected): nothing more goes out.
+                // After an ACKed frame the unit may have acted on it, so that is unconfirmed; C says
+                // FAILED for a refusal at any frame (control_run.c:226). This stays the more honest result.
                 return acked ? .unconfirmed : .failed("The camper unit did not take the command.")
             }
         }

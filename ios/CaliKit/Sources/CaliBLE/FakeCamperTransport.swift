@@ -21,6 +21,7 @@ public actor FakeCamperTransport: CamperTransport {
     private var subscribed: Set<UInt16> = []
     private var connected = false
     private var rejectNext = false
+    private var dropOnWriteTo: UInt16?
     private var connectWillFail = false
     private var unavailable: BluetoothAvailability?
     private var hangUpTask: Task<Void, Never>?
@@ -62,6 +63,10 @@ public actor FakeCamperTransport: CamperTransport {
     public func echo(_ char: UInt16, _ bytes: [UInt8]) { frames[char] = bytes }
 
     public func rejectNextWrite() { rejectNext = true }
+    /// The next write to `char` is issued (recorded), then the link drops before its ACK.
+    public func dropLinkDuringNextWrite(to char: UInt16) { dropOnWriteTo = char }
+    /// A later read of `char` fails (the unit does not offer it).
+    public func remove(_ char: UInt16) { frames[char] = nil }
     public func failNextConnect() { connectWillFail = true }
     /// `connect()` reports `.bluetoothUnavailable` until called with `nil`.
     public func setBluetooth(unavailable: BluetoothAvailability?) { self.unavailable = unavailable }
@@ -90,6 +95,11 @@ public actor FakeCamperTransport: CamperTransport {
     public func write(_ char: UInt16, _ bytes: [UInt8]) throws {
         guard connected else { throw TransportError.notConnected }
         writes.append(Write(char: char, bytes: bytes))
+        if dropOnWriteTo == char {
+            dropOnWriteTo = nil
+            end(.linkLost)
+            throw TransportError.linkLost
+        }
         if rejectNext {
             rejectNext = false
             sink.yield(.written(char: char, ok: false))
@@ -137,6 +147,9 @@ public final class TestClock: Clock, @unchecked Sendable {
     public var now: Instant { lock.withLock { current } }
     /// Sleepers waiting now; tests poll it before `advance` so the sleep is registered first.
     public var sleeperCount: Int { lock.withLock { sleepers.count } }
+    /// The deadlines (time since the clock's start) of the sleepers waiting now: a test can wait
+    /// for one particular sleep to be registered.
+    public var deadlines: [Duration] { lock.withLock { sleepers.map(\.deadline.offset) } }
 
     public func sleep(until deadline: Instant, tolerance: Duration?) async throws {
         let id = lock.withLock { defer { nextID += 1 }; return nextID }

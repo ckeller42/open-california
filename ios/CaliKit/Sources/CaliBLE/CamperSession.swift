@@ -42,6 +42,8 @@ public actor CamperSession {
     /// Why the session cancelled its own link (the next `.localCancel` is then a link loss).
     private var dropReason: String?
     private(set) var commands = 0
+    /// Functions with a frame (read or push) from the current link; cleared at each link up.
+    public private(set) var liveFunctions: Set<String> = []
     private var heartbeat: Task<Void, Never>?
     private var firstBeat: (@Sendable () -> Duration)?
     private var sinceLost: (@Sendable () -> Duration)?
@@ -143,15 +145,17 @@ public actor CamperSession {
     }
 
     /// Every push from now on (see `Push`); the command runner's only source of confirmation.
-    func pushes() -> AsyncStream<Push> {
+    /// The caller ends it with `unsubscribePushes(id)`.
+    func pushes() -> (id: Int, stream: AsyncStream<Push>) {
         let (stream, cont) = AsyncStream<Push>.makeStream(bufferingPolicy: .bufferingNewest(64))
         let id = takeID()
         pushSubscribers[id] = cont
-        cont.onTermination = { [weak self] _ in Task { await self?.unsubscribePushes(id) } }
-        return stream
+        return (id, stream)
     }
 
-    private func unsubscribePushes(_ id: Int) { pushSubscribers[id] = nil }
+    func unsubscribePushes(_ id: Int) { pushSubscribers.removeValue(forKey: id)?.finish() }
+
+    var pushSubscriberCount: Int { pushSubscribers.count }
 
     // MARK: link
 
@@ -237,6 +241,7 @@ public actor CamperSession {
         case .encrypted:
             linkGen += 1
             ready = false
+            liveFunctions = []
             state.lightConfig = [:]
             setLink(.up)
             startHeartbeat(gen: linkGen)
@@ -376,6 +381,7 @@ public actor CamperSession {
     private func store(_ char: UInt16, _ bytes: [UInt8]) {
         guard let fn = charToFunction[char], let fields = try? CaliCodec.decode(function: fn, bytes: bytes) else { return }
         state.fields[fn] = fields
+        liveFunctions.insert(fn)
         // A read or a push of the unit's own frame: never one of our writes (R4).
         if fn == "lighting" { state.lightConfig = CaliControl.lightConfig(previous: state.lightConfig, frame: fields) }
         do {

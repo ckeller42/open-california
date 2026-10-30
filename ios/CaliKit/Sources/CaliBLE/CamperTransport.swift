@@ -35,7 +35,11 @@ public protocol CamperTransport: Sendable {
 }
 
 public enum TransportError: Error, Equatable, Sendable {
+    /// The call was not issued: no link.
     case notConnected
+    /// The unit answered the write with an error.
     case writeRejected
+    /// The write was issued, then the link went before its ACK: the unit may have acted on it.
+    case linkLost
     case noSuchChar(UInt16)
 }
