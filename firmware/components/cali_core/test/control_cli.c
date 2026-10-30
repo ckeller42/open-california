@@ -12,6 +12,7 @@
  *   W <hex char> <len>    -> OK 1|0 (cali_ctl_write_ok)
  *   A                     -> OK <char>/<len> ... every allowed pair: chars 0..0xffff ascending,
  *                            lengths 0..CODEC_FRAME_MAX+1
+ * Built with -DCLI_CTX, P/C/L go through the _ctx functions, with a reader that checks its ctx.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,6 +36,20 @@ static int get(const char *fn, const char *field, uint32_t *out) {
         }
     return 0;
 }
+
+#ifdef CLI_CTX
+static int get_ctx(void *ctx, const char *fn, const char *field, uint32_t *out) {
+    if (ctx != (void *)s_st) abort();   /* the context must arrive unchanged on every call */
+    return get(fn, field, out);
+}
+#define PLAN(fn, what, value, now, out) cali_ctl_plan_ctx(fn, what, value, now, get_ctx, s_st, out)
+#define LIGHT_CFG(out) cali_light_cfg_ctx(get_ctx, s_st, out)
+#define REPORTS_STATE() cali_light_reports_state_ctx(get_ctx, s_st)
+#else
+#define PLAN(fn, what, value, now, out) cali_ctl_plan(fn, what, value, now, get, out)
+#define LIGHT_CFG(out) cali_light_cfg(get, out)
+#define REPORTS_STATE() cali_light_reports_state(get)
+#endif
 
 static void set_state(char *rest) {
     char *fn = strtok(rest, " "), *kv;
@@ -101,7 +116,7 @@ static void plan_line(char *rest) {
         puts("ERR parse");
         return;
     }
-    cali_ctl_plan(fn, what, value, local_now, get, &p);
+    PLAN(fn, what, value, local_now, &p);
     print_plan(&p);
 }
 
@@ -122,13 +137,13 @@ int main(void) {
             print_plan(&q);
         } else if (strcmp(line, "C") == 0) {
             cali_light_cfg_t cfg;
-            cali_light_cfg(get, &cfg);
+            LIGHT_CFG(&cfg);
             fputs("CFG", stdout);
             for (int k = 0; k < CALI_LCFG_N; k++)
                 if (cfg.have >> k & 1u) printf(" %s=%lu", CALI_LCFG_KEYS[k], (unsigned long)cfg.v[k]);
             putchar('\n');
         } else if (strcmp(line, "L") == 0) {
-            printf("STATE %d\n", cali_light_reports_state(get));
+            printf("STATE %d\n", REPORTS_STATE());
         } else if (sscanf(line, "W %x %u", &c, &len) == 2) {
             printf("OK %d\n", cali_ctl_write_ok((uint16_t)c, len));
         } else if (strcmp(line, "A") == 0) {
