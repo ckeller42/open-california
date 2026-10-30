@@ -123,3 +123,26 @@ External sensors
 ~~~~~~~~~~~~~~~~
 
 .. doxygenfile:: cali_sensors.h
+
+OTA, logging & time
+-------------------
+
+OTA
+~~~
+
+.. doxygenfile:: cali_ota.h
+
+Time
+~~~~
+
+.. doxygenfile:: cali_time.h
+
+SD log
+~~~~~~
+
+.. doxygenfile:: cali_sdlog.h
+
+Diagnostics
+~~~~~~~~~~~
+
+.. doxygenfile:: cali_diag.h

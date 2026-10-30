@@ -11,27 +11,7 @@ GENERATE_HTML          = NO
 GENERATE_LATEX         = YES
 LATEX_OUTPUT           = latex
 LATEX_BATCHMODE        = YES
-INPUT                  = firmware/components/cali_core/include/cali_snapshot.h \
-                         firmware/components/cali_core/include/cali_session.h \
-                         firmware/components/cali_core/include/cali_runner.h \
-                         firmware/components/cali_core/include/cali_status.h \
-                         firmware/components/cali_core/include/cali_control.h \
-                         firmware/components/cali_core/include/cali_transport.h \
-                         firmware/components/cali_core/include/cali_pairing_sm.h \
-                         firmware/components/cali_core/include/cali_wifi_sm.h \
-                         firmware/components/cali_core/include/cali_wifi_run.h \
-                         firmware/components/cali_core/include/cali_captive.h \
-                         firmware/components/cali_core/include/cali_net.h \
-                         firmware/components/cali_core/include/cali_web.h \
-                         firmware/components/cali_core/include/cali_http.h \
-                         firmware/components/cali_core/include/cali_console.h \
-                         firmware/components/cali_core/include/cali_json.h \
-                         firmware/components/cali_core/include/cali_auto_camper.h \
-                         firmware/components/cali_core/include/cali_pi_wake.h \
-                         firmware/components/cali_core/include/cali_battery.h \
-                         firmware/components/cali_core/include/cali_display_model.h \
-                         firmware/components/cali_core/include/cali_ble_exp.h \
-                         firmware/components/cali_core/include/cali_sensors.h
+INPUT                  = firmware/components/cali_core/include
 EXCLUDE_PATTERNS       = */_deps/* */*_gen.h
 WARN_AS_ERROR          = YES
 WARN_NO_PARAMDOC       = YES

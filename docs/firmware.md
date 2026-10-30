@@ -1692,6 +1692,8 @@ The requirements `R_FW_HTTP_STATUS`, `R_FW_SHARED_UI`, `R_FW_STATE_DIAG` and `R_
 
 The requirements `R_FW_AUTO_CAMPER`, `R_FW_PI_WAKE`, `R_FW_PI_HALT`, `R_FW_BATTERY`, `R_FW_STATUS_DISPLAY`, `R_FW_DISPLAY_WAKE`, `R_FW_BLE_EXP`, `R_FW_BLE_IDLE` and `R_FW_SENSORS` live with the device-feature API too: see {doc}`firmware-api`.
 
+The requirements `R_FW_OTA`, `R_FW_TIME`, `R_FW_SD_LOG`, `R_FW_LOG_API`, `R_FW_DIAG_LOG` and `R_FW_PANIC_CAPTURE` live with the OTA, time, SD-log and diagnostics API: see {doc}`firmware-api`.
+
 Requirements are authored as `sphinx-needs` objects next to the code they constrain (or, where the
 implementation is C — not autodoc'd — in the docstring of the Python test module that verifies
 it, a "shim" `sphinx-needs` can parse; see `firmware/README.md`'s own traceability section for the
@@ -1747,93 +1749,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    The record shall carry the last failure's context (CPU MHz, USB/charging, screen state, the
    owner task's last I2C device and ms since, the controller's power mode), each ``null`` when unknown.
 
-
-.. req:: The satellite updates itself on request from the GitHub release, verified, with rollback
-   :id: R_FW_OTA
-   :status: implemented
-   :tags: esp32, ota
-
-   On request only (``POST /api/ota``, station mode only, or the console), the firmware shall fetch
-   its channel's release's (``esp-stable`` by default, ``esp-latest`` once the stored channel is
-   ``latest``) ``manifest.json`` over HTTPS on its own task (never blocking the BLE
-   session or the web server), report ``up_to_date`` when its sha is the running build's and
-   ``available`` otherwise, and on install write ``cali_fw.bin`` into the inactive OTA slot, check
-   the SHA-256 of what landed against the manifest, and only on a match switch the boot partition
-   and restart; any failure leaves the boot partition untouched. A new image stays revocable until
-   it has run 60 s healthy (tick alive, web server listening); a reset before that boots the
-   previous slot. Progress is ``device.ota`` in ``/api/state``. The channel (``stable``: the build the
-   ``esp-stable`` tag points at; ``latest``: every main merge) is persisted and set with
-   ``POST /api/ota {"channel"}``.
-
-.. req:: The satellite counts its boots and keeps SNTP or unit-clock time for the log stamps
-   :id: R_FW_TIME
-   :status: implemented
-   :tags: esp32, time
-
-   The firmware shall count every boot in NVS (``boot``, +1 per boot, under its own key) and, whenever
-   the WiFi station has a lease, sync its clock over SNTP (``pool.ntp.org`` plus the DHCP-offered
-   server), so a log record can carry ``boot``, ``up`` (uptime ms), ``ts`` (epoch ms UTC) and
-   ``tsrc``. Source order: ``ntp`` once this boot's first sync completed; else ``unit``, the camper
-   unit's clock from the last usable ``1004`` frame (local Europe/Berlin, converted with
-   ``CET-1CEST,M3.5.0,M10.5.0/3``, advanced by uptime; a day-0 frame or one in the DST-ambiguous
-   hour is skipped); else none. ``/api/state`` reports ``device.time``
-   ``{source: sntp|unit|none, synced, boot, up}`` (``synced`` only from this boot's SNTP sync, never a
-   plausible-clock check) and the shared UI's Device status shows it.
-
-.. req:: The satellite logs every unit frame to its SD card, stamped, in 1 MB segments
-   :id: R_FW_SD_LOG
-   :status: implemented
-   :tags: esp32, sd, log
-
-   The firmware shall append every unit frame the session sees (notify and read), every link up/down
-   and, every 5 min while linked, a snapshot of every held frame to ``/sdcard/log/<first seq>.jsonl``
-   as JSON lines in calictl's ``CALICTL_BLE_TRACE`` shape plus ``seq``/``boot``/``up``/``ts``/``tsrc``
-   (stamped at log time, ``R_FW_TIME``); roll segments at 1 MB, resume ``seq`` from the newest
-   segment's last complete line (truncating a line cut by a power loss), delete the oldest segment
-   above 90 % full, ``fsync`` at least every 10 s, and never block the owner task (a bounded queue;
-   overflow drops and counts). A missing or unreadable card never aborts or reboots the firmware: it
-   retries the mount every 5 min. ``/api/state`` reports ``device.sd``
-   ``{state: absent|error|ok, total_mb, free_mb, dropped}`` (``last_seq`` with ``?diag=1``), shown as a
-   Storage row in the shared UI's Device status card, EN + DE.
-
-.. req:: The satellite records its own health, events, timings and warnings on the SD log
-   :id: R_FW_DIAG_LOG
-   :status: implemented
-   :tags: esp32, sd, log, diagnostics
-
-   The firmware shall append to the SD log (``R_FW_SD_LOG``), with the same stamp: a ``diag``
-   record every 60 s (heap, PSRAM, CPU, per-task stack high-water marks, WiFi/BLE RSSI, link,
-   uptime); ``evt`` records for boot (with the reset reason), BLE link up/down (reason, duration,
-   reconnect time, attempts), WiFi up/down and join failures, every control command's result
-   (function and control name, never the value; latency; source), OTA transitions, auto camper
-   decisions and SD errors; a ``perf`` record per HTTP response (route, status, bytes, time) and per
-   BLE operation, sampled per characteristic; and ``ESP_LOGW``/``ESP_LOGE`` lines as ``log``
-   records, at most 20 a minute plus a dropped count. Records come from any task without blocking
-   (dropped and counted when the queue is full) and never hold a client's MAC or IP address.
-
-.. req:: The satellite keeps the backtrace of a panic and logs it on the next boot
-   :id: R_FW_PANIC_CAPTURE
-   :status: implemented
-   :tags: esp32, diagnostics, sd
-
-   On a panic, the firmware shall keep the task name, the panic reason (cut) and up to 16 backtrace
-   PCs in RTC no-init memory, guarded by a magic and a checksum, without a coredump partition (an
-   OTA-only change). The next boot shall print it on the console and log it as an ``evt`` ``panic``
-   record after the boot record (``R_FW_DIAG_LOG``), then clear it; a capture that fails its magic,
-   depth or checksum is never logged. CI shall keep each build's ``cali_fw.elf`` so the PCs can be
-   symbolized.
-
-
-.. req:: The satellite serves its SD log page by page over HTTP
-   :id: R_FW_LOG_API
-   :status: implemented
-   :tags: esp32, sd, log
-
-   ``GET /api/log?since=<seq>&max=<n>`` shall answer the complete log records with ``seq > since``
-   in seq order across segments, at most ``max`` (default 2000) and what fits the page buffer, then
-   a trailer ``{"next", "more", "boot", "lost"}`` (``lost`` = seqs in deleted segments, the page
-   resuming from the oldest one); never a half-written line. The card is read only by the SD task;
-   no card = 503 with a JSON error.
 
 .. req:: The shared web UI opens instantly and offline on a secure origin, and is installable
    :id: R_UI_PWA_OFFLINE
