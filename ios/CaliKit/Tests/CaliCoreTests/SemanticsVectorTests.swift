@@ -18,16 +18,34 @@ struct SemanticsVectorTests {
             let want = try dec.decode(
                 [String: JSONValue].self, from: JSONSerialization.data(withJSONObject: c["expect"]!))
             // Exact equality: JS and Python both produce IEEE doubles from the same rounding rule (pyRound).
-            #expect(Semantics.shared.interpret(function: c["function"] as! String, fields: fields) == want, "\(id)")
+            #expect(try Semantics.shared.interpret(function: c["function"] as! String, fields: fields) == want, "\(id)")
         }
     }
 
     /// - Test: T_IOS_SEMANTICS_UNKNOWN_FUNCTION
     /// - Verifies: R_IOS_TESTED, R_IOS_FUNCTIONS
-    @Test func unknownFunctionGivesGenericViewAndNoError() {
-        let out = Semantics.shared.interpret(function: "nope", fields: ["A": 1])
+    @Test func unknownFunctionGivesGenericViewAndNoError() throws {
+        let out = try Semantics.shared.interpret(function: "nope", fields: ["A": 1])
         #expect(!out.isEmpty)
-        #expect(Semantics.shared.lastError == nil)
+    }
+
+    /// A JS exception is an error with the JS message, never an empty or unchanged result.
+    /// - Test: T_IOS_SEMANTICS_ERROR_THROWS
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
+    @Test func jsExceptionThrowsWithItsMessage() {
+        let broken = Semantics(scripts: [("""
+            function interpret(f, d) { throw new Error("boom " + f); }
+            function applySwCorrections(s) { throw new Error("no fix"); }
+            """, nil)])
+        #expect(throws: SemanticsError.self) { try broken.interpret(function: "energy", fields: [:]) }
+        do { _ = try broken.interpret(function: "energy", fields: [:]) } catch {
+            #expect((error as? SemanticsError)?.message.contains("boom energy") == true)
+        }
+        #expect(throws: SemanticsError.self) { try broken.applySwCorrections(["energy": [:]]) }
+        let missing = Semantics(scripts: [], loadError: "missing resource semantics.js")
+        #expect(throws: SemanticsError(message: "missing resource semantics.js")) {
+            try missing.interpret(function: "energy", fields: [:])
+        }
     }
 
     /// - Test: T_IOS_SEMANTICS_SW_CORRECTION
@@ -40,12 +58,12 @@ struct SemanticsVectorTests {
             let id = c["id"] as? String ?? "?"
             var st: [String: [String: JSONValue]] = [:]
             for (k, f) in c["fn"] as! [String: [String: NSNumber]] {
-                st[k] = Semantics.shared.interpret(function: k, fields: f.mapValues { $0.uint32Value })
+                st[k] = try Semantics.shared.interpret(function: k, fields: f.mapValues { $0.uint32Value })
             }
             let want = try dec.decode(
                 [String: [String: JSONValue]].self,
                 from: JSONSerialization.data(withJSONObject: (c["expect"] as! [String: Any])["state"]!))
-            #expect(applySwCorrections(st) == want, "\(id)")
+            #expect(try applySwCorrections(st) == want, "\(id)")
         }
     }
 

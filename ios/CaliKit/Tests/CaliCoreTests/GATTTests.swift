@@ -32,8 +32,8 @@ struct GATTTests {
             for f in (e["frames"] as? [[String: Any]]) ?? [] {
                 frames += 1
                 let chr = UInt16(f["char"] as! String, radix: 16)!
-                #expect(!CamperGATT.forbiddenWrites.contains(chr), "\(c["id"] as! String)")
-                #expect(CamperGATT.controlChars.values.contains(chr), "\(c["id"] as! String)")
+                #expect(!CamperGATT.forbiddenWrites.contains(chr), "\((c["id"] as! String))")
+                #expect(CamperGATT.controlChars.values.contains(chr), "\((c["id"] as! String))")
             }
         }
         #expect(frames > 0)

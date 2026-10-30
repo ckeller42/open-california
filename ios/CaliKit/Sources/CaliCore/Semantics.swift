@@ -33,63 +33,80 @@ public enum JSONValue: Equatable, Sendable, Codable {
     }
 }
 
+/// A JavaScript exception or load failure in `semantics.js`; `message` is the JS text.
+public struct SemanticsError: Error, Equatable, Sendable {
+    public let message: String
+}
+
 /// The web UI's interpretation layer (`semantics.js`, unchanged) run in JavaScriptCore.
 ///
 /// One `JSContext`, touched only inside `queue.sync`, so the class is safe to call from any thread.
-/// Data crosses the boundary as JSON strings (keeps bool/number/null exact).
+/// Data crosses the boundary as JSON strings (keeps bool/number/null exact). A JS failure throws
+/// `SemanticsError`; it never comes back as an empty or unchanged result.
 ///
-/// - Requirement: R_IOS_FUNCTIONS
+/// - Requirement: R_IOS_FUNCTIONS, R_IOS_HONEST
 public final class Semantics: @unchecked Sendable {  // @unchecked: `ctx` and `error` are only used inside `queue`
     public static let shared = Semantics()
 
     private let queue = DispatchQueue(label: "de.opencalifornia.semantics")
     private let ctx = JSContext()!
     private var error: String?
+    private var loadError: String?
 
-    /// The last JS exception or load failure, nil if none (cleared by the next successful call).
-    public var lastError: String? { queue.sync { error } }
-
-    private init() {
-        ctx.exceptionHandler = { [unowned self] _, e in error = e?.toString() ?? "unknown JS exception" }
+    private convenience init() {
+        var scripts: [(String, URL?)] = []
         for name in ["semantics_tables", "semantics"] {
             guard let url = Bundle.module.url(forResource: name, withExtension: "js"),
                   let src = try? String(contentsOf: url, encoding: .utf8)
-            else { error = "missing resource \(name).js"; return }
-            ctx.evaluateScript(src, withSourceURL: url)
+            else { self.init(scripts: [], loadError: "missing resource \(name).js"); return }
+            scripts.append((src, url))
         }
+        self.init(scripts: scripts)
+    }
+
+    /// Tests load their own script (for example one whose `interpret` throws).
+    init(scripts: [(String, URL?)], loadError: String? = nil) {
+        self.loadError = loadError
+        ctx.exceptionHandler = { [unowned self] _, e in error = e?.toString() ?? "unknown JS exception" }
+        for (src, url) in scripts { ctx.evaluateScript(src, withSourceURL: url) }
+        if self.loadError == nil, let e = error { self.loadError = e }
         ctx.evaluateScript("""
             function __call(fn, json) { return JSON.stringify(globalThis[fn](JSON.parse(json))); }
             function __interpret(f, json) { return JSON.stringify(interpret(f, JSON.parse(json))); }
             """)
     }
 
-    /// Calls a global JS function with JSON in and JSON out; `[:]` plus `lastError` on failure.
-    private func run<T: Decodable>(_ fn: String, _ args: [Any], empty: T) -> T {
-        queue.sync {
+    /// Calls a global JS function with JSON in and JSON out.
+    private func run<T: Decodable>(_ fn: String, _ args: [Any]) throws -> T {
+        try queue.sync {
+            if let loadError { throw SemanticsError(message: loadError) }
             error = nil
-            guard let out = ctx.objectForKeyedSubscript(fn)?.call(withArguments: args), error == nil,
-                  let s = out.isString ? out.toString() : nil,
+            let out = ctx.objectForKeyedSubscript(fn)?.call(withArguments: args)
+            if let error { throw SemanticsError(message: error) }
+            guard let out, out.isString, let s = out.toString(),
                   let v = try? JSONDecoder().decode(T.self, from: Data(s.utf8))
-            else { error = error ?? "\(fn) returned no JSON"; return empty }
+            else { throw SemanticsError(message: "\(fn) returned no JSON") }
             return v
         }
     }
 
     /// `interpret(fn, d)` of semantics.js. An unknown function gives the generic view, like the web UI.
-    public func interpret(function: String, fields: [String: UInt32]) -> [String: JSONValue] {
+    public func interpret(function: String, fields: [String: UInt32]) throws -> [String: JSONValue] {
         let json = String(decoding: (try? JSONSerialization.data(withJSONObject: fields)) ?? Data("{}".utf8), as: UTF8.self)
-        return run("__interpret", [function, json], empty: [:])
+        return try run("__interpret", [function, json])
     }
 
-    fileprivate func corrected(_ states: [String: [String: JSONValue]]) -> [String: [String: JSONValue]] {
+    /// `applySwCorrections(states)` of semantics.js (DC-DC current +2 on certain unit software).
+    /// It adds to the input: pass uncorrected interpretations, never an already corrected map.
+    public func applySwCorrections(_ states: [String: [String: JSONValue]]) throws -> [String: [String: JSONValue]] {
         let json = String(decoding: (try? JSONEncoder().encode(states)) ?? Data("{}".utf8), as: UTF8.self)
-        return run("__call", ["applySwCorrections", json], empty: states)
+        return try run("__call", ["applySwCorrections", json])
     }
 }
 
-/// `applySwCorrections(states)` of semantics.js (DC-DC current +2 on certain unit software). Returns the input on a JS error.
+/// `Semantics.shared.applySwCorrections(_:)`.
 ///
 /// - Requirement: R_IOS_FUNCTIONS
-public func applySwCorrections(_ states: [String: [String: JSONValue]]) -> [String: [String: JSONValue]] {
-    Semantics.shared.corrected(states)
+public func applySwCorrections(_ states: [String: [String: JSONValue]]) throws -> [String: [String: JSONValue]] {
+    try Semantics.shared.applySwCorrections(states)
 }

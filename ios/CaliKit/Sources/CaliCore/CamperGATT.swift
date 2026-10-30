@@ -18,6 +18,9 @@ public enum CamperGATT {
     public static let controlChars: [String: UInt16] = table(CALI_CTL_CHARS, Int(CALI_CTL_NCHARS)) { (e: cali_ctl_char) in (e.function, e.control_short) }
 
     public static let heartbeat = UInt16(CODEC_CHAR_HEARTBEAT)
+    /// The heartbeat's first counter value; +1 per beat, written as 4 bytes big-endian.
+    public static let heartbeatStart = UInt32(CODEC_HEARTBEAT_START)
+    public static let heartbeatPeriod = Duration.milliseconds(Int(CODEC_HEARTBEAT_PERIOD_MS))
 
     /// Chars of the V3 protocol; this app never writes them (`R_IOS_V2_ONLY`).
     public static let forbiddenWrites: Set<UInt16> = [0x1603, 0xF002]

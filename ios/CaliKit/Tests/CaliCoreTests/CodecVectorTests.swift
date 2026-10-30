@@ -31,7 +31,7 @@ struct CodecVectorTests {
             let fn = c["function"] as! String
             let want = (c["expect"] as! [String: NSNumber]).mapValues { $0.uint32Value }
             let got = try CaliCodec.decode(function: fn, bytes: bytes(hex: c["raw_hex"] as! String))
-            #expect(got == want, "\(c["id"] as! String)")
+            #expect(got == want, "\((c["id"] as! String))")
             checked += 1
         }
         #expect(checked > 0)
