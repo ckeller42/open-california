@@ -21,6 +21,9 @@ public enum CamperGATT {
     /// The heartbeat's first counter value; +1 per beat, written as 4 bytes big-endian.
     public static let heartbeatStart = UInt32(CODEC_HEARTBEAT_START)
     public static let heartbeatPeriod = Duration.milliseconds(Int(CODEC_HEARTBEAT_PERIOD_MS))
+    /// A link that came up for a command waits this long after its first beat before the first
+    /// frame (`CODEC_ARM_DELAY_MS`, calictl `device.ARM_DELAY_S`).
+    public static let armDelay = Duration.milliseconds(Int(CODEC_ARM_DELAY_MS))
 
     /// Chars of the V3 protocol; this app never writes them (`R_IOS_V2_ONLY`).
     public static let forbiddenWrites: Set<UInt16> = [0x1603, 0xF002]

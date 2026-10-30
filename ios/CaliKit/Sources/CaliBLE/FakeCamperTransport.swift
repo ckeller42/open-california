@@ -58,6 +58,9 @@ public actor FakeCamperTransport: CamperTransport {
         if connected, subscribed.contains(char) { sink.yield(.notified(char: char, bytes: bytes)) }
     }
 
+    /// The unit's write-through echo: a later read returns `bytes`, and nothing is pushed.
+    public func echo(_ char: UInt16, _ bytes: [UInt8]) { frames[char] = bytes }
+
     public func rejectNextWrite() { rejectNext = true }
     public func failNextConnect() { connectWillFail = true }
     /// `connect()` reports `.bluetoothUnavailable` until called with `nil`.

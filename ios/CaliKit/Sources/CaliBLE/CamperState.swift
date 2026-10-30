@@ -15,6 +15,18 @@ public struct CamperState: Sendable, Equatable {
     public var gate: ProtocolGate = .unknown
     /// function (or `applySwCorrections`) -> the JS error message of its failed interpretation.
     public var semanticsErrors: [String: String] = [:]
+    /// This link's lighting config latch (`CALI_LCFG_KEYS` -> value) from the unit's own `1502`
+    /// frames; cleared at each link up (control_run.c plans over the live latch only).
+    public var lightConfig: [String: UInt32] = [:]
+
+    /// The state the planner sees: the frames, with the lighting config latch answering like
+    /// lighting fields (control_run.c `get_field`).
+    public var planFields: [String: [String: UInt32]] {
+        guard !lightConfig.isEmpty else { return fields }
+        var f = fields
+        f["lighting", default: [:]].merge(lightConfig) { _, latch in latch }
+        return f
+    }
 
     public init() {}
 }

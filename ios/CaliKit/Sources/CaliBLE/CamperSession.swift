@@ -23,13 +23,14 @@ public actor CamperSession {
     static let stable = Duration.seconds(60)
     static let redialTimeout = Duration.seconds(20)
 
-    private let transport: CamperTransport
-    private let clock: any Clock<Duration>
+    let transport: CamperTransport
+    let clock: any Clock<Duration>
     private let semantics: Semantics
     private let charToFunction: [UInt16: String]
     /// Interpretations before `applySwCorrections` (it adds to its input, so it runs on these each time).
     private var uncorrected: [String: [String: JSONValue]] = [:]
     private var subscribers: [Int: AsyncStream<(CamperState, LinkState)>.Continuation] = [:]
+    private var pushSubscribers: [Int: AsyncStream<Push>.Continuation] = [:]
     private var waiters: [Int: CheckedContinuation<Void, any Error>] = [:]
     private var nextID = 0
     /// +1 per encrypted link: a task of an earlier link can never mark the current one.
@@ -40,7 +41,7 @@ public actor CamperSession {
     private var flight: Task<Void, any Error>?
     /// Why the session cancelled its own link (the next `.localCancel` is then a link loss).
     private var dropReason: String?
-    private var commands = 0
+    private(set) var commands = 0
     private var heartbeat: Task<Void, Never>?
     private var firstBeat: (@Sendable () -> Duration)?
     private var sinceLost: (@Sendable () -> Duration)?
@@ -134,6 +135,24 @@ public actor CamperSession {
         }
     }
 
+    /// What the unit pushed (a notification), or that the link went down. Reads are not in it:
+    /// a read of a state char can be the unit's write-through echo of our own write.
+    enum Push: Sendable {
+        case frame(function: String, state: CamperState)
+        case linkDown
+    }
+
+    /// Every push from now on (see `Push`); the command runner's only source of confirmation.
+    func pushes() -> AsyncStream<Push> {
+        let (stream, cont) = AsyncStream<Push>.makeStream(bufferingPolicy: .bufferingNewest(64))
+        let id = takeID()
+        pushSubscribers[id] = cont
+        cont.onTermination = { [weak self] _ in Task { await self?.unsubscribePushes(id) } }
+        return stream
+    }
+
+    private func unsubscribePushes(_ id: Int) { pushSubscribers[id] = nil }
+
     // MARK: link
 
     private func startFlight(budget: Duration) {
@@ -218,6 +237,7 @@ public actor CamperSession {
         case .encrypted:
             linkGen += 1
             ready = false
+            state.lightConfig = [:]
             setLink(.up)
             startHeartbeat(gen: linkGen)
             // A link nobody here asked for (iOS reconnect, state restoration) still subscribes and reads.
@@ -225,6 +245,9 @@ public actor CamperSession {
             resumeWaiters(.success(()))
         case .notified(let char, let bytes):
             store(char, bytes)
+            if let fn = charToFunction[char] {
+                for c in pushSubscribers.values { c.yield(.frame(function: fn, state: state)) }
+            }
         case .bluetoothUnavailable(let a):
             setLink(.unreachable("Bluetooth is not available."))
             resumeWaiters(.failure(.bluetooth(a)))
@@ -250,6 +273,7 @@ public actor CamperSession {
             return
         }
         guard wasUp else { return }
+        for c in pushSubscribers.values { c.yield(.linkDown) }
         sinceLost = clock.stopwatch()
         if held { backoffStep = 0 }
         if reason == .localCancel {
@@ -352,6 +376,8 @@ public actor CamperSession {
     private func store(_ char: UInt16, _ bytes: [UInt8]) {
         guard let fn = charToFunction[char], let fields = try? CaliCodec.decode(function: fn, bytes: bytes) else { return }
         state.fields[fn] = fields
+        // A read or a push of the unit's own frame: never one of our writes (R4).
+        if fn == "lighting" { state.lightConfig = CaliControl.lightConfig(previous: state.lightConfig, frame: fields) }
         do {
             uncorrected[fn] = try semantics.interpret(function: fn, fields: fields)
             state.semanticsErrors[fn] = nil
@@ -403,7 +429,7 @@ extension Clock {
 
 extension Clock {
     /// The time left of `budget` counted from this call.
-    fileprivate func countdown(_ budget: Duration) -> @Sendable () -> Duration {
+    func countdown(_ budget: Duration) -> @Sendable () -> Duration {
         let end = now.advanced(by: budget)
         return { self.now.duration(to: end) }
     }
@@ -438,7 +464,7 @@ private final class Once: @unchecked Sendable {  // @unchecked: all state behind
 
 /// Runs `op`, but returns by `budget` on `clock` whether or not `op` honours cancellation
 /// (a BLE read can hang). On the deadline `op` is cancelled and `SessionError.unreachable` thrown.
-private func race(_ clock: any Clock<Duration>, _ budget: Duration,
+func race(_ clock: any Clock<Duration>, _ budget: Duration,
                   _ op: @escaping @Sendable () async throws -> Void) async throws {
     guard budget > .zero else { throw SessionError.unreachable }
     try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, any Error>) in
