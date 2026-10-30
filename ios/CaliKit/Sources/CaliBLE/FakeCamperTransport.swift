@@ -25,6 +25,9 @@ public actor FakeCamperTransport: CamperTransport {
     private var connectWillFail = false
     private var unavailable: BluetoothAvailability?
     private var hangUpTask: Task<Void, Never>?
+    private var pairOnConnect = false
+    private var pairingOpen = false
+    private var pairingRequiredOnConnect = false
 
     /// Every write attempt, in order, including a rejected one.
     public private(set) var writes: [Write] = []
@@ -73,18 +76,43 @@ public actor FakeCamperTransport: CamperTransport {
     /// The link drops without the unit's hang-up (out of range).
     public func dropLink() { end(.linkLost) }
     public func demandPairing() { sink.yield(.pairingRequired) }
+    /// The next `connect()` is a first pairing: `.connected` and `.pairing`, then nothing until
+    /// `completePairing()` (the user typed the passkey).
+    public func pairNextConnect() { pairOnConnect = true }
+    public func completePairing() {
+        guard pairingOpen else { return }
+        pairingOpen = false
+        connected = true
+        sink.yield(.encrypted)
+    }
+    /// The next `connect()` finds a stale bond: `.pairingRequired`, no link.
+    public func requirePairingOnNextConnect() { pairingRequiredOnConnect = true }
 
     // MARK: CamperTransport
 
     public func connect() {
         if let unavailable { sink.yield(.bluetoothUnavailable(unavailable)); return }
         if connectWillFail { connectWillFail = false; sink.yield(.disconnected(reason: .failedToConnect)); return }
+        if pairingRequiredOnConnect { pairingRequiredOnConnect = false; sink.yield(.pairingRequired); return }
+        if pairOnConnect {
+            pairOnConnect = false
+            pairingOpen = true
+            sink.yield(.connected)
+            sink.yield(.pairing)
+            return
+        }
         connected = true
         sink.yield(.connected)
         sink.yield(.encrypted)
     }
 
-    public func cancel() { end(.localCancel) }
+    /// Counts every call, also one without a link.
+    public private(set) var cancels = 0
+    public func cancel() {
+        cancels += 1
+        pairingOpen = false
+        end(.localCancel)
+    }
 
     public func read(_ char: UInt16) throws -> [UInt8] {
         guard connected else { throw TransportError.notConnected }

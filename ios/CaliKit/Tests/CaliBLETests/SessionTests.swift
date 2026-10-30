@@ -272,6 +272,54 @@ struct SessionTests {
         #expect(st.semanticsErrors["general"]?.contains("boom") == true)
     }
 
+    /// A first pairing keeps the caller waiting within its own (long) budget while the passkey
+    /// dialog is open; the typed passkey then brings the link up.
+    ///
+    /// - Test: T_IOS_SESSION_PAIRING_WAITS
+    /// - Verifies: R_IOS_PAIRING
+    @Test func firstPairingKeepsTheConnectWaiting() async throws {
+        let r = Rig()
+        await r.fake.pairNextConnect()
+        let call = Task { try await r.s.ensureConnected(timeout: .seconds(90)) }
+        try await until("pairing") { await r.s.link == .pairing }
+        r.clock.advance(by: .seconds(30))  // the user types; well past the 20 s redial budget
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(await r.s.link == .pairing)
+        await r.fake.completePairing()
+        try await call.value
+        #expect(await r.s.isReady)
+    }
+
+    /// The caller's deadline ends a pairing that does not finish: the transport is cancelled.
+    ///
+    /// - Test: T_IOS_SESSION_PAIRING_DEADLINE
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pairingDeadlineCancelsTheTransport() async throws {
+        let r = Rig()
+        await r.fake.pairNextConnect()
+        let call = Task { try await r.s.ensureConnected(timeout: .seconds(90)) }
+        try await until("pairing") { await r.s.link == .pairing }
+        try await until("deadline timer") { r.clock.deadlines.contains(.seconds(90)) }
+        r.clock.advance(by: .seconds(90))
+        await #expect(throws: SessionError.unreachable) { try await call.value }
+        try await until("cancelled") { await r.fake.cancels >= 1 }
+        #expect(await r.s.link != .pairing)
+        await r.fake.completePairing()  // too late: the fake dropped the pairing on cancel
+        #expect(await r.s.isReady == false)
+    }
+
+    /// A saved unit with a stale bond: `.pairingRequired` fails the connect at once, as before.
+    ///
+    /// - Test: T_IOS_SESSION_STALE_BOND
+    /// - Verifies: R_IOS_PAIRING
+    @Test func staleBondFailsTheConnect() async throws {
+        let r = Rig()
+        await r.fake.requirePairingOnNextConnect()
+        await #expect(throws: SessionError.unreachable) { try await r.s.ensureConnected(timeout: .seconds(90)) }
+        #expect(await r.s.link == .unreachable("The camper unit asks for pairing."))
+        try await until("transport cancelled") { await r.fake.cancels >= 1 }
+    }
+
     /// - Test: T_IOS_SESSION_HEARTBEAT_REJECTED
     /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
     @Test func rejectedHeartbeatDropsTheLinkAndNeverArms() async throws {

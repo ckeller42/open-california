@@ -37,6 +37,8 @@ public struct CamperState: Sendable, Equatable {
 
 public enum LinkState: Sendable, Equatable {
     case off, connecting, up
+    /// A first pairing: the user types the code from the camper screen into the iOS dialog.
+    case pairing
     /// The power-save rest: no auto-redial; a reconnect waits until `until`.
     case rest(until: Date)
     case unreachable(String)

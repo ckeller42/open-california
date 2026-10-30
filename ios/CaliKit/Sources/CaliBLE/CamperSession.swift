@@ -226,15 +226,15 @@ public actor CamperSession {
         ready = false
         stopHeartbeat()
         switch link {
-        case .connecting:
+        case .connecting, .pairing:
             setLink(.unreachable(why))
             resumeWaiters(.failure(.unreachable))
             await transport.cancel()
         case .up:
             dropReason = why
             await transport.cancel()
-        default:
-            break
+        case .unreachable, .off, .rest:
+            break  // `.pairingRequired` cancels the transport itself
         }
     }
 
@@ -260,9 +260,14 @@ public actor CamperSession {
         case .bluetoothUnavailable(let a):
             setLink(.unreachable("Bluetooth is not available."))
             resumeWaiters(.failure(.bluetooth(a)))
+        case .pairing:
+            // The caller keeps waiting within its own budget (a first pairing needs a long one).
+            if link == .connecting { setLink(.pairing) }
         case .pairingRequired:
             setLink(.unreachable("The camper unit asks for pairing."))
             resumeWaiters(.failure(.unreachable))
+            // The transport may still hold or probe a link that nobody waits for now.
+            Task { await transport.cancel() }
         case .alreadyPaired:
             setLink(.unreachable("This iPhone is already paired with the camper unit."))
             resumeWaiters(.failure(.unreachable))
@@ -280,7 +285,7 @@ public actor CamperSession {
         ready = false
         stopHeartbeat()
         if !waiters.isEmpty {  // a connect in progress failed: its caller decides what follows
-            if link == .connecting { setLink(.unreachable("The camper unit did not answer.")) }
+            if link == .connecting || link == .pairing { setLink(.unreachable("The camper unit did not answer.")) }
             resumeWaiters(.failure(.unreachable))
             return
         }

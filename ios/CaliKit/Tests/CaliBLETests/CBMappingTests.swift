@@ -131,6 +131,20 @@ struct CBMappingTests {
         #expect(q.saved == nil)
     }
 
+    /// The re-reads of a first pairing stop at a cap of their own.
+    ///
+    /// - Test: T_IOS_CB_PAIRING_READ_CAP
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pairingReadsAreCapped() {
+        var p = PeerPolicy(saved: nil)
+        p.chosen = UUID()
+        for _ in 0..<PeerPolicy.maxPairingReads { let ok = p.pairingError(); #expect(ok) }
+        let more = p.pairingError(); #expect(!more)
+        p.linkEnded()
+        p.chosen = UUID()
+        let again = p.pairingError(); #expect(again)  // a new pick starts a new count
+    }
+
     /// Only the exact advertised name, one entry per unit, strongest first.
     ///
     /// - Test: T_IOS_CB_CANDIDATES

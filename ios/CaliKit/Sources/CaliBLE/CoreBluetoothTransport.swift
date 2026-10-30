@@ -39,6 +39,8 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     private var ops = PendingOps()
     private var phase = Phase.idle
     private var servicesLeft = 0
+    /// +1 per link: a delayed re-read of an earlier link sends nothing.
+    private var linkGen = 0
     /// State restoration handed over a connected peripheral; its bring-up waits for `poweredOn`.
     private var restoredConnected = false
     private var candidates: (list: CandidateList, k: CheckedContinuation<[PairingCandidate], any Error>)?
@@ -214,6 +216,7 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
 
     private func linkOpened(_ p: CBPeripheral) {
         phase = .discovering
+        linkGen += 1
         sink.yield(.connected)
         p.discoverServices(Self.services)
     }
@@ -349,10 +352,11 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
             }
             if Self.needsPairing(error), policy.pairingError() {
                 // The pairing is seen: iOS shows its passkey dialog. Read again after a pause until it
-                // succeeds, or until the session's deadline cancels the link.
-                sink.yield(.pairingRequired)
+                // succeeds, the caller cancels, or `PeerPolicy.maxPairingReads` is reached.
+                sink.yield(.pairing)
+                let gen = linkGen
                 queue.asyncAfter(deadline: .now() + 1) {
-                    if self.phase == .probing, self.peripheral === p { p.readValue(for: c) }
+                    if self.phase == .probing, self.peripheral === p, self.linkGen == gen { p.readValue(for: c) }
                 }
                 return
             }
@@ -408,6 +412,10 @@ struct PeerPolicy {
     var chosen: UUID?
     /// In this first pairing, the `1004` read failed with an authentication error (iOS pairs).
     private var pairingSeen = false
+    private var pairingReads = 0
+    /// The re-reads of `1004` in one first pairing (one per second): a hard cap of its own, so a
+    /// caller that gave up without `cancel()` leaves no endless reads.
+    static let maxPairingReads = 90
 
     init(saved: UUID?) { self.saved = saved }
 
@@ -428,7 +436,8 @@ struct PeerPolicy {
     /// The `1004` read failed with a pairing error. True: in a first pairing, the pairing is seen
     /// and the read goes again; false: end the link (a saved unit's bond is stale).
     mutating func pairingError() -> Bool {
-        guard chosen != nil else { return false }
+        guard chosen != nil, pairingReads < Self.maxPairingReads else { return false }
+        pairingReads += 1
         pairingSeen = true
         return true
     }
@@ -448,6 +457,7 @@ struct PeerPolicy {
     mutating func linkEnded() {
         chosen = nil
         pairingSeen = false
+        pairingReads = 0
     }
 }
 

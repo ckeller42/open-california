@@ -4,7 +4,11 @@ public enum TransportEvent: Sendable {
     case disconnected(reason: DisconnectReason)
     case notified(char: UInt16, bytes: [UInt8])
     case written(char: UInt16, ok: Bool)
+    /// No usable bond (a saved unit's bond is stale, or there is no unit to connect to): the
+    /// connect fails.
     case pairingRequired
+    /// A first pairing is in progress: iOS shows its passkey dialog, and the connect goes on.
+    case pairing
     /// A first pairing found the unit already bonded to this iPhone (no pairing was seen), so it
     /// was not adopted: forget the device in iOS Settings → Bluetooth, then pair again in the app.
     case alreadyPaired
