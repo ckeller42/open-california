@@ -15,14 +15,19 @@ the link itself. Run it on a real iPhone at the van.
 - **Encryption.** After service discovery the app reads `1004`, the authenticated read, on every
   link. Only a successful read makes the link usable: before it, the app passes no notification
   on. A link without `1004`, or with a failed read, ends at once.
-- **Adoption.** The app adopts a new unit only when the user picked it and the app saw the
-  pairing: the first read of `1004` fails with an authentication error (iOS then shows the passkey
-  dialog), and a later read of `1004` succeeds. A first read that succeeds at once means that the
-  iPhone already has a bond (for example from the vendor app). The app then does not adopt the
-  unit and asks the user to forget the device in iOS Settings and pair again. The new bond also
-  serves the vendor app. A unit that the app adopted earlier needs only a successful read. The app
-  stores the unit only after the adoption. The pick is good for one connection: a link that ends
-  without the adoption, a cancel or a timeout ends the first pairing.
+- **Adoption.** The app adopts a new unit only when the user picked it and a read of `1004`
+  succeeds on that link. There are two cases. In the first case, the app sees the pairing: the
+  first read of `1004` fails with an authentication error, iOS shows the passkey dialog, and a
+  later read succeeds. In the second case, the iPhone already has a bond with the unit (for example
+  from the vendor app), and the first read succeeds at once. iOS keeps one bond per accessory for
+  the whole iPhone, so the app and the vendor app share it and work in parallel. A unit that the
+  app adopted earlier needs a successful read of `1004` on every new link. The app stores the unit
+  only after the adoption, and it never adopts a unit in the background. The pick is good for one
+  connection: an adoption, a link that ends without the adoption, a cancel or a timeout ends the
+  first pairing.
+- **Residual risk.** iOS does not tell an app whether a link is encrypted. In the second case, a
+  look-alike device that serves `1004` without encryption is adopted if the user picks it. The
+  guard is the user's pick from the list (strongest signal first) and the exact name `VWCAMPER`.
 - **Passkey rule.** The unit refuses Just Works pairing. A new pairing with the real unit always
   shows the iOS passkey dialog, and its 6-digit code must match the camper screen. A pairing
   prompt without a code is not the camper: cancel it.
@@ -46,7 +51,8 @@ Do the checks in this order. Each check names what to see.
 
 ### First: does iOS show the app the pairing?
 
-The adoption rule depends on this check. Do it before the pairing guide is built.
+The pairing guide depends on this check: it tells whether the app can show "Pairing" while iOS
+shows the passkey dialog. The adoption works in both cases.
 
 1. On the iPhone, open *Settings → Bluetooth* and make sure that no bond to the unit exists.
 2. On the camper panel, start the pairing.
@@ -55,7 +61,7 @@ The adoption rule depends on this check. Do it before the pairing guide is built
    or "Encryption is insufficient", and that iOS then shows the passkey dialog.
 5. Type the passkey. Check that a later read of `1004` succeeds and that the app adopts the unit.
 6. If the first read does not fail (iOS pairs inside the read and the app sees only the success),
-   the app cannot adopt any unit. Report it at once.
+   record it: the app still adopts the unit, but it cannot show the pairing step.
 
 ### Discovery and pairing with the passkey
 
@@ -80,12 +86,10 @@ The adoption rule depends on this check. Do it before the pairing guide is built
 1. Use an iPhone on which the vendor app is already paired with the unit, and no adopted unit in
    this app.
 2. Start the first pairing in the app and pick the unit.
-3. Check that no dialog appears, that the app does not adopt the unit, and that it asks you to
-   forget the device in iOS Settings.
-4. In *Settings → Bluetooth*, forget the unit. Start the pairing on the camper panel and pick the
-   unit again in the app.
-5. Check that the passkey dialog appears and that the app adopts the unit after the passkey.
-6. Open the vendor app. Check that it connects with the new bond.
+3. Check that no dialog appears, that the app adopts the unit and shows its state.
+4. Close the app and open it again. Check that it connects without a scan and without a dialog.
+5. Open the vendor app while this app holds the link. Check that both apps show the state of the
+   unit.
 
 ### No unit without proof
 

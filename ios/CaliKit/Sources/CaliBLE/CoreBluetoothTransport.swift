@@ -16,13 +16,17 @@ import Foundation
 /// Which unit (`PeerPolicy`): only the adopted one, by its saved identifier. Without one,
 /// `connect()` reports `.pairingRequired`. The first pairing is the user's: `pairingCandidates()`
 /// lists the units in range (service `1000`, name exactly `VWCAMPER`), the user picks one,
-/// `beginFirstPairing(with:)` arms it for ONE connect, and it is adopted only when the app saw the
-/// pairing: its first `1004` read fails with an authentication error (iOS shows the passkey
-/// dialog), and a later `1004` read succeeds. A `1004` that reads at once (a bond that already
-/// exists, for example the vendor app's) is not adopted: `.alreadyPaired`, link down. The real unit
-/// refuses Just Works pairing (evidence ledger, CAPTURE), so a genuine new pairing always shows the
-/// iOS passkey dialog, and its code must match the camper screen. A pairing prompt without a code
-/// is not the camper: the user cancels it.
+/// `beginFirstPairing(with:)` arms it for ONE connect, and it is adopted when its authenticated
+/// `1004` read succeeds on that link (lenient, AD_IOS_SHARED_BOND): after a seen pairing (the first
+/// read fails with an authentication error, iOS shows the passkey dialog, a later read succeeds),
+/// or at once with the bond the iPhone already has (iOS keeps one bond per accessory, shared with
+/// the vendor app). The real unit refuses Just Works pairing (evidence ledger, CAPTURE), so a
+/// genuine new pairing always shows the iOS passkey dialog, and its code must match the camper
+/// screen. A pairing prompt without a code is not the camper: the user cancels it.
+///
+/// Residual risk: CoreBluetooth exposes no encryption state, so a look-alike that serves `1004`
+/// without encryption is adopted once the user picks it. The guard is the user's pick from the
+/// candidate list (strongest first) and the exact name `VWCAMPER`.
 ///
 /// Writes: a write that is issued and then gets no answer (the caller cancelled the link, or the
 /// char does not accept the write and CoreBluetooth never answers) ends as `.linkLost` when the
@@ -136,7 +140,7 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     }
 
     /// The user picked `id` and confirmed it: the next `connect()` goes to that unit, once. It is
-    /// adopted (and replaces the saved unit) only after a seen pairing (see the class comment);
+    /// adopted (and replaces the saved unit) when its `1004` read succeeds (see the class comment);
     /// any other end of that link, or `cancel()`, ends the first pairing.
     public func beginFirstPairing(with id: UUID) async {
         queue.async { self.policy.chosen = id }
@@ -346,12 +350,11 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
             if error == nil {
                 switch policy.authenticated(p.identifier) {
                 case .up: return linkUp(p)
-                case .alreadyPaired: sink.yield(.alreadyPaired); return fail(p, nil)
                 case .reject: return fail(p, nil)
                 }
             }
             if Self.needsPairing(error), policy.pairingError() {
-                // The pairing is seen: iOS shows its passkey dialog. Read again after a pause until it
+                // iOS pairs: it shows its passkey dialog. Read again after a pause until it
                 // succeeds, the caller cancels, or `PeerPolicy.maxPairingReads` is reached.
                 sink.yield(.pairing)
                 let gen = linkGen
@@ -400,8 +403,8 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
 
 /// Which peripheral the transport may talk to. The saved identifier is the only one it connects
 /// to, and it never switches by itself. A new one is adopted only when the user picked it
-/// (`chosen`, one connect only) and its authenticated `1004` read succeeded (iOS pairs with the
-/// passkey inside that read, or uses the iPhone's existing bond, for example the vendor app's).
+/// (`chosen`, one connect only) and its authenticated `1004` read succeeded, after a pairing or at
+/// once with the iPhone's existing bond (for example the vendor app's): lenient, AD_IOS_SHARED_BOND.
 /// Nothing is adopted in the background. A failed read or a missing `1004` never reaches
 /// `authenticated`; the link then ends, and with it the first pairing.
 ///
@@ -410,8 +413,6 @@ struct PeerPolicy {
     private(set) var saved: UUID?
     /// The unit the user picked for a first pairing; nil outside one.
     var chosen: UUID?
-    /// In this first pairing, the `1004` read failed with an authentication error (iOS pairs).
-    private var pairingSeen = false
     private var pairingReads = 0
     /// The re-reads of `1004` in one first pairing (one per second): a hard cap of its own, so a
     /// caller that gave up without `cancel()` leaves no endless reads.
@@ -423,8 +424,6 @@ struct PeerPolicy {
     enum Verdict: Equatable {
         /// The link is verified: report it encrypted (a saved unit, or a unit adopted just now).
         case up
-        /// A first pairing without a seen pairing: an existing bond. Not adopted.
-        case alreadyPaired
         case reject
     }
 
@@ -433,22 +432,19 @@ struct PeerPolicy {
         return saved.map(Route.saved) ?? .refuse
     }
 
-    /// The `1004` read failed with a pairing error. True: in a first pairing, the pairing is seen
-    /// and the read goes again; false: end the link (a saved unit's bond is stale).
+    /// The `1004` read failed with a pairing error. True: in a first pairing, iOS pairs and the read
+    /// goes again; false: end the link (a saved unit's bond is stale).
     mutating func pairingError() -> Bool {
         guard chosen != nil, pairingReads < Self.maxPairingReads else { return false }
         pairingReads += 1
-        pairingSeen = true
         return true
     }
 
     /// The authenticated `1004` read succeeded on `id`. Ends a first pairing (adopted or not).
     mutating func authenticated(_ id: UUID) -> Verdict {
         guard let c = chosen else { return id == saved ? .up : .reject }
-        let seen = pairingSeen
         linkEnded()
         guard id == c else { return .reject }
-        guard seen else { return .alreadyPaired }
         saved = id
         return .up
     }
@@ -456,7 +452,6 @@ struct PeerPolicy {
     /// The link ended, a connect failed, or the caller cancelled: the first pairing is over.
     mutating func linkEnded() {
         chosen = nil
-        pairingSeen = false
         pairingReads = 0
     }
 }

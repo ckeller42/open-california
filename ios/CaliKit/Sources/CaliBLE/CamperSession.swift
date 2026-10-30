@@ -268,9 +268,6 @@ public actor CamperSession {
             resumeWaiters(.failure(.unreachable))
             // The transport may still hold or probe a link that nobody waits for now.
             Task { await transport.cancel() }
-        case .alreadyPaired:
-            setLink(.unreachable("This iPhone is already paired with the camper unit."))
-            resumeWaiters(.failure(.unreachable))
         case .disconnected(let reason):
             lost(reason)
         }

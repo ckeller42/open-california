@@ -78,11 +78,11 @@ struct CBMappingTests {
         #expect(none.saved == nil)
     }
 
-    /// Strict adoption: the pairing must be seen (an authentication error, then a success).
+    /// Lenient adoption, a seen pairing: an authentication error, then a success.
     ///
     /// - Test: T_IOS_CB_PEER_ADOPT
     /// - Verifies: R_IOS_PAIRING
-    @Test func adoptsOnlyAfterASeenPairing() {
+    @Test func adoptsAfterASeenPairing() {
         let old = UUID(), new = UUID()
         var p = PeerPolicy(saved: old)
         p.chosen = new
@@ -94,22 +94,40 @@ struct CBMappingTests {
         let r2 = p.authenticated(old); #expect(r2 == .reject)  // the old unit is not taken back silently
     }
 
-    /// A first read that succeeds without a seen pairing is an existing bond: not adopted.
+    /// Lenient adoption, a shared bond: the iPhone is already paired with the unit (for example
+    /// through the vendor app), so the first read succeeds at once. The picked unit is adopted.
     ///
-    /// - Test: T_IOS_CB_PEER_ALREADY_PAIRED
+    /// - Test: T_IOS_CB_PEER_SHARED_BOND
     /// - Verifies: R_IOS_PAIRING
-    @Test func existingBondIsNotAdopted() {
+    @Test func existingBondIsAdoptedDuringAPick() {
         let old = UUID(), new = UUID()
         var p = PeerPolicy(saved: old)
         p.chosen = new
-        let r = p.authenticated(new); #expect(r == .alreadyPaired)
-        #expect(p.saved == old)
-        #expect(p.route() == .saved(old))  // one-shot: the pick is over
+        let r = p.authenticated(new); #expect(r == .up)
+        #expect(p.saved == new)
+        #expect(p.route() == .saved(new))  // one-shot: the pick is over
+    }
+
+    /// Outside a pick, an authenticated read never adopts: not in the background without a saved
+    /// unit, and not another unit next to the saved one.
+    ///
+    /// - Test: T_IOS_CB_PEER_NO_BACKGROUND_ADOPT
+    /// - Verifies: R_IOS_PAIRING
+    @Test func noAdoptionOutsideAPick() {
+        let unit = UUID(), other = UUID()
+        var none = PeerPolicy(saved: nil)
+        let r1 = none.authenticated(unit); #expect(r1 == .reject)
+        #expect(none.saved == nil)
+        #expect(none.route() == .refuse)
+        var p = PeerPolicy(saved: unit)
+        let r2 = p.authenticated(other); #expect(r2 == .reject)
+        #expect(p.saved == unit)
     }
 
     /// The first pairing is one-shot: a link that ends without an adoption (a failed read, a missing
-    /// `1004`, a cancel or a timeout) falls back to the saved unit, or to nothing; a seen pairing
-    /// does not carry over to the next pick.
+    /// `1004`, a cancel or a timeout) falls back to the saved unit, or to nothing. An adoption also
+    /// uses the pick up: a second unit needs a second pick. A reconnect to the saved unit verifies
+    /// the authenticated `1004` read again.
     ///
     /// - Test: T_IOS_CB_PEER_ONE_SHOT
     /// - Verifies: R_IOS_PAIRING
@@ -120,8 +138,8 @@ struct CBMappingTests {
         _ = p.pairingError()
         p.linkEnded()
         #expect(p.route() == .saved(old))
-        p.chosen = new
-        let r0 = p.authenticated(new); #expect(r0 == .alreadyPaired)
+        let r0 = p.authenticated(new); #expect(r0 == .reject)  // the pick ended with the link
+        #expect(p.saved == old)
 
         var q = PeerPolicy(saved: nil)
         q.chosen = new
@@ -129,6 +147,20 @@ struct CBMappingTests {
         let r1 = q.authenticated(other); #expect(r1 == .reject)  // not the picked unit
         #expect(q.route() == .refuse)
         #expect(q.saved == nil)
+
+        var a = PeerPolicy(saved: nil)
+        a.chosen = new
+        let r2 = a.authenticated(new); #expect(r2 == .up)
+        let r3 = a.authenticated(other); #expect(r3 == .reject)  // the pick is used up
+        #expect(a.saved == new)
+        a.chosen = other  // a second pick
+        let r4 = a.authenticated(other); #expect(r4 == .up)
+        #expect(a.saved == other)
+
+        // Reconnect: the saved unit is up only on its authenticated read; a failed one ends the link.
+        #expect(a.route() == .saved(other))
+        let stale = a.pairingError(); #expect(!stale)
+        let r5 = a.authenticated(other); #expect(r5 == .up)
     }
 
     /// The re-reads of a first pairing stop at a cap of their own.
