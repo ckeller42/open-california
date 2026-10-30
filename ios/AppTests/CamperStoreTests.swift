@@ -107,6 +107,81 @@ struct CamperStoreTests {
         #expect(store.controlEnabled("campingmode"))
     }
 
+    /// Ruling 21: each update is saved; a relaunch restores the values with their `asOf`, and the
+    /// controls stay disabled (no function is live) until this link reads the unit.
+    ///
+    /// - Test: T_IOS_STORE_PERSIST_RESTORE
+    /// - Verifies: R_IOS_BACKGROUND_LINK, R_IOS_HONEST
+    @Test func savedStateIsRestoredWithItsAgeAndControlsDisabled() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "camper-\(UUID().uuidString)/last_state.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let live = CamperStore.preview(.campingOn).state
+        let first = CamperStore(session: Fixture.parked.makeSession(), saveURL: url)
+        first.apply(live, .up)
+        #expect(first.controlsEnabled)
+
+        let restored = try #require(CamperStore.restore(from: url))
+        #expect(restored.fields == live.fields)
+        #expect(restored.interpreted == live.interpreted)
+        #expect(restored.gate == .supported)
+        #expect(restored.asOf == live.asOf)
+        #expect(restored.liveFunctions.isEmpty && restored.lightConfig.isEmpty)
+
+        let second = CamperStore(session: Fixture.parked.makeSession(), state: restored, link: .up, saveURL: url)
+        #expect(second.value("campingmode", "master_on")?.bool == true)
+        #expect(!second.controlsEnabled)
+        #expect(!second.controlEnabled("campingmode"))
+        #expect(CamperStore.restore(from: url.appending(path: "missing")) == nil)
+    }
+
+    /// The water guard stores no `water` frame on a cold start; the restored reading stays, marked
+    /// as held with its age, never as live.
+    ///
+    /// - Test: T_IOS_STORE_WATER_HELD
+    /// - Verifies: R_IOS_HONEST
+    @Test func restoredWaterStaysHeldAfterAColdRead() throws {
+        let store = CamperStore.preview(.staleRestore)
+        let restoredAt = try #require(store.state.asOf)
+        var fresh = CamperStore.preview(.parked).state
+        fresh.fields["water"] = nil
+        fresh.interpreted["water"] = nil
+        store.apply(fresh, .up)
+        #expect(store.state.waterHeld)
+        #expect(store.state.waterGoodAt == restoredAt)
+        #expect(store.value("water", "fresh")?["liters"]?.number == 11)
+    }
+
+    /// "as of {age}" and the stale state follow the clock alone (the screens redraw on a
+    /// `TimelineView`): the same state turns stale and its age grows as the injected clock moves.
+    ///
+    /// - Test: T_IOS_STORE_AGE_CLOCK
+    /// - Verifies: R_IOS_HONEST, R_IOS_I18N
+    @Test func ageAndStalenessFollowTheClock() throws {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = CamperStore.preview(.parked, now: t0)
+        var now = t0
+        store.now = { now }
+        #expect(!store.isStale)
+        #expect(String(localized: try #require(store.age)) == "just now")
+        now = t0.addingTimeInterval(91)
+        #expect(store.isStale && !store.controlsEnabled)
+        #expect(String(localized: try #require(store.age)) == "2 min ago")
+        now = t0.addingTimeInterval(5 * 3600)
+        #expect(String(localized: try #require(store.age)) == "5 h ago")
+        #expect(String(localized: ageText(3 * 86400)) == "3 d ago")
+        #expect(String(localized: ageText(-5)) == "just now")
+    }
+
+    /// A function the unit reports as not installed has no tile.
+    ///
+    /// - Test: T_IOS_STORE_INSTALLED
+    /// - Verifies: R_IOS_INSTALLED
+    @Test func installedFollowsTheUnit() {
+        #expect(CamperStore.preview(.parked).installed("cooler"))
+        #expect(!CamperStore.preview(.noCooler).installed("cooler"))
+        #expect(CamperStore.preview(.noCooler).installed("campingmode"))
+    }
+
     /// Every key of the app's string catalogs has an English and a German value. Where the web UI
     /// has the same English string, the German value is the one of `strings.de.js`.
     ///

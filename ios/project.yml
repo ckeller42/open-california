@@ -15,6 +15,10 @@ settings:
 packages:
   CaliKit:
     path: ..
+  # Snapshot tests (AppTests). Exact pin; the resolved graph is committed in Package.resolved.
+  SnapshotTesting:
+    url: https://github.com/pointfreeco/swift-snapshot-testing
+    exactVersion: 1.19.6
 targets:
   Camper:
     type: application
@@ -37,9 +41,13 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - AppTests
+      - path: AppTests
+        excludes:
+          - "__Snapshots__/**"
     dependencies:
       - target: Camper
+      - package: SnapshotTesting
+        product: SnapshotTesting
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -61,6 +69,9 @@ schemes:
       targets:
         Camper: all
     test:
+      # A fixed language and region: the snapshot references show English and "14.1 V".
+      language: en
+      region: US
       targets:
         - AppTests
         - AppUITests

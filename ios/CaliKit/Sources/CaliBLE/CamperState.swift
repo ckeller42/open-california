@@ -4,7 +4,7 @@ import Foundation
 /// The latest frame per function, as the unit sent it (a read or a push: the last frame wins).
 ///
 /// - Requirement: R_IOS_HONEST
-public struct CamperState: Sendable, Equatable {
+public struct CamperState: Sendable, Equatable, Codable {
     /// function -> decoded fields of its latest frame.
     public var fields: [String: [String: UInt32]] = [:]
     /// function -> `semantics.js` interpretation (with `applySwCorrections`). A function whose

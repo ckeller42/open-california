@@ -19,14 +19,18 @@ struct CamperApp: App {
         } else {
             // The restore identifier lets iOS relaunch the app for the held link (camping on).
             let transport = CoreBluetoothTransport(restoreIdentifier: "de.opencalifornia.camper.central")
-            _store = State(initialValue: CamperStore(session: CamperSession(transport: transport, clock: ContinuousClock())))
+            // The last state, with its age, until this link has read the unit (never under a fixture).
+            let url = CamperStore.defaultSaveURL
+            _store = State(initialValue: CamperStore(
+                session: CamperSession(transport: transport, clock: ContinuousClock()),
+                state: CamperStore.restore(from: url) ?? CamperState(), saveURL: url))
             live = true
         }
     }
 
     var body: some Scene {
         WindowGroup {
-            StatusView(store: store)
+            RootView(store: store)
                 .task {
                     guard live else { return }
                     store.start()
@@ -36,7 +40,7 @@ struct CamperApp: App {
     }
 }
 
-/// A placeholder until the cockpit: the link, the age of the data and the protocol gate.
+/// The Setup tab's placeholder until the setup screens: the link, the age of the data and the gate.
 struct StatusView: View {
     let store: CamperStore
 
