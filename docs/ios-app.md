@@ -194,7 +194,19 @@ order.
 
 A freshly flashed satellite shows a QR code on its screen. The user scans it with the app. The app
 joins the satellite's first-time-setup WiFi hotspot and guides the WiFi setup, the camper pairing
-and the sensors over it.
+and the sensors over it. The QR code carries no secrets: only the device id, the setup hotspot
+(the standard `WIFI:` form with a one-time password) and the device's pairing endpoint.
+```
+
+```{req} Secrets only after a pairing code
+:id: R_IOS_DEVICE_SECRETS
+:status: open
+:tags: ios
+
+A device hands over its secrets (for example the keys for a LoRa network server) only after the
+user enters the 6-digit code that the device shows on its screen for a short time. The device sends
+them once; wrong codes and the timeout close the window. The app keeps the secrets in the iOS
+Keychain. A setup link or QR code never overwrites stored secrets; only a new pairing does.
 ```
 
 ### Testing
