@@ -2,18 +2,21 @@
 
 The simulator has no Bluetooth, so the unit tests cover only the pure parts of the CoreBluetooth
 transport (`CoreBluetoothTransport`): the disconnect mapping, the pairing errors, the Bluetooth
-states and the bookkeeping of the calls in flight. This checklist covers the link itself. Run it
-on a real iPhone at the van, first against the fake unit peripheral where a step says so.
+states, the choice of the unit and the bookkeeping of the calls in flight. This checklist covers
+the link itself. Run it on a real iPhone at the van.
 
 ## How the transport works
 
-- **Finding the unit.** The app first asks iOS for the remembered unit (its identifier is stored
-  after the first encrypted link; iOS resolves the rotating address with the bond). Next it takes
-  a unit that another app on the iPhone already holds, for example the vendor app. Otherwise it
-  scans for the general service `00001000-6c77-4b7d-bbf6-a5e587701f3d`.
-- **Encryption.** After service discovery the app reads `1004`, the authenticated read. iOS
-  encrypts the link with the bond, or runs the passkey pairing and answers the read after it. A
-  successful read means the link is encrypted. An authentication error means "pair first".
+- **Finding the unit.** The app connects only to the unit that it adopted, by the identifier that
+  iOS gives it (iOS resolves the rotating address with the bond). Without an adopted unit it
+  connects to nothing until the user starts the first pairing. The first pairing scans for the
+  general service `00001000-6c77-4b7d-bbf6-a5e587701f3d` and the name `VWCAMPER`.
+- **Encryption.** After service discovery the app reads `1004`, the authenticated read, on every
+  link. Only a successful read makes the link usable. A link without `1004`, or with a failed
+  read, ends at once.
+- **Adoption.** In the first pairing the app adopts a unit only when the read of `1004` first fails
+  with an authentication error (the unit asks for pairing, iOS shows its passkey dialog) and then
+  succeeds. A unit whose `1004` reads without pairing is not adopted.
 - **Hang-up.** The unit ends a link with HCI 0x13. iOS reports it as
   `CBError.peripheralDisconnected`, and the session treats it as the unit's hang-up.
 - **Writes** use "write with response". A write that went out before the link dropped reports
@@ -42,8 +45,29 @@ Do the checks in this order. Each check names what to see.
 5. Check that iOS shows its own pairing dialog.
 6. Type the 6-digit passkey from the camper screen into the dialog.
 7. Check that the app shows the unit's state after the pairing.
-8. Cancel the pairing dialog once (repeat steps 1–5). Check that the app shows "The camper unit
+8. Check in the Console that the first read of `1004` failed with an authentication error before
+   the dialog, and that the app read `1004` again after it. If iOS shows the dialog but the app
+   never sees the error, the app cannot adopt the unit: report it, because the adoption rule must
+   then change.
+9. Cancel the pairing dialog once (repeat steps 1–5). Check that the app shows "The camper unit
    asks for pairing." and does not connect in a loop.
+10. Close the app and open it again. Check that it connects without a scan and without a dialog.
+
+### A bond from the vendor app
+
+1. Use an iPhone on which the vendor app is already paired with the unit, and no adopted unit in
+   this app.
+2. Start the first pairing in the app.
+3. Check what happens: no dialog appears because the bond exists. Record whether the app adopts
+   the unit. By the adoption rule it does not; the owner decides if that stays.
+
+### No unit without proof
+
+1. Run the fake unit peripheral without the `1004` characteristic, or with a `1004` that needs no
+   encryption.
+2. Start the first pairing in the app.
+3. Check that the app ends the link after the service discovery or the read, that it never shows
+   a state, and that it stores no unit.
 
 ### The MTU answer (link with camping on)
 

@@ -27,6 +27,15 @@ struct CBMappingTests {
         #expect(!CoreBluetoothTransport.needsPairing(nil))
     }
 
+    /// A write error is "rejected" only when the unit answered; otherwise the result is unconfirmed.
+    ///
+    /// - Test: T_IOS_CB_WRITE_MAP
+    /// - Verifies: R_IOS_HONEST
+    @Test func writeErrors() {
+        #expect(CoreBluetoothTransport.mapWrite(CBATTError(.writeNotPermitted)) == .writeRejected)
+        #expect(CoreBluetoothTransport.mapWrite(CBError(.connectionTimeout)) == .linkLost)
+    }
+
     /// - Test: T_IOS_CB_AVAILABILITY_MAP
     /// - Verifies: R_IOS_BLE_DIRECT
     @Test func centralStates() {
@@ -49,6 +58,42 @@ struct CBMappingTests {
         // Each char lives in its function's service (feature-availability.md: 0x1000, 0x1100, 0x1700).
         #expect(services.isSuperset(of: [0x1000, 0x1100, 0x1200, 0x1500, 0x1700, 0xF000]))
         #expect(services.allSatisfy { $0 & 0x00FF == 0 })
+    }
+
+    /// Only the adopted unit; without one, nothing until the user starts the first pairing.
+    ///
+    /// - Test: T_IOS_CB_PEER_SAVED_ONLY
+    /// - Verifies: R_IOS_PAIRING, R_IOS_BLE_DIRECT
+    @Test func connectsOnlyToTheAdoptedUnit() {
+        let unit = UUID(), other = UUID()
+        var p = PeerPolicy(saved: unit)
+        #expect(p.route() == .saved(unit))
+        let r1 = p.authenticated(unit); #expect(r1)
+        let r2 = p.authenticated(other); #expect(!r2)
+        let r3 = p.pairingError(); #expect(!r3)  // a stale bond outside a first pairing ends the link
+        #expect(PeerPolicy(saved: nil).route() == .refuse)
+    }
+
+    /// A new unit is adopted only after it asked for pairing and the authenticated read then
+    /// succeeded (the passkey was typed); a `1004` that reads without pairing is not adopted.
+    ///
+    /// - Test: T_IOS_CB_PEER_ADOPT
+    /// - Verifies: R_IOS_PAIRING
+    @Test func adoptsOnlyAfterPairing() {
+        let old = UUID(), new = UUID()
+        var p = PeerPolicy(saved: old)
+        p.firstPairing = true
+        #expect(p.route() == .scan)
+        let r4 = p.authenticated(new); #expect(!r4)  // no pairing seen: a look-alike without encryption
+        #expect(p.saved == old)
+        let r5 = p.pairingError(); #expect(r5)       // the unit asks: read again while iOS pairs
+        let r6 = p.pairingError(); #expect(!r6)      // the pairing failed: end the link
+        p.linkEnded()
+        let r7 = p.pairingError(); #expect(r7)
+        let r8 = p.authenticated(new); #expect(r8)
+        #expect(p.saved == new)
+        #expect(p.route() == .saved(new))
+        let r9 = p.authenticated(old); #expect(!r9)
     }
 
     /// - Test: T_IOS_CB_PENDING_OPS

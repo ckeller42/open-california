@@ -8,11 +8,14 @@ import Foundation
 /// calls the delegate methods on. The async API hops onto `queue` before it touches state. That
 /// confinement is why the class is `@unchecked Sendable`.
 ///
-/// Bring-up: connect (the remembered peripheral, else one another app holds, else a scan for the
-/// service `1000`), discover the services of the char family, then read `1004`, the authenticated
-/// read. Its success is `.encrypted`: iOS encrypts the link with the bond, or runs the passkey
-/// pairing first and answers the read afterwards. An authentication error is `.pairingRequired`.
-/// No own timers: the session's deadline calls `cancel()`.
+/// Bring-up: connect, discover the services of the char family, then read `1004`, the
+/// authenticated read. Only its success is `.encrypted`, on every link; without `1004` or with a
+/// failed read the transport ends the link (fail closed). No own timers: the session's deadline
+/// calls `cancel()`.
+///
+/// Which unit (`PeerPolicy`): only the adopted one, by its saved identifier. Without one,
+/// `connect()` reports `.pairingRequired` until the user starts `beginFirstPairing()`; that scans
+/// for the unit (service `1000`, name `VWCAMPER`) and adopts it only after the passkey pairing.
 ///
 /// - Requirement: R_IOS_BLE_DIRECT, R_IOS_PAIRING, R_IOS_BACKGROUND_LINK, R_IOS_POWER_SAVE, R_IOS_HONEST
 public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked Sendable {
@@ -27,6 +30,7 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     private var servicesLeft = 0
     /// State restoration handed over a connected peripheral; its bring-up waits for `poweredOn`.
     private var restoredConnected = false
+    private var policy = PeerPolicy(saved: UserDefaults.standard.string(forKey: peripheralKey).flatMap(UUID.init(uuidString:)))
 
     private enum Phase: Int, Comparable {
         case idle, waitingForPower, scanning, connecting, discovering, probing, up
@@ -70,6 +74,12 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         return false
     }
 
+    /// A failed write: an ATT error is the unit's answer (`.writeRejected`); any other error means the
+    /// write went out and no answer came back, so the unit may have acted (`.linkLost`).
+    static func mapWrite(_ error: Error) -> TransportError {
+        error is CBATTError ? .writeRejected : .linkLost
+    }
+
     /// nil: Bluetooth is usable, or its state is not known yet (wait for the next update).
     static func availability(_ state: CBManagerState) -> BluetoothAvailability? {
         switch state {
@@ -86,6 +96,13 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         guard s.count == 36, s.hasPrefix("0000"),
               s.hasSuffix(CamperGATT.uuid(0).dropFirst(8)) else { return nil }
         return UInt16(s.dropFirst(4).prefix(4), radix: 16)
+    }
+
+    /// The user starts the first pairing (the pairing guide): the next `connect()` scans for the
+    /// unit and adopts the one that pairs with the passkey from the camper screen. It replaces the
+    /// adopted unit only when that pairing succeeds.
+    public func beginFirstPairing() async {
+        queue.async { self.policy.firstPairing = true }
     }
 
     // MARK: CamperTransport
@@ -139,20 +156,20 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         guard phase == .idle else { return }
         if let a = Self.availability(central.state) { sink.yield(.bluetoothUnavailable(a)); return }
         guard central.state == .poweredOn else { phase = .waitingForPower; return }
-        if let p = known() {
-            open(p)
-        } else {
+        switch policy.route() {
+        case .scan:
             phase = .scanning
             central.scanForPeripherals(withServices: [Self.generalService])
+        case .saved(let id):
+            // iOS resolves the unit's rotating address with the bond. Never another peripheral.
+            guard let p = central.retrievePeripherals(withIdentifiers: [id]).first else {
+                sink.yield(.disconnected(reason: .failedToConnect))
+                return
+            }
+            open(p)
+        case .refuse:
+            sink.yield(.pairingRequired)
         }
-    }
-
-    /// The remembered unit (iOS resolves its rotating address with the bond), else one that another
-    /// app on this iPhone holds (the vendor app).
-    private func known() -> CBPeripheral? {
-        if let s = UserDefaults.standard.string(forKey: Self.peripheralKey), let id = UUID(uuidString: s),
-           let p = central.retrievePeripherals(withIdentifiers: [id]).first { return p }
-        return central.retrieveConnectedPeripherals(withServices: [Self.generalService]).first
     }
 
     private func open(_ p: CBPeripheral) {
@@ -186,6 +203,7 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     /// The link is gone: every pending call resumes (an issued write with `.linkLost`).
     private func tearDown() {
         phase = .idle
+        policy.linkEnded()
         chars = [:]
         servicesLeft = 0
         restoredConnected = false
@@ -221,7 +239,9 @@ extension CoreBluetoothTransport: CBCentralManagerDelegate {
 
     public func centralManager(_ central: CBCentralManager, didDiscover p: CBPeripheral,
                                advertisementData: [String: Any], rssi: NSNumber) {
-        guard phase == .scanning else { return }
+        // A cheap first screen only: the pairing is the check.
+        let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? p.name ?? ""
+        guard phase == .scanning, name.hasPrefix(CamperGATT.deviceName) else { return }
         central.stopScan()
         open(p)
     }
@@ -249,7 +269,8 @@ extension CoreBluetoothTransport: CBCentralManagerDelegate {
     /// iOS relaunched the app for the held link (it was terminated by the system, not swiped away).
     /// Called before `centralManagerDidUpdateState`; the bring-up resumes once Bluetooth is on.
     public func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
-        guard let p = (dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral])?.first else { return }
+        guard let p = (dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral])?
+            .first(where: { $0.identifier == policy.saved }) else { return }
         peripheral = p
         p.delegate = self
         switch p.state {
@@ -278,7 +299,8 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
         servicesLeft -= 1
         guard servicesLeft == 0 else { return }
         // `.encrypted` only once the char map is complete: the session starts the heartbeat on it.
-        guard let auth = chars[CamperGATT.auth] else { return linkUp(p) }  // ponytail: no 1004, no proof of encryption
+        // No `1004`, no proof of encryption: not the unit, or not usable.
+        guard let auth = chars[CamperGATT.auth] else { return fail(p, nil) }
         phase = .probing
         p.readValue(for: auth)
     }
@@ -287,7 +309,12 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
         guard p === peripheral, let s = Self.short(c.uuid) else { return }
         if phase == .probing, s == CamperGATT.auth {
             // The probe's value is discarded: the session reads every char after `.encrypted`.
-            return error == nil ? linkUp(p) : fail(p, error)
+            if error == nil { return policy.authenticated(p.identifier) ? linkUp(p) : fail(p, CBATTError(.insufficientAuthentication)) }
+            if Self.needsPairing(error), policy.pairingError() {
+                sink.yield(.pairingRequired)  // iOS shows its passkey dialog; read again
+                return p.readValue(for: c)
+            }
+            return fail(p, error)
         }
         let bytes = [UInt8](c.value ?? Data())
         let result: Result<[UInt8], any Error> = error.map { e in
@@ -308,7 +335,7 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
         guard p === peripheral, let s = Self.short(c.uuid) else { return }
         if Self.needsPairing(error) { sink.yield(.pairingRequired) }
         sink.yield(.written(char: s, ok: error == nil))
-        ops.finishWrite(s, error == nil ? .success(()) : .failure(TransportError.writeRejected))
+        ops.finishWrite(s, error.map { .failure(Self.mapWrite($0)) } ?? .success(()))
     }
 
     public func peripheral(_ p: CBPeripheral, didUpdateNotificationStateFor c: CBCharacteristic, error: Error?) {
@@ -319,9 +346,51 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
 
     private func linkUp(_ p: CBPeripheral) {
         phase = .up
-        UserDefaults.standard.set(p.identifier.uuidString, forKey: Self.peripheralKey)
+        UserDefaults.standard.set(p.identifier.uuidString, forKey: Self.peripheralKey)  // the adopted unit
         sink.yield(.encrypted)
     }
+}
+
+/// Which peripheral the transport may talk to. The saved identifier is the only one it connects
+/// to. A new one is adopted only in a first pairing that the user started, and only after the
+/// unit asked for pairing (an authentication error on `1004`) and the read then succeeded: the
+/// passkey from the camper screen was typed. A peripheral whose `1004` reads without that, in a
+/// first pairing, is not adopted (an unpaired look-alike serves it without encryption).
+///
+/// - Requirement: R_IOS_PAIRING, R_IOS_BLE_DIRECT
+struct PeerPolicy {
+    private(set) var saved: UUID?
+    var firstPairing = false
+    private var pairingSeen = false
+
+    init(saved: UUID?) { self.saved = saved }
+
+    enum Route: Equatable { case saved(UUID), scan, refuse }
+
+    func route() -> Route {
+        if firstPairing { return .scan }
+        return saved.map(Route.saved) ?? .refuse
+    }
+
+    /// The `1004` read failed with a pairing error. True: read again (iOS runs the pairing);
+    /// false: end the link (outside a first pairing, or the pairing failed once already).
+    mutating func pairingError() -> Bool {
+        guard firstPairing, !pairingSeen else { return false }
+        pairingSeen = true
+        return true
+    }
+
+    /// The authenticated `1004` read succeeded on `id`. True: the link may be reported encrypted.
+    mutating func authenticated(_ id: UUID) -> Bool {
+        guard firstPairing else { return id == saved }
+        guard pairingSeen else { return false }
+        saved = id
+        firstPairing = false
+        pairingSeen = false
+        return true
+    }
+
+    mutating func linkEnded() { pairingSeen = false }
 }
 
 /// The continuations of the calls in flight, per char, in issue order; each resumes exactly once.
