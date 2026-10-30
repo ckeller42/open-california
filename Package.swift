@@ -14,14 +14,15 @@ let package = Package(
             name: "CCodec",
             path: "csrc",
             sources: ["codec.c", "ports.c"],
-            publicHeadersPath: "."
+            publicHeadersPath: "swiftpm"   // module.modulemap there: Swift sees only the linked API
         ),
         .target(
             name: "CControl",
             dependencies: ["CCodec"],
             path: "firmware/components/cali_core",
             sources: ["control.c"],
-            publicHeadersPath: "include"
+            publicHeadersPath: "swiftpm",
+            cSettings: [.headerSearchPath("include")]   // control.c's own includes; Swift never sees this dir
         ),
         .target(
             name: "CaliCore",

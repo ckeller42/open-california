@@ -1,0 +1,10 @@
+// SwiftPM only (the iOS app). The ESP32 build and the host tests never read this file.
+// Swift sees exactly the headers whose code is linked: codec.c and ports.c. codec_dict.h and
+// codec_cli.c stay private.
+module CCodec {
+    header "codec.h"
+    header "codec_chars.h"
+    header "control_consts.h"
+    header "ports.h"
+    export *
+}

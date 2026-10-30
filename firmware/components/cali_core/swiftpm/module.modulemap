@@ -1,0 +1,7 @@
+// SwiftPM only (the iOS app). The ESP32 build and the host tests never read this file.
+// Swift sees cali_control.h (control.c is the only cali_core source linked) and what it includes.
+module CControl {
+    use CCodec
+    header "../include/cali_control.h"
+    export *
+}
