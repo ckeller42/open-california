@@ -86,6 +86,9 @@ ESP_ELSEWHERE_REASON = "Only via buspi or the app"
 ESP_WAKEUP_CLOCK_REASON = "the wake-up light needs the time from the web page — set it there"
 _APP_SCRIPTS = ("strings.de.js", "semantics_tables.js", "semantics.js", "app.js")
 SEM_TABLES_OUT = WEBUI_DIR / "semantics_tables.js"
+# The iOS app runs the same two scripts in JavaScriptCore: byte-identical copies as package resources.
+IOS_RES_DIR = ROOT / "ios" / "CaliKit" / "Sources" / "CaliCore" / "Resources"
+IOS_SEM_COPIES = tuple((IOS_RES_DIR / n, WEBUI_DIR / n) for n in ("semantics_tables.js", "semantics.js"))
 # (JS name, calictl module, attribute): the lookup tables the web UI's JS (semantics.js, app.js) shares
 # with Python, emitted into SEM_TABLES_OUT. Tables only — the logic using them stays hand-written.
 _JS_TABLES = (
@@ -915,6 +918,7 @@ _TARGETS = (
     (APP_BUNDLE_OUT, generate_app_bundle),
     (PWA_ASSETS_OUT, generate_pwa_assets),
     (CONTROL_OUT, generate_control),
+    *((dst, lambda src=src: src.read_text(encoding="utf-8")) for dst, src in IOS_SEM_COPIES),
 )
 
 

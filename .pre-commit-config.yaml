@@ -19,9 +19,9 @@ repos:
     hooks:
       - id: trailing-whitespace
         # generated artifacts: their generators (and --check guards) own their exact bytes
-        exclude: ^(csrc/(codec_dict|codec_chars|pairing_consts|net_consts|control_consts)\.h|firmware/web/(strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/.*\.json|calictl/webui/(screens\.json|semantics_tables\.js)|ui/prototype\.html)$
+        exclude: ^(csrc/(codec_dict|codec_chars|pairing_consts|net_consts|control_consts)\.h|firmware/web/(strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/.*\.json|(calictl/webui|ios/CaliKit/Sources/CaliCore/Resources)/(screens\.json|semantics_tables\.js)|ui/prototype\.html)$
       - id: end-of-file-fixer
-        exclude: ^(csrc/(codec_dict|codec_chars|pairing_consts|net_consts|control_consts)\.h|firmware/web/(strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/.*\.json|calictl/webui/(screens\.json|semantics_tables\.js)|ui/prototype\.html)$
+        exclude: ^(csrc/(codec_dict|codec_chars|pairing_consts|net_consts|control_consts)\.h|firmware/web/(strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/.*\.json|(calictl/webui|ios/CaliKit/Sources/CaliCore/Resources)/(screens\.json|semantics_tables\.js)|ui/prototype\.html)$
       - id: check-yaml
       - id: check-merge-conflict
       - id: check-added-large-files

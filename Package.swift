@@ -23,7 +23,8 @@ let package = Package(
         .target(
             name: "CaliCore",
             dependencies: ["CCodec", "CControl"],
-            path: "ios/CaliKit/Sources/CaliCore"
+            path: "ios/CaliKit/Sources/CaliCore",
+            resources: [.copy("Resources/semantics_tables.js"), .copy("Resources/semantics.js")]
         ),
         .testTarget(
             name: "CaliCoreTests",
