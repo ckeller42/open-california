@@ -21,7 +21,11 @@ INPUT                  = firmware/components/cali_core/include/cali_snapshot.h \
                          firmware/components/cali_core/include/cali_wifi_sm.h \
                          firmware/components/cali_core/include/cali_wifi_run.h \
                          firmware/components/cali_core/include/cali_captive.h \
-                         firmware/components/cali_core/include/cali_net.h
+                         firmware/components/cali_core/include/cali_net.h \
+                         firmware/components/cali_core/include/cali_web.h \
+                         firmware/components/cali_core/include/cali_http.h \
+                         firmware/components/cali_core/include/cali_console.h \
+                         firmware/components/cali_core/include/cali_json.h
 EXCLUDE_PATTERNS       = */_deps/* */*_gen.h
 WARN_AS_ERROR          = YES
 WARN_NO_PARAMDOC       = YES

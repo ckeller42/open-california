@@ -67,3 +67,26 @@ Network
 ~~~~~~~
 
 .. doxygenfile:: cali_net.h
+
+Web server & console
+--------------------
+
+Web handlers
+~~~~~~~~~~~~
+
+.. doxygenfile:: cali_web.h
+
+HTTP core
+~~~~~~~~~
+
+.. doxygenfile:: cali_http.h
+
+Console
+~~~~~~~
+
+.. doxygenfile:: cali_console.h
+
+JSON writer
+~~~~~~~~~~~
+
+.. doxygenfile:: cali_json.h
