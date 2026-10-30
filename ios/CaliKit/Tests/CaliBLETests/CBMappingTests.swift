@@ -60,7 +60,8 @@ struct CBMappingTests {
         #expect(services.allSatisfy { $0 & 0x00FF == 0 })
     }
 
-    /// Only the adopted unit; without one, nothing until the user starts the first pairing.
+    /// Only the adopted unit, verified by an authenticated read alone; without one, nothing until
+    /// the user picks a unit.
     ///
     /// - Test: T_IOS_CB_PEER_SAVED_ONLY
     /// - Verifies: R_IOS_PAIRING, R_IOS_BLE_DIRECT
@@ -68,34 +69,47 @@ struct CBMappingTests {
         let unit = UUID(), other = UUID()
         var p = PeerPolicy(saved: unit)
         #expect(p.route() == .saved(unit))
-        let r1 = p.authenticated(unit); #expect(r1)
-        let r2 = p.authenticated(other); #expect(!r2)
+        let r1 = p.authenticated(unit); #expect(r1 == .up)  // no pairing error needed
+        let r2 = p.authenticated(other); #expect(r2 == .reject)
+        let r3 = p.pairingError(); #expect(!r3)  // a stale bond of the saved unit ends the link
         #expect(PeerPolicy(saved: nil).route() == .refuse)
+        var none = PeerPolicy(saved: nil)
+        let r4 = none.authenticated(other); #expect(r4 == .reject)  // no user action: never adopt
+        #expect(none.saved == nil)
     }
 
-    /// A new unit is adopted only when the user picked it and its authenticated read succeeded
-    /// (a fresh passkey pairing or an existing bond); nothing without that action.
+    /// Strict adoption: the pairing must be seen (an authentication error, then a success).
     ///
     /// - Test: T_IOS_CB_PEER_ADOPT
     /// - Verifies: R_IOS_PAIRING
-    @Test func adoptsOnUserActionPlusAuthenticatedRead() {
+    @Test func adoptsOnlyAfterASeenPairing() {
         let old = UUID(), new = UUID()
-        var none = PeerPolicy(saved: nil)
-        let r1 = none.authenticated(new); #expect(!r1)  // no user action: never adopt
-        #expect(none.saved == nil)
-        #expect(none.route() == .refuse)
-
         var p = PeerPolicy(saved: old)
         p.chosen = new
         #expect(p.route() == .chosen(new))
-        let r2 = p.authenticated(new); #expect(r2)
+        let e = p.pairingError(); #expect(e)  // iOS shows the passkey dialog; read again
+        let r1 = p.authenticated(new); #expect(r1 == .up)
         #expect(p.saved == new)
         #expect(p.route() == .saved(new))
-        let r3 = p.authenticated(old); #expect(!r3)  // the old unit is not taken back silently
+        let r2 = p.authenticated(old); #expect(r2 == .reject)  // the old unit is not taken back silently
+    }
+
+    /// A first read that succeeds without a seen pairing is an existing bond: not adopted.
+    ///
+    /// - Test: T_IOS_CB_PEER_ALREADY_PAIRED
+    /// - Verifies: R_IOS_PAIRING
+    @Test func existingBondIsNotAdopted() {
+        let old = UUID(), new = UUID()
+        var p = PeerPolicy(saved: old)
+        p.chosen = new
+        let r = p.authenticated(new); #expect(r == .alreadyPaired)
+        #expect(p.saved == old)
+        #expect(p.route() == .saved(old))  // one-shot: the pick is over
     }
 
     /// The first pairing is one-shot: a link that ends without an adoption (a failed read, a missing
-    /// `1004`, a cancel or a timeout) falls back to the saved unit, or to nothing.
+    /// `1004`, a cancel or a timeout) falls back to the saved unit, or to nothing; a seen pairing
+    /// does not carry over to the next pick.
     ///
     /// - Test: T_IOS_CB_PEER_ONE_SHOT
     /// - Verifies: R_IOS_PAIRING
@@ -103,13 +117,16 @@ struct CBMappingTests {
         let old = UUID(), new = UUID(), other = UUID()
         var p = PeerPolicy(saved: old)
         p.chosen = new
+        _ = p.pairingError()
         p.linkEnded()
         #expect(p.route() == .saved(old))
-        #expect(p.saved == old)
+        p.chosen = new
+        let r0 = p.authenticated(new); #expect(r0 == .alreadyPaired)
 
         var q = PeerPolicy(saved: nil)
         q.chosen = new
-        let r1 = q.authenticated(other); #expect(!r1)  // not the picked unit: no adoption, mode over
+        _ = q.pairingError()
+        let r1 = q.authenticated(other); #expect(r1 == .reject)  // not the picked unit
         #expect(q.route() == .refuse)
         #expect(q.saved == nil)
     }

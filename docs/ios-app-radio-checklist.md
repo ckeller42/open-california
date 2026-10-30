@@ -13,13 +13,16 @@ the link itself. Run it on a real iPhone at the van.
   seconds for the general service `00001000-6c77-4b7d-bbf6-a5e587701f3d` and lists each unit with
   the exact name `VWCAMPER`. The user picks one, also when there is only one.
 - **Encryption.** After service discovery the app reads `1004`, the authenticated read, on every
-  link. Only a successful read makes the link usable. A link without `1004`, or with a failed
-  read, ends at once.
-- **Adoption.** The app adopts a new unit only when the user picked it, and only when the
-  authenticated read of `1004` succeeds. iOS runs the passkey pairing inside that read, or uses a
-  bond that the iPhone already has. The app stores the unit only after that read. The pick is good
-  for one connection: a link that ends without the adoption, a cancel or a timeout ends the first
-  pairing.
+  link. Only a successful read makes the link usable: before it, the app passes no notification
+  on. A link without `1004`, or with a failed read, ends at once.
+- **Adoption.** The app adopts a new unit only when the user picked it and the app saw the
+  pairing: the first read of `1004` fails with an authentication error (iOS then shows the passkey
+  dialog), and a later read of `1004` succeeds. A first read that succeeds at once means that the
+  iPhone already has a bond (for example from the vendor app). The app then does not adopt the
+  unit and asks the user to forget the device in iOS Settings and pair again. The new bond also
+  serves the vendor app. A unit that the app adopted earlier needs only a successful read. The app
+  stores the unit only after the adoption. The pick is good for one connection: a link that ends
+  without the adoption, a cancel or a timeout ends the first pairing.
 - **Passkey rule.** The unit refuses Just Works pairing. A new pairing with the real unit always
   shows the iOS passkey dialog, and its 6-digit code must match the camper screen. A pairing
   prompt without a code is not the camper: cancel it.
@@ -41,6 +44,19 @@ the link itself. Run it on a real iPhone at the van.
 
 Do the checks in this order. Each check names what to see.
 
+### First: does iOS show the app the pairing?
+
+The adoption rule depends on this check. Do it before the pairing guide is built.
+
+1. On the iPhone, open *Settings → Bluetooth* and make sure that no bond to the unit exists.
+2. On the camper panel, start the pairing.
+3. Pick the unit in the app.
+4. Check in the Console that the first read of `1004` fails with "Authentication is insufficient"
+   or "Encryption is insufficient", and that iOS then shows the passkey dialog.
+5. Type the passkey. Check that a later read of `1004` succeeds and that the app adopts the unit.
+6. If the first read does not fail (iOS pairs inside the read and the app sees only the success),
+   the app cannot adopt any unit. Report it at once.
+
 ### Discovery and pairing with the passkey
 
 1. On the iPhone, open *Settings → Bluetooth* and make sure that no bond to the unit exists.
@@ -52,8 +68,9 @@ Do the checks in this order. Each check names what to see.
 5. Pick the unit. Check that iOS shows its own pairing dialog with a field for a 6-digit code.
 6. Type the 6-digit passkey from the camper screen into the dialog.
 7. Check that the app shows the unit's state after the pairing.
-8. Check that the app connects for at least 60 seconds while the dialog is open, so that there is
-   time to type the passkey.
+8. Check that the app keeps the link for at least 60 seconds while the dialog is open, so that
+   there is time to type the passkey. This step needs the pairing guide, which extends the
+   connection time for the pairing.
 9. Cancel the pairing dialog once (repeat steps 1–5). Check that the app shows "The camper unit
    asks for pairing.", does not connect in a loop, and needs a new pick for the next try.
 10. Close the app and open it again. Check that it connects without a scan and without a dialog.
@@ -63,8 +80,12 @@ Do the checks in this order. Each check names what to see.
 1. Use an iPhone on which the vendor app is already paired with the unit, and no adopted unit in
    this app.
 2. Start the first pairing in the app and pick the unit.
-3. Check that no dialog appears, because the bond exists, and that the app adopts the unit and
-   shows its state.
+3. Check that no dialog appears, that the app does not adopt the unit, and that it asks you to
+   forget the device in iOS Settings.
+4. In *Settings → Bluetooth*, forget the unit. Start the pairing on the camper panel and pick the
+   unit again in the app.
+5. Check that the passkey dialog appears and that the app adopts the unit after the passkey.
+6. Open the vendor app. Check that it connects with the new bond.
 
 ### No unit without proof
 

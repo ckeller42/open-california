@@ -263,6 +263,9 @@ public actor CamperSession {
         case .pairingRequired:
             setLink(.unreachable("The camper unit asks for pairing."))
             resumeWaiters(.failure(.unreachable))
+        case .alreadyPaired:
+            setLink(.unreachable("This iPhone is already paired with the camper unit."))
+            resumeWaiters(.failure(.unreachable))
         case .disconnected(let reason):
             lost(reason)
         }

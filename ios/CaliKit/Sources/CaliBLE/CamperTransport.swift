@@ -5,6 +5,9 @@ public enum TransportEvent: Sendable {
     case notified(char: UInt16, bytes: [UInt8])
     case written(char: UInt16, ok: Bool)
     case pairingRequired
+    /// A first pairing found the unit already bonded to this iPhone (no pairing was seen), so it
+    /// was not adopted: forget the device in iOS Settings → Bluetooth, then pair again in the app.
+    case alreadyPaired
     case bluetoothUnavailable(BluetoothAvailability)
 }
 
