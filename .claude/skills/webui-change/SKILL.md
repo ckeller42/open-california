@@ -13,6 +13,9 @@ bundler catches mistakes, so the gates below are the only safety net.
   satellite flavour is detected (`satellite()`). `/device` (`firmware/web/index.html`) is a minimal
   WiFi recovery page: never add features there.
 
+If the change also touches a `cali_core/include/*.h` header (a web handler or route), follow skill
+`document-c-api` (strict Doxygen, `tools/ci.sh docs`).
+
 ## Gates (all must pass)
 
 | Gate | Command | Why |

@@ -19,7 +19,12 @@ extensions = [
     "sphinx_needs",
     "sphinxcontrib.mermaid",   # protocol sequence diagrams (client-side mermaid.js, no Java)
     "myst_parser",             # the markdown docs (business-logic/, protocol.md, ...) on the site
+    "breathe",                 # the firmware C API (Doxygen XML from `doxygen firmware/Doxyfile`)
 ]
+
+# Doxygen writes the XML under the repo root; build_site.sh runs doxygen before sphinx.
+breathe_projects = {"cali_core": os.path.join(os.path.dirname(__file__), "..", "firmware", "_doxygen", "xml")}
+breathe_default_project = "cali_core"
 
 # myst: render ```mermaid fences through sphinxcontrib.mermaid; allow heading anchors for
 # the markdown docs' internal links.
