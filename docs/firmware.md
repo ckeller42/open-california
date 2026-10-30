@@ -1694,11 +1694,12 @@ The requirements `R_FW_AUTO_CAMPER`, `R_FW_PI_WAKE`, `R_FW_PI_HALT`, `R_FW_BATTE
 
 The requirements `R_FW_OTA`, `R_FW_TIME`, `R_FW_SD_LOG`, `R_FW_LOG_API`, `R_FW_DIAG_LOG` and `R_FW_PANIC_CAPTURE` live with the OTA, time, SD-log and diagnostics API: see {doc}`firmware-api`.
 
-Requirements are authored as `sphinx-needs` objects next to the code they constrain (or, where the
-implementation is C — not autodoc'd — in the docstring of the Python test module that verifies
-it, a "shim" `sphinx-needs` can parse; see `firmware/README.md`'s own traceability section for the
-human-readable version of the same trace). `docs/api.md` pulls those test modules in via
-`.. automodule::` so their objects are collected here.
+Requirements are authored as `sphinx-needs` objects next to the code they constrain. The public C
+API requirements live in the header comments of `firmware/components/cali_core/include/` (a
+`@verbatim embed:rst:leading-asterisk` block holding a `.. req::`) and render on {doc}`firmware-api`.
+The remaining ones live on this page. The verifying `.. test::` objects live in the docstrings of the
+Python test modules; `docs/api.md` pulls those modules in via `.. automodule::` so their objects are
+collected here. `firmware/README.md` has the human-readable version of the same trace.
 
 ```{eval-rst}
 .. req:: The firmware writes no control frame: its only characteristic-value write is the 1003 heartbeat

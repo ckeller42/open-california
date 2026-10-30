@@ -14,14 +14,16 @@
 # firmware` runs all of tests/firmware = ci.yml `firmware-host-e2e`: BLE host e2e, bond store,
 # WiFi/web e2e incl. the Playwright status-page test). pre-commit only sees git-TRACKED files:
 # `git add` a new file before running this, or it gets a false green.
-# Only GitHub runs: `install-script` (sh -n + shellcheck install.sh), `docs` (sphinx -W site build
-# on PRs; locally `sh docs/build_site.sh`), `firmware-build` + `firmware-qemu` (ESP-IDF container),
+# Only GitHub runs: `install-script` (sh -n + shellcheck install.sh), `firmware-build` + `firmware-qemu` (ESP-IDF container),
 # `pairing-real-stack` (real BlueZ in a VM, tests/realstack/vm.sh; not a required check), and the
 # push-to-main workflows: docs.yml (the same build + Pages deploy) and screenshots.yml
 # (re-renders docs/screenshots and commits them to main with [skip ci]).
 #
+# `tools/ci.sh docs` runs ci.yml's `docs` job locally in Docker (doxygen + sphinx -W site build;
+# the Mac has no sphinx); not part of the default gate.
+#
 #   tools/ci.sh              # run the local gate (see above for what it does NOT cover)
-#   tools/ci.sh test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|linux|screenshots|import-clean|vendor-check
+#   tools/ci.sh test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|linux|docs|screenshots|import-clean|vendor-check
 #   tools/ci.sh dev          # install dev tooling + the pre-commit/pre-push hooks (pre-commit framework)
 #
 # The single-check subcommands are also the entries of the repo-local hooks in
@@ -121,6 +123,13 @@ linux() {   # CI's C toolchain (tools/docker/linux.Dockerfile: Linux amd64, gcc 
   "${run[@]}" -n auto -m "not linux_only" tests/firmware tests/test_codec_parity.py tests/test_ports_parity.py
   "${run[@]}" -m linux_only tests/firmware/test_control_parity.py   # its -m32 leg (no NimBLE needed)
 }
+docs() {   # ci.yml's `docs` job in Docker (image oc-docs = docs/Dockerfile: doxygen + sphinx + breathe):
+           # doxygen firmware/Doxyfile, then the -W site build. Ends with `site -> /tmp/site`.
+  command -v docker >/dev/null || { echo "docs: needs Docker" >&2; exit 1; }
+  docker build -q -t oc-docs -f docs/Dockerfile . >/dev/null
+  docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/w -w /w oc-docs \
+    sh -c 'doxygen --version && sh docs/build_site.sh /tmp/site'
+}
 doc_offset() { "$PY" -m pytest tests/test_doc_offset_consistency.py -q -p no:cacheprovider; }
 needs_trace() { "$PY" -m pytest tests/test_needs_docstrings.py -q -p no:cacheprovider; }   # every need is autodoc'd
 codec_fresh() {   # golden vectors + generated C headers match protocol/dictionary.yaml + overrides
@@ -186,9 +195,10 @@ case "${1:-ci}" in
   doc-offset)    doc_offset;;
   needs-trace)   needs_trace;;
   linux)         shift; linux "$@";;
+  docs)          docs;;
   screenshots)   screenshots;;
   import-clean)  import_clean;;
   vendor-check)  vendor_check;;
   dev)           dev;;
-  *) echo "usage: tools/ci.sh [ci|test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|linux|screenshots|import-clean|vendor-check|dev]"; exit 2;;
+  *) echo "usage: tools/ci.sh [ci|test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|linux|docs|screenshots|import-clean|vendor-check|dev]"; exit 2;;
 esac

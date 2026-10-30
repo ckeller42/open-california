@@ -29,6 +29,8 @@ merge commit on buspi and the ESP. Buspi mechanics (live reads, address, tailsca
 
 ## CI-only gates (green on the Mac, red in CI)
 
+A changed or new public C header also needs `tools/ci.sh docs` (strict Doxygen): skill `document-c-api`.
+
 The Mac's clang and the commit hooks miss these CI gates. Run them before pushing a PR that
 touches `firmware/` C, a `cali_core/test/*_cli.c`, or docs (the gitleaks working-tree scan, 2), runs
 on every push as a pre-push hook):
