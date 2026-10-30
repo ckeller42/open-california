@@ -9,15 +9,16 @@ struct BatteryRing: View {
     let percent: Double?
     let volts: Double?
     let amps: Double?
-    @ScaledMetric(relativeTo: .largeTitle) private var size: CGFloat = 150
+    @ScaledMetric(relativeTo: .largeTitle) private var size: CGFloat = 130
+    @Environment(\.locale) private var locale
 
     private var detail: String {
         let w = volts.flatMap { v in amps.map { "\(Int((v * $0).rounded())) W" } }
-        return [volts.map { "\($0.formatted()) V" }, w].compactMap { $0 }.joined(separator: " · ")
+        return [volts.map { "\($0.formatted(.number.locale(locale))) V" }, w].compactMap { $0 }.joined(separator: " · ")
     }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 6) {
             ZStack {
                 Circle().stroke(Color(uiColor: .tertiarySystemFill), lineWidth: 16)
                 Circle()

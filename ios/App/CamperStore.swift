@@ -54,13 +54,17 @@ final class CamperStore {
     }
 
     /// No frame at all, or the last frame is older than 90 s.
-    var isStale: Bool {
+    var isStale: Bool { isStale(at: now()) }
+
+    /// `isStale` at `date` (the screens pass their `TimelineView` tick).
+    func isStale(at date: Date) -> Bool {
         guard let asOf = state.asOf else { return true }
-        return now().timeIntervalSince(asOf) > Self.staleAfter
+        return date.timeIntervalSince(asOf) > Self.staleAfter
     }
 
-    /// The age of the shown state ("5 h ago"); nil without a frame.
-    var age: LocalizedStringResource? { state.asOf.map { ageText(now().timeIntervalSince($0)) } }
+    /// The age of the shown state at `date` ("5 h ago"); nil without a frame.
+    func age(at date: Date) -> LocalizedStringResource? { state.asOf.map { ageText(date.timeIntervalSince($0)) } }
+    var age: LocalizedStringResource? { age(at: now()) }
 
     /// The interpreted value `key` of `function`, nil when absent.
     func value(_ function: String, _ key: String) -> JSONValue? { state.interpreted[function]?[key] }
@@ -81,9 +85,11 @@ final class CamperStore {
         controlsEnabled && state.liveFunctions.contains(function)
     }
 
-    var linkLabel: LocalizedStringResource {
+    var linkLabel: LocalizedStringResource { linkLabel(at: now()) }
+
+    func linkLabel(at date: Date) -> LocalizedStringResource {
         switch link {
-        case .up: isStale ? "offline" : "live"
+        case .up: isStale(at: date) ? "offline" : "live"
         case .connecting: "connecting…"
         case .pairing: "Pairing"
         case .rest: "Disconnected to save energy"
@@ -145,6 +151,15 @@ func ageText(_ seconds: TimeInterval) -> LocalizedStringResource {
     if m < 90 { return "\(m) min ago" }
     let h = Int((Double(m) / 60).rounded())
     return h < 48 ? "\(h) h ago" : "\(Int((Double(h) / 24).rounded())) d ago"
+}
+
+extension LocalizedStringResource {
+    /// This text in `locale`: the views pass their environment locale, so a snapshot can pin it.
+    func string(_ locale: Locale) -> String {
+        var r = self
+        r.locale = locale
+        return String(localized: r)
+    }
 }
 
 extension JSONValue {

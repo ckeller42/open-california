@@ -13,17 +13,18 @@ final class CockpitUITests: XCTestCase {
     }
 
     /// The battery ring and the fresh-water value show (the `unreachable` fixture: a live read pass
-    /// stores no water on a cold start); this van reports no solar and the unit no outside
-    /// temperature, so those small values are absent.
+    /// stores no water on a cold start). This van reports no solar and the unit reports no outside
+    /// temperature, so neither small value exists.
     ///
     /// - Test: T_IOS_UI_COCKPIT_VALUES
     /// - Verifies: R_IOS_LOOK, R_IOS_INSTALLED
     @MainActor
-    func testCockpitShowsBatteryWaterOutsideSolar() throws {
+    func testCockpitShowsBatteryAndWaterButNoSolarOrOutsideTemperature() throws {
         let app = launch("unreachable")
         XCTAssertTrue(app.otherElements["battery-ring"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Fresh water'")).firstMatch.exists)
         XCTAssertFalse(app.staticTexts["Solar power"].exists)
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS '°C'")).firstMatch.exists)
         for name in ["Camping mode", "Lights", "Cooler", "Air heater"] {
             XCTAssertTrue(app.buttons[name].exists, name)
         }
@@ -80,7 +81,9 @@ extension XCUIApplication {
     /// Exemption (the only one): a contrast, Dynamic Type or clipping issue of an element under the
     /// floating tab bar or in the band above it where the system blurs scrolled content (the scroll
     /// edge effect, taken as 44 pt). There the element is measured against the blur, not its own
-    /// background; scrolled into view, the same element is audited like any other.
+    /// background; scrolled into view, the same element is audited like any other. The band also
+    /// covers the system tab bar items themselves. Each exemption is recorded as an activity with an
+    /// attachment, so it shows in the `.xcresult`.
     @MainActor
     func audit() throws {
         let tab = tabBars.firstMatch.exists ? tabBars.firstMatch.frame : .null
@@ -89,6 +92,11 @@ extension XCUIApplication {
             let underBar = issue.element.map { $0.frame.intersects(bar) } ?? false
                 && [.contrast, .dynamicType, .textClipped].contains(issue.auditType)
             print("AUDIT \(underBar ? "exempt (under the tab bar) " : "")\(issue.compactDescription) | \(issue.element?.label ?? "-") | \(issue.detailedDescription)")
+            if underBar {
+                XCTContext.runActivity(named: "Audit exemption (under the tab bar): \(issue.compactDescription)") { activity in
+                    activity.add(XCTAttachment(string: "\(issue.element?.label ?? "-")\n\(issue.detailedDescription)"))
+                }
+            }
             return underBar
         }
     }

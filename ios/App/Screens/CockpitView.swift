@@ -29,6 +29,7 @@ struct RootView: View {
 struct CockpitView: View {
     let store: CamperStore
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.locale) private var locale
 
     var body: some View {
         StatusPage(store: store) {
@@ -40,7 +41,7 @@ struct CockpitView: View {
             HStack(spacing: 12) {
                 if store.installed("water"), let liters = store.value("water", "fresh")?["liters"]?.number {
                     MiniValue(title: "Fresh water", systemImage: "drop", value: "\(Int(liters)) L",
-                              note: store.state.waterHeld ? WaterView.measured(store) : nil)
+                              note: store.state.waterHeld ? WaterView.measured(store, locale: locale) : nil)
                 }
                 if store.value("energy", "solar_installed")?.bool == true,
                    let watts = store.value("energy", "solar_power")?.number {
@@ -94,7 +95,7 @@ struct MiniValue: View {
     let title: LocalizedStringResource
     let systemImage: String
     let value: String
-    let note: LocalizedStringResource?
+    let note: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -103,12 +104,12 @@ struct MiniValue: View {
             Text(verbatim: value)
                 .font(.title2.weight(.semibold).monospacedDigit())
             if let note {
-                Label { Text(note) } icon: { Image(systemName: "clock").accessibilityHidden(true) }
+                Label { Text(verbatim: note) } icon: { Image(systemName: "clock").accessibilityHidden(true) }
                     .font(.caption)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
+        .padding(12)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
     }

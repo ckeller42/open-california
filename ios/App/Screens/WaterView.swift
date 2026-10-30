@@ -8,6 +8,7 @@ import SwiftUI
 /// - Requirement: R_IOS_FUNCTIONS, R_IOS_INSTALLED, R_IOS_HONEST
 struct WaterView: View {
     let store: CamperStore
+    @Environment(\.locale) private var locale
 
     static let freshAlert: [String: LocalizedStringResource] = [
         "pump_protection": "Pump protection is active. Please fill up fresh water.",
@@ -23,9 +24,10 @@ struct WaterView: View {
     ]
 
     /// "measured 2 h ago" for a held reading (from `waterGoodAt`), else "last measured".
-    static func measured(_ store: CamperStore) -> LocalizedStringResource {
-        guard let at = store.state.waterGoodAt else { return "last measured" }
-        return "measured \(String(localized: ageText(store.now().timeIntervalSince(at))))"
+    static func measured(_ store: CamperStore, locale: Locale = .current) -> String {
+        guard let at = store.state.waterGoodAt else { return LocalizedStringResource("last measured").string(locale) }
+        let age = ageText(store.now().timeIntervalSince(at)).string(locale)
+        return LocalizedStringResource("measured \(age)").string(locale)
     }
 
     private func tank(_ key: String) -> (text: String, percent: Double?) {
@@ -44,7 +46,7 @@ struct WaterView: View {
                     Row("Fresh water", Text(verbatim: fresh.text), bar: fresh.percent)
                     Row("Waste water", Text(verbatim: waste.text), bar: waste.percent)
                     if store.state.waterHeld {
-                        Label { Text(Self.measured(store)) } icon: { Image(systemName: "clock") }
+                        Label { Text(verbatim: Self.measured(store, locale: locale)) } icon: { Image(systemName: "clock") }
                             .font(.footnote)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
@@ -52,7 +54,7 @@ struct WaterView: View {
                 }
                 .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
                 ForEach(alerts.indices, id: \.self) { i in
-                    Label { Text(alerts[i]) } icon: { Image(systemName: "exclamationmark.triangle") }
+                    Label { Text(verbatim: alerts[i].string(locale)) } icon: { Image(systemName: "exclamationmark.triangle") }
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
