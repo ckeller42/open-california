@@ -69,6 +69,57 @@
         }
       }
     },
+    "Active": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiv"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active"
+          }
+        }
+      }
+    },
+    "Active • %lld min remaining": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiv • Restlaufzeit: %lld min"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active • %lld min remaining"
+          }
+        }
+      }
+    },
+    "Active • Continuous heating": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiv • Dauerbetrieb"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active • Continuous heating"
+          }
+        }
+      }
+    },
     "Additional battery: charging required. Power consumers will switch off.": {
       "extractionState": "manual",
       "localizations": {
@@ -120,6 +171,142 @@
         }
       }
     },
+    "All lights": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Lichter"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All lights"
+          }
+        }
+      }
+    },
+    "Applied": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übernommen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applied"
+          }
+        }
+      }
+    },
+    "Apply new settings now? Resetting the duration. The heating will stay on for %lld minutes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Einstellungen jetzt übernehmen? Die Laufzeit wird zurückgesetzt. Die Heizung bleibt %lld Minuten eingeschaltet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply new settings now? Resetting the duration. The heating will stay on for %lld minutes."
+          }
+        }
+      }
+    },
+    "Automatic": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic"
+          }
+        }
+      }
+    },
+    "Auxiliary air heater deactivated due to activation of the auxiliary heater.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luftstandheizung deaktiviert durch Aktivierung der Standheizung."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auxiliary air heater deactivated due to activation of the auxiliary heater."
+          }
+        }
+      }
+    },
+    "Auxiliary air heater deactivated due to engine running.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luftstandheizung durch Motorlauf deaktiviert."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auxiliary air heater deactivated due to engine running."
+          }
+        }
+      }
+    },
+    "Auxiliary air heater fault — please contact your workshop": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Störung der Standheizung — bitte Werkstatt kontaktieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auxiliary air heater fault — please contact your workshop"
+          }
+        }
+      }
+    },
+    "Background lighting": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambientelicht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background lighting"
+          }
+        }
+      }
+    },
     "Battery is flat. Charge now!": {
       "extractionState": "manual",
       "localizations": {
@@ -154,6 +341,40 @@
         }
       }
     },
+    "Battery voltage too low — charge the second battery or connect external power": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batteriespannung zu niedrig — Zweitbatterie laden oder externe Stromquelle anschließen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Battery voltage too low — charge the second battery or connect external power"
+          }
+        }
+      }
+    },
+    "Cabinet": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schrank"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cabinet"
+          }
+        }
+      }
+    },
     "Camping mode": {
       "extractionState": "manual",
       "localizations": {
@@ -167,6 +388,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Camping mode"
+          }
+        }
+      }
+    },
+    "Can only be started from inside the vehicle": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kann nur im Fahrzeug aktiviert werden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can only be started from inside the vehicle"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
           }
         }
       }
@@ -205,6 +460,23 @@
         }
       }
     },
+    "Closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geschlossen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closed"
+          }
+        }
+      }
+    },
     "Cockpit": {
       "extractionState": "manual",
       "localizations": {
@@ -218,6 +490,91 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cockpit"
+          }
+        }
+      }
+    },
+    "Command failed: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Befehl fehlgeschlagen: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command failed: %@"
+          }
+        }
+      }
+    },
+    "Connecting…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting…"
+          }
+        }
+      }
+    },
+    "Continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortfahren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "Continuous heating": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dauerbetrieb"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuous heating"
+          }
+        }
+      }
+    },
+    "Cooking": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kochen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cooking"
           }
         }
       }
@@ -239,6 +596,23 @@
         }
       }
     },
+    "Cooling level": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kühlstufe"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cooling level"
+          }
+        }
+      }
+    },
     "Data age": {
       "extractionState": "manual",
       "localizations": {
@@ -252,6 +626,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Data age"
+          }
+        }
+      }
+    },
+    "Default": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default"
           }
         }
       }
@@ -273,6 +664,57 @@
         }
       }
     },
+    "Disconnected to save energy — tap to connect": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung getrennt, um Energie zu sparen — zum Verbinden tippen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnected to save energy — tap to connect"
+          }
+        }
+      }
+    },
+    "ECO": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ECO"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ECO"
+          }
+        }
+      }
+    },
+    "Emission limit exceeded — the heater switched off, drive ≥ 5 km/h to re-enable": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emissionsgrenze überschritten — die Heizung wurde abgeschaltet, ab 5 km/h wieder einschaltbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emission limit exceeded — the heater switched off, drive ≥ 5 km/h to re-enable"
+          }
+        }
+      }
+    },
     "Energy": {
       "extractionState": "manual",
       "localizations": {
@@ -286,6 +728,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Energy"
+          }
+        }
+      }
+    },
+    "Energy mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Energiemodus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Energy mode"
+          }
+        }
+      }
+    },
+    "Entrance": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingang"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrance"
+          }
+        }
+      }
+    },
+    "Exterior and interior lighting": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Außen- und Innenbeleuchtung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exterior and interior lighting"
+          }
+        }
+      }
+    },
+    "Exterior light": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Außenlicht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exterior light"
           }
         }
       }
@@ -320,6 +830,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "External power source is currently unavailable."
+          }
+        }
+      }
+    },
+    "Favourite %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorit %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favourite %@"
           }
         }
       }
@@ -409,6 +936,23 @@
         }
       }
     },
+    "Front passenger": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beifahrer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Front passenger"
+          }
+        }
+      }
+    },
     "General grey water error. Please visit a workshop.": {
       "extractionState": "manual",
       "localizations": {
@@ -443,6 +987,108 @@
         }
       }
     },
+    "Heater deactivated — not while the engine or the auxiliary water heater is running": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standheizung deaktiviert — nicht bei laufendem Motor oder aktiver Wasser-Zusatzheizung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heater deactivated — not while the engine or the auxiliary water heater is running"
+          }
+        }
+      }
+    },
+    "Heater error": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heizungsfehler"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heater error"
+          }
+        }
+      }
+    },
+    "Heating temperature": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heizstufe"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heating temperature"
+          }
+        }
+      }
+    },
+    "Ignition": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zündung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignition"
+          }
+        }
+      }
+    },
+    "Immediate heating": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sofortheizen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Immediate heating"
+          }
+        }
+      }
+    },
+    "Inactive": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inaktiv"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inactive"
+          }
+        }
+      }
+    },
     "Issues": {
       "extractionState": "manual",
       "localizations": {
@@ -456,6 +1102,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Issues"
+          }
+        }
+      }
+    },
+    "Kitchen": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Küche"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kitchen"
           }
         }
       }
@@ -477,6 +1140,40 @@
         }
       }
     },
+    "Left": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Links"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left"
+          }
+        }
+      }
+    },
+    "Level %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stufe %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Level %lld"
+          }
+        }
+      }
+    },
     "Lighting": {
       "extractionState": "manual",
       "localizations": {
@@ -490,6 +1187,91 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lighting"
+          }
+        }
+      }
+    },
+    "Low fuel — the heater switched off, please refuel": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kraftstoffstand niedrig — die Heizung wurde abgeschaltet, bitte tanken"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low fuel — the heater switched off, please refuel"
+          }
+        }
+      }
+    },
+    "Manual": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manuell"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manual"
+          }
+        }
+      }
+    },
+    "Max": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MAX"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Max"
+          }
+        }
+      }
+    },
+    "Normal": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal"
+          }
+        }
+      }
+    },
+    "Not available during continuous heating": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Dauerbetrieb nicht verfügbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not available during continuous heating"
           }
         }
       }
@@ -545,6 +1327,40 @@
         }
       }
     },
+    "Only possible when stationary": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur im Stand möglich"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only possible when stationary"
+          }
+        }
+      }
+    },
+    "Open": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geöffnet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        }
+      }
+    },
     "Pairing": {
       "extractionState": "manual",
       "localizations": {
@@ -562,6 +1378,40 @@
         }
       }
     },
+    "Please close the refrigerator box door fully": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Tür der Kühlbox bitte vollständig schließen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please close the refrigerator box door fully"
+          }
+        }
+      }
+    },
+    "Pop-up roof": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufstelldach"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pop-up roof"
+          }
+        }
+      }
+    },
     "Pump protection is active. Please fill up fresh water.": {
       "extractionState": "manual",
       "localizations": {
@@ -575,6 +1425,193 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pump protection is active. Please fill up fresh water."
+          }
+        }
+      }
+    },
+    "Quiet mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flüstermodus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quiet mode"
+          }
+        }
+      }
+    },
+    "Reading light": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leselicht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading light"
+          }
+        }
+      }
+    },
+    "Reading lights": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leselichter"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading lights"
+          }
+        }
+      }
+    },
+    "Rear USB ports": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintere USB-Anschlüsse"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rear USB ports"
+          }
+        }
+      }
+    },
+    "Rear surroundings": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Umgebung hinten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rear surroundings"
+          }
+        }
+      }
+    },
+    "Refrigerator box": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kühlbox"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refrigerator box"
+          }
+        }
+      }
+    },
+    "Refrigerator box door": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kühlbox-Tür"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refrigerator box door"
+          }
+        }
+      }
+    },
+    "Refrigerator box error — please visit a workshop": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kühlbox-Fehler — bitte Werkstatt aufsuchen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refrigerator box error — please visit a workshop"
+          }
+        }
+      }
+    },
+    "Refrigerator box in emergency mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kühlbox im Notbetrieb"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refrigerator box in emergency mode"
+          }
+        }
+      }
+    },
+    "Right": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechts"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right"
+          }
+        }
+      }
+    },
+    "Run time": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufzeit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run time"
           }
         }
       }
@@ -626,6 +1663,91 @@
           "stringUnit": {
             "state": "translated",
             "value": "Second battery warning level 2"
+          }
+        }
+      }
+    },
+    "Sending…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird gesendet…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending…"
+          }
+        }
+      }
+    },
+    "Sent — check the lamp": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesendet — prüfe die Lampe"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent — check the lamp"
+          }
+        }
+      }
+    },
+    "Sent — the unit didn't confirm it": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesendet — die Einheit hat es nicht bestätigt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent — the unit didn't confirm it"
+          }
+        }
+      }
+    },
+    "Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Energiemanagement-Modus setzen? Diese Funktion ist abgeleitet und am Fahrzeug noch nicht verifiziert. Fortfahren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?"
+          }
+        }
+      }
+    },
+    "Set the refrigerator box's quiet mode? Not yet verified on the van. Continue?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flüstermodus der Kühlbox setzen? Am Fahrzeug noch nicht verifiziert. Fortfahren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the refrigerator box's quiet mode? Not yet verified on the van. Continue?"
           }
         }
       }
@@ -715,6 +1837,23 @@
         }
       }
     },
+    "Start the fuel-burning auxiliary air heater (%@)? It is not live-verified. Continue?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kraftstoffbetriebene Luftstandheizung starten (%@)? Nicht live-verifiziert. Fortfahren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start the fuel-burning auxiliary air heater (%@)? It is not live-verified. Continue?"
+          }
+        }
+      }
+    },
     "Starter battery": {
       "extractionState": "manual",
       "localizations": {
@@ -749,6 +1888,57 @@
         }
       }
     },
+    "Status": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        }
+      }
+    },
+    "Switch the refrigerator box on first": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuerst die Kühlbox einschalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch the refrigerator box on first"
+          }
+        }
+      }
+    },
+    "The camper unit did not answer in time": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Camper-Einheit hat nicht rechtzeitig geantwortet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camper unit did not answer in time"
+          }
+        }
+      }
+    },
     "The charging cable is still plugged into the vehicle's external socket. Please remove it.": {
       "extractionState": "manual",
       "localizations": {
@@ -762,6 +1952,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "The charging cable is still plugged into the vehicle's external socket. Please remove it."
+          }
+        }
+      }
+    },
+    "The previous command is still running — try again in a moment": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der vorige Befehl läuft noch — bitte gleich noch einmal versuchen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The previous command is still running — try again in a moment"
           }
         }
       }
@@ -783,6 +1990,23 @@
         }
       }
     },
+    "This favourite is empty on the unit": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Favorit ist auf der Einheit leer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This favourite is empty on the unit"
+          }
+        }
+      }
+    },
     "Time remaining": {
       "extractionState": "manual",
       "localizations": {
@@ -796,6 +2020,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "Time remaining"
+          }
+        }
+      }
+    },
+    "Turn camping mode on first": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuerst Campingmodus einschalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn camping mode on first"
+          }
+        }
+      }
+    },
+    "Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dauerbetrieb ausschalten? Er kann nur im Fahrzeug wieder eingeschaltet werden. Fortfahren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?"
+          }
+        }
+      }
+    },
+    "Turn off continuous heating? You can only turn continuous heating on again using the controls in your California.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dauerbetrieb ausschalten? Den Dauerbetrieb können Sie nur über die Bedienelemente in Ihrem California wieder einschalten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn off continuous heating? You can only turn continuous heating on again using the controls in your California."
           }
         }
       }
@@ -1085,6 +2360,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "offline"
+          }
+        }
+      }
+    },
+    "only when the pop-up roof is open": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nur bei geöffnetem Aufstelldach"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "only when the pop-up roof is open"
           }
         }
       }

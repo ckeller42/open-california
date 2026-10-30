@@ -36,7 +36,7 @@ struct EnergyView: View {
     private func wav(_ v: Double?, _ a: Double?) -> (String, String) {
         guard v != nil || a != nil else { return ("—", "—") }
         let w = v.flatMap { v in a.map { (v * $0).rounded() } }
-        let text = "\(w.map { String(Int($0)) } ?? "—")\(nbsp)W · \(a.map(fmt) ?? "—")\(nbsp)A · \(v.map(fmt) ?? "—")\(nbsp)V"
+        let text = "\(w.map { String(Int($0)) } ?? "—")\(nbsp)W\(nbsp)· \(a.map(fmt) ?? "—")\(nbsp)A\(nbsp)· \(v.map(fmt) ?? "—")\(nbsp)V"
         let words = [w.map { spoken($0, UnitPower.watts, locale) }, a.map { spoken($0, UnitElectricCurrent.amperes, locale) },
                      v.map { spoken($0, UnitElectricPotentialDifference.volts, locale) }].map { $0 ?? "—" }
         return (text, words.joined(separator: ", "))
@@ -52,7 +52,7 @@ struct EnergyView: View {
         let st = store.value("energy", "\(prefix)_state")?.string
         let word = st.map { Self.sourceState[$0].map { $0.string(locale) } ?? $0 } ?? "—"
         let w = num("\(prefix)_power"), a = num("\(prefix)_current")
-        return ("\(word) (\(w.map { String(Int($0)) } ?? "—")\(nbsp)W · \(a.map(fmt) ?? "—")\(nbsp)A)",
+        return ("\(word) (\(w.map { String(Int($0)) } ?? "—")\(nbsp)W\(nbsp)· \(a.map(fmt) ?? "—")\(nbsp)A)",
                 [word, w.map { spoken($0, UnitPower.watts, locale) } ?? "—",
                  a.map { spoken($0, UnitElectricCurrent.amperes, locale) } ?? "—"].joined(separator: ", "))
     }
@@ -60,6 +60,7 @@ struct EnergyView: View {
     var body: some View {
         StatusPage(store: store) {
             if store.state.interpreted["energy"] != nil {
+                EnergyModeView(store: store)
                 // The unit's starter data is stale while the starter subsystem sleeps (age 255).
                 let starterStale = store.value("energy", "stale")?.bool == true
                 let batt2 = wav(num("batt2_v"), num("batt2_current")), batt1 = wav(num("batt1_v"), num("batt1_current"))
@@ -83,17 +84,20 @@ struct EnergyView: View {
                         let r = source("solar")
                         Row("Solar power", Text(verbatim: r.0), spoken: r.1)
                     }
-                    Row("Issues", issues)
+                    if faults.isEmpty { Row("Issues", Text("none")) }
                 }
                 .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+                ForEach(faults.indices, id: \.self) { AlertCard(text: faults[$0]) }
             }
         }
     }
 
-    private var issues: Text {
-        guard case .array(let flags)? = store.value("energy", "faults"), !flags.isEmpty else { return Text("none") }
-        let texts = flags.compactMap(\.string).map { Self.faultText[$0].map { $0.string(locale) } ?? $0 }
-        return Text(Image(systemName: "exclamationmark.triangle")) + Text(verbatim: " " + texts.joined(separator: " · "))
+    /// The unit's fault dialogs (one alert card each).
+    private var faults: [LocalizedStringResource] { Self.faults(store) }
+
+    static func faults(_ store: CamperStore) -> [LocalizedStringResource] {
+        guard case .array(let flags)? = store.value("energy", "faults") else { return [] }
+        return flags.compactMap(\.string).map { Self.faultText[$0] ?? LocalizedStringResource(String.LocalizationValue($0)) }
     }
 
     /// The unit reports an age only for the starter battery; 255 = the starter subsystem sleeps.
@@ -122,6 +126,7 @@ struct Row: View {
     var clock: Bool
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.pageStale) private var pageStale
+    @Environment(\.pageStaleSpoken) private var staleSpoken
 
     init(_ label: LocalizedStringResource, _ value: Text, spoken: String? = nil, bar: Double? = nil, dimmed: Bool = false, clock: Bool = false) {
         self.clock = clock
@@ -167,6 +172,6 @@ struct Row: View {
         .padding(.vertical, 10)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(label))
-        .accessibilityValue(spoken.map { Text(verbatim: $0) } ?? value)
+        .accessibilityValue((spoken.map { Text(verbatim: $0) } ?? value) + Text(verbatim: staleSpoken.map { ", \($0)" } ?? ""))
     }
 }

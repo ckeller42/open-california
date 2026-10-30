@@ -19,8 +19,10 @@ struct ControlButton: View {
     let systemImage: String
     let isOn: Bool
     let tint: Color
-    /// Why the button is disabled; nil = enabled.
+    /// Why the controls are locked; nil = unlocked.
     let lockedBecause: LocalizedStringResource?
+    /// Locked, yet a tap does something (connect again after the power-save rest).
+    var tappable = false
     let action: () -> Void
 
     var body: some View {
@@ -47,7 +49,7 @@ struct ControlButton: View {
                         in: RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(Undimmed())
-        .disabled(lockedBecause != nil)
+        .disabled(lockedBecause != nil && !tappable)
         .accessibilityLabel(Text(title))
         .accessibilityValue(Text(isOn ? "On" : "Off"))
         .accessibilityHint(lockedBecause.map { Text($0) } ?? Text(verbatim: ""))

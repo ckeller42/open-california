@@ -16,7 +16,7 @@ struct PathPill: View {
         let stale = store.isStale(at: now)
         let label = store.linkLabel(at: now).string(locale)
         let age = stale ? store.state.asOf.map { now.timeIntervalSince($0) } : nil
-        PillLabel(stale: stale, label: label,
+        PillLabel(stale: stale, live: store.link == .up && !stale, label: label,
                   asOf: age.map { LocalizedStringResource("as of \(ageText($0).string(locale))").string(locale) },
                   spoken: age.map { "\(label), " + LocalizedStringResource("as of \(spokenAge($0, locale))").string(locale) } ?? label)
     }
@@ -24,9 +24,11 @@ struct PathPill: View {
 
 /// What the pill draws: plain values, so SwiftUI skips it while they stay equal.
 struct PillLabel: View, Equatable {
-    nonisolated static func == (a: Self, b: Self) -> Bool { (a.stale, a.label, a.asOf, a.spoken) == (b.stale, b.label, b.asOf, b.spoken) }
+    nonisolated static func == (a: Self, b: Self) -> Bool { (a.stale, a.live, a.label, a.asOf, a.spoken) == (b.stale, b.live, b.label, b.asOf, b.spoken) }
 
     let stale: Bool
+    /// The link is up and the data fresh: only then the icon is green.
+    let live: Bool
     let label: String
     let asOf: String?
     let spoken: String
@@ -38,7 +40,7 @@ struct PillLabel: View, Equatable {
         let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 8))
         layout {
             Image(systemName: "dot.radiowaves.left.and.right")
-                .foregroundStyle(stale ? Color.secondary : Color.onGreen)
+                .foregroundStyle(live ? Color.onGreen : Color.secondary)
             Text(verbatim: label)
                 .font(.subheadline.weight(.semibold))
             if let asOf {
@@ -88,19 +90,14 @@ struct StatusPage<Content: View>: View {
                         .onChange(of: visible(at: tick), initial: true) { changedAt = tick }
                 }
                 if case .unsupported = store.state.gate {
-                    Label {
-                        Text("This camper unit is not supported yet")
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    }
-                    .font(.subheadline)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
+                    AlertCard(text: "This camper unit is not supported yet")
                 }
                 VStack(spacing: 12) { content() }
                     .environment(\.pageNow, now)
                     .environment(\.pageStale, store.isStale(at: now))
+                    .environment(\.pageStaleSpoken, store.isStale(at: now) ? store.state.asOf.map {
+                        LocalizedStringResource("as of \(spokenAge(now.timeIntervalSince($0), locale))").string(locale)
+                    } : nil)
             }
             .padding()
         }

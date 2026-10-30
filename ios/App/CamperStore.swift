@@ -85,6 +85,24 @@ final class CamperStore {
         controlsEnabled && state.liveFunctions.contains(function)
     }
 
+    /// Why the controls of `function` are locked, in the words of the link state; nil when usable.
+    /// In the power-save rest a tap connects again (`R_IOS_POWER_SAVE`: the next user action redials).
+    ///
+    /// - Requirement: R_IOS_HONEST, R_IOS_V2_ONLY, R_IOS_POWER_SAVE
+    func lockReason(_ function: String) -> LocalizedStringResource? {
+        if controlEnabled(function) { return nil }
+        if case .unsupported = state.gate { return "This camper unit is not supported yet" }
+        switch link {
+        case .rest: return "Disconnected to save energy — tap to connect"
+        case .connecting, .pairing: return "Connecting…"
+        case .up where !isStale: return "Waiting for the camper unit's data"
+        case .up, .off, .unreachable: return "Not available while the van is offline"
+        }
+    }
+
+    /// The link rests to save the unit's energy; a user action may connect again.
+    var resting: Bool { if case .rest = link { true } else { false } }
+
     var linkLabel: LocalizedStringResource { linkLabel(at: now()) }
 
     func linkLabel(at date: Date) -> LocalizedStringResource {

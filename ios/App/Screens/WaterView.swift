@@ -56,20 +56,14 @@ struct WaterView: View {
                     }
                 }
                 .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-                ForEach(alerts.indices, id: \.self) { i in
-                    Label { Text(verbatim: alerts[i].string(locale)) } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
-                }
+                let alerts = Self.alerts(store)
+                ForEach(alerts.indices, id: \.self) { AlertCard(text: alerts[$0]) }
             }
         }
     }
 
     /// The unit's fault dialogs, fresh first, then waste.
-    private var alerts: [LocalizedStringResource] {
+    static func alerts(_ store: CamperStore) -> [LocalizedStringResource] {
         [store.value("water", "fresh_alert")?.string.flatMap { Self.freshAlert[$0] },
          store.value("water", "waste_alert")?.string.flatMap { Self.wasteAlert[$0] }].compactMap { $0 }
     }

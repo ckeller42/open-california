@@ -10,6 +10,8 @@ extension EnvironmentValues {
     @Entry var pageNow: Date?
     /// The shown data is older than 90 s (`CamperStore.isStale`): values draw in `Color.staleText`.
     @Entry var pageStale = false
+    /// "as of 5 hours ago" while the page is stale (nil when fresh): VoiceOver hears it after each value.
+    @Entry var pageStaleSpoken: String?
 }
 
 extension Color {

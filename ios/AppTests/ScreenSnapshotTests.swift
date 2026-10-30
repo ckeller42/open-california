@@ -89,16 +89,40 @@ struct ScreenSnapshotTests {
         }
     }
 
-    /// The app's frame: tab bar with its labels, navigation title and the page under it.
+    /// The app's frame: tab bar with its labels, navigation title and the page under it, in English
+    /// and German.
     ///
     /// - Test: T_IOS_SNAPSHOT_ROOT
-    /// - Verifies: R_IOS_LOOK
+    /// - Verifies: R_IOS_LOOK, R_IOS_I18N
     @Test func rendersTheTabs() {
-        // As a view controller in a window: the floating tab bar and the navigation bar draw only there.
-        let host = UIHostingController(rootView: RootView(store: CamperStore.preview(.parked, now: Self.now))
-            .environment(\.locale, Self.english))
-        let traits = UITraitCollection { $0.userInterfaceStyle = .light; $0.displayScale = 1; $0.preferredContentSizeCategory = .large }
-        assertSnapshot(of: host, as: .image(drawHierarchyInKeyWindow: true, perceptualPrecision: 0.98, size: CGSize(width: 390, height: 844), traits: traits), named: "root", testName: "screens")
+        for (name, locale) in [("root", Self.english), ("root-de", Locale(identifier: "de_DE"))] {
+            // As a view controller in a window: the floating tab bar and the navigation bar draw only there.
+            let host = UIHostingController(rootView: RootView(store: CamperStore.preview(.parked, now: Self.now))
+                .environment(\.locale, locale))
+            let traits = UITraitCollection { $0.userInterfaceStyle = .light; $0.displayScale = 1; $0.preferredContentSizeCategory = .large }
+            assertSnapshot(of: host, as: .image(drawHierarchyInKeyWindow: true, perceptualPrecision: 0.98, size: CGSize(width: 390, height: 844), traits: traits), named: name, testName: "screens")
+        }
+    }
+
+    /// Every control screen in light and dark for a parked unit, camping on and an unsupported (V3)
+    /// unit (every control locked, with the reason); camping on also in German, at the largest
+    /// accessibility text size (whole scroll height) and at 375 pt.
+    ///
+    /// - Test: T_IOS_SNAPSHOT_CONTROLS
+    /// - Verifies: R_IOS_LOOK, R_IOS_FUNCTIONS, R_IOS_V2_ONLY, R_IOS_I18N
+    @Test(arguments: [Fixture.parked, .campingOn, .unsupportedV3])
+    func controlScreensSnapshot(_ fixture: Fixture) {
+        let store = CamperStore.preview(fixture, now: Self.now)
+        for screen in [ControlScreen.camping, .lighting, .cooler, .airHeater] {
+            let view = NavigationStack { screen.view(store) }
+            let name = "control-\(screen)-\(fixture.rawValue)"
+            check(view, name)
+            if fixture == .campingOn {
+                snap(view, "\(name)-de", locale: Locale(identifier: "de_DE"))
+                snap(view, "\(name)-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: 3600))
+                snap(view, "\(name)-se", layout: .fixed(width: 375, height: 1400))
+            }
+        }
     }
 
     /// The page redraws by itself when the data turns stale, without a new frame: with the store's

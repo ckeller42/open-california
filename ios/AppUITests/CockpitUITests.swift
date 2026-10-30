@@ -76,29 +76,77 @@ final class CockpitUITests: XCTestCase {
     }
 }
 
+/// The control screens, opened from the cockpit buttons, each with the accessibility audit.
+final class ControlUITests: XCTestCase {
+    /// Each cockpit button opens its control screen (none is a no-op); every control screen and the
+    /// energy mode pass the audit, in light and dark, also scrolled to the end.
+    ///
+    /// - Test: T_IOS_UI_CONTROLS_AUDIT
+    /// - Verifies: R_IOS_LOOK, R_IOS_FUNCTIONS, R_IOS_TESTED
+    @MainActor
+    func testControlScreensPassAccessibilityAudit() throws {
+        for dark in [false, true] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-UITestFixture", "campingOn", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+            if dark { app.launchArguments += ["-UIUserInterfaceStyle", "dark"] }
+            app.launch()
+            for (button, title, control) in [("Camping mode", "Camping mode", "Rear USB ports"), ("Lighting", "Lighting", "All lights"),
+                                             ("Cooler", "Cooler", "Refrigerator box"), ("Air heater", "Air heater", "Immediate heating")] {
+                let tile = app.buttons[button]
+                XCTAssertTrue(tile.waitForExistence(timeout: 10), button)
+                if !tile.isHittable { app.swipeUp() }
+                tile.tap()
+                XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), title)
+                XCTAssertTrue(app.descendants(matching: .any)[control].exists, control)
+                Thread.sleep(forTimeInterval: 1)  // the push animation ends
+                print("AUDIT screen \(title)")
+                try app.audit()
+                // A drag with a hold: the content rests where the finger stops (no momentum, no bounce).
+                let scroll = app.scrollViews.firstMatch
+                scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)).press(
+                    forDuration: 0.2, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)),
+                    withVelocity: .default, thenHoldForDuration: 0.5)
+                Thread.sleep(forTimeInterval: 1)
+                print("AUDIT screen \(title), scrolled")
+                try app.audit()
+                app.navigationBars[title].buttons.element(boundBy: 0).tap()
+                XCTAssertTrue(app.navigationBars["Cockpit"].waitForExistence(timeout: 5), app.debugDescription)
+            }
+            app.tabBars.buttons["Energy"].tap()
+            XCTAssertTrue(app.descendants(matching: .any)["Energy mode"].waitForExistence(timeout: 5))
+            try app.audit()
+            app.terminate()
+        }
+    }
+}
+
 extension XCUIApplication {
     /// The accessibility audit; each issue is logged with its element.
     ///
-    /// Exemption (the only one): a contrast, Dynamic Type or clipping issue of an element under the
-    /// floating tab bar or in the band above it where the system blurs scrolled content (the scroll
-    /// edge effect, taken as 44 pt). There the element is measured against the blur, not its own
-    /// background; scrolled into view, the same element is audited like any other. The band also
+    /// Exemption (the only one): a contrast, Dynamic Type or clipping issue of an element that is
+    /// not fully inside the clear part of the screen — under the navigation bar or the floating tab
+    /// bar, in the 44 pt band next to either where the system blurs scrolled content (the scroll edge
+    /// effect), or scrolled off the screen. There the element is measured against
+    /// the blur or against nothing, not its own background; the tests audit each screen again
+    /// after a scroll, where the same element is audited like any other. The tab bar band also
     /// covers the system tab bar items themselves. Each exemption is recorded as an activity with an
     /// attachment, so it shows in the `.xcresult`.
     @MainActor
     func audit() throws {
-        let tab = tabBars.firstMatch.exists ? tabBars.firstMatch.frame : .null
-        let bar = tab.isNull ? tab : CGRect(x: tab.minX, y: tab.minY - 44, width: tab.width, height: tab.height + 44)
+        let screen = windows.firstMatch.frame
+        let top = navigationBars.firstMatch.exists ? navigationBars.firstMatch.frame.maxY + 44 : screen.minY
+        let bottom = tabBars.firstMatch.exists ? tabBars.firstMatch.frame.minY - 44 : screen.maxY
+        let clear = CGRect(x: screen.minX, y: top, width: screen.width, height: max(0, bottom - top))
         try performAccessibilityAudit { issue in
-            let underBar = issue.element.map { $0.frame.intersects(bar) } ?? false
+            let outside = issue.element.map { !clear.contains($0.frame) } ?? false
                 && [.contrast, .dynamicType, .textClipped].contains(issue.auditType)
-            print("AUDIT \(underBar ? "exempt (under the tab bar) " : "")\(issue.compactDescription) | \(issue.element?.label ?? "-") | \(issue.detailedDescription)")
-            if underBar {
-                XCTContext.runActivity(named: "Audit exemption (under the tab bar): \(issue.compactDescription)") { activity in
+            print("AUDIT \(outside ? "exempt (outside the clear screen) " : "")\(issue.compactDescription) | \(issue.element?.label ?? "-") \(issue.element.map { "\($0.frame)" } ?? "") | \(issue.detailedDescription)")
+            if outside {
+                XCTContext.runActivity(named: "Audit exemption (outside the clear screen): \(issue.compactDescription)") { activity in
                     activity.add(XCTAttachment(string: "\(issue.element?.label ?? "-")\n\(issue.detailedDescription)"))
                 }
             }
-            return underBar
+            return outside
         }
     }
 }

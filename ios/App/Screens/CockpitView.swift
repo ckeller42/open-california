@@ -28,8 +28,20 @@ struct RootView: View {
 /// - Requirement: R_IOS_LOOK, R_IOS_INSTALLED, R_IOS_FUNCTIONS
 struct CockpitView: View {
     let store: CamperStore
+    @State private var open: ControlScreen?
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.locale) private var locale
+
+    /// What a tap on a function button does: like the web UI's tiles (`goto(fn)`) it opens the
+    /// function's screen and never sends a command; in the power-save rest it connects again; else
+    /// (offline, connecting, an unsupported unit) the button is disabled.
+    ///
+    /// - Requirement: R_IOS_SIRI_NO_HEATER, R_IOS_POWER_SAVE
+    static func tap(_ screen: ControlScreen, store: CamperStore) -> CockpitTap? {
+        if store.lockReason(screen.function) == nil { return .open(screen) }
+        if case .unsupported = store.state.gate { return nil }
+        return store.resting ? .connect : nil
+    }
 
     var body: some View {
         StatusPage(store: store) {
@@ -39,6 +51,9 @@ struct CockpitView: View {
                             amps: store.value("energy", "batt2_current")?.number,
                             asOf: store.state.asOf)
             }
+            // Active faults, in the same alert cards as on the Energy and Water tabs.
+            let alerts = EnergyView.faults(store) + (store.installed("water") ? WaterView.alerts(store) : [])
+            ForEach(alerts.indices, id: \.self) { AlertCard(text: alerts[$0]) }
             HStack(spacing: 12) {
                 if store.installed("water"), let liters = store.value("water", "fresh")?["liters"]?.number {
                     MiniValue(title: "Fresh water", systemImage: "drop", value: "\(Int(liters))\(nbsp)L",
@@ -51,7 +66,6 @@ struct CockpitView: View {
                               spoken: spoken(watts, UnitPower.watts, locale), heldSince: nil)
                 }
             }
-            // ponytail: the buttons open nothing yet; the control screens (camping, lighting, cooler, air heater) wire them.
             // Two per row; one per row at large type sizes, where a long word (Luftstandheizung) needs the width.
             let tiles = buttons, perRow = typeSize >= .xxLarge ? 1 : 2
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
@@ -63,39 +77,62 @@ struct CockpitView: View {
                 }
             }
         }
+        .navigationDestination(item: $open) { $0.view(store) }
     }
 
     private func on(_ function: String, _ key: String) -> Bool { store.value(function, key)?.bool == true }
 
-    /// Why `function`'s button is disabled, for VoiceOver; nil when it is enabled.
-    private func locked(_ function: String) -> LocalizedStringResource? {
-        if store.controlEnabled(function) { return nil }
-        if case .unsupported = store.state.gate { return "This camper unit is not supported yet" }
-        if store.link != .up || store.isStale { return "Not available while the van is offline" }
-        return "Waiting for the camper unit's data"
-    }
-
     /// The function buttons of the installed functions, in the mockup's order.
     private var buttons: [ControlButton] {
-        var b: [ControlButton] = []
-        if store.installed("campingmode") {
-            b.append(ControlButton(title: "Camping mode", systemImage: "tent", isOn: on("campingmode", "master_on"),
-                                   tint: .onGreen, lockedBecause: locked("campingmode")) {})
+        let all: [(ControlScreen, LocalizedStringResource, String, String, Color)] = [
+            (.camping, "Camping mode", "tent", "master_on", .onGreen),
+            (.lighting, "Lighting", "lightbulb", "any_on", .lightAmber),
+            (.cooler, "Cooler", "snowflake", "on", .onGreen),
+            (.airHeater, "Air heater", "heater.vertical", "running", .onGreen),
+        ]
+        return all.filter { store.installed($0.0.function) }.map { screen, title, symbol, key, tint in
+            ControlButton(title: title, systemImage: symbol, isOn: on(screen.function, key), tint: tint,
+                          lockedBecause: store.lockReason(screen.function),
+                          tappable: Self.tap(screen, store: store) != nil) {
+                switch Self.tap(screen, store: store) {
+                case .open(let s): open = s
+                case .connect: Task { await store.connect() }
+                case nil: break
+                }
+            }
         }
-        if store.installed("lighting") {
-            b.append(ControlButton(title: "Lighting", systemImage: "lightbulb", isOn: on("lighting", "any_on"),
-                                   tint: .lightAmber, lockedBecause: locked("lighting")) {})
-        }
-        if store.installed("cooler") {
-            b.append(ControlButton(title: "Cooler", systemImage: "snowflake", isOn: on("cooler", "on"),
-                                   tint: .onGreen, lockedBecause: locked("cooler")) {})
-        }
-        if store.installed("airheater") {
-            b.append(ControlButton(title: "Air heater", systemImage: "heater.vertical", isOn: on("airheater", "running"),
-                                   tint: .onGreen, lockedBecause: locked("airheater")) {})
-        }
-        return b
     }
+}
+
+/// The control screens the cockpit buttons open.
+enum ControlScreen: Hashable, Identifiable {
+    case camping, lighting, cooler, airHeater
+
+    var id: Self { self }
+
+    var function: String {
+        switch self {
+        case .camping: "campingmode"
+        case .lighting: "lighting"
+        case .cooler: "cooler"
+        case .airHeater: "airheater"
+        }
+    }
+
+    @MainActor @ViewBuilder func view(_ store: CamperStore) -> some View {
+        switch self {
+        case .camping: CampingView(store: store)
+        case .lighting: LightsView(store: store)
+        case .cooler: CoolerView(store: store)
+        case .airHeater: AirHeaterView(store: store)
+        }
+    }
+}
+
+/// A cockpit tap: open a control screen, or connect again after the power-save rest.
+enum CockpitTap: Equatable {
+    case open(ControlScreen)
+    case connect
 }
 
 /// One of the cockpit's small values: an SF Symbol, a label, the value and, for a held reading, its
@@ -112,6 +149,7 @@ struct MiniValue: View {
     let heldSince: Date??
     @Environment(\.pageStale) private var stale
     @Environment(\.pageNow) private var pageNow
+    @Environment(\.pageStaleSpoken) private var staleSpoken
     @Environment(\.locale) private var locale
 
     var body: some View {
@@ -133,6 +171,6 @@ struct MiniValue: View {
         .accessibilityLabel(Text(title))
         .accessibilityValue(Text(verbatim: heldSince.map {
             "\(spoken), " + HeldNote.text(since: $0, now: pageNow ?? Date(), locale: locale, spoken: true)
-        } ?? spoken))
+        } ?? spoken) + Text(verbatim: staleSpoken.map { ", \($0)" } ?? ""))
     }
 }
