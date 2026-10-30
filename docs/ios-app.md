@@ -39,8 +39,10 @@ no satellite, no Pi and no network for any phase-1 function.
 
 The app guides the first pairing: it tells the user to start pairing on the camper panel and to
 type the 6-digit passkey from the camper screen into the iOS pairing dialog. On a stale bond it
-guides the user to *Settings → Bluetooth → Forget This Device* and back. (iOS runs the pairing and
-owns the bond; an app cannot delete a bond itself.)
+guides the user to *Settings → Bluetooth → Forget This Device* and back. The same step applies when
+the iPhone is already paired with the camper before the first setup in the app. The real camper
+always asks for a passkey; a pairing prompt without a code is not the camper and is cancelled.
+(iOS runs the pairing and owns the bond; an app cannot delete a bond itself.)
 ```
 
 ```{req} Protocol version 2 only
@@ -248,14 +250,19 @@ flow are Swift code against CoreBluetooth, because iOS runs pairing and owns the
 That code is tested against the same parity rules as the C session.
 ```
 
-```{decision} The bond belongs to the iPhone
+```{decision} A camper is adopted only after a pairing the app sees
 :id: AD_IOS_SHARED_BOND
 :status: accepted
 :tags: ios
 :links: R_IOS_PAIRING
 
-iOS keeps one bond per accessory for the whole phone. On an iPhone that already uses the vendor
-app with this camper, the app uses that bond and needs no new pairing. A new user pairs once.
+iOS keeps one bond per accessory for the whole phone and does not tell an app whether a link is
+encrypted. The app therefore adopts a camper only when it sees the pairing happen during the
+user-started setup: the first read of a protected characteristic is refused, iOS asks for the
+passkey, and the read then succeeds. A device that answers without that step is never adopted,
+so a look-alike without encryption cannot pass as the camper. On an iPhone that is already paired
+with the camper (for example through the vendor app), the user forgets the device once in iOS
+Settings and pairs again in the app; the new bond then serves the vendor app too.
 ```
 
 ```{decision} SwiftUI, iOS 17 or later
