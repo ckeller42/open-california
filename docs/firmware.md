@@ -243,7 +243,6 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    probe`` and returns to the mode (``off``: disconnect). A probe that cannot connect logs
    ``ok:false`` and is not retried. The probe writes nothing but the 1003 heartbeat.
 
-
 .. req:: Power-save rest: no reconnect while camping is off
    :id: R_FW_BLE_REST
    :status: implemented
@@ -1684,15 +1683,7 @@ can be checked on the CoreS3 only. They are the expected behaviours; none of the
 
 ## Traceability
 
-The requirements `R_FW_CONTROL_TWIN`, `R_FW_WRITE_ALLOWLIST` and `R_FW_CONTROL_API` live with their API: see {doc}`firmware-api`.
-
-The requirements `R_FW_PAIRING_SM`, `R_FW_WIFI_PROVISION`, `R_FW_WIFI_ROLLBACK` and `R_FW_WIFI_BLE_COEX` live with their API too: see {doc}`firmware-api`.
-
-The requirements `R_FW_HTTP_STATUS`, `R_FW_SHARED_UI`, `R_FW_STATE_DIAG` and `R_FW_PAIRING_WIZARD` live with the web handlers' API: see {doc}`firmware-api`.
-
-The requirements `R_FW_AUTO_CAMPER`, `R_FW_PI_WAKE`, `R_FW_PI_HALT`, `R_FW_BATTERY`, `R_FW_STATUS_DISPLAY`, `R_FW_DISPLAY_WAKE`, `R_FW_BLE_EXP`, `R_FW_BLE_IDLE` and `R_FW_SENSORS` live with the device-feature API too: see {doc}`firmware-api`.
-
-The requirements `R_FW_OTA`, `R_FW_TIME`, `R_FW_SD_LOG`, `R_FW_LOG_API`, `R_FW_DIAG_LOG` and `R_FW_PANIC_CAPTURE` live with the OTA, time, SD-log and diagnostics API: see {doc}`firmware-api`.
+The control, pairing, Wi-Fi, web, device-feature, OTA, time, SD-log and diagnostics requirements live with their C API: see {doc}`firmware-api`.
 
 Requirements are authored as `sphinx-needs` objects next to the code they constrain. The public C
 API requirements live in the header comments of `firmware/components/cali_core/include/` (a
@@ -1706,8 +1697,8 @@ collected here. `firmware/README.md` has the human-readable version of the same 
    :id: R_FW_READ_ONLY
    :status: retired
 
-   Retired: the firmware writes control frames. Superseded by ``R_FW_WRITE_ALLOWLIST`` (what may be
-   written) and ``R_FW_CONTROL_API`` (when and how); no test links here.
+   Retired: the firmware writes control frames. Superseded by :need:`R_FW_WRITE_ALLOWLIST` (what may be
+   written) and :need:`R_FW_CONTROL_API` (when and how); no test links here.
 
 .. req:: The satellite sets the wake-up light with the page's clock and the unit's own config
    :id: R_FW_WAKEUP

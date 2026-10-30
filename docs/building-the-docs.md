@@ -40,7 +40,7 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
   nothing is published from a PR. The default `tools/ci.sh` gate does not build the docs — run
   `tools/ci.sh docs` (or `sh docs/build_site.sh` where sphinx and doxygen are installed) locally.
 - **On `main`:** `.github/workflows/docs.yml` runs on a push to `main` that touches `docs/**`,
-  `calictl/**`, `tests/**`, `tools/gen_c_dict.py`, `tools/gen_codec_vectors.py` or the workflow itself (plus a manual `workflow_dispatch`).
+  `calictl/**`, `tests/**`, `firmware/components/cali_core/include/**`, `firmware/Doxyfile`, `tools/gen_c_dict.py`, `tools/gen_codec_vectors.py` or the workflow itself (plus a manual `workflow_dispatch`).
 - **Deploy:** its `build` job runs `sh docs/build_site.sh docs/_build/html` (both builds, `-W`) with
   `docs/requirements.txt` on Python 3.12, uploads the result as a Pages artifact, and the `deploy`
   job publishes it with `actions/deploy-pages` to <https://ckeller42.github.io/open-california/>.

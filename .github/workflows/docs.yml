@@ -9,6 +9,8 @@ on:
       - 'docs/**'
       - 'calictl/**'
       - 'tests/**'
+      - 'firmware/components/cali_core/include/**'  # C API headers (Doxygen input)
+      - 'firmware/Doxyfile'
       - 'tools/gen_c_dict.py'        # automodule'd in docs/api.md
       - 'tools/gen_codec_vectors.py'
       - '.github/workflows/docs.yml'

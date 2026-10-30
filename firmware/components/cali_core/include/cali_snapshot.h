@@ -10,6 +10,7 @@
  * .. req:: Snapshot emitter
  *    :id: R_FW_SNAPSHOT
  *    :status: implemented
+ *    :tags: esp32
  *
  *    The satellite emits the session's last frame per function, decoded, as the ``fn`` members
  *    of ``/api/state`` and of the console SNAP line, from one function, so the two never disagree.

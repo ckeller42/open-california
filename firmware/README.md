@@ -613,15 +613,14 @@ pairs with the Bumble fake unit, its `SNAP` equals `calictl.protocol.decode` of 
 fake served (a truncated frame too), the heartbeat keeps the link for 20 s, a pushed notification
 replaces exactly that function, and a passkey typed while idle is ignored.
 
-These `.. req::` / `.. test::` IDs are declared in that test module's own docstring — a Python
-"shim" sphinx-needs can parse, since the real implementation is C (whose comments sphinx-needs
-does not collect). `docs/api.md` pulls the module in via `.. automodule::
-tests.firmware.test_pairing_sm_parity`, so both objects and their `:links:` resolve in the
-`sphinx -b needs` build today.
+R_FW_PAIRING_SM is declared in the `cali_pairing_sm.h` header comment (rendered on
+`docs/firmware-api.rst`). R_FW_PAIRING_RUNNER and R_FW_SESSION are declared in the docstrings of
+`tests/firmware/test_runner_fake.py` and `tests/firmware/test_session_fake.py` — Python "shims"
+sphinx-needs can parse. The `.. test::` objects live in the test modules' docstrings, which
+`docs/api.md` pulls in via `.. automodule::`, so objects and their `:links:` resolve in the
+`sphinx -b needs` build.
 
-Four more requirements are authored outside a test docstring shim (R_FW_CONTROL_TWIN, R_FW_WRITE_ALLOWLIST and R_FW_CONTROL_API in the `cali_control.h` header comment, the rest on the doc page) (they describe cross-cutting properties, not one C module), all in
-**`docs/firmware.md`**'s traceability section and the C API page (`docs/firmware-api.rst`, where the
-header-held requirements render) — together the primary human-readable trace for firmware; this file stays the build/porting reference:
+Four more requirements describe cross-cutting properties, not one C module: R_FW_CONTROL_TWIN, R_FW_WRITE_ALLOWLIST and R_FW_CONTROL_API live in the `cali_control.h` header comment (rendered on `docs/firmware-api.rst`); R_FW_IO_CAP_BEFORE_LINK lives in the traceability section of `docs/firmware.md`. Together with that page they are the primary human-readable trace for firmware; this file stays the build/porting reference:
 
 - **R_FW_CONTROL_TWIN** — `cali_core/control.c` plans exactly the writes `calictl.control` would
   (same gate texts, same frames, same lighting commit) on every vector of

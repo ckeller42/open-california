@@ -9,6 +9,7 @@ PY="${PYTHON:-python3}"
 DOCS="$(cd "$(dirname "$0")" && pwd)"
 OUT="${1:-$DOCS/_build/site}"
 command -v doxygen >/dev/null || { echo "doxygen is required (firmware C API docs)" >&2; exit 1; }
+doxygen --version
 (cd "$DOCS/.." && doxygen firmware/Doxyfile)
 "$PY" -m sphinx -b html -W "$DOCS" "$OUT"
 "$PY" -m sphinx -b html -W -t evidence "$DOCS" "$DOCS/_build/evidence"
