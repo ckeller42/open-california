@@ -5,7 +5,10 @@ import PackageDescription
 let package = Package(
     name: "CaliKit",
     platforms: [.iOS(.v17), .macOS(.v14)],
-    products: [.library(name: "CaliCore", targets: ["CaliCore"])],
+    products: [
+        .library(name: "CaliCore", targets: ["CaliCore"]),
+        .library(name: "CaliBLE", targets: ["CaliBLE"]),
+    ],
     targets: [
         .target(
             name: "CCodec",
@@ -25,6 +28,16 @@ let package = Package(
             dependencies: ["CCodec", "CControl"],
             path: "ios/CaliKit/Sources/CaliCore",
             resources: [.copy("Resources/semantics_tables.js"), .copy("Resources/semantics.js")]
+        ),
+        .target(
+            name: "CaliBLE",
+            dependencies: ["CaliCore"],
+            path: "ios/CaliKit/Sources/CaliBLE"
+        ),
+        .testTarget(
+            name: "CaliBLETests",
+            dependencies: ["CaliBLE", "CaliCore"],
+            path: "ios/CaliKit/Tests/CaliBLETests"
         ),
         .testTarget(
             name: "CaliCoreTests",

@@ -1,0 +1,170 @@
+import Foundation
+
+/// A deterministic stand-in for the camper unit. Tests drive it (hang-up, foreign pushes,
+/// rejected writes, Bluetooth off, failed connect) and read back every write in order.
+///
+/// Time: only `hangUp(after:)` waits, and it waits on the injected clock, so a test clock
+/// makes it instant. Seeds are raw frames; there is no state-field encoder to build one
+/// from a field dictionary (the C codec only encodes control frames).
+///
+/// - Requirement: R_IOS_BLE_DIRECT, R_IOS_POWER_SAVE
+public actor FakeCamperTransport: CamperTransport {
+    public struct Write: Sendable, Equatable {
+        public let char: UInt16
+        public let bytes: [UInt8]
+    }
+
+    public nonisolated let events: AsyncStream<TransportEvent>
+    private let sink: AsyncStream<TransportEvent>.Continuation
+    private let clock: any Clock<Duration>
+    private var frames: [UInt16: [UInt8]]
+    private var subscribed: Set<UInt16> = []
+    private var connected = false
+    private var rejectNext = false
+    private var connectWillFail = false
+    private var unavailable: BluetoothAvailability?
+    private var hangUpTask: Task<Void, Never>?
+
+    /// Every write attempt, in order, including a rejected one.
+    public private(set) var writes: [Write] = []
+
+    public init(clock: any Clock<Duration> = ContinuousClock(), frames: [UInt16: [UInt8]] = [:]) {
+        (events, sink) = AsyncStream.makeStream()
+        self.clock = clock
+        self.frames = frames
+    }
+
+    // MARK: test controls
+
+    /// Sets the frame a read returns; a subscribed char also gets a `.notified` push.
+    public func seed(_ char: UInt16, _ bytes: [UInt8]) {
+        frames[char] = bytes
+        if connected, subscribed.contains(char) { sink.yield(.notified(char: char, bytes: bytes)) }
+    }
+
+    /// The unit ends the link after `after` on the injected clock.
+    public func hangUp(after: Duration) {
+        hangUpTask?.cancel()
+        hangUpTask = Task { [clock] in
+            do { try await clock.sleep(for: after) } catch { return }
+            self.finishHangUp()
+        }
+    }
+
+    /// Another central changed the unit: the frame is stored and pushed.
+    public func pushForeign(char: UInt16, bytes: [UInt8]) {
+        frames[char] = bytes
+        sink.yield(.notified(char: char, bytes: bytes))
+    }
+
+    public func rejectNextWrite() { rejectNext = true }
+    public func failNextConnect() { connectWillFail = true }
+    /// `connect()` reports `.bluetoothUnavailable` until called with `nil`.
+    public func setBluetooth(unavailable: BluetoothAvailability?) { self.unavailable = unavailable }
+    /// The link drops without the unit's hang-up (out of range).
+    public func dropLink() { end(.linkLost) }
+    public func demandPairing() { sink.yield(.pairingRequired) }
+
+    // MARK: CamperTransport
+
+    public func connect() {
+        if let unavailable { sink.yield(.bluetoothUnavailable(unavailable)); return }
+        if connectWillFail { connectWillFail = false; sink.yield(.disconnected(reason: .failedToConnect)); return }
+        connected = true
+        sink.yield(.connected)
+        sink.yield(.encrypted)
+    }
+
+    public func cancel() { end(.localCancel) }
+
+    public func read(_ char: UInt16) throws -> [UInt8] {
+        guard connected else { throw TransportError.notConnected }
+        guard let f = frames[char] else { throw TransportError.noSuchChar(char) }
+        return f
+    }
+
+    public func write(_ char: UInt16, _ bytes: [UInt8]) throws {
+        guard connected else { throw TransportError.notConnected }
+        writes.append(Write(char: char, bytes: bytes))
+        if rejectNext {
+            rejectNext = false
+            sink.yield(.written(char: char, ok: false))
+            throw TransportError.writeRejected
+        }
+        sink.yield(.written(char: char, ok: true))
+    }
+
+    /// Like the unit, pushes the current frame of each newly subscribed char.
+    public func subscribe(_ chars: [UInt16]) throws {
+        guard connected else { throw TransportError.notConnected }
+        for c in chars {
+            subscribed.insert(c)
+            if let f = frames[c] { sink.yield(.notified(char: c, bytes: f)) }
+        }
+    }
+
+    private func finishHangUp() { end(.remoteHangUp) }
+
+    private func end(_ reason: DisconnectReason) {
+        hangUpTask?.cancel()
+        hangUpTask = nil
+        guard connected else { return }
+        connected = false
+        subscribed = []
+        sink.yield(.disconnected(reason: reason))
+    }
+}
+
+#if DEBUG
+/// A manual clock for tests: `sleep` suspends until `advance(by:)` passes its deadline.
+public final class TestClock: Clock, @unchecked Sendable {
+    public struct Instant: InstantProtocol {
+        public var offset: Duration
+        public func advanced(by d: Duration) -> Instant { Instant(offset: offset + d) }
+        public func duration(to other: Instant) -> Duration { other.offset - offset }
+        public static func < (a: Instant, b: Instant) -> Bool { a.offset < b.offset }
+    }
+
+    private struct Sleeper { let deadline: Instant; let cont: CheckedContinuation<Void, any Error>; let id: Int }
+    private let lock = NSLock()
+    private var current = Instant(offset: .zero)
+    private var sleepers: [Sleeper] = []
+    private var nextID = 0
+
+    public init() {}
+    public var minimumResolution: Duration { .zero }
+    public var now: Instant { lock.withLock { current } }
+    /// Sleepers waiting now; tests poll it before `advance` so the sleep is registered first.
+    public var sleeperCount: Int { lock.withLock { sleepers.count } }
+
+    public func sleep(until deadline: Instant, tolerance: Duration?) async throws {
+        let id = lock.withLock { defer { nextID += 1 }; return nextID }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { cont in
+                let ready = lock.withLock { () -> Bool in
+                    if deadline <= current { return true }
+                    sleepers.append(Sleeper(deadline: deadline, cont: cont, id: id))
+                    return false
+                }
+                if ready { cont.resume() }
+            }
+        } onCancel: {
+            let s = lock.withLock { () -> Sleeper? in
+                guard let i = sleepers.firstIndex(where: { $0.id == id }) else { return nil }
+                return sleepers.remove(at: i)
+            }
+            s?.cont.resume(throwing: CancellationError())
+        }
+    }
+
+    public func advance(by d: Duration) {
+        let due = lock.withLock { () -> [Sleeper] in
+            current = current.advanced(by: d)
+            let due = sleepers.filter { $0.deadline <= current }
+            sleepers.removeAll { $0.deadline <= current }
+            return due
+        }
+        for s in due { s.cont.resume() }
+    }
+}
+#endif
