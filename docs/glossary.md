@@ -206,6 +206,19 @@ App Intents
 SF Symbols
   Apple's icon set for iOS apps, drawn to match the system font. See {doc}`ios-app`.
 
+XcodeGen
+  A command-line tool that generates an Xcode project from a YAML spec. The iPhone app's project
+  is generated from `ios/project.yml` and is not in git. See {doc}`ios-development-setup`.
+
+Personal Team
+  The free development team that Xcode makes from a plain Apple ID (free provisioning). It signs
+  apps for the owner's own devices; an installed app runs for 7 days. See
+  {doc}`ios-development-setup`.
+
+Developer Mode
+  The iPhone setting (Settings → Privacy & Security) that allows development builds from Xcode to
+  run. See {doc}`ios-development-setup`.
+
 Power-save hang-up
   The unit ends a central's link about 30.7 s after encryption (HCI 0x13) while camping mode is
   off and no shore power feeds it. A link that starts less than 6 s later is cut about 1.2 s in.

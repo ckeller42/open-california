@@ -1,0 +1,66 @@
+# XcodeGen spec of the iPhone app. Generate the (gitignored) project with
+#   xcodegen generate --spec ios/project.yml
+# and never edit ios/Camper.xcodeproj by hand. Setup: docs/ios-development-setup.md.
+name: Camper
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+packages:
+  CaliKit:
+    path: ..
+targets:
+  Camper:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    dependencies:
+      - package: CaliKit
+        product: CaliCore
+      - package: CaliKit
+        product: CaliBLE
+    settings:
+      base:
+        INFOPLIST_FILE: App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).camper
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_EMIT_LOC_STRINGS: YES
+  AppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - AppTests
+    dependencies:
+      - target: Camper
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).camper.tests
+  AppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - AppUITests
+    dependencies:
+      - target: Camper
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).camper.uitests
+schemes:
+  Camper:
+    build:
+      targets:
+        Camper: all
+    test:
+      targets:
+        - AppTests
+        - AppUITests

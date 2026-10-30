@@ -36,6 +36,7 @@ protocol
 firmware
 ios-app
 ios-app-radio-checklist
+ios-development-setup
 screenshots
 glossary
 ```

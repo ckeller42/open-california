@@ -224,6 +224,7 @@ peripheral; the van with an owner checklist; and a manual Siri checklist in both
 ```
 
 The checks of the Bluetooth link on a real iPhone are in {doc}`ios-app-radio-checklist`.
+What a Mac needs to build and test the app is in {doc}`ios-development-setup`.
 
 ## Architecture decisions
 
