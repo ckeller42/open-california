@@ -45,8 +45,8 @@ public actor CamperSession {
     /// Why the session cancelled its own link (the next `.localCancel` is then a link loss).
     private var dropReason: String?
     private(set) var commands = 0
-    /// Functions with a frame (read or push) from the current link; cleared at each link up.
-    public private(set) var liveFunctions: Set<String> = []
+    /// Functions with a frame (read or push) from the current link (`state.liveFunctions`).
+    public var liveFunctions: Set<String> { state.liveFunctions }
     private var heartbeat: Task<Void, Never>?
     private var firstBeat: (@Sendable () -> Duration)?
     private var sinceLost: (@Sendable () -> Duration)?
@@ -245,7 +245,7 @@ public actor CamperSession {
         case .encrypted:
             linkGen += 1
             ready = false
-            liveFunctions = []
+            state.liveFunctions = []
             state.lightConfig = [:]
             setLink(.up)
             startHeartbeat(gen: linkGen)
@@ -402,13 +402,13 @@ public actor CamperSession {
             } else {
                 state.waterHeld = true
                 guard state.fields["water"] != nil else { return }
-                liveFunctions.insert(fn)
+                state.liveFunctions.insert(fn)
                 state.asOf = Date()
                 publish()
                 return
             }
         }
-        liveFunctions.insert(fn)
+        state.liveFunctions.insert(fn)
         if fn == "lighting" {
             // A read or a push of the unit's own frame: never one of our writes (R4). A config or ack frame
             // only feeds the latch and keeps the stored lamps (#284, session.c `keep`).

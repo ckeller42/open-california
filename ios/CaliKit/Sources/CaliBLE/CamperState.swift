@@ -13,6 +13,9 @@ public struct CamperState: Sendable, Equatable {
     /// When the last frame arrived.
     public var asOf: Date?
     public var gate: ProtocolGate = .unknown
+    /// Functions with a frame (read or push) from the current link; cleared at each link up. A
+    /// command needs its function here (control_run.c `cali_session_frame_live`).
+    public var liveFunctions: Set<String> = []
     /// function (or `applySwCorrections`) -> the JS error message of its failed interpretation.
     public var semanticsErrors: [String: String] = [:]
     /// This link's lighting config latch (`CALI_LCFG_KEYS` -> value) from the unit's own `1502`

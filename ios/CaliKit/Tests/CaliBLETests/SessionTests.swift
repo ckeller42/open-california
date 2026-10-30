@@ -198,6 +198,31 @@ struct SessionTests {
         try await until("subscribed: push arrives") { await r.s.holdsInBackground }
     }
 
+    /// A new link publishes `.up` with no live function: the previous link's frames stay in `fields`
+    /// for display, but they are not this link's until the read pass has run.
+    /// - Test: T_IOS_SESSION_LIVE_PER_LINK
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
+    @Test func liveFunctionsStartEmptyOnEachLink() async throws {
+        let r = Rig()
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        #expect(await r.s.state.liveFunctions.contains("general"))
+        await r.fake.dropLink()
+        try await until("down") { await r.s.link != .up }
+        var updates = await r.s.updates().makeAsyncIterator()
+        await r.fake.connect()  // the transport brings the link back by itself
+        var upUpdate: CamperState?
+        while upUpdate == nil, let (st, link) = await updates.next() {
+            if link == .up { upUpdate = st }
+        }
+        #expect(upUpdate?.liveFunctions.isEmpty == true)
+        #expect(upUpdate?.fields["general"] != nil)  // the old frames stay for display
+        #expect(await r.s.liveFunctions.isEmpty)
+        // The read pass of the new link runs after the unit's 7 s cooldown.
+        try await until("cooldown sleeper") { r.clock.deadlines.contains { $0 >= .seconds(6) } }
+        r.clock.advance(by: .seconds(7))
+        try await until("read pass") { await r.s.state.liveFunctions.contains("general") }
+    }
+
     /// Another central (the VW app, the satellite) changes the unit: its push updates our state.
     /// - Test: T_IOS_SESSION_FOREIGN_PUSH
     /// - Verifies: R_IOS_TESTED, R_IOS_HONEST

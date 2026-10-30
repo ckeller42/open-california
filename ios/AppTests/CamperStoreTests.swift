@@ -29,7 +29,7 @@ struct CamperStoreTests {
 
         // The session's first update has no frame yet: the restored state stays, still disabled.
         store.start()
-        try await Task.sleep(for: .milliseconds(100))
+        try await until("first session update") { store.link == .off }  // the session's link, not ours
         #expect(store.state.asOf == restoredAt)
         #expect(!store.controlsEnabled)
 
@@ -74,6 +74,37 @@ struct CamperStoreTests {
         store.now = { asOf.addingTimeInterval(91) }
         #expect(store.isStale)
         #expect(!store.controlsEnabled)
+    }
+
+    /// The runner plans only over frames of the current link: after a reconnect the previous link's
+    /// frames are shown, but the controls wait for this link's read pass.
+    ///
+    /// - Test: T_IOS_STORE_CURRENT_LINK
+    /// - Verifies: R_IOS_HONEST
+    @Test func controlsFollowTheCurrentLinksFrames() {
+        let store = CamperStore.preview(.parked)
+        var live = store.state
+        #expect(store.controlsEnabled)
+        #expect(store.controlEnabled("campingmode"))
+
+        store.apply(live, .off)  // the unit hangs up
+        #expect(!store.controlsEnabled)
+
+        var reconnected = live
+        reconnected.liveFunctions = []  // link up again, no frame of this link yet
+        store.apply(reconnected, .up)
+        #expect(!store.isStale)
+        #expect(!store.controlsEnabled)
+        #expect(!store.controlEnabled("campingmode"))
+
+        live.liveFunctions = ["general"]  // the read pass has reached `general` only
+        store.apply(live, .up)
+        #expect(store.controlsEnabled)
+        #expect(!store.controlEnabled("campingmode"))
+
+        live.liveFunctions.insert("campingmode")
+        store.apply(live, .up)
+        #expect(store.controlEnabled("campingmode"))
     }
 
     /// Every key of the app's string catalogs has an English and a German value. Where the web UI

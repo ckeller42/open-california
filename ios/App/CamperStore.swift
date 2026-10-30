@@ -33,7 +33,16 @@ final class CamperStore {
         return now().timeIntervalSince(asOf) > Self.staleAfter
     }
 
-    var controlsEnabled: Bool { link == .up && !isStale && state.gate == .supported }
+    /// The link is up, this link has read `general` (the runner plans only over frames of the current
+    /// link), the data is fresh and the unit is supported.
+    var controlsEnabled: Bool {
+        link == .up && state.liveFunctions.contains("general") && !isStale && state.gate == .supported
+    }
+
+    /// `controlsEnabled`, and this link has a frame of `function` (else the runner answers `.notReady`).
+    func controlEnabled(_ function: String) -> Bool {
+        controlsEnabled && state.liveFunctions.contains(function)
+    }
 
     var linkLabel: LocalizedStringResource {
         switch link {
@@ -54,10 +63,15 @@ final class CamperStore {
         follow = Task { [weak self, session] in
             for await (state, link) in await session.updates() {
                 guard let self else { return }
-                if state.asOf != nil { self.state = state }
-                self.link = link
+                self.apply(state, link)
             }
         }
+    }
+
+    /// One update of the session.
+    func apply(_ state: CamperState, _ link: LinkState) {
+        if state.asOf != nil { self.state = state }
+        self.link = link
     }
 
     /// One connect attempt; a failure shows in `link`. No redial loop (`R_IOS_POWER_SAVE`).
@@ -129,6 +143,7 @@ enum Fixture: String, CaseIterable {
         }
         st.interpreted = (try? applySwCorrections(st.interpreted)) ?? st.interpreted
         st.gate = ProtocolGate(general: st.fields["general"])
+        if isLive { st.liveFunctions = Set(st.fields.keys) }  // a restored state has no live link
         st.asOf = switch self {
         case .staleRestore: now.addingTimeInterval(-5 * 3600)
         case .unreachable: now.addingTimeInterval(-600)
