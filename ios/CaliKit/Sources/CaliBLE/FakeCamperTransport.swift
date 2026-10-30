@@ -139,12 +139,19 @@ public final class TestClock: Clock, @unchecked Sendable {
         let id = lock.withLock { defer { nextID += 1 }; return nextID }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { cont in
-                let ready = lock.withLock { () -> Bool in
+                // A task cancelled before this point already ran onCancel (it found nothing):
+                // checking under the lock keeps a dead sleeper out of `sleepers`.
+                let ready = lock.withLock { () -> Bool? in
+                    if Task.isCancelled { return nil }
                     if deadline <= current { return true }
                     sleepers.append(Sleeper(deadline: deadline, cont: cont, id: id))
                     return false
                 }
-                if ready { cont.resume() }
+                switch ready {
+                case nil: cont.resume(throwing: CancellationError())
+                case true?: cont.resume()
+                case false?: break
+                }
             }
         } onCancel: {
             let s = lock.withLock { () -> Sleeper? in

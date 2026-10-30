@@ -32,6 +32,15 @@ public actor CamperSession {
     private var subscribers: [Int: AsyncStream<(CamperState, LinkState)>.Continuation] = [:]
     private var waiters: [Int: CheckedContinuation<Void, any Error>] = [:]
     private var nextID = 0
+    /// +1 per encrypted link: a task of an earlier link can never mark the current one.
+    private var linkGen = 0
+    /// Subscribe and the read pass finished on the current link.
+    private var ready = false
+    /// The one bring-up (cooldown, connect, subscribe, read) in progress; every caller awaits it.
+    private var flight: Task<Void, any Error>?
+    /// Why the session cancelled its own link (the next `.localCancel` is then a link loss).
+    private var dropReason: String?
+    private var commands = 0
     private var heartbeat: Task<Void, Never>?
     private var firstBeat: (@Sendable () -> Duration)?
     private var sinceLost: (@Sendable () -> Duration)?
@@ -60,15 +69,23 @@ public actor CamperSession {
 
     // MARK: public API
 
+    /// The link is up, subscribed, and its read pass finished: `state` holds this link's frames.
+    public var isReady: Bool { link == .up && ready }
+
     /// Camping master on (`1202` `State` 1): only then the link is held in the background.
     public var holdsInBackground: Bool { state.fields["campingmode"]?["State"] == 1 }
 
     /// The `1003` heartbeat is running on the current link.
     public var heartbeatBeating: Bool { heartbeat != nil }
 
-    /// Time since the current link's first heartbeat; nil while it does not beat. A command on a link
-    /// that is younger than `CODEC_ARM_DELAY_MS` waits out the rest before its first frame.
+    /// Time since the current link's first successful heartbeat write; nil while none. A command
+    /// waits until this reaches `CODEC_ARM_DELAY_MS` before its first frame.
     public var sinceFirstBeat: Duration? { firstBeat?() }
+
+    /// A control command is running from now until `endCommand()`. While one runs, the unit's
+    /// hang-up does not start the power-save rest (session.c `!cali_ctl_busy()`): it reconnects.
+    public func beginCommand() { commands += 1 }
+    public func endCommand() { commands = max(0, commands - 1) }
 
     /// Every change of `state` or `link`, starting with the current values.
     public func updates() -> AsyncStream<(CamperState, LinkState)> {
@@ -80,24 +97,22 @@ public actor CamperSession {
         return stream
     }
 
-    /// Brings the link up (if it is not) and reads every state function. After a lost link it waits
-    /// until the unit's 7 s cooldown has passed; when that is longer than `timeout` it throws
-    /// `inRest(retryAfter:)` at once. It also ends the power-save rest and replaces a scheduled
-    /// automatic reconnect.
+    /// Brings the link up, subscribes and reads every state function; returns at once when the link
+    /// is already ready. `timeout` is the total budget of the whole call. After a lost link it waits
+    /// until the unit's 7 s cooldown has passed; when that does not fit the budget it throws
+    /// `inRest(retryAfter:)` at once. It ends the power-save rest and replaces a scheduled reconnect.
+    /// Concurrent callers share one bring-up.
     public func ensureConnected(timeout: Duration) async throws {
-        if link == .up { return }
-        if link == .connecting { return try await waitForLink(timeout: timeout, connect: false) }
-        if let left = cooldownLeft() {
-            if left > timeout { throw SessionError.inRest(retryAfter: left) }
+        let remaining = clock.countdown(timeout)
+        if isReady { return }
+        if flight == nil {
+            if let left = cooldownLeft(), left > timeout { throw SessionError.inRest(retryAfter: left) }
             cancelReconnect()
-            try await clock.sleep(for: left)
-            if link == .up { return }
-            if link == .connecting { return try await waitForLink(timeout: timeout, connect: false) }
+            startFlight(budget: timeout)
         }
-        cancelReconnect()
-        setLink(.connecting)
-        try await waitForLink(timeout: timeout, connect: true)
-        try await subscribeAndRead()
+        guard let f = flight else { throw SessionError.unreachable }
+        try await race(clock, remaining()) { try await f.value }
+        guard isReady else { throw SessionError.unreachable }
     }
 
     /// Reads every state function once; each frame replaces that function's last one.
@@ -111,6 +126,8 @@ public actor CamperSession {
                 store(char, try await transport.read(char))
             } catch TransportError.notConnected {
                 throw SessionError.unreachable
+            } catch is CancellationError {
+                throw SessionError.unreachable
             } catch {
                 continue
             }
@@ -119,37 +136,55 @@ public actor CamperSession {
 
     // MARK: link
 
-    private func subscribeAndRead() async throws {
+    private func startFlight(budget: Duration) {
+        flight = Task {
+            defer { self.flightDone() }
+            do {
+                try await race(clock, budget) { try await self.bringUp() }
+            } catch {
+                await self.dropLink("The camper unit did not answer.")
+                throw error is SessionError ? error : SessionError.unreachable
+            }
+        }
+    }
+
+    private func flightDone() { flight = nil }
+
+    /// Cooldown, connect (unless up), subscribe, read; `ready` only when all of it worked on one link.
+    private func bringUp() async throws {
+        if let left = cooldownLeft() { try await clock.sleep(for: left) }
+        if link != .up {
+            setLink(.connecting)
+            try await waitForLink()
+        }
+        let gen = linkGen
         do {
             try await transport.subscribe(Array(CamperGATT.stateChars.values))
         } catch {
             throw SessionError.unreachable
         }
         try await readAll()
+        guard gen == linkGen, link == .up, !Task.isCancelled else { throw SessionError.unreachable }
+        ready = true
+        publish()
     }
 
-    /// Waits for `.encrypted`; fails on a failed connect, Bluetooth off or `timeout` (then cancels the connect).
-    private func waitForLink(timeout: Duration, connect: Bool) async throws {
+    /// Waits for `.encrypted`; a failed connect, Bluetooth off or cancellation (the deadline) fails it.
+    private func waitForLink() async throws {
         let id = takeID()
-        let timer = Task { [clock] in
-            do { try await clock.sleep(for: timeout) } catch { return }
-            await self.timedOut(id)
-        }
-        defer { timer.cancel() }
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, any Error>) in
-            waiters[id] = cont
-            // Connect only once the waiter is registered: the fake answers inside connect().
-            if connect { Task { await transport.connect() } }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, any Error>) in
+                waiters[id] = cont
+                // Connect only once the waiter is registered: the fake answers inside connect().
+                Task { await transport.connect() }
+            }
+        } onCancel: {
+            Task { await self.failWaiter(id) }
         }
     }
 
-    private func timedOut(_ id: Int) async {
-        guard let w = waiters.removeValue(forKey: id) else { return }
-        w.resume(throwing: SessionError.unreachable)
-        if waiters.isEmpty, link == .connecting {
-            setLink(.unreachable("The camper unit did not answer."))
-            await transport.cancel()
-        }
+    private func failWaiter(_ id: Int) {
+        waiters.removeValue(forKey: id)?.resume(throwing: SessionError.unreachable)
     }
 
     private func resumeWaiters(_ result: Result<Void, SessionError>) {
@@ -158,15 +193,35 @@ public actor CamperSession {
         for w in all { w.resume(with: result.mapError { $0 as any Error }) }
     }
 
+    /// The session ends its own link after a failure on it (session.c `link_lost`): a heartbeat that
+    /// cannot be written, a failed subscribe or read pass, a missed deadline.
+    private func dropLink(_ why: String) async {
+        ready = false
+        stopHeartbeat()
+        switch link {
+        case .connecting:
+            setLink(.unreachable(why))
+            resumeWaiters(.failure(.unreachable))
+            await transport.cancel()
+        case .up:
+            dropReason = why
+            await transport.cancel()
+        default:
+            break
+        }
+    }
+
     private func handle(_ e: TransportEvent) {
         switch e {
         case .connected, .written:
             break
         case .encrypted:
+            linkGen += 1
+            ready = false
             setLink(.up)
-            startHeartbeat()
+            startHeartbeat(gen: linkGen)
             // A link nobody here asked for (iOS reconnect, state restoration) still subscribes and reads.
-            if waiters.isEmpty { Task { try? await self.subscribeAndRead() } }
+            if flight == nil { startFlight(budget: Self.redialTimeout) }
             resumeWaiters(.success(()))
         case .notified(let char, let bytes):
             store(char, bytes)
@@ -181,9 +236,13 @@ public actor CamperSession {
         }
     }
 
-    private func lost(_ reason: DisconnectReason) {
+    private func lost(_ raw: DisconnectReason) {
         let wasUp = link == .up
         let held = sinceFirstBeat.map { $0 >= Self.stable } ?? false
+        let dropped = raw == .localCancel ? dropReason : nil
+        let reason = dropped == nil ? raw : .linkLost
+        dropReason = nil
+        ready = false
         stopHeartbeat()
         if !waiters.isEmpty {  // a connect in progress failed: its caller decides what follows
             if link == .connecting { setLink(.unreachable("The camper unit did not answer.")) }
@@ -198,23 +257,24 @@ public actor CamperSession {
         } else if reason == .remoteHangUp, restConditions {
             // S_SEQ_POWER_SAVE_HANGUP: the unit saves power; no redial until the user or Siri asks.
             setLink(.rest(until: Date().addingTimeInterval(Self.seconds(Self.cooldown))))
-        } else if holdsInBackground || reason == .remoteHangUp {
+        } else if holdsInBackground || reason == .remoteHangUp || commands > 0 {
             scheduleReconnect()
         } else {
-            setLink(.off)
+            setLink(dropped.map { .unreachable($0) } ?? .off)
         }
     }
 
     /// session.c `rest_conditions`: camping master off and shore power neither active nor standby,
-    /// both known. A missing frame or field means "reconnect as usual".
+    /// both known, and no command in flight. A missing frame or field means "reconnect as usual".
     private var restConditions: Bool {
-        guard state.fields["campingmode"]?["State"] == 0,
+        guard commands == 0, state.fields["campingmode"]?["State"] == 0,
               case .string(let shore)? = state.interpreted["energy"]?["shore_state"]
         else { return false }
         return shore != "active" && shore != "standby"
     }
 
     private func scheduleReconnect() {
+        guard reconnect == nil else { return }
         let delay = max(Self.backoff[min(backoffStep, Self.backoff.count - 1)], cooldownLeft() ?? .zero)
         backoffStep += 1
         pendingReconnect = delay
@@ -231,7 +291,7 @@ public actor CamperSession {
         do {
             try await ensureConnected(timeout: Self.redialTimeout)
         } catch {
-            if link != .up, reconnect == nil { scheduleReconnect() }
+            if !isReady { scheduleReconnect() }
         }
     }
 
@@ -250,8 +310,9 @@ public actor CamperSession {
     // MARK: heartbeat
 
     /// The `1003` heartbeat: 4-byte big-endian counter from `CODEC_HEARTBEAT_START`, +1 every
-    /// `CODEC_HEARTBEAT_PERIOD_MS`, first beat at link up, until the link goes down.
-    private func startHeartbeat() {
+    /// `CODEC_HEARTBEAT_PERIOD_MS`, first beat at link up, until the link goes down. A beat that
+    /// cannot be written ends the link (session.c `link_lost("heartbeat")`).
+    private func startHeartbeat(gen: Int) {
         stopHeartbeat()
         heartbeat = Task { [transport, clock] in
             var counter = CamperGATT.heartbeatStart
@@ -261,17 +322,23 @@ public actor CamperSession {
                 } catch TransportError.notConnected {
                     return  // the disconnect event follows and stops the beat
                 } catch {
-                    // ponytail: a rejected beat is skipped; the C session drops the link instead.
+                    await self.heartbeatFailed(gen)
+                    return
                 }
-                if counter == CamperGATT.heartbeatStart { self.firstBeatWritten() }
+                if counter == CamperGATT.heartbeatStart { self.firstBeatWritten(gen) }
                 counter &+= 1
                 do { try await clock.sleep(for: CamperGATT.heartbeatPeriod) } catch { return }
             }
         }
     }
 
-    private func firstBeatWritten() {
-        if heartbeat != nil { firstBeat = clock.stopwatch() }
+    private func firstBeatWritten(_ gen: Int) {
+        if gen == linkGen, heartbeat != nil { firstBeat = clock.stopwatch() }
+    }
+
+    private func heartbeatFailed(_ gen: Int) async {
+        guard gen == linkGen else { return }
+        await dropLink("The heartbeat could not be written.")
     }
 
     private func stopHeartbeat() {
@@ -331,5 +398,58 @@ extension Clock {
     fileprivate func stopwatch() -> @Sendable () -> Duration {
         let start = now
         return { start.duration(to: self.now) }
+    }
+}
+
+extension Clock {
+    /// The time left of `budget` counted from this call.
+    fileprivate func countdown(_ budget: Duration) -> @Sendable () -> Duration {
+        let end = now.advanced(by: budget)
+        return { self.now.duration(to: end) }
+    }
+}
+
+/// Resumes its continuation once: with the work's result or with the timer's timeout.
+private final class Once: @unchecked Sendable {  // @unchecked: all state behind `lock`
+    private let lock = NSLock()
+    private var cont: CheckedContinuation<Void, any Error>?
+    private var timer: Task<Void, Never>?
+
+    init(_ cont: CheckedContinuation<Void, any Error>) { self.cont = cont }
+
+    func setTimer(_ t: Task<Void, Never>) {
+        let done = lock.withLock { () -> Bool in
+            if cont == nil { return true }
+            timer = t
+            return false
+        }
+        if done { t.cancel() }
+    }
+
+    func finish(_ r: Result<Void, any Error>) {
+        let (c, t) = lock.withLock { () -> (CheckedContinuation<Void, any Error>?, Task<Void, Never>?) in
+            defer { cont = nil; timer = nil }
+            return (cont, timer)
+        }
+        t?.cancel()
+        c?.resume(with: r)
+    }
+}
+
+/// Runs `op`, but returns by `budget` on `clock` whether or not `op` honours cancellation
+/// (a BLE read can hang). On the deadline `op` is cancelled and `SessionError.unreachable` thrown.
+private func race(_ clock: any Clock<Duration>, _ budget: Duration,
+                  _ op: @escaping @Sendable () async throws -> Void) async throws {
+    guard budget > .zero else { throw SessionError.unreachable }
+    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, any Error>) in
+        let once = Once(cont)
+        let work = Task {
+            do { try await op(); once.finish(.success(())) } catch { once.finish(.failure(error)) }
+        }
+        once.setTimer(Task {
+            do { try await clock.sleep(for: budget) } catch { return }
+            work.cancel()
+            once.finish(.failure(SessionError.unreachable))
+        })
     }
 }
