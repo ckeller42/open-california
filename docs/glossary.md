@@ -199,6 +199,39 @@ HCI reason code
   host, `0x3e` connection failed to be established (often a busy scanner), `0x08` supervision
   timeout (out of range, or the peer went silent).
 
+App Intents
+  Apple's framework through which an iOS app offers actions to Siri, the Shortcuts app and
+  Spotlight, with fixed spoken phrases per language. See {doc}`ios-app`.
+
+SF Symbols
+  Apple's icon set for iOS apps, drawn to match the system font. See {doc}`ios-app`.
+
+CoreBluetooth
+  Apple's Bluetooth Low Energy framework. On iOS it owns pairing and the bonds; an app only sees
+  the result. See {doc}`ios-app`.
+
+SwiftUI
+  Apple's declarative UI framework for iOS apps. See {doc}`ios-app`.
+
+Observation
+  The Swift framework (`@Observable`) through which SwiftUI redraws a view when the data it reads
+  changes. See {doc}`ios-app`.
+
+Keychain
+  The encrypted per-app store of iOS for passwords and keys. See {doc}`ios-app`.
+
+Hotspot Configuration
+  The iOS framework through which an app joins a WiFi network itself; it needs a paid Apple
+  developer account. See {doc}`ios-app`.
+
+mDNS
+  Multicast DNS: devices on a local network announce and find each other by name (`*.local`)
+  without a DNS server.
+
+Tailscale
+  A private network (VPN) between the owner's devices, reachable from anywhere. The van's Pi is on
+  it; see {doc}`architecture`.
+
 Power-save hang-up
   The unit ends a central's link about 30.7 s after encryption (HCI 0x13) while camping mode is
   off and no shore power feeds it. A link that starts less than 6 s later is cut about 1.2 s in.

@@ -34,6 +34,7 @@ howto-esp-standalone
 hardware
 protocol
 firmware
+ios-app
 firmware-api
 screenshots
 glossary

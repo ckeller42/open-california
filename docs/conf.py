@@ -49,6 +49,7 @@ needs_types = [
     dict(directive="spec", title="Specification", prefix="S_", color="#FFCC00", style="node"),
     dict(directive="impl", title="Implementation", prefix="I_", color="#8CA1BF", style="node"),
     dict(directive="test", title="Test Case", prefix="T_", color="#DCB239", style="node"),
+    dict(directive="decision", title="Decision", prefix="AD_", color="#C9B6E4", style="node"),
 ]
 # a test that ``:links:`` a requirement satisfies traceability; surface gaps in the build
 needs_extra_links = [
