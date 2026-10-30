@@ -223,6 +223,8 @@ the simulator over a fake transport in light and dark; a real iPhone against the
 peripheral; the van with an owner checklist; and a manual Siri checklist in both languages.
 ```
 
+The checks of the Bluetooth link on a real iPhone are in {doc}`ios-app-radio-checklist`.
+
 ## Architecture decisions
 
 ```{decision} Bluetooth first, satellite as the upgrade

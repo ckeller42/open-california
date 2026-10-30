@@ -18,6 +18,10 @@ public enum CamperGATT {
     public static let controlChars: [String: UInt16] = table(CALI_CTL_CHARS, Int(CALI_CTL_NCHARS)) { (e: cali_ctl_char) in (e.function, e.control_short) }
 
     public static let heartbeat = UInt16(CODEC_CHAR_HEARTBEAT)
+    /// The authenticated read (`vehicle`): it succeeds only over an encrypted, bonded link.
+    public static let auth = UInt16(CODEC_CHAR_AUTH)
+    /// The unit's advertised name.
+    public static let deviceName = CODEC_DEVICE_NAME
     /// The heartbeat's first counter value; +1 per beat, written as 4 bytes big-endian.
     public static let heartbeatStart = UInt32(CODEC_HEARTBEAT_START)
     public static let heartbeatPeriod = Duration.milliseconds(Int(CODEC_HEARTBEAT_PERIOD_MS))

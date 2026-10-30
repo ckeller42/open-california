@@ -1,0 +1,387 @@
+@preconcurrency import CoreBluetooth
+import CaliCore
+import Foundation
+
+/// The link to the camper unit over CoreBluetooth.
+///
+/// Concurrency: every stored var below is touched only on `queue`, the serial queue CoreBluetooth
+/// calls the delegate methods on. The async API hops onto `queue` before it touches state. That
+/// confinement is why the class is `@unchecked Sendable`.
+///
+/// Bring-up: connect (the remembered peripheral, else one another app holds, else a scan for the
+/// service `1000`), discover the services of the char family, then read `1004`, the authenticated
+/// read. Its success is `.encrypted`: iOS encrypts the link with the bond, or runs the passkey
+/// pairing first and answers the read afterwards. An authentication error is `.pairingRequired`.
+/// No own timers: the session's deadline calls `cancel()`.
+///
+/// - Requirement: R_IOS_BLE_DIRECT, R_IOS_PAIRING, R_IOS_BACKGROUND_LINK, R_IOS_POWER_SAVE, R_IOS_HONEST
+public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked Sendable {
+    public let events: AsyncStream<TransportEvent>
+    private let sink: AsyncStream<TransportEvent>.Continuation
+    private let queue = DispatchQueue(label: "de.opencalifornia.camper.ble")
+    private var central: CBCentralManager!
+    private var peripheral: CBPeripheral?
+    private var chars: [UInt16: CBCharacteristic] = [:]
+    private var ops = PendingOps()
+    private var phase = Phase.idle
+    private var servicesLeft = 0
+    /// State restoration handed over a connected peripheral; its bring-up waits for `poweredOn`.
+    private var restoredConnected = false
+
+    private enum Phase: Int, Comparable {
+        case idle, waitingForPower, scanning, connecting, discovering, probing, up
+        static func < (a: Phase, b: Phase) -> Bool { a.rawValue < b.rawValue }
+    }
+
+    static let peripheralKey = "de.opencalifornia.camper.peripheral"
+    /// The general service (`1000`): the unit advertises it, and it holds `1001`–`1004`.
+    static let generalService = CBUUID(string: CamperGATT.uuid(CamperGATT.auth & 0xFF00))
+    /// One service per function: char `0xXXYY` lives in service `0xXX00`.
+    static let services: [CBUUID] = {
+        let all = Array(CamperGATT.stateChars.values) + Array(CamperGATT.controlChars.values) + [CamperGATT.heartbeat, CamperGATT.auth]
+        return Set(all.map { $0 & 0xFF00 }).sorted().map { CBUUID(string: CamperGATT.uuid($0)) }
+    }()
+
+    public init(restoreIdentifier: String = "de.opencalifornia.camper.central") {
+        (events, sink) = AsyncStream.makeStream()
+        super.init()
+        var options: [String: Any] = [:]
+        #if os(iOS)
+        options[CBCentralManagerOptionRestoreIdentifierKey] = restoreIdentifier
+        #endif
+        // On the queue: no delegate callback can run before `central` is set.
+        queue.sync { central = CBCentralManager(delegate: self, queue: queue, options: options) }
+    }
+
+    // MARK: pure mapping (tested without a radio)
+
+    /// Why a link ended. HCI 0x13 (the unit's power-save hang-up) arrives as
+    /// `CBError.peripheralDisconnected`; no error means our own `cancel()`.
+    public static func mapDisconnect(_ error: Error?) -> DisconnectReason {
+        guard let error else { return .localCancel }
+        return (error as? CBError)?.code == .peripheralDisconnected ? .remoteHangUp : .linkLost
+    }
+
+    /// An error that means "no usable bond": iOS shows its own passkey dialog on the next access,
+    /// or the bond is stale (the unit dropped it: *Forget This Device* in Settings).
+    static func needsPairing(_ error: Error?) -> Bool {
+        if let e = error as? CBATTError { return e.code == .insufficientAuthentication || e.code == .insufficientEncryption }
+        if let e = error as? CBError { return e.code == .peerRemovedPairingInformation || e.code == .encryptionTimedOut }
+        return false
+    }
+
+    /// nil: Bluetooth is usable, or its state is not known yet (wait for the next update).
+    static func availability(_ state: CBManagerState) -> BluetoothAvailability? {
+        switch state {
+        case .poweredOff: .poweredOff
+        case .unauthorized: .unauthorized
+        case .unsupported: .unsupported
+        default: nil
+        }
+    }
+
+    /// The short id of a char or service UUID of the unit's family; nil for any other UUID.
+    static func short(_ uuid: CBUUID) -> UInt16? {
+        let s = uuid.uuidString.lowercased()
+        guard s.count == 36, s.hasPrefix("0000"),
+              s.hasSuffix(CamperGATT.uuid(0).dropFirst(8)) else { return nil }
+        return UInt16(s.dropFirst(4).prefix(4), radix: 16)
+    }
+
+    // MARK: CamperTransport
+
+    public func connect() async {
+        queue.async { self.startConnect() }
+    }
+
+    public func cancel() async {
+        queue.async { self.stop() }
+    }
+
+    public func read(_ char: UInt16) async throws -> [UInt8] {
+        try await withCheckedThrowingContinuation { k in
+            queue.async {
+                guard self.phase == .up, let p = self.peripheral else { return k.resume(throwing: TransportError.notConnected) }
+                guard let c = self.chars[char] else { return k.resume(throwing: TransportError.noSuchChar(char)) }
+                if self.ops.addRead(char, k) { p.readValue(for: c) }
+            }
+        }
+    }
+
+    public func write(_ char: UInt16, _ bytes: [UInt8]) async throws {
+        try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in
+            queue.async {
+                guard self.phase == .up, let p = self.peripheral else { return k.resume(throwing: TransportError.notConnected) }
+                guard let c = self.chars[char] else { return k.resume(throwing: TransportError.noSuchChar(char)) }
+                self.ops.addWrite(char, k)
+                p.writeValue(Data(bytes), for: c, type: .withResponse)
+            }
+        }
+    }
+
+    /// Enables notifications on each char that supports them; a char without notify is skipped.
+    /// The unit sends nothing on subscribe: the caller reads each char.
+    public func subscribe(_ list: [UInt16]) async throws {
+        try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in
+            queue.async {
+                guard self.phase == .up, let p = self.peripheral else { return k.resume(throwing: TransportError.notConnected) }
+                let notifying = list.compactMap { self.chars[$0] }.filter { !$0.properties.isDisjoint(with: [.notify, .indicate]) }
+                self.ops.addSubscribe(Set(notifying.compactMap { Self.short($0.uuid) }), k)
+                for c in notifying { p.setNotifyValue(true, for: c) }
+            }
+        }
+    }
+
+    // MARK: link (on `queue`)
+
+    private func startConnect() {
+        if phase == .up { sink.yield(.encrypted); return }
+        guard phase == .idle else { return }
+        if let a = Self.availability(central.state) { sink.yield(.bluetoothUnavailable(a)); return }
+        guard central.state == .poweredOn else { phase = .waitingForPower; return }
+        if let p = known() {
+            open(p)
+        } else {
+            phase = .scanning
+            central.scanForPeripherals(withServices: [Self.generalService])
+        }
+    }
+
+    /// The remembered unit (iOS resolves its rotating address with the bond), else one that another
+    /// app on this iPhone holds (the vendor app).
+    private func known() -> CBPeripheral? {
+        if let s = UserDefaults.standard.string(forKey: Self.peripheralKey), let id = UUID(uuidString: s),
+           let p = central.retrievePeripherals(withIdentifiers: [id]).first { return p }
+        return central.retrieveConnectedPeripherals(withServices: [Self.generalService]).first
+    }
+
+    private func open(_ p: CBPeripheral) {
+        peripheral = p
+        p.delegate = self
+        phase = .connecting
+        central.connect(p)  // no timeout in CoreBluetooth; no auto-reconnect (the unit cuts a redial within 6 s)
+    }
+
+    private func linkOpened(_ p: CBPeripheral) {
+        phase = .discovering
+        sink.yield(.connected)
+        p.discoverServices(Self.services)
+    }
+
+    private func stop() {
+        switch phase {
+        case .idle:
+            return
+        case .waitingForPower, .scanning, .connecting:
+            if phase == .scanning { central.stopScan() }
+            if phase == .connecting, let p = peripheral { central.cancelPeripheralConnection(p) }
+            tearDown()
+            sink.yield(.disconnected(reason: .localCancel))
+        case .discovering, .probing, .up:
+            // didDisconnectPeripheral (error nil -> .localCancel) ends it.
+            if let p = peripheral { central.cancelPeripheralConnection(p) }
+        }
+    }
+
+    /// The link is gone: every pending call resumes (an issued write with `.linkLost`).
+    private func tearDown() {
+        phase = .idle
+        chars = [:]
+        servicesLeft = 0
+        restoredConnected = false
+        ops.drain()
+    }
+
+    private func fail(_ p: CBPeripheral, _ error: Error?) {
+        if Self.needsPairing(error) { sink.yield(.pairingRequired) }
+        central.cancelPeripheralConnection(p)
+    }
+}
+
+// MARK: - CBCentralManagerDelegate (on `queue`)
+
+extension CoreBluetoothTransport: CBCentralManagerDelegate {
+    public func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        if central.state == .poweredOn {
+            if phase == .waitingForPower { phase = .idle; startConnect() }
+            if restoredConnected, let p = peripheral, p.state == .connected { restoredConnected = false; linkOpened(p) }
+            return
+        }
+        // Not powered on: CoreBluetooth sends no disconnect for the links it dropped.
+        let was = phase
+        if was > .waitingForPower { tearDown() }
+        if was >= .discovering { sink.yield(.disconnected(reason: .linkLost)) }
+        if let a = Self.availability(central.state) {
+            if was == .waitingForPower { tearDown() }
+            sink.yield(.bluetoothUnavailable(a))
+        } else if was > .idle {
+            phase = .waitingForPower  // resetting: connect again once it is back
+        }
+    }
+
+    public func centralManager(_ central: CBCentralManager, didDiscover p: CBPeripheral,
+                               advertisementData: [String: Any], rssi: NSNumber) {
+        guard phase == .scanning else { return }
+        central.stopScan()
+        open(p)
+    }
+
+    public func centralManager(_ central: CBCentralManager, didConnect p: CBPeripheral) {
+        guard p === peripheral, phase == .connecting else { return }
+        linkOpened(p)
+    }
+
+    public func centralManager(_ central: CBCentralManager, didFailToConnect p: CBPeripheral, error: Error?) {
+        guard p === peripheral, phase != .idle else { return }
+        if Self.needsPairing(error) { sink.yield(.pairingRequired) }
+        tearDown()
+        sink.yield(.disconnected(reason: .failedToConnect))
+    }
+
+    public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
+        guard p === peripheral, phase != .idle else { return }
+        if Self.needsPairing(error) { sink.yield(.pairingRequired) }
+        tearDown()
+        sink.yield(.disconnected(reason: Self.mapDisconnect(error)))
+    }
+
+    #if os(iOS)
+    /// iOS relaunched the app for the held link (it was terminated by the system, not swiped away).
+    /// Called before `centralManagerDidUpdateState`; the bring-up resumes once Bluetooth is on.
+    public func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        guard let p = (dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral])?.first else { return }
+        peripheral = p
+        p.delegate = self
+        switch p.state {
+        case .connected: phase = .connecting; restoredConnected = true
+        case .connecting: phase = .connecting  // the pending connect lives on; didConnect follows
+        default: peripheral = nil
+        }
+    }
+    #endif
+}
+
+// MARK: - CBPeripheralDelegate (on `queue`)
+
+extension CoreBluetoothTransport: CBPeripheralDelegate {
+    public func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
+        guard p === peripheral, phase == .discovering else { return }
+        let found = p.services ?? []
+        guard error == nil, !found.isEmpty else { return fail(p, error) }
+        servicesLeft = found.count
+        for s in found { p.discoverCharacteristics(nil, for: s) }
+    }
+
+    public func peripheral(_ p: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        guard p === peripheral, phase == .discovering else { return }
+        for c in service.characteristics ?? [] { if let s = Self.short(c.uuid) { chars[s] = c } }
+        servicesLeft -= 1
+        guard servicesLeft == 0 else { return }
+        // `.encrypted` only once the char map is complete: the session starts the heartbeat on it.
+        guard let auth = chars[CamperGATT.auth] else { return linkUp(p) }  // ponytail: no 1004, no proof of encryption
+        phase = .probing
+        p.readValue(for: auth)
+    }
+
+    public func peripheral(_ p: CBPeripheral, didUpdateValueFor c: CBCharacteristic, error: Error?) {
+        guard p === peripheral, let s = Self.short(c.uuid) else { return }
+        if phase == .probing, s == CamperGATT.auth {
+            // The probe's value is discarded: the session reads every char after `.encrypted`.
+            return error == nil ? linkUp(p) : fail(p, error)
+        }
+        let bytes = [UInt8](c.value ?? Data())
+        let result: Result<[UInt8], any Error> = error.map { e in
+            if Self.needsPairing(e) { sink.yield(.pairingRequired) }
+            return .failure(TransportError.noSuchChar(s))
+        } ?? .success(bytes)
+        // CoreBluetooth reports a read answer and a notification alike: while a read of this char is
+        // pending, the value goes to that read and is never reported as a push (a push confirms a
+        // command; a read can be the unit's write-through echo).
+        switch ops.finishRead(s, result) {
+        case true?: p.readValue(for: c)
+        case false?: break
+        case nil: if error == nil { sink.yield(.notified(char: s, bytes: bytes)) }
+        }
+    }
+
+    public func peripheral(_ p: CBPeripheral, didWriteValueFor c: CBCharacteristic, error: Error?) {
+        guard p === peripheral, let s = Self.short(c.uuid) else { return }
+        if Self.needsPairing(error) { sink.yield(.pairingRequired) }
+        sink.yield(.written(char: s, ok: error == nil))
+        ops.finishWrite(s, error == nil ? .success(()) : .failure(TransportError.writeRejected))
+    }
+
+    public func peripheral(_ p: CBPeripheral, didUpdateNotificationStateFor c: CBCharacteristic, error: Error?) {
+        guard p === peripheral, let s = Self.short(c.uuid) else { return }
+        if Self.needsPairing(error) { sink.yield(.pairingRequired) }
+        ops.finishSubscribe(s, error.map { _ in TransportError.writeRejected })
+    }
+
+    private func linkUp(_ p: CBPeripheral) {
+        phase = .up
+        UserDefaults.standard.set(p.identifier.uuidString, forKey: Self.peripheralKey)
+        sink.yield(.encrypted)
+    }
+}
+
+/// The continuations of the calls in flight, per char, in issue order; each resumes exactly once.
+/// Not thread-safe: the transport confines it to its queue.
+///
+/// - Requirement: R_IOS_BLE_DIRECT, R_IOS_HONEST
+struct PendingOps {
+    typealias Read = CheckedContinuation<[UInt8], any Error>
+    typealias Done = CheckedContinuation<Void, any Error>
+    private var reads: [UInt16: [Read]] = [:]
+    private var writes: [UInt16: [Done]] = [:]
+    private var subscribes: [(left: Set<UInt16>, k: Done)] = []
+
+    /// Queues a read. True: it is the only one for the char, so issue `readValue` now (one read
+    /// per char on the air: CoreBluetooth answers do not say which request they belong to).
+    mutating func addRead(_ c: UInt16, _ k: Read) -> Bool {
+        reads[c, default: []].append(k)
+        return reads[c]!.count == 1
+    }
+
+    /// A value arrived. Resumes the oldest read: true when another one waits (issue it), false when
+    /// none waits, nil when no read was pending (the value is a notification).
+    mutating func finishRead(_ c: UInt16, _ r: Result<[UInt8], any Error>) -> Bool? {
+        guard var q = reads[c], !q.isEmpty else { return nil }
+        q.removeFirst().resume(with: r)
+        reads[c] = q.isEmpty ? nil : q
+        return !q.isEmpty
+    }
+
+    /// Queues an issued write; the ATT answers come in issue order.
+    mutating func addWrite(_ c: UInt16, _ k: Done) { writes[c, default: []].append(k) }
+
+    mutating func finishWrite(_ c: UInt16, _ r: Result<Void, any Error>) {
+        guard var q = writes[c], !q.isEmpty else { return }
+        q.removeFirst().resume(with: r)
+        writes[c] = q.isEmpty ? nil : q
+    }
+
+    /// Waits for the notification state of every char in `chars`; an empty set resumes at once.
+    mutating func addSubscribe(_ chars: Set<UInt16>, _ k: Done) {
+        if chars.isEmpty { k.resume() } else { subscribes.append((chars, k)) }
+    }
+
+    mutating func finishSubscribe(_ c: UInt16, _ error: (any Error)?) {
+        subscribes = subscribes.compactMap { s in
+            guard s.left.contains(c) else { return s }
+            if let error { s.k.resume(throwing: error); return nil }
+            let left = s.left.subtracting([c])
+            if left.isEmpty { s.k.resume(); return nil }
+            return (left, s.k)
+        }
+    }
+
+    /// The link went: a write was issued, so the unit may have acted (`.linkLost`); a read or a
+    /// subscribe has no effect on the unit (`.notConnected`).
+    mutating func drain() {
+        let (r, w, s) = (reads.values.joined(), writes.values.joined(), subscribes.map(\.k))
+        reads = [:]; writes = [:]; subscribes = []
+        for k in r { k.resume(throwing: TransportError.notConnected) }
+        for k in w { k.resume(throwing: TransportError.linkLost) }
+        for k in s { k.resume(throwing: TransportError.notConnected) }
+    }
+}
