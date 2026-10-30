@@ -11,3 +11,26 @@ Snapshot
 --------
 
 .. doxygenfile:: cali_snapshot.h
+
+Protocol core
+-------------
+
+Session
+~~~~~~~
+
+.. doxygenfile:: cali_session.h
+
+Pairing runner
+~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_runner.h
+
+Device status
+~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_status.h
+
+Control
+~~~~~~~
+
+.. doxygenfile:: cali_control.h

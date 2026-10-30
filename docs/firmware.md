@@ -1741,6 +1741,8 @@ can be checked on the CoreS3 only. They are the expected behaviours; none of the
 
 ## Traceability
 
+The requirements `R_FW_CONTROL_TWIN`, `R_FW_WRITE_ALLOWLIST` and `R_FW_CONTROL_API` live with their API: see {doc}`firmware-api`.
+
 Requirements are authored as `sphinx-needs` objects next to the code they constrain (or, where the
 implementation is C — not autodoc'd — in the docstring of the Python test module that verifies
 it, a "shim" `sphinx-needs` can parse; see `firmware/README.md`'s own traceability section for the
@@ -1755,20 +1757,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    Retired: the firmware writes control frames. Superseded by ``R_FW_WRITE_ALLOWLIST`` (what may be
    written) and ``R_FW_CONTROL_API`` (when and how); no test links here.
 
-.. req:: The firmware's control frames and gates are byte-identical to calictl's
-   :id: R_FW_CONTROL_TWIN
-   :status: implemented
-   :tags: esp32, control
-
-   For cooler, campingmode, lighting (power, zones, ``all``, ``profile``, ``save_profile`` with its
-   SET_COLOR preface, ``door_contact``), airheater and energy, the firmware shall plan exactly the
-   writes ``calictl.control`` would — the same ``command_precondition`` refusal texts, the same
-   frames from ``control.build``, the same lighting commit after each frame — on every vector of
-   ``tests/vectors/control.json`` (generated from the Python, ``--check`` in CI). The roof is
-   answered "Only via buspi or the app"; ``lighting wakeup`` follows ``R_FW_WAKEUP``. The twin is
-   ``firmware/components/cali_core/control.c`` (``cali_ctl_plan``), pure C99 over the generated
-   ``csrc/control_consts.h``.
-
 .. req:: The satellite sets the wake-up light with the page's clock and the unit's own config
    :id: R_FW_WAKEUP
    :status: implemented
@@ -1779,43 +1767,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    refused with the clock reason. The edit's unit-reported fields come only from the unit's own 1502
    frames on the current link; with none known the firmware shall pull them with REQUEST_CONFIG, wait
    at most ``CODEC_CONFIG_PULL_MS`` and then build or refuse with ``WAKEUP_UNKNOWN``.
-
-.. req:: The firmware writes only the five control chars at their frame length, and the 1003 heartbeat
-   :id: R_FW_WRITE_ALLOWLIST
-   :status: implemented
-   :tags: esp32, control, safety
-
-   The firmware's only characteristic-value writes shall be the ``1003`` liveness heartbeat
-   (``write_heartbeat``) and control frames to the five chars of ``CALI_CTL_CHARS``
-   (``csrc/control_consts.h``, generated from ``tools/gen_c_dict.ESP_CONTROL_FUNCTIONS``: ``1101``
-   cooler, ``1201`` camping mode, ``1501`` lighting, ``1601`` energy, ``1701`` air heater), each at
-   exactly its control frame length. One function, ``cali_ctl_write_ok``
-   (``firmware/components/cali_core/control.c``), decides it, and both the sequencer
-   (``control_run.c``, before every write) and the NimBLE transport's ``write`` (``ble_nimble.c``
-   ``t_write``, for any caller) call it. The roof's ``1401`` is never on the list (the generator
-   asserts it); no roof builder exists. CCCD writes only enable notifications.
-
-.. req:: Control commands: armed link, one at a time, station mode only
-   :id: R_FW_CONTROL_API
-   :status: implemented
-   :tags: esp32, control, web
-
-   The firmware shall accept a control command from ``POST /api/command`` (calictl's request and
-   response shape) only in station mode, and from the console ``set <fn> <what> [value]``; a
-   command is accepted only on an armed link (up ``CODEC_ARM_DELAY_MS`` with its first read-all
-   done) and when the function's state has been read on that link; it writes the planned frames
-   one at a time with response, a lighting commit at least ``CODEC_FOLLOW_DELAY_MS`` after the
-   previous ACK; it reports
-   success only after every write was ACKed, a refused write or a lost link as a failure (no
-   further frame), and gives up after ``CALI_CTL_DEADLINE_MS``; a second command while one runs
-   — or while a timed-out write still awaits its ACK — is refused (busy). The sequencer is
-   ``firmware/components/cali_core/control_run.c``, ticked by the session. ``POST /api/command``
-   (``web.c``) answers in calictl's request and response shape — ``applied`` never ``true`` (no
-   readback check), a gate's refusal as ``{"applied":false,"refused":<text>}`` — and only after the
-   sequencer's done callback: the HTTP core holds the connection (``CALI_HTTP_PENDING``, no idle
-   timeout meanwhile) so a refused or timed-out write is a 502/504, never "Sent". Outside station
-   mode (setup hotspot, setup-flow join, unprovisioned) it is ``403 setup_mode`` before anything
-   reaches the control module; ``/api/state`` reports it as ``device.control.writes``.
 
 .. req:: SM I/O capability and MITM must be set before any link exists
    :id: R_FW_IO_CAP_BEFORE_LINK

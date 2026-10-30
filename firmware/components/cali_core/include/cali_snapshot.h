@@ -1,18 +1,18 @@
 /**
  * @file cali_snapshot.h
- * @brief Per-function decoded-frame cache (the SNAP object behind /api/state).
+ * @brief Emitter for the status members of the console SNAP line and /api/state.
  *
  * The status pieces the console (SNAP/STATE lines) and the web page (/api/state) both report,
  * emitted in one place so the two can never disagree. C99, no malloc, no platform deps beyond
  * cali_core's own session/runner.
  *
  * @verbatim embed:rst:leading-asterisk
- * .. req:: Snapshot cache
+ * .. req:: Snapshot emitter
  *    :id: R_FW_SNAPSHOT
  *    :status: implemented
  *
- *    The satellite holds the last decoded frame per function and serves it in
- *    ``/api/state``.
+ *    The satellite emits the session's last frame per function, decoded, as the ``fn`` members
+ *    of ``/api/state`` and of the console SNAP line, from one function, so the two never disagree.
  * @endverbatim
  */
 #ifndef CALI_SNAPSHOT_H
