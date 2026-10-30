@@ -34,3 +34,36 @@ Control
 ~~~~~~~
 
 .. doxygenfile:: cali_control.h
+
+Transport, pairing & WiFi
+-------------------------
+
+Transport
+~~~~~~~~~
+
+.. doxygenfile:: cali_transport.h
+
+Pairing state machine
+~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_pairing_sm.h
+
+WiFi state machine
+~~~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_wifi_sm.h
+
+WiFi runtime
+~~~~~~~~~~~~
+
+.. doxygenfile:: cali_wifi_run.h
+
+Captive portal
+~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_captive.h
+
+Network
+~~~~~~~
+
+.. doxygenfile:: cali_net.h

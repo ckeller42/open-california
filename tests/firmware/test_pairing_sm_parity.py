@@ -1,16 +1,6 @@
 """The C pairing SM replays tests/vectors/pairing.json exactly (same pinned enums as calictl.pairing).
 
-.. req:: C twin of the pairing SM
-   :id: R_FW_PAIRING_SM
-
-   The C port of ``calictl.pairing.step`` for the upcoming ESP32 firmware (#154):
-   ``firmware/components/cali_core/pairing_sm.c`` uses the same pinned state/event/action enums
-   as the Python original (``csrc/pairing_consts.h``, generated from ``calictl/pairing.py`` by
-   ``tools/gen_c_dict.py``), the same transition table, and no strings/clock/BLE calls in the SM
-   itself. Proven equal to the Python reference by replaying ``tests/vectors/pairing.json``
-   through both. See ``firmware/README.md``'s traceability section (this Python module is the
-   "shim" sphinx-needs collects it through, since C comments are not autodoc'd; rendered on its
-   own docs page by ``docs/firmware.md``, added in Task 10).
+The requirement ``R_FW_PAIRING_SM`` lives in ``cali_pairing_sm.h`` (see docs/firmware-api.rst).
 
 .. test:: C pairing SM matches the Python golden vectors
    :id: T_FW_PAIRING_SM_PARITY

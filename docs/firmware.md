@@ -1743,6 +1743,8 @@ can be checked on the CoreS3 only. They are the expected behaviours; none of the
 
 The requirements `R_FW_CONTROL_TWIN`, `R_FW_WRITE_ALLOWLIST` and `R_FW_CONTROL_API` live with their API: see {doc}`firmware-api`.
 
+The requirements `R_FW_PAIRING_SM`, `R_FW_WIFI_PROVISION`, `R_FW_WIFI_ROLLBACK` and `R_FW_WIFI_BLE_COEX` live with their API too: see {doc}`firmware-api`.
+
 Requirements are authored as `sphinx-needs` objects next to the code they constrain (or, where the
 implementation is C — not autodoc'd — in the docstring of the Python test module that verifies
 it, a "shim" `sphinx-needs` can parse; see `firmware/README.md`'s own traceability section for the
@@ -1785,39 +1787,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    step too late — so the fake unit refuses it and ``test_just_works_build_is_refused`` proves the
    firmware (and the test setup) would actually catch this class of regression, not just assert
    it away. Never compiled into a device build (``#error`` if ``ESP_PLATFORM`` is also defined).
-
-.. req:: WiFi provisioning — setup hotspot, captive portal, station join with retry, credentials in the kv store
-   :id: R_FW_WIFI_PROVISION
-
-   A satellite with no saved WiFi opens a WPA2 setup hotspot (``calictl-esp-setup``, fixed
-   passphrase, address ``192.168.4.1``) whose DNS answers every A query with its own address and whose
-   HTTP server redirects the OS captive-portal probe paths to the web UI (``http://192.168.4.1/``),
-   which opens on its WiFi-setup screen, so a phone that joins is led to it. Credentials entered there (or with the console's ``wifi set``) are validated (SSID
-   1-32 bytes, PSK 8-63 bytes — open networks unsupported), stored in the kv store (``wifi_ssid`` /
-   ``wifi_psk``) and joined as a station; on success mDNS announces ``calictl-esp.local`` and the
-   hotspot closes ``NET_AP_CLOSE_MS`` later. A failed join of credentials typed in the current setup
-   flow clears them and returns to the hotspot; credentials that joined before or were loaded from
-   flash are never wiped by a failure — the station retries on a 1 s to 60 s doubling backoff and
-   reopens the hotspot alongside after ``NET_SETUP_AFTER_MS`` (5 min) without a join. ``wifi forget``
-   / ``DELETE /api/wifi`` erase them and reopen the hotspot from any state. ``GET /api/wifi`` lists
-   networks over the hotspot and while online (a scan at most every ``NET_SCAN_MIN_INTERVAL_MS``,
-   never during a join or a BLE pairing flow). The state machine is a pure C twin of
-   ``tools/wifi_sm_ref.py`` (golden-vector parity). A board whose WiFi driver cannot start boots with
-   WiFi off and the BLE side unaffected.
-
-.. req:: A failed WiFi replacement returns to the previous, joined network by itself
-   :id: R_FW_WIFI_ROLLBACK
-   :status: implemented
-   :tags: esp32, wifi
-
-   New credentials (``POST /api/wifi`` or ``wifi set``) for a station whose current credentials have
-   joined keep those as the fallback (RAM only, never logged). If the new join fails (network not
-   found, wrong password, any other failure or the join timeout), the firmware shall restore the
-   previous credentials in RAM and in the kv store, rejoin them on the retry backoff, close the setup
-   hotspot ``NET_AP_CLOSE_MS`` after it is back, and report ``"reverted": true`` with ``last_error``
-   = the replacement's reason on ``GET /api/wifi`` until the next credential change or forget. A
-   replacement that joins drops the fallback. Without a joined network (first setup) a failed join
-   clears the typed credentials and stays in setup, as in ``R_FW_WIFI_PROVISION``.
 
 .. req:: Web pages and JSON state over a bounded, non-blocking, single-connection HTTP server
    :id: R_FW_HTTP_STATUS
@@ -1900,15 +1869,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    reports ``device.battery`` ``{pct, mv, usb, charging, runtime_min}`` (each ``null`` when unknown);
    the screen shows it in the station footer only (never a wake trigger), the shared UI's Device status
    shows it, EN + DE.
-
-.. req:: WiFi never disturbs the BLE session; scans wait for an active pairing flow
-   :id: R_FW_WIFI_BLE_COEX
-
-   WiFi events (join, loss, retries, hotspot up/down) never call into the BLE session: the link,
-   the ``1003`` heartbeat cadence and notification-driven ``SNAP`` lines continue unchanged through a
-   WiFi loss and reconnect. The only coupling is scans: a WiFi scan is deferred while a BLE pairing
-   flow is **active** (runner state not idle, bonded or error — a failed pairing does not block it)
-   and started on the first tick after it ends.
 
 .. req:: The satellite updates itself on request from the GitHub release, verified, with rollback
    :id: R_FW_OTA
