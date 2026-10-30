@@ -406,4 +406,37 @@ struct StoreGuardTests {
         #expect(st.fields["water"] == nil && st.interpreted["water"] == nil)
         #expect(st.waterHeld)
     }
+
+    /// A config or ack 1502 frame feeds the latch but keeps the stored lamps (#284, session.c `keep`).
+    /// - Test: T_IOS_LAMP_MERGE
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST, R_IOS_FUNCTIONS
+    @Test func configFrameKeepsTheStoredLamps() async throws {
+        let lamps = Fx.lights(pn: 9, mode: 4)
+        let r = Rig(Fx.frames().merging([Fx.lighting: lamps]) { $1 })
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        let before = await r.s.state
+        #expect(before.fields["lighting"]?["Mode"] == 4)
+
+        await r.fake.pushForeign(char: Fx.lighting, bytes: Fx.wakeup)  // Mode 20
+        try await until("latched") { await r.s.state.lightConfig["WakeupTimestamp"] != nil }
+        await r.fake.pushForeign(char: Fx.lighting, bytes: Fx.lights(pn: 0, mode: 12))  // REQUEST_CONFIG reply
+        try await Task.sleep(for: .milliseconds(50))
+        let after = await r.s.state
+        #expect(after.fields["lighting"] == before.fields["lighting"])
+        #expect(after.interpreted["lighting"] == before.interpreted["lighting"])
+        #expect(after.lightConfig["WakeupLightValue"] == 0x0101)
+
+        // A later lamp-state frame replaces them.
+        await r.fake.pushForeign(char: Fx.lighting, bytes: Fx.lights(pn: 9, mode: 4).enumerated().map { $0 == 8 ? 0x33 : $1 })
+        try await until("new lamps") { await r.s.state.fields["lighting"]?["BrightnessLOne"] == 3 }
+    }
+
+    /// With no lamp-state frame stored, a config frame is stored as it is.
+    /// - Test: T_IOS_LAMP_MERGE_EMPTY
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
+    @Test func configFrameIsStoredWhenNoLampsAreKnown() async throws {
+        let r = Rig(Fx.frames().merging([Fx.lighting: Fx.wakeup]) { $1 })
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        #expect(await r.s.state.fields["lighting"]?["Mode"] == 20)
+    }
 }

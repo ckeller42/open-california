@@ -402,8 +402,14 @@ public actor CamperSession {
         }
         liveFunctions.insert(fn)
         if fn == "lighting" {
-            // A read or a push of the unit's own frame: never one of our writes (R4).
+            // A read or a push of the unit's own frame: never one of our writes (R4). A config or ack frame
+            // only feeds the latch and keeps the stored lamps (#284, session.c `keep`).
             state.lightConfig = CaliControl.lightConfig(previous: state.lightConfig, frame: fields)
+            if !CaliControl.lightReportsState(fields), let kept = state.fields[fn], CaliControl.lightReportsState(kept) {
+                state.asOf = Date()
+                publish()
+                return
+            }
         }
         state.fields[fn] = fields
         do {
