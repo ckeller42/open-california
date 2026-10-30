@@ -199,6 +199,13 @@ HCI reason code
   host, `0x3e` connection failed to be established (often a busy scanner), `0x08` supervision
   timeout (out of range, or the peer went silent).
 
+App Intents
+  Apple's framework through which an iOS app offers actions to Siri, the Shortcuts app and
+  Spotlight, with fixed spoken phrases per language. See {doc}`ios-app`.
+
+SF Symbols
+  Apple's icon set for iOS apps, drawn to match the system font. See {doc}`ios-app`.
+
 Power-save hang-up
   The unit ends a central's link about 30.7 s after encryption (HCI 0x13) while camping mode is
   off and no shore power feeds it. A link that starts less than 6 s later is cut about 1.2 s in.
