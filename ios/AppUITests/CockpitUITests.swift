@@ -62,6 +62,8 @@ final class CockpitUITests: XCTestCase {
             let app = launch("campingOn", dark: dark)
             XCTAssertTrue(app.otherElements["battery-ring"].waitForExistence(timeout: 10))
             try app.audit()
+            app.swipeUp()  // the tiles near the tab bar, scrolled into view
+            try app.audit()
             for tab in ["Energy", "Water"] {
                 app.tabBars.buttons[tab].tap()
                 XCTAssertTrue(app.navigationBars[tab].waitForExistence(timeout: 5))
