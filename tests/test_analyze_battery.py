@@ -45,7 +45,7 @@ def test_classify_gap_distinguishes_the_failure_states():
     assert "DAEMON-DOWN" in ab.classify_gap(1000, 5000, [])[0]  # no rows
     assert "DAEMON-DOWN" in ab.classify_gap(1000, 5000, [{"ts": 50, "outcome": "ok"}])[0]  # rows outside
     asleep = [{"ts": t, "outcome": "asleep"} for t in range(1000, 5000, 500)]
-    assert "VAN DEEP-SLEEP" in ab.classify_gap(1000, 5000, asleep)[0]
+    assert "UNIT UNREACHABLE" in ab.classify_gap(1000, 5000, asleep)[0]
     # short ble_error run (<30 min) = transient/our-side; long persistent run = unit BLE disabled
     short_ble = [{"ts": t, "outcome": "ble_error"} for t in range(1000, 2200, 300)]  # 20 min
     assert "OUR-SIDE" in ab.classify_gap(1000, 2200, short_ble)[0]

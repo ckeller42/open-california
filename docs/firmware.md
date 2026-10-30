@@ -356,7 +356,7 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    viewer the rest and all its no-rest conditions (a command in flight, the ignition on or unknown,
    a camping restore owed, camping on, shore power active or standby) work as in ``R_FW_BLE_REST``.
 
-   When a reconnect out of the rest never brings a link up (the unit deep-sleeps, so the connects
+   When a reconnect out of the rest never brings a link up (the unit is out of reach, so the connects
    fail or time out), the first such failure after the viewer is gone re-enters the rest (``evt
    rest`` ``why`` ``unreachable``) instead of backing off without end. While the viewer stays, or a
    command is in flight, the backoff goes on.

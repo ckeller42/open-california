@@ -1,7 +1,7 @@
 # The mock camper unit: setup and usage
 
-The real VW California {term}`camper unit` is hard to reach. It sits in a parked van, deep-sleeps for days,
-and stops advertising. So nearly all development runs against a
+The real VW California {term}`camper unit` is hard to reach. It sits in a parked van, often out of
+Bluetooth range. So nearly all development runs against a
 **mock** of the unit instead — a model you can run on a laptop with no van, no phone and usually no
 radio.
 

@@ -2,7 +2,7 @@
 
 > **NOTE (2026-07-12):** this is the original 2026-07-07 audit. Several gaps here have since been
 > **resolved** — see **`protocol-alignment.md`** (cooler-timer offsets, satellite `1901`, vehicle
-> byte-0, all lighting modes) and **`value-freshness.md`** (the stale-read / deep-sleep behavior)
+> byte-0, all lighting modes) and **`value-freshness.md`** (the stale-read / unreachable-unit behavior)
 > for the current state. The BLE protocol is now ~98%; the residual is van-gated (see
 > `remaining-captures.md`).
 >
