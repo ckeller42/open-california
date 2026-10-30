@@ -47,7 +47,7 @@ struct ControlVectorTests {
     }
 
     /// - Test: T_IOS_CONTROL_VECTORS
-    /// - Verifies: R_IOS_CONTROL_PLAN
+    /// - Verifies: R_IOS_TESTED, R_IOS_FUNCTIONS
     @Test func planMatchesControlVectors() throws {
         let v = try loadVectors("control.json")
         let states = (v["states"] as! [String: Any]).mapValues { Self.state($0 as! [String: Any]) }
@@ -62,7 +62,7 @@ struct ControlVectorTests {
     }
 
     /// - Test: T_IOS_CONTROL_APP_VECTORS
-    /// - Verifies: R_IOS_CONTROL_PLAN
+    /// - Verifies: R_IOS_TESTED, R_IOS_FUNCTIONS
     @Test func planMatchesAppRecordedVectors() throws {
         let v = try loadVectors("control.json")
         let pull = (v["config_pull"] as! [String: Any])["reason"] as! String
@@ -81,5 +81,6 @@ struct ControlVectorTests {
             Self.check(c, state: st, pull: pull, kinds: &kinds, pulls: &pulls)
         }
         #expect(app.count > 0)
+        #expect(kinds == ["frames", "refused"])
     }
 }

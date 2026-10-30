@@ -28,7 +28,7 @@ public enum PlanResult: Equatable, Sendable {
 
 /// The control planner of the satellite (`firmware/components/cali_core/control.c`), linked as it is.
 ///
-/// - Requirement: R_IOS_CONTROL_PLAN
+/// - Requirement: R_IOS_FUNCTIONS
 public enum CaliControl {
     // cali_ctl_plan takes a C callback without a context pointer, so the state sits in a lock-guarded global
     // for the duration of one plan call. ponytail: serialises all plans; they take microseconds.

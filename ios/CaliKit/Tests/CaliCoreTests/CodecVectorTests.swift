@@ -23,7 +23,7 @@ func bytes(hex: String) -> [UInt8] {
 
 struct CodecVectorTests {
     /// - Test: T_IOS_CODEC_VECTORS
-    /// - Verifies: R_IOS_CODEC
+    /// - Verifies: R_IOS_TESTED, R_IOS_FUNCTIONS
     @Test func decodeMatchesCamperCodecVectors() throws {
         let cases = try #require(try loadVectors("camper_codec.json")["decode"] as? [[String: Any]])
         var checked = 0
@@ -39,7 +39,7 @@ struct CodecVectorTests {
     }
 
     /// - Test: T_IOS_CODEC_UNKNOWN_FUNCTION
-    /// - Verifies: R_IOS_CODEC
+    /// - Verifies: R_IOS_TESTED, R_IOS_FUNCTIONS
     @Test func unknownFunctionThrows() {
         #expect(throws: CaliCodecError.unknownFunction) {
             try CaliCodec.decode(function: "nope", bytes: [0])

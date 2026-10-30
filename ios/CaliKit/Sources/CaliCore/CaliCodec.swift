@@ -6,7 +6,7 @@ public enum CaliCodecError: Error, Equatable, Sendable {
 
 /// Decodes a state frame with the repo's C codec (`csrc/codec.c`), the code the ESP32 satellite runs.
 ///
-/// - Requirement: R_IOS_CODEC
+/// - Requirement: R_IOS_FUNCTIONS
 public enum CaliCodec {
     /// - Returns: every placed state field of `function` that fully fits `bytes`, by dictionary name.
     public static func decode(function: String, bytes: [UInt8]) throws -> [String: UInt32] {
