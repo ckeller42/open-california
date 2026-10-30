@@ -10,7 +10,8 @@ extension Color {
 }
 
 /// A large cockpit button: an SF Symbol, the function's name and its state (On / Off), tinted when on.
-/// Disabled while the controls are not usable (`CamperStore.controlEnabled`).
+/// Disabled while the controls are not usable (`CamperStore.controlEnabled`); then a lock shows, and
+/// VoiceOver gives the reason as the hint.
 ///
 /// - Requirement: R_IOS_LOOK, R_IOS_HONEST
 struct ControlButton: View {
@@ -18,7 +19,8 @@ struct ControlButton: View {
     let systemImage: String
     let isOn: Bool
     let tint: Color
-    let enabled: Bool
+    /// Why the button is disabled; nil = enabled.
+    let lockedBecause: LocalizedStringResource?
     let action: () -> Void
 
     var body: some View {
@@ -29,7 +31,7 @@ struct ControlButton: View {
                         .font(.title2)
                         .foregroundStyle(isOn ? tint : Color.primary)
                     Spacer(minLength: 0)
-                    if !enabled { Image(systemName: "lock").font(.footnote) }
+                    if lockedBecause != nil { Image(systemName: "lock").font(.footnote) }
                 }
                 .accessibilityHidden(true)
                 Text(title)
@@ -45,9 +47,10 @@ struct ControlButton: View {
                         in: RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(Undimmed())
-        .disabled(!enabled)
+        .disabled(lockedBecause != nil)
         .accessibilityLabel(Text(title))
         .accessibilityValue(Text(isOn ? "On" : "Off"))
+        .accessibilityHint(lockedBecause.map { Text($0) } ?? Text(verbatim: ""))
     }
 
     /// A disabled button keeps full contrast (dimmed text fails the contrast audit); the lock marks it.

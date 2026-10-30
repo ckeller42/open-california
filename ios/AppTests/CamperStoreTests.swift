@@ -165,11 +165,16 @@ struct CamperStoreTests {
         #expect(String(localized: try #require(store.age)) == "just now")
         now = t0.addingTimeInterval(91)
         #expect(store.isStale && !store.controlsEnabled)
-        #expect(String(localized: try #require(store.age)) == "2 min ago")
+        #expect(String(localized: try #require(store.age)) == "2\u{00A0}min ago")
         now = t0.addingTimeInterval(5 * 3600)
-        #expect(String(localized: try #require(store.age)) == "5 h ago")
-        #expect(String(localized: ageText(3 * 86400)) == "3 d ago")
+        #expect(String(localized: try #require(store.age)) == "5\u{00A0}h ago")
+        #expect(String(localized: ageText(3 * 86400)) == "3\u{00A0}d ago")
         #expect(String(localized: ageText(-5)) == "just now")
+        // VoiceOver hears full words, with the same rounding.
+        #expect(spokenAge(5 * 3600, Locale(identifier: "en_US")) == "5 hours ago")
+        #expect(spokenAge(5 * 3600, Locale(identifier: "de_DE")) == "vor 5 Stunden")
+        #expect(spokenAge(3 * 86400, Locale(identifier: "de_DE")) == "vor 3 Tagen")
+        #expect(spoken(14.1, UnitElectricPotentialDifference.volts, Locale(identifier: "en_US")) == "14.1 volts")
     }
 
     /// A function the unit reports as not installed has no tile.

@@ -25,17 +25,18 @@ struct WaterView: View {
 
     /// "measured 2 h ago" for a held reading (from `waterGoodAt`), else "last measured".
     static func measured(_ store: CamperStore, locale: Locale = .current) -> String {
-        guard let at = store.state.waterGoodAt else { return LocalizedStringResource("last measured").string(locale) }
-        let age = ageText(store.now().timeIntervalSince(at)).string(locale)
-        return LocalizedStringResource("measured \(age)").string(locale)
+        HeldNote.text(since: store.state.waterGoodAt, now: store.now(), locale: locale)
     }
 
-    private func tank(_ key: String) -> (text: String, percent: Double?) {
+    /// "37%  (11/29 L)" like the web UI's `tank`, and the same in full words for VoiceOver.
+    private func tank(_ key: String) -> (text: String, spoken: String, percent: Double?) {
         let t = store.value("water", key)
-        guard let p = t?["percent"]?.number else { return ("—", nil) }
-        let l = t?["liters"]?.number.map { String(Int($0)) } ?? "—"
-        let c = t?["capacity_l"]?.number.map { String(Int($0)) } ?? "—"
-        return ("\(Int(p))%  (\(l)/\(c) L)", p)
+        guard let p = t?["percent"]?.number else { return ("—", "—", nil) }
+        let l = t?["liters"]?.number, c = t?["capacity_l"]?.number
+        let ls = l.map { String(Int($0)) } ?? "—", cs = c.map { String(Int($0)) } ?? "—"
+        let capSpoken = c.map { spoken($0, UnitVolume.liters, locale) } ?? "—"
+        return ("\(Int(p))%\(nbsp) (\(ls)/\(cs)\(nbsp)L)",
+                "\(Int(p))%, " + LocalizedStringResource("\(ls) of \(capSpoken)").string(locale), p)
     }
 
     var body: some View {
@@ -43,19 +44,25 @@ struct WaterView: View {
             if store.installed("water") {
                 VStack(spacing: 0) {
                     let fresh = tank("fresh"), waste = tank("waste")
-                    Row("Fresh water", Text(verbatim: fresh.text), bar: fresh.percent)
-                    Row("Waste water", Text(verbatim: waste.text), bar: waste.percent)
+                    Row("Fresh water", Text(verbatim: fresh.text), spoken: fresh.spoken, bar: fresh.percent)
+                    Row("Waste water", Text(verbatim: waste.text), spoken: waste.spoken, bar: waste.percent)
                     if store.state.waterHeld {
-                        Label { Text(verbatim: Self.measured(store, locale: locale)) } icon: { Image(systemName: "clock") }
+                        HeldNote(since: store.state.waterGoodAt)
                             .font(.footnote)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding()
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .padding(.horizontal)
+                            .padding(.bottom, 6)
+                            .accessibilityElement(children: .combine)  // the whole line is the hit area
                     }
                 }
                 .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
                 ForEach(alerts.indices, id: \.self) { i in
-                    Label { Text(verbatim: alerts[i].string(locale)) } icon: { Image(systemName: "exclamationmark.triangle") }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Label { Text(verbatim: alerts[i].string(locale)) } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
                 }
             }
         }
@@ -65,5 +72,29 @@ struct WaterView: View {
     private var alerts: [LocalizedStringResource] {
         [store.value("water", "fresh_alert")?.string.flatMap { Self.freshAlert[$0] },
          store.value("water", "waste_alert")?.string.flatMap { Self.wasteAlert[$0] }].compactMap { $0 }
+    }
+}
+
+/// The age of a held water reading ("measured 2 h ago"), from the page's clock, so it grows on an
+/// open screen without a new frame; never shown as live.
+///
+/// - Requirement: R_IOS_HONEST
+struct HeldNote: View {
+    /// When the held reading was measured; nil = unknown ("last measured").
+    let since: Date?
+    @Environment(\.pageNow) private var pageNow
+    @Environment(\.locale) private var locale
+
+    /// "measured 2 h ago" (or in full words for VoiceOver), "last measured" without a date.
+    static func text(since: Date?, now: Date, locale: Locale, spoken: Bool = false) -> String {
+        guard let since else { return LocalizedStringResource("last measured").string(locale) }
+        let age = now.timeIntervalSince(since)
+        return LocalizedStringResource("measured \(spoken ? spokenAge(age, locale) : ageText(age).string(locale))").string(locale)
+    }
+
+    var body: some View {
+        let now = pageNow ?? Date()
+        Label { Text(verbatim: Self.text(since: since, now: now, locale: locale)) } icon: { Image(systemName: "clock") }
+            .accessibilityLabel(Text(verbatim: Self.text(since: since, now: now, locale: locale, spoken: true)))
     }
 }

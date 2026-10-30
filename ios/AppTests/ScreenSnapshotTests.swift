@@ -55,47 +55,66 @@ struct ScreenSnapshotTests {
         let store = CamperStore.preview(.parked, now: Self.now)
         store.state.waterHeld = true
         store.state.waterGoodAt = Self.now.addingTimeInterval(-2 * 3600)
-        #expect(WaterView.measured(store, locale: Self.english) == "measured 2 h ago")
-        #expect(WaterView.measured(store, locale: Locale(identifier: "de_DE")) == "vor 2 Std gemessen")
+        #expect(WaterView.measured(store, locale: Self.english) == "measured 2\u{00A0}h ago")
+        #expect(WaterView.measured(store, locale: Locale(identifier: "de_DE")) == "vor 2\u{00A0}Std gemessen")
         check(NavigationStack { WaterView(store: store) }, "water-held")
         check(NavigationStack { CockpitView(store: store) }, "cockpit-water-held")
     }
 
-    /// The full fixture (camping on, every function installed, a held water reading) in German, at
-    /// the largest accessibility text size, and at the iPhone SE width (375 pt, the SE models that
-    /// run iOS 17). The last two show the whole scroll height, not one screen. Light mode only. A
-    /// clipped or overlapping element here is a layout bug.
+    /// Two fixtures in German, at the largest accessibility text size and at the iPhone SE width
+    /// (375 pt, the SE models that run iOS 17): the full one (camping on, every function installed, a
+    /// held water reading) and `faults` (30 %, two energy faults, a water alert, a "—" value, the
+    /// power-save rest). The last two variants show the whole scroll height, not one screen. Light
+    /// mode only. A clipped or overlapping element here is a layout bug.
     ///
     /// - Test: T_IOS_SNAPSHOT_VARIANTS
     /// - Verifies: R_IOS_LOOK, R_IOS_I18N
-    @Test func rendersInGermanLargestTextAndSmallPhone() {
-        let store = CamperStore.preview(.campingOn, now: Self.now)
-        store.state.waterHeld = true
-        store.state.waterGoodAt = Self.now.addingTimeInterval(-2 * 3600)
+    @Test(arguments: [Fixture.campingOn, .faults])
+    func rendersInGermanLargestTextAndSmallPhone(_ fixture: Fixture) {
+        let store = CamperStore.preview(fixture, now: Self.now)
+        if fixture == .campingOn {
+            store.state.waterHeld = true
+            store.state.waterGoodAt = Self.now.addingTimeInterval(-2 * 3600)
+        }
+        let tag = fixture == .campingOn ? "" : "-\(fixture.rawValue)"
         let screens: [(String, AnyView)] = [
             ("cockpit", AnyView(NavigationStack { CockpitView(store: store) })),
             ("energy", AnyView(NavigationStack { EnergyView(store: store) })),
             ("water", AnyView(NavigationStack { WaterView(store: store) })),
         ]
         for (name, view) in screens {
-            snap(view, "\(name)-de", locale: Locale(identifier: "de_DE"))
-            snap(view, "\(name)-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: 2400))
-            snap(view, "\(name)-se", layout: .fixed(width: 375, height: 1000))
+            snap(view, "\(name)\(tag)-de", locale: Locale(identifier: "de_DE"))
+            snap(view, "\(name)\(tag)-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: 3200))
+            snap(view, "\(name)\(tag)-se", layout: .fixed(width: 375, height: 1000))
         }
     }
 
-    /// The page redraws by itself when the data turns stale, without a new frame: a state 88.5 s
-    /// old (real clock) is "live"; 90 s after its frame the hosted pill shows "offline" + "as of …",
-    /// and the content is drawn again (its controls disable then). Without the tick's clock in the
-    /// pill the two renders are equal; without the content's stale tick the content is not redrawn.
+    /// The app's frame: tab bar with its labels, navigation title and the page under it.
+    ///
+    /// - Test: T_IOS_SNAPSHOT_ROOT
+    /// - Verifies: R_IOS_LOOK
+    @Test func rendersTheTabs() {
+        // As a view controller in a window: the floating tab bar and the navigation bar draw only there.
+        let host = UIHostingController(rootView: RootView(store: CamperStore.preview(.parked, now: Self.now))
+            .environment(\.locale, Self.english))
+        let traits = UITraitCollection { $0.userInterfaceStyle = .light; $0.displayScale = 1; $0.preferredContentSizeCategory = .large }
+        assertSnapshot(of: host, as: .image(drawHierarchyInKeyWindow: true, perceptualPrecision: 0.98, size: CGSize(width: 390, height: 844), traits: traits), named: "root", testName: "screens")
+    }
+
+    /// The page redraws by itself when the data turns stale, without a new frame: with the store's
+    /// clock 88 s after the frame the page is "live"; the clock moves to 120 s and, on the next 1 s
+    /// tick, the hosted pill shows "offline" + "as of …" and the content is drawn again (its controls
+    /// disable then). Without the tick's clock in the pill the two renders are equal; without the
+    /// page's change state the content is not redrawn. The clock is injected; only the tick is real.
     ///
     /// - Test: T_IOS_PILL_TICK
     /// - Verifies: R_IOS_HONEST
     @Test func pageRedrawsWhenTheDataTurnsStale() async throws {
         final class Count { var n = 0 }
         let count = Count()
-        let store = CamperStore.preview(.parked)
-        store.state.asOf = Date().addingTimeInterval(-88.5)
+        var clock = Self.now.addingTimeInterval(88)
+        let store = CamperStore.preview(.parked, now: Self.now)
+        store.now = { clock }
         // A window in the host app's scene: a TimelineView ticks only on screen.
         let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)
@@ -113,7 +132,8 @@ struct ScreenSnapshotTests {
         try await Task.sleep(for: .milliseconds(300))
         #expect(!store.isStale)
         let fresh = render(), drawn = count.n
-        try await Task.sleep(for: .milliseconds(2500))  // past asOf + 90.5 s: the stale tick
+        clock = Self.now.addingTimeInterval(120)
+        try await Task.sleep(for: .milliseconds(1500))  // at least one 1 s tick
         #expect(store.isStale)
         #expect(render() != fresh)
         #expect(count.n > drawn)

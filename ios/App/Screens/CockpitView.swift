@@ -36,19 +36,22 @@ struct CockpitView: View {
             if store.installed("energy") {
                 BatteryRing(percent: store.value("energy", "soc2_pct")?.number,
                             volts: store.value("energy", "batt2_v")?.number,
-                            amps: store.value("energy", "batt2_current")?.number)
+                            amps: store.value("energy", "batt2_current")?.number,
+                            asOf: store.state.asOf)
             }
             HStack(spacing: 12) {
                 if store.installed("water"), let liters = store.value("water", "fresh")?["liters"]?.number {
-                    MiniValue(title: "Fresh water", systemImage: "drop", value: "\(Int(liters)) L",
-                              note: store.state.waterHeld ? WaterView.measured(store, locale: locale) : nil)
+                    MiniValue(title: "Fresh water", systemImage: "drop", value: "\(Int(liters))\(nbsp)L",
+                              spoken: spoken(liters, UnitVolume.liters, locale),
+                              heldSince: store.state.waterHeld ? .some(store.state.waterGoodAt) : nil)
                 }
                 if store.value("energy", "solar_installed")?.bool == true,
                    let watts = store.value("energy", "solar_power")?.number {
-                    MiniValue(title: "Solar power", systemImage: "sun.max", value: "\(Int(watts)) W", note: nil)
+                    MiniValue(title: "Solar power", systemImage: "sun.max", value: "\(Int(watts))\(nbsp)W",
+                              spoken: spoken(watts, UnitPower.watts, locale), heldSince: nil)
                 }
             }
-            // ponytail: the buttons open nothing yet; the control screens (camping, lights, cooler, air heater) wire them.
+            // ponytail: the buttons open nothing yet; the control screens (camping, lighting, cooler, air heater) wire them.
             // Two per row; one per row at large type sizes, where a long word (Luftstandheizung) needs the width.
             let tiles = buttons, perRow = typeSize >= .xxLarge ? 1 : 2
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
@@ -64,53 +67,72 @@ struct CockpitView: View {
 
     private func on(_ function: String, _ key: String) -> Bool { store.value(function, key)?.bool == true }
 
+    /// Why `function`'s button is disabled, for VoiceOver; nil when it is enabled.
+    private func locked(_ function: String) -> LocalizedStringResource? {
+        if store.controlEnabled(function) { return nil }
+        if case .unsupported = store.state.gate { return "This camper unit is not supported yet" }
+        if store.link != .up || store.isStale { return "Not available while the van is offline" }
+        return "Waiting for the camper unit's data"
+    }
+
     /// The function buttons of the installed functions, in the mockup's order.
     private var buttons: [ControlButton] {
         var b: [ControlButton] = []
         if store.installed("campingmode") {
             b.append(ControlButton(title: "Camping mode", systemImage: "tent", isOn: on("campingmode", "master_on"),
-                                   tint: .onGreen, enabled: store.controlEnabled("campingmode")) {})
+                                   tint: .onGreen, lockedBecause: locked("campingmode")) {})
         }
         if store.installed("lighting") {
-            b.append(ControlButton(title: "Lights", systemImage: "lightbulb", isOn: on("lighting", "any_on"),
-                                   tint: .lightAmber, enabled: store.controlEnabled("lighting")) {})
+            b.append(ControlButton(title: "Lighting", systemImage: "lightbulb", isOn: on("lighting", "any_on"),
+                                   tint: .lightAmber, lockedBecause: locked("lighting")) {})
         }
         if store.installed("cooler") {
             b.append(ControlButton(title: "Cooler", systemImage: "snowflake", isOn: on("cooler", "on"),
-                                   tint: .onGreen, enabled: store.controlEnabled("cooler")) {})
+                                   tint: .onGreen, lockedBecause: locked("cooler")) {})
         }
         if store.installed("airheater") {
             b.append(ControlButton(title: "Air heater", systemImage: "heater.vertical", isOn: on("airheater", "running"),
-                                   tint: .onGreen, enabled: store.controlEnabled("airheater")) {})
+                                   tint: .onGreen, lockedBecause: locked("airheater")) {})
         }
         return b
     }
 }
 
-/// One of the cockpit's small values: an SF Symbol, a label, the value and an optional note (a held
-/// reading's age).
+/// One of the cockpit's small values: an SF Symbol, a label, the value and, for a held reading, its
+/// measurement age (from the page's clock, so it grows on an open screen). Stale data draws muted.
 ///
-/// - Requirement: R_IOS_LOOK
+/// - Requirement: R_IOS_LOOK, R_IOS_HONEST
 struct MiniValue: View {
     let title: LocalizedStringResource
     let systemImage: String
     let value: String
-    let note: String?
+    /// The value in full words for VoiceOver.
+    let spoken: String
+    /// `.some(date)`: a held reading, measured at `date` (nil: unknown); nil: a live reading.
+    let heldSince: Date??
+    @Environment(\.pageStale) private var stale
+    @Environment(\.pageNow) private var pageNow
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label { Text(title) } icon: { Image(systemName: systemImage).accessibilityHidden(true) }
+            Label { Text(title) } icon: { Image(systemName: systemImage) }
                 .font(.caption)
             Text(verbatim: value)
                 .font(.title2.weight(.semibold).monospacedDigit())
-            if let note {
-                Label { Text(verbatim: note) } icon: { Image(systemName: "clock").accessibilityHidden(true) }
+                .foregroundStyle(stale ? Color.staleText : Color.primary)
+            if let heldSince {
+                HeldNote(since: heldSince)
                     .font(.caption)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(title))
+        .accessibilityValue(Text(verbatim: heldSince.map {
+            "\(spoken), " + HeldNote.text(since: $0, now: pageNow ?? Date(), locale: locale, spoken: true)
+        } ?? spoken))
     }
 }

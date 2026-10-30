@@ -25,7 +25,7 @@ final class CockpitUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Fresh water'")).firstMatch.exists)
         XCTAssertFalse(app.staticTexts["Solar power"].exists)
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS '°C'")).firstMatch.exists)
-        for name in ["Camping mode", "Lights", "Cooler", "Air heater"] {
+        for name in ["Camping mode", "Lighting", "Cooler", "Air heater"] {
             XCTAssertTrue(app.buttons[name].exists, name)
         }
         try app.audit()
@@ -48,7 +48,8 @@ final class CockpitUITests: XCTestCase {
     @MainActor
     func testStaleRestoreShowsAsOf() throws {
         let app = launch("staleRestore")
-        XCTAssertTrue(app.staticTexts["as of 5 h ago"].waitForExistence(timeout: 10))
+        // The pill is one element for VoiceOver, with the age in full words.
+        XCTAssertTrue(app.staticTexts["offline, as of 5 hours ago"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Camping mode"].isEnabled)
         try app.audit()
     }

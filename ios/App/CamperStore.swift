@@ -174,7 +174,7 @@ extension JSONValue {
 ///
 /// - Requirement: R_IOS_TESTED
 enum Fixture: String, CaseIterable {
-    case parked, campingOn, unsupportedV3, unreachable, staleRestore, noCooler
+    case parked, campingOn, unsupportedV3, unreachable, staleRestore, noCooler, faults
 
     private static let mockFrames: [String: String] = [
         "airheater": "10000000000000",
@@ -198,6 +198,11 @@ enum Fixture: String, CaseIterable {
         case .campingOn: hex["campingmode"] = "21"
         case .unsupportedV3: hex["general"] = "303431303032303703"  // CommunicationVersion 3
         case .noCooler: hex["cooler"] = "0043000000000000"  // Installed (bit 4) cleared
+        case .faults:
+            // Second battery level 3 (30 %), -4.5 A, faults TwoBattNotCharged + CurrentDeratingTemperature;
+            // fresh water pump protection (FreshWaterInfoPopUp 1). Starter power stays "—" (IOneBattBemAfs 0x81).
+            hex["energy"] = "01c4500300ff810000003a00308dffd3fffe00000000"
+            hex["water"] = "130b1d010016"
         case .parked, .unreachable, .staleRestore: break
         }
         return hex.mapValues { h in stride(from: 0, to: h.count, by: 2).map { i in
@@ -206,7 +211,7 @@ enum Fixture: String, CaseIterable {
     }
 
     /// The UI tests connect to the fake on launch only for these; the others keep their state.
-    var isLive: Bool { ![.unreachable, .staleRestore].contains(self) }
+    var isLive: Bool { ![.unreachable, .staleRestore, .faults].contains(self) }
 
     /// A session over the fake transport, which answers with this fixture's frames.
     func makeSession() -> CamperSession {
@@ -231,7 +236,7 @@ enum Fixture: String, CaseIterable {
         st.asOf = switch self {
         case .staleRestore: now.addingTimeInterval(-5 * 3600)
         case .unreachable: now.addingTimeInterval(-600)
-        case .parked, .campingOn, .unsupportedV3, .noCooler: now
+        case .parked, .campingOn, .unsupportedV3, .noCooler, .faults: now
         }
         return st
     }
@@ -243,6 +248,7 @@ extension CamperStore {
         let link: LinkState = switch fixture {
         case .unreachable: .unreachable("The camper unit did not answer.")
         case .staleRestore: .off
+        case .faults: .rest(until: (now ?? Date()).addingTimeInterval(60))  // the power-save rest
         case .parked, .campingOn, .unsupportedV3, .noCooler: .up
         }
         let store = CamperStore(session: fixture.makeSession(), state: fixture.state(now: now ?? Date()), link: link)
