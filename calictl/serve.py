@@ -197,8 +197,8 @@ class ServeBackend:
 
     def state(self):
         """Interpreted state for every function in the poll cache (no BLE read), plus a `_meta`
-        block with the last-successful-poll time and an online flag. The camper unit deep-sleeps
-        when the van is parked and then can't be reached at all, so the UI must show the last
+        block with the last-successful-poll time and an online flag. The camper unit is often
+        unreachable (range, power-save with camping mode off, a BLE fault), so the UI must show the last
         known values *with an "as of" age* and an offline indicator — never a blank or a stale
         number dressed as live. `_meta` is not a function name, so it never renders as a tile."""
         self._s._note_ui_activity()  # a browser is polling -> the UI is active; hold the session
@@ -521,7 +521,7 @@ class Server:
            After every successful poll the daemon shall write the decoded state and the poll time to
            its state file (temp file plus rename), reload it on start, and serve it through the web
            API with ``_meta.last_seen`` / ``age_s`` / ``online`` while the unit is unreachable, so a
-           parked, deep-sleeping unit shows its last values with their age and an offline flag,
+           unreachable unit shows its last values with their age and an offline flag,
            never a blank or a stale number dressed as live. Diagram: :need:`S_SEQ_POLL`.
         """
         try:
@@ -545,8 +545,9 @@ class Server:
         """Append this poll cycle's OUTCOME to the durable log so a later gap can be classified.
         Never raises. ``outcome`` is one of ok / asleep / ble_error / error; the session state +
         consecutive-fail count are recorded alongside so `tools.analyze_battery --diagnose` can tell
-        van deep-sleep (asleep) from an our-side connection loss (ble_error) from a dead daemon
-        (no rows at all)."""
+        a lasting connect failure (asleep: the supervisor's backoff reached its cap; the cause is not
+        checked, so it is the unit out of reach OR a lasting fault on our side) from a short connection
+        loss (ble_error) from a dead daemon (no rows at all)."""
         rec = {
             "ts": round(time.time(), 1),
             "outcome": outcome,

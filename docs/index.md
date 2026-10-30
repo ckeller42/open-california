@@ -35,6 +35,7 @@ hardware
 protocol
 firmware
 ios-app
+firmware-api
 screenshots
 glossary
 ```

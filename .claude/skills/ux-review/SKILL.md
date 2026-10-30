@@ -15,8 +15,8 @@ uses an iPhone; Material rules apply only where Android matters).
 ## This repo's constraints (always apply, before the generic rules)
 
 - **One owner, one van, a phone at 390 px** (iPhone PWA, `black-translucent` status bar: respect
-  `env(safe-area-inset-*)`), often over a slow Tailscale link; the camper unit deep-sleeps when parked,
-  so every screen has an honest offline/asleep/unreachable state (`linkState()` drives the pill + banner).
+  `env(safe-area-inset-*)`), often over a slow Tailscale link; the camper unit is often unreachable
+  (range, power-save hang-up, a BLE fault), so every screen has an honest offline/asleep/unreachable state (`linkState()` drives the pill + banner).
 - **Every user-facing string is EN in code + DE in `calictl/webui/strings.de.js`** (`t("…")`/`tf("…")`;
   `tests/test_i18n_de.py` guards literal keys). The recovery page carries its EN + DE inline
   (`firmware/web/index.html`). Labels use the **unit's own vocabulary** (Ruhezustand, Sofortheizen, Dauerbetrieb,

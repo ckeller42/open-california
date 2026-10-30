@@ -9,6 +9,8 @@ on:
       - 'docs/**'
       - 'calictl/**'
       - 'tests/**'
+      - 'firmware/components/cali_core/include/**'  # C API headers (Doxygen input)
+      - 'firmware/Doxyfile'
       - 'tools/gen_c_dict.py'        # automodule'd in docs/api.md
       - 'tools/gen_codec_vectors.py'
       - '.github/workflows/docs.yml'
@@ -42,6 +44,8 @@ jobs:
             || echo "no screenshots branch yet, building with main's copies"
       - name: Install doc toolchain
         run: pip install -r docs/requirements.txt
+      - name: Install doxygen (firmware C API docs)
+        run: sudo apt-get update && sudo apt-get install -y doxygen
       - name: Build HTML (warnings are errors)
         run: sh docs/build_site.sh docs/_build/html   # product docs + the separate evidence build, merged
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

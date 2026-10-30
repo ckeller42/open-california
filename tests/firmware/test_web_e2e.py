@@ -7,7 +7,7 @@ and the Bumble fake unit for the camper. Requests go to ``127.0.0.1:PORT`` with 
 
 .. test:: WiFi provisioning and the status API end to end (host tier)
    :id: T_FW_WEB_E2E
-   :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX
+   :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX, R_FW_SNAPSHOT
 
 .. test:: A failed WiFi replacement returns to the old network; a good one moves (host tier)
    :id: T_FW_WIFI_ROLLBACK

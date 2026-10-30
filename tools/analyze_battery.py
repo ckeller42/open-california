@@ -93,7 +93,7 @@ def polling_gaps(timestamps, gap_s):
 def classify_gap(start, end, outcomes):
     """Classify a telemetry gap from the daemon's poll-OUTCOME records overlapping ``[start, end]``.
 
-    Distinguishes the failure states behind a gap: van deep-sleep (expected) vs an our-side
+    Distinguishes the failure states behind a gap: a lasting connect failure (`asleep`) vs an our-side
     connection loss (van may have been awake) vs the daemon being down vs Influx-write failure.
 
     :param outcomes: list of ``{"ts", "outcome", ...}`` from the daemon's poll-outcomes log.
@@ -112,13 +112,13 @@ def classify_gap(start, end, outcomes):
     n = len(rows)
     if c.get("asleep", 0) >= n * 0.5:
         return (
-            f"VAN DEEP-SLEEP — {c.get('asleep', 0)}/{n} cycles reported 'asleep' "
-            "(unit stopped advertising; expected while parked)",
+            f"UNIT UNREACHABLE — {c.get('asleep', 0)}/{n} cycles reported 'asleep' "
+            "(lasting connect failure: out of range, or a lasting BLE fault on this side)",
             dict(c),
         )
     if c.get("ble_error", 0) + c.get("error", 0) >= n * 0.5:
         hrs = (end - start) / 3600
-        # A LONG unbroken run of DeviceNotFound (won't self-resolve like deep sleep) points at the
+        # A LONG unbroken run of DeviceNotFound (won't self-resolve like an out-of-range unit) points at the
         # unit's Bluetooth being switched OFF in its settings, or a hard link problem — not a blip.
         kind = (
             "UNIT BLUETOOTH DISABLED / hard link problem" if hrs >= 0.5 else "OUR-SIDE CONNECTION/BLE FAILURE"
@@ -191,9 +191,9 @@ def analyze(days=7.0, every="1m", gap_min=10.0, outcomes_path=None):
     """Query InfluxDB and print the reliability report. Returns the per-field summary dict.
 
     When the daemon's poll-outcome log is readable (``outcomes_path``, default
-    ``~/.cache/calictl/poll_outcomes.jsonl``), each gap is CLASSIFIED — van deep-sleep vs an
+    ``~/.cache/calictl/poll_outcomes.jsonl``), each gap is CLASSIFIED — a lasting connect failure vs an
     our-side BLE/connection failure vs the daemon being down vs an Influx-write failure — instead
-    of being assumed to be deep sleep.
+    of being assumed to be the unit's fault.
     """
     import os
     import time

@@ -81,6 +81,7 @@ firmware/sdkconfig
 firmware/sdkconfig.old
 firmware/managed_components/
 firmware/dependencies.lock
+firmware/_doxygen/
 
 # Engram (agent memory) git export writes its chunks to .engram/ inside the project;
 # this repo is public, so saved observations must never reach a commit

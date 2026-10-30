@@ -132,11 +132,14 @@ def test_need_ids_are_unique():
 
 
 def _doc_reqs():
-    """R_ ids authored directly in the rendered docs pages (firmware.md, cross-language-codec.md)."""
+    """R_ ids authored directly in the rendered docs pages (firmware.md, cross-language-codec.md)
+    and in the firmware headers' ``embed:rst`` blocks (rendered by Breathe on docs/firmware-api.rst)."""
     ids = set()
     for p in (ROOT / "docs").rglob("*"):
         if p.suffix == ".md" and not {"_build", "business-logic", "superpowers"} & set(p.parts):
             ids |= set(re.findall(r"^\s*:id:\s*(R_\w+)", p.read_text(encoding="utf-8"), re.M))
+    for h in (ROOT / "firmware" / "components" / "cali_core" / "include").glob("*.h"):
+        ids |= set(re.findall(r"^\s*\*\s+:id:\s*(R_\w+)", h.read_text(encoding="utf-8"), re.M))
     return ids
 
 

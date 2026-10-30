@@ -46,7 +46,7 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
 - **Writes: five control chars + `1003`, never the roof.** A control frame goes out only through
   the transport's `write`, which — like the sequencer `cali_core/control_run.c` before it — passes
   `cali_ctl_write_ok` (the generated allow-list: `1101`/`1201`/`1501`/`1601`/`1701` at their exact
-  frame length; `R_FW_WRITE_ALLOWLIST` in `docs/firmware.md`). The 1003 heartbeat is the other
+  frame length; `R_FW_WRITE_ALLOWLIST` in `cali_control.h`). The 1003 heartbeat is the other
   write; `subscribe`'s CCCD descriptor writes only enable notifications. (Until #154 B the firmware
   was read-only — `CODEC_NO_ENCODE` + an `nm` check; `R_FW_READ_ONLY`, now retired.)
 - **NimBLE options pinned to the host tier** (final review I1, `sdkconfig.defaults`): no in-stack
@@ -613,16 +613,14 @@ pairs with the Bumble fake unit, its `SNAP` equals `calictl.protocol.decode` of 
 fake served (a truncated frame too), the heartbeat keeps the link for 20 s, a pushed notification
 replaces exactly that function, and a passkey typed while idle is ignored.
 
-These `.. req::` / `.. test::` IDs are declared in that test module's own docstring — a Python
-"shim" sphinx-needs can parse, since the real implementation is C (whose comments sphinx-needs
-does not collect). `docs/api.md` pulls the module in via `.. automodule::
-tests.firmware.test_pairing_sm_parity`, so both objects and their `:links:` resolve in the
-`sphinx -b needs` build today.
+R_FW_PAIRING_SM is declared in the `cali_pairing_sm.h` header comment (rendered on
+`docs/firmware-api.rst`). R_FW_PAIRING_RUNNER and R_FW_SESSION are declared in the docstrings of
+`tests/firmware/test_runner_fake.py` and `tests/firmware/test_session_fake.py` — Python "shims"
+sphinx-needs can parse. The `.. test::` objects live in the test modules' docstrings, which
+`docs/api.md` pulls in via `.. automodule::`, so objects and their `:links:` resolve in the
+`sphinx -b needs` build.
 
-Four more requirements are authored directly on the rendered doc page rather than in a test
-docstring shim (they describe cross-cutting properties, not one C module), all in
-**`docs/firmware.md`**'s traceability section — that page is the primary human-readable trace for
-firmware; this file stays the build/porting reference:
+Four more requirements describe cross-cutting properties, not one C module: R_FW_CONTROL_TWIN, R_FW_WRITE_ALLOWLIST and R_FW_CONTROL_API live in the `cali_control.h` header comment (rendered on `docs/firmware-api.rst`); R_FW_IO_CAP_BEFORE_LINK lives in the traceability section of `docs/firmware.md`. Together with that page they are the primary human-readable trace for firmware; this file stays the build/porting reference:
 
 - **R_FW_CONTROL_TWIN** — `cali_core/control.c` plans exactly the writes `calictl.control` would
   (same gate texts, same frames, same lighting commit) on every vector of
@@ -644,25 +642,25 @@ firmware; this file stays the build/porting reference:
   `make cali-host-jw` regression build and verified by `T_FW_HOST_E2E`.
 
 **R_FW_WIFI_PROVISION**, **R_FW_HTTP_STATUS**, **R_FW_WIFI_BLE_COEX** (the WiFi/web slice) are
-defined in `docs/firmware.md` too, with their verifying tests (`T_WIFI_SM_REF`,
+defined in the header comments of the WiFi, web and HTTP headers (see `docs/firmware-api.rst`), with their verifying tests (`T_WIFI_SM_REF`,
 `T_FW_WIFI_SM_PARITY`, `T_FW_CAPTIVE_DNS`, `T_FW_NET_HOST`, `T_FW_QEMU_NO_WIFI_DRIVER`,
 `T_FW_HTTP_CORE`, `T_FW_WEB_HANDLERS`, `T_FW_JSON_WRITER`, `T_FW_WEB_STRINGS`,
 `T_FW_ESP_SCREENSHOT_FIXTURES`, `T_FW_WIFI_LOSS_SESSION`, `T_FW_WEB_E2E`) declared in the test
 modules' docstrings.
 
 **R_FW_OTA** (the on-request update from the channel's GitHub release — `esp-stable` by default,
-`esp-latest` on the `latest` channel — rollback after 60 s healthy) is defined in `docs/firmware.md` too; verified by `T_FW_OTA_SM` (`tests/firmware/test_ota.py`,
+`esp-latest` on the `latest` channel — rollback after 60 s healthy) is defined in `cali_ota.h`; verified by `T_FW_OTA_SM` (`tests/firmware/test_ota.py`,
 `cali_core/ota.c` against a fake fetcher/slot via `test/ota_cli.c`), `T_FW_OTA_API` and
 `T_FW_OTA_PAGE`. The ESP I/O (`components/cali_ota/ota_esp.c`: `esp_https_ota`, the certificate
 bundle, the flash read-back SHA-256, rollback, console `ota check|install|status|invalid`) is
 board-only.
 
-**R_FW_TIME** (NVS boot counter + SNTP for the log stamps) is defined in `docs/firmware.md`; verified
+**R_FW_TIME** (NVS boot counter + SNTP for the log stamps) is defined in `cali_time.h`; verified
 by `T_FW_TIME` (`tests/firmware/test_time.py`, `cali_core/time.c` via `test/time_cli.c` over the host
 kv store), `T_FW_TIME_QEMU`, `T_FW_TIME_PAGE` and `T_FW_TIME_UNIT` (the unit clock across both DST
 switches). SNTP itself (`components/cali_sntp`) is board-only.
 
-**R_FW_SD_LOG** (the SD log, `device.sd`) is defined in `docs/firmware.md`; verified by `T_FW_SD_LOG`
+**R_FW_SD_LOG** (the SD log, `device.sd`) is defined in `cali_sdlog.h`; verified by `T_FW_SD_LOG`
 (`tests/firmware/test_sdlog.py`, `sdlog.c` via `test/sdlog_cli.c` against a temp dir),
 `T_FW_SD_LOG_TAP` and `T_FW_SD_LOG_PAGE`. Mount, card power and the SD task are board-only.
 
