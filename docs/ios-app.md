@@ -39,9 +39,10 @@ no satellite, no Pi and no network for any phase-1 function.
 
 The app guides the first pairing: it tells the user to start pairing on the camper panel and to
 type the 6-digit passkey from the camper screen into the iOS pairing dialog. On a stale bond it
-guides the user to *Settings → Bluetooth → Forget This Device* and back. The same step applies when
-the iPhone is already paired with the camper before the first setup in the app. The real camper
-always asks for a passkey; a pairing prompt without a code is not the camper and is cancelled.
+guides the user to *Settings → Bluetooth → Forget This Device* and back. An iPhone that is already
+paired with the camper (for example through the vendor app) needs no new pairing; both apps share
+the bond. The real camper always asks for a passkey when it pairs; a pairing prompt without a code
+is not the camper and is cancelled.
 (iOS runs the pairing and owns the bond; an app cannot delete a bond itself.)
 ```
 
@@ -250,19 +251,23 @@ flow are Swift code against CoreBluetooth, because iOS runs pairing and owns the
 That code is tested against the same parity rules as the C session.
 ```
 
-```{decision} A camper is adopted only after a pairing the app sees
+```{decision} The bond belongs to the iPhone, shared with the vendor app
 :id: AD_IOS_SHARED_BOND
 :status: accepted
 :tags: ios
 :links: R_IOS_PAIRING
 
-iOS keeps one bond per accessory for the whole phone and does not tell an app whether a link is
-encrypted. The app therefore adopts a camper only when it sees the pairing happen during the
-user-started setup: the first read of a protected characteristic is refused, iOS asks for the
-passkey, and the read then succeeds. A device that answers without that step is never adopted,
-so a look-alike without encryption cannot pass as the camper. On an iPhone that is already paired
-with the camper (for example through the vendor app), the user forgets the device once in iOS
-Settings and pairs again in the app; the new bond then serves the vendor app too.
+iOS keeps one bond per accessory for the whole phone, so the app and the vendor app work in
+parallel on the same iPhone. The app adopts a camper during the user-started setup in two cases:
+it sees the pairing happen (the first read of a protected characteristic is refused, iOS asks for
+the passkey, the read then succeeds), or the iPhone is already paired with the camper and the read
+succeeds at once. The app never adopts a device in the background and never switches silently to
+another one.
+
+Known risk: iOS does not tell an app whether a link is encrypted. In the second case a nearby
+look-alike device that serves the data without encryption could be adopted, if the user picks it
+from the list during the first setup. The setup lists every candidate with its signal strength,
+and the real camper is the one the user is standing next to.
 ```
 
 ```{decision} SwiftUI, iOS 17 or later
