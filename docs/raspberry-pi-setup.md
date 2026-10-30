@@ -367,7 +367,7 @@ never fails the verdict.
 | 1 | `telemetry` | the window holds `esp_diag` samples (an empty window is a FAIL, not a quiet pass) |
 | 2 | `reboots` | no boot with `reset_reason` panic, int_wdt, task_wdt, wdt, brownout or cpu_lockup (sw, poweron, usb are listed only) |
 | 3 | `fw` | every `boot` point in the window carries the ESP's current `fw` (sha prefix compare; SKIP when the ESP is unreachable or there is no boot point), so the 72 h ran on one build |
-| 4 | `link` | at most 10 `link_down` events per boot interval (the `link_up` fraction is printed as information: with camping mode off the {term}`camper unit` ends every link after about 30 s) |
+| 4 | `link` | at most 10 `link_down` events per boot interval (the `link_up` fraction is printed as information: with camping mode off and no shore power the {term}`camper unit` ends every link after about 30 s) |
 | 5 | `touch_nacks` | per boot, max cumulative touch `errors` / hours of that boot is at most 5 |
 | 6 | `ingest` | every `esp-ingest` summary has `lost == 0` and the last has `held == 0` (SKIP without a journal summary) |
 | 7 | `heap_min` | `heap_min` is at least 32768 B in every `esp_diag` sample |

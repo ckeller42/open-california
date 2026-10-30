@@ -545,8 +545,9 @@ class Server:
         """Append this poll cycle's OUTCOME to the durable log so a later gap can be classified.
         Never raises. ``outcome`` is one of ok / asleep / ble_error / error; the session state +
         consecutive-fail count are recorded alongside so `tools.analyze_battery --diagnose` can tell
-        an unreachable unit (asleep) from an our-side connection loss (ble_error) from a dead daemon
-        (no rows at all)."""
+        a lasting connect failure (asleep: the supervisor's backoff reached its cap; the cause is not
+        checked, so it is the unit out of reach OR a lasting fault on our side) from a short connection
+        loss (ble_error) from a dead daemon (no rows at all)."""
         rec = {
             "ts": round(time.time(), 1),
             "outcome": outcome,

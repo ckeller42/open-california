@@ -144,12 +144,10 @@ Bluetooth jobs at once. The how-to for owners is
   directly: `LE Connection Complete`, then BlueZ re-enabled active scanning at **100 % duty**
   (scan window == scan interval, 11.25 ms) because another client still held discovery, and
   ~300 ms later the connection failed to establish with **HCI error 0x3e**. With every other
-  scanner stopped, the same connect attempt succeeded. The owner's phone holding the unit's
-  single connection blocks a Pi connect the same way, for a different reason (the unit itself
-  refuses a second link, not the local radio).
-- **One connection slot on the unit.** The camper control unit accepts exactly one BLE [central](https://ckeller42.github.io/open-california/glossary.html#term-Central)
-  at a time; a phone connected via the CaliforniaOnTour app locks the Pi out regardless of the
-  local radio's state.
+  scanner stopped, the same connect attempt succeeded.
+- **Several centrals at once.** The camper control unit accepts several BLE [centrals](https://ckeller42.github.io/open-california/glossary.html#term-Central)
+  at once (phone app, Pi and satellite together); see "The single connection slot is not
+  absolute" below.
 - **A rotating advertising address.** The unit advertises from a private address that changes
   periodically (observed 2026-09-25: **four different addresses in about 45 minutes** of
   continuous scanning). The wizard finds it by name (`VWCAMPER`), not by address; only once

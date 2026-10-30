@@ -125,8 +125,6 @@ recorded per-poll in `poll_outcomes.jsonl` and classified by `tools.analyze_batt
   off; a parked unit itself keeps advertising. `outcome: asleep` once the supervisor backoff hits
   the cap (the label is historical: a multi-day "deep sleep" seen from buspi was a Bluetooth setup
   fault on buspi, not the unit).
-- **Phone holds the single BLE slot** — the CaliforniaOnTour app is connected, so the unit stops
-  advertising; **resolves when the app disconnects**. `outcome: ble_error`, short run.
 - **Unit Bluetooth DISABLED** (in the unit's own settings) — persistent `DeviceNotFound` that
   **will NOT self-resolve** until re-enabled; then buspi reconnects on the next poll. Shows as a
   long unbroken `ble_error` run (observed 2026-08-18). NOT a buspi fault.

@@ -32,7 +32,7 @@ map, and the downstream consumers Home Assistant and Grafana.
 - **Runtime `calictl/*` imports only the standard library at import time** — The suite runs with no BLE or MQTT installed. `bleak`, `paho`, `influxdb_client` and `yaml` import lazily
 - **The BLE codec is MSB-first and control frames are full-packet** — That is how the unit and the vendor app behave. Every field is resent, and unchanged fields carry the {term}`leave-unchanged sentinel <Sentinel>`
 - **No vendor material in the repository** — The APK, decompiled sources and manuals are never committed. VW material appears as citations only
-- **The unit is not always reachable** — A parked unit keeps advertising, but with camping mode off it ends every link after about 30 s, and a Bluetooth fault on the central's side (a stale bond, a kernel regression on {term}`Buspi`) can keep a central out for days
+- **The unit is not always reachable** — A parked unit keeps advertising, but with camping mode off and no shore power it ends every link after about 30 s, and a Bluetooth fault on the central's side (a stale bond, a kernel regression on {term}`Buspi`) can keep a central out for days
 - **The web UI is un-built JavaScript** — `tsc --checkJs` is its hard gate, since no build step would catch an undeclared identifier
 - **Runs on a Raspberry Pi with Python 3.11 to 3.13** — The deployment target is buspi
 
@@ -409,7 +409,7 @@ flowchart TB
   - *Notes:* `serve` runs under a virtualenv, and the installed unit adds `--web 8088` through a `systemctl edit` drop-in rather than the committed template. Secrets live in root-only files under `/etc/buspi/`.
 - **Camper unit**
   - *What runs there:* the vehicle's own firmware
-  - *Notes:* Keeps advertising when parked. With camping mode off and no shore power it ends every link about 30 s after encryption (the {term}`power-save hang-up <Power-save hang-up>`).
+  - *Notes:* Keeps advertising when parked, in every probe observed so far (its behaviour with no central at all for days is not yet observed). With camping mode off and no shore power it ends every link about 30 s after encryption (the {term}`power-save hang-up <Power-save hang-up>`).
 - **ESP32 satellite**
   - *What runs there:* independent firmware on a CoreS3
   - *Notes:* Its own BLE bond to the unit, connected alongside buspi and the phone. Joins WiFi through a setup hotspot and serves the same web UI. It writes only in station mode, through a single allow-list, and never the roof.

@@ -169,7 +169,7 @@ buspi's own adapter). Warm the fast session first with `POST /api/session {"acti
   press reuses the counter. Release → lock-free `_roof_stop`; 1000 ms re-press debounce; auto-stop at end of
   travel/limit. See `protocol-alignment.md` + `protocol-sequences`.
 - **Reads go stale; access is intermittent.** A parked unit keeps advertising (the old "deep-sleeps for
-  days" reading was a Bluetooth setup fault on buspi), but with camping off it ends links after ~30 s, and
+  days" reading was a Bluetooth setup fault on buspi), but with camping off and no shore power it ends links after ~30 s, and
   range or our own BLE stack can fail. `serve` persists last-state + "as of"; the UI shows an offline banner. Water is measurement-gated: a parked read
   may return the stale latch FreshWaterLevel = 1, which `freshness.implausible_water_drop` (+ C twins) holds
   back (#274) — a deliberate deviation from the app. See `value-freshness.md`.
