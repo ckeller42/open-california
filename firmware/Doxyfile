@@ -1,0 +1,24 @@
+# Strict, XML-only Doxygen run for the firmware C API docs (Breathe renders the XML in Sphinx).
+# Run from the repo root: doxygen firmware/Doxyfile. A header enters INPUT only once every public
+# declaration in it is fully documented; WARN_AS_ERROR makes a gap fail the build.
+PROJECT_NAME           = "cali_core"
+OUTPUT_DIRECTORY       = firmware/_doxygen
+GENERATE_XML           = YES
+XML_OUTPUT             = xml
+GENERATE_HTML          = NO
+# Doxygen 1.9.8 reports every documented @param/@return as missing unless a non-XML generator runs
+# (checked: HTML, LaTeX, RTF, man all fix it). LaTeX is the cheap one; its output is never read.
+GENERATE_LATEX         = YES
+LATEX_OUTPUT           = latex
+LATEX_BATCHMODE        = YES
+INPUT                  = firmware/components/cali_core/include/cali_snapshot.h
+EXCLUDE_PATTERNS       = */_deps/* */*_gen.h
+WARN_AS_ERROR          = YES
+WARN_NO_PARAMDOC       = YES
+OPTIMIZE_OUTPUT_FOR_C  = YES
+EXTRACT_ALL            = NO
+MACRO_EXPANSION        = YES
+QUIET                  = YES
+HAVE_DOT               = NO
+INCLUDE_GRAPH          = NO
+INCLUDED_BY_GRAPH      = NO

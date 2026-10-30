@@ -34,6 +34,7 @@ howto-esp-standalone
 hardware
 protocol
 firmware
+firmware-api
 screenshots
 glossary
 ```

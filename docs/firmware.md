@@ -7,7 +7,8 @@ independently of `calictl` and {term}`buspi`. It is the device target of the pai
 
 The full build and porting detail (every NimBLE/Bumble adaptation, exact pins, warnings policy) is
 in [`firmware/README.md`](https://github.com/ckeller42/open-california/blob/main/firmware/README.md)
-in the repository. This page is the reference and traceability view.
+in the repository. This page is the reference and traceability view. The C headers' API is on
+the [firmware C API](firmware-api.rst) page.
 
 ## Overview
 
