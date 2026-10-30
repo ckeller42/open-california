@@ -15,6 +15,19 @@
 #define N_OF(a) (sizeof (a) / sizeof *(a))
 #define WS " \t\n\r\v\f"
 
+/* strtok(s, WS) without its hidden static state: skip WS, cut the token, advance *p; NULL at the end */
+static char *next_tok(char **p) {
+    char *t = *p + strspn(*p, WS), *e;
+    if (!*t) {
+        *p = t;
+        return NULL;
+    }
+    e = t + strcspn(t, WS);
+    *p = *e ? e + 1 : e;
+    *e = '\0';
+    return t;
+}
+
 /* ---- Python value coercions ---- */
 
 static int is_ws(char c) { return c && strchr(WS, c) != NULL; }
@@ -329,11 +342,11 @@ static void zones_saved(vals_t *v, cali_ctl_get_t get) {
 /* control._save_profile_args: "N" or "N <colour>" (N 1-7) -> *n, *colour (-1 = none); 0 = bad */
 static int save_args(const char *value, long *n, long *colour) {
     char s[CALI_CTL_VALUE_MAX];
-    char *t0, *t1, *t2;
+    char *t0, *t1, *t2, *rest = s;
     snprintf(s, sizeof s, "%s", value);
-    t0 = strtok(s, WS);
-    t1 = t0 ? strtok(NULL, WS) : NULL;
-    t2 = t1 ? strtok(NULL, WS) : NULL;
+    t0 = next_tok(&rest);
+    t1 = t0 ? next_tok(&rest) : NULL;
+    t2 = t1 ? next_tok(&rest) : NULL;
     if (!t0 || t2 || !int_range(t0, 1, 7, n)) return 0;
     *colour = -1;
     if (!t1) return 1;
@@ -467,7 +480,7 @@ static int wake_areas(char *s, uint32_t *areas) {
 /* control.wakeup_request over semantics.wakeup_config(cfg): 1 ok, 0 malformed (ValueError).
  * *switched: an on/off token was given (command_precondition's R5 test). */
 static int wake_request(const char *value, const cali_light_cfg_t *cfg, wake_t *w, int *switched) {
-    char s[CALI_CTL_VALUE_MAX], k[8], *tok, *pos[3] = {NULL, NULL, NULL};
+    char s[CALI_CTL_VALUE_MAX], k[8], *tok, *rest = s, *pos[3] = {NULL, NULL, NULL};
     int npos = 0, ntok = 0, timed = 0, known = wake_known(cfg);
     long b;
     uint32_t ts = cfg->v[CALI_LCFG_WAKE_TS], lv = cfg->v[CALI_LCFG_WAKE_LV];
@@ -489,7 +502,7 @@ static int wake_request(const char *value, const cali_light_cfg_t *cfg, wake_t *
     }
     *switched = 0;
     snprintf(s, sizeof s, "%s", value);
-    for (tok = strtok(s, WS); tok; tok = strtok(NULL, WS)) {
+    for (tok = next_tok(&rest); tok; tok = next_tok(&rest)) {
         ntok++;
         norm(tok, k, sizeof k);
         if (strcmp(k, "on") == 0 || strcmp(k, "off") == 0) {
