@@ -5,5 +5,5 @@ coverage==7.16.2     # tools/ci.sh cov + CI `test` (3.13): floor in pyproject.to
 pytest-cov==7.1.0
 ruff==0.16.9        # keep in step with the ruff-pre-commit rev in .pre-commit-config.yaml
 mypy
-bumble==0.0.235
-pre-commit==4.6.2   # runs .pre-commit-config.yaml (tools/ci.sh dev installs the hooks; CI pre-commit job)
+bumble==0.0.236
+pre-commit==4.7.0   # runs .pre-commit-config.yaml (tools/ci.sh dev installs the hooks; CI pre-commit job)
