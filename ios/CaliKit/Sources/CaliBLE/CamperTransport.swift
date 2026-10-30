@@ -25,6 +25,7 @@ public enum BluetoothAvailability: Sendable {
 ///
 /// - Requirement: R_IOS_BLE_DIRECT
 public protocol CamperTransport: Sendable {
+    /// Single consumer: iterate it for the transport's whole lifetime (events are lost otherwise).
     var events: AsyncStream<TransportEvent> { get }
     func connect() async
     func cancel() async

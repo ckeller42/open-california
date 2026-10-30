@@ -61,6 +61,7 @@ struct FakeTransportTests {
     /// - Verifies: R_IOS_TESTED, R_IOS_BLE_DIRECT
     @Test func foreignPushArrivesAsNotified() async throws {
         let t = await Self.connected()
+        try await t.subscribe([Self.general])
         await t.pushForeign(char: Self.general, bytes: [7])
         var it = t.events.makeAsyncIterator()
         var got: [UInt8]?
@@ -81,5 +82,37 @@ struct FakeTransportTests {
         await t.failNextConnect()
         await t.connect()
         guard case .disconnected(.failedToConnect)? = await it.next() else { Issue.record("expected failedToConnect"); return }
+    }
+
+    /// - Test: T_IOS_FAKE_SUBSCRIBE_SILENT
+    /// - Verifies: R_IOS_TESTED, R_IOS_BLE_DIRECT
+    @Test func subscribeAloneDeliversNoFrame() async throws {
+        let t = await Self.connected()
+        try await t.subscribe([Self.general])
+        try await t.write(0x1202, [1])  // a marker event after subscribe
+        await t.pushForeign(char: 0x9998, bytes: [1])  // unsubscribed: stored, not pushed
+        var it = t.events.makeAsyncIterator()
+        while let e = await it.next() {
+            if case .notified = e { Issue.record("unexpected push"); return }
+            if case .written = e { break }
+        }
+        #expect(try await t.read(Self.general) == [0xC0, 0x01])
+    }
+
+    /// - Test: T_IOS_FAKE_RECONNECT
+    /// - Verifies: R_IOS_TESTED, R_IOS_POWER_SAVE
+    @Test func reconnectAfterHangUp() async throws {
+        let clock = TestClock()
+        let t = await Self.connected(clock: clock)
+        try await t.subscribe([Self.general])
+        await t.hangUp(after: .seconds(30))
+        while clock.sleeperCount == 0 { await Task.yield() }
+        clock.advance(by: .seconds(30))
+        var it = t.events.makeAsyncIterator()
+        while let e = await it.next() { if case .disconnected(.remoteHangUp) = e { break } }
+        await #expect(throws: TransportError.notConnected) { try await t.read(Self.general) }
+        await t.connect()
+        try await t.subscribe([Self.general])
+        #expect(try await t.read(Self.general) == [0xC0, 0x01])
     }
 }

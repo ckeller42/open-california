@@ -51,10 +51,11 @@ public actor FakeCamperTransport: CamperTransport {
         }
     }
 
-    /// Another central changed the unit: the frame is stored and pushed.
+    /// Another central changed the unit: the frame is stored, and pushed only if we subscribed to
+    /// the char while connected (the real unit does not notify an unsubscribed char).
     public func pushForeign(char: UInt16, bytes: [UInt8]) {
         frames[char] = bytes
-        sink.yield(.notified(char: char, bytes: bytes))
+        if connected, subscribed.contains(char) { sink.yield(.notified(char: char, bytes: bytes)) }
     }
 
     public func rejectNextWrite() { rejectNext = true }
@@ -94,13 +95,10 @@ public actor FakeCamperTransport: CamperTransport {
         sink.yield(.written(char: char, ok: true))
     }
 
-    /// Like the unit, pushes the current frame of each newly subscribed char.
+    /// Like the real unit, sends nothing on subscribe: the caller must `read` each char.
     public func subscribe(_ chars: [UInt16]) throws {
         guard connected else { throw TransportError.notConnected }
-        for c in chars {
-            subscribed.insert(c)
-            if let f = frames[c] { sink.yield(.notified(char: c, bytes: f)) }
-        }
+        subscribed.formUnion(chars)
     }
 
     private func finishHangUp() { end(.remoteHangUp) }
