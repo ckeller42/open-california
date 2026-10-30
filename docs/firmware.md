@@ -243,53 +243,6 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    probe`` and returns to the mode (``off``: disconnect). A probe that cannot connect logs
    ``ok:false`` and is not retried. The probe writes nothing but the 1003 heartbeat.
 
-.. req:: BLE power experiment
-   :id: R_FW_BLE_EXP
-   :status: open
-
-   ``ble exp <phase_min> [HH-HH]`` (console; ``POST /api/ble {"exp_min":N,"from":H,"to":H}``) runs
-   the night experiment: inside the window (default 22-06, Europe/Berlin local time from SNTP or the
-   unit's clock) it cycles the modes ``hold -> quiet -> off -> hold …``, each ``phase_min`` (1-720)
-   long, with a probe at the end of every phase; outside the window the mode is ``hold``. Without a
-   wall clock it is refused (``no_time``). A viewer (``GET /api/state``, or the page load ``GET /`` / ``/app``), a mode change from outside
-   (a control command in ``quiet`` or ``off``, ``ble mode``, ``/api/ble``, pairing — also while the
-   phase-end probe runs) or, on an up link, the van's ignition (terminal 15, ``cali_ac_ignition``)
-   ends the running phase as ``aborted`` and returns to ``hold``; the cycle then holds 10 min
-   (``CALI_BX_IDLE_MS``, renewed by every further viewer poll and every tick with the ignition on, so a
-   night drive never reaches the next phase) and goes on with the next phase. The unit's own advert is
-   the sleep indicator: a sensor window (``sensors on`` only — no window runs otherwise) that sees an
-   advert whose address is the bond's identity (resolved by the controller, or an RPA resolving with
-   the bond's IRK) logs ``evt unit_adv`` ``seen:true`` on the first sighting, ``seen:false`` after
-   ``CALI_BX_GONE_MS`` (3 scan periods + one window, 185 s) without one (also from the start, when
-   never seen). A reappearance in ``quiet`` or ``off`` after a ``seen:false`` logged in that same mode
-   **with the link down** is a wake (door, ignition) and counts as activity. The first sighting is not,
-   and neither is a sighting after a gone logged with the link up, nor the adverts after the link
-   drops (our ``hold -> off`` disconnect, the unit dropping a ``quiet`` link). Each phase end logs
-   ``evt ble_phase`` with its ``dur_ms``, start/stop ``evt ble_exp``; stopping or restarting
-   mid-phase logs that phase ``aborted`` first; a refused phase-end probe logs ``evt probe`` with
-   ``ok:false``, reason ``refused``. ``ble exp off`` (``{"exp_min":0}``) ends it in ``hold``; a
-   reboot ends it too (not persisted). ``tools/esplab/soak_report.py`` polls ``/api/state`` and so
-   counts as a viewer: do not run it during an experiment night.
-
-.. req:: BLE idle policy
-   :id: R_FW_BLE_IDLE
-   :status: open
-
-   ``POST /api/ble {"idle_min":N}`` (0-60, stored in NVS key ``ble_idle``, read at boot; missing = 0;
-   the Satellite settings' *Connection* select) sets how the session idles. ``0`` (the default) =
-   ``hold``: the link stays up. ``N`` > 0: the link is held while someone is active and dropped
-   otherwise — activity is a viewer (the page load ``GET /`` or ``/app``, so the reconnect starts while the
-   page loads; ``GET /api/state``: the web UI polls it every 2 s; not ``/api/ble`` or ``/api/log``), a mode the
-   policy did not set (a control command in ``off`` switches to ``hold``, ``ble mode``, ``/api/ble``),
-   the van's ignition (terminal 15) on an up link (also during a probe), or a new setting; after
-   ``CALI_BX_IDLE_MS`` (10 min) without one the mode goes ``off`` (``evt ble_mode`` ``why`` ``idle``),
-   and every ``N`` minutes while ``off`` a :term:`Probe` reads every function (``evt probe``; skipped
-   with no bond). Activity during a probe lets it finish, then ``hold``. A running experiment
-   (``R_FW_BLE_EXP``) owns the session; the policy waits and holds 10 min after it ends. Outside
-   ``hold`` the Pi wake and an auto-camper restore see the ignition only through a probe (``R_FW_BLE_MODE``),
-   so they react up to ``N`` minutes late; a GUI opened while ``off`` shows the last probe's data until
-   the reconnect (≈1 s) and the read-all (≈6 s) are done. The reasons for the policy are in
-   ``docs/business-logic/DECISIONS.md``.
 
 .. req:: Power-save rest: no reconnect while camping is off
    :id: R_FW_BLE_REST
@@ -1468,17 +1421,7 @@ is touched. No chip, a failed read or no screen (host, QEMU): every member `null
 
 ## External sensors (`R_FW_SENSORS`)
 
-```{eval-rst}
-.. req:: External BLE sensors
-   :id: R_FW_SENSORS
-   :status: open
-
-   Behind exp_sensors (R_FW_EXPERIMENTAL): a 5 s passive scan window every 60 s (skipped while a
-   connect is pending or a pairing flow runs) delivers manufacturer-data adverts; configured
-   addresses decode by type (govee, victron_mppt, victron_battery) into /api/state ext.<alias> and
-   an ext SD record at most once a minute; unconfigured ones fill a 16-row seen table with
-   boot-local ids. The list (<= 16, NVS sens_list) survives the flag; keys never leave the ESP.
-```
+The requirement `R_FW_SENSORS` lives with the sensor API: see {doc}`firmware-api`.
 
 The satellite's Energy screen derives a **House load** row from the Victron chargers' `battery_current`
 and the unit's own currents; the derivation, evidence and limits are in
@@ -1747,6 +1690,8 @@ The requirements `R_FW_PAIRING_SM`, `R_FW_WIFI_PROVISION`, `R_FW_WIFI_ROLLBACK` 
 
 The requirements `R_FW_HTTP_STATUS`, `R_FW_SHARED_UI`, `R_FW_STATE_DIAG` and `R_FW_PAIRING_WIZARD` live with the web handlers' API: see {doc}`firmware-api`.
 
+The requirements `R_FW_AUTO_CAMPER`, `R_FW_PI_WAKE`, `R_FW_PI_HALT`, `R_FW_BATTERY`, `R_FW_STATUS_DISPLAY`, `R_FW_DISPLAY_WAKE`, `R_FW_BLE_EXP`, `R_FW_BLE_IDLE` and `R_FW_SENSORS` live with the device-feature API too: see {doc}`firmware-api`.
+
 Requirements are authored as `sphinx-needs` objects next to the code they constrain (or, where the
 implementation is C — not autodoc'd — in the docstring of the Python test module that verifies
 it, a "shim" `sphinx-needs` can parse; see `firmware/README.md`'s own traceability section for the
@@ -1790,33 +1735,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    firmware (and the test setup) would actually catch this class of regression, not just assert
    it away. Never compiled into a device build (``#error`` if ``ESP_PLATFORM`` is also defined).
 
-.. req:: The CoreS3 screen shows device, WiFi and camper-unit status
-   :id: R_FW_STATUS_DISPLAY
-   :status: implemented
-   :tags: esp32, display
-
-   The satellite's screen shall show three rows — device running, WiFi (setup hotspot / joining /
-   online with SSID, IP and signal / off with reason), camper unit (not paired / pairing / connected
-   with data age / stale after ``DISPLAY_STALE_MS`` (90 s) without a snapshot / link lost) — in German or English, using the same status
-   snapshot as ``/api/state``; when it is lit and how bright: ``R_FW_DISPLAY_WAKE``.
-
-.. req:: The CoreS3 screen wakes on a tap, a hand near, motion or an alert, and follows the room light
-   :id: R_FW_DISPLAY_WAKE
-   :status: implemented
-   :tags: esp32, display
-
-   The satellite's screen shall be on for 60 s after a wake event — a touch, a hand near the
-   LTR-553 proximity sensor (two reads in a row over the threshold, with hysteresis), motion on the
-   BMI270 accelerometer (the accel vector's change between reads over a high threshold two reads in a
-   row; the rising edge only, re-armed after a still period, so continuous shaking never keeps it on;
-   no reading or no sensor = no motion wake), or a status row newly turning red or amber — then dim, and off (backlight off) after 5 min; a tap that wakes it
-   shall not reach a widget. Its brightness shall follow the LTR-553 ambient light on a log curve
-   between a minimum and a maximum, smoothed (EMA, ~3 s) and changed only beyond a 15 % deadband,
-   falling back to fixed levels after 5 s without a valid reading. The settings (auto brightness,
-   wake on hand, wake on motion, min, max, a −50…+50 brightness offset clamped to min..max) persist in NVS, ``/api/state`` reports ``device.display`` and
-   ``POST /api/display`` changes them (station mode only); Satellite settings shows it, EN + DE.
-   Diagnostic aid: ``POST /api/display {"dfs"}`` switches dynamic frequency scaling at
-   once without storing it; ``device.display.dfs``/``pm`` (``/api/state?diag=1``) report the live PM config.
 
 .. req:: A failed touch-controller read never aborts the firmware
    :id: R_FW_TOUCH_NO_ABORT
@@ -1829,18 +1747,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    The record shall carry the last failure's context (CPU MHz, USB/charging, screen state, the
    owner task's last I2C device and ms since, the controller's power mode), each ``null`` when unknown.
 
-.. req:: The satellite reports its own battery and a measured runtime estimate
-   :id: R_FW_BATTERY
-   :status: implemented
-   :tags: esp32, display
-
-   The firmware shall read the CoreS3's AXP2101 every 10 s (fuel-gauge percent, battery voltage, USB
-   present, charging) with only the battery-voltage ADC and the fuel-gauge enable bits ever written,
-   and estimate the runtime from the measured percent slope while discharging (a 10-min window; an
-   estimate only after ≥ 5 min and ≥ 2 points dropped; reset on USB or charging). ``/api/state``
-   reports ``device.battery`` ``{pct, mv, usb, charging, runtime_min}`` (each ``null`` when unknown);
-   the screen shows it in the station footer only (never a wake trigger), the shared UI's Device status
-   shows it, EN + DE.
 
 .. req:: The satellite updates itself on request from the GitHub release, verified, with rollback
    :id: R_FW_OTA
@@ -1917,47 +1823,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    depth or checksum is never logged. CI shall keep each build's ``cali_fw.elf`` so the PCs can be
    symbolized.
 
-.. req:: The satellite restores camping mode after you park, as calictl serve does
-   :id: R_FW_AUTO_CAMPER
-   :status: implemented
-   :tags: esp32, automation, camping
-
-   The firmware shall run calictl's restore-after-park decision (``R_AUTO_CAMPER_RESTORE``) as a C
-   twin held equal by vectors generated from the Python function: remember the pre-drive camping
-   config when the engine sheds it, re-assert it through the control path on the ignition falling
-   edge within a bounded window and tries, respect a manual off and stand down on low battery or a
-   warning. The toggle (default on) and the restore debt persist in NVS; ``/api/state`` reports
-   ``device.auto_camper`` ``{enabled, state}``, ``POST /api/auto_camper`` switches it (station mode
-   only) and Satellite settings shows and switches it (EN + DE).
-
-.. req:: The satellite wakes the halted Raspberry Pi through a GPIO
-   :id: R_FW_PI_WAKE
-   :status: implemented
-   :tags: esp32, gpio, power
-
-   The firmware shall drive Port B GPIO9 as an open-drain output that is released (high-Z) from
-   boot and never driven high, and pull it low for 200 ms on the ignition rising edge (vehicle
-   terminal 15 or campingmode Enable; previous 0 or unknown -> 1, a read gap never an edge), at most
-   once per 60 s, while "Wake on ignition" is on (NVS ``pw_ign``, default on). ``POST /api/pi_wake``
-   (station mode only, 409 while a pulse runs) and the console wake it by hand; ``POST
-   /api/pi_wake_setting`` switches the setting; ``/api/state`` reports ``device.pi_wake``
-   ``{enabled, last_s, reason}``; Satellite settings shows the box (EN + DE).
-
-.. req:: The satellite halts the Raspberry Pi after parking and on a low battery
-   :id: R_FW_PI_HALT
-   :status: implemented
-   :tags: esp32, gpio, power
-   :links: R_FW_PI_WAKE
-
-   The firmware shall drive Port B GPIO8 as GPIO9 (open drain, released from boot, never driven
-   high) and pull it low for 500 ms once the van has been parked (the boot, the ignition 0 after 1
-   or unknown, or a wake pulse; unknown ignition keeps the state) for the "Shut down after parking"
-   minutes (NVS ``ph_min``, 0 off, default 30), or at most 10 minutes while the battery is low and
-   the guard is on (NVS ``ph_soc``, default 30 %: SleepWarning, WarningLevelTwo, or the SoC level ×10
-   at or below it). Once per park: only a wake pulse or the ignition re-arms it. The two lines are
-   never low together. ``POST /api/pi_halt`` (station mode only, 409 busy) and the console halt it
-   by hand; ``POST /api/pi_wake_setting`` sets both settings; ``/api/state`` reports the halt in
-   ``device.pi_wake``; Satellite settings shows it (EN + DE).
 
 .. req:: The satellite serves its SD log page by page over HTTP
    :id: R_FW_LOG_API

@@ -25,7 +25,13 @@ INPUT                  = firmware/components/cali_core/include/cali_snapshot.h \
                          firmware/components/cali_core/include/cali_web.h \
                          firmware/components/cali_core/include/cali_http.h \
                          firmware/components/cali_core/include/cali_console.h \
-                         firmware/components/cali_core/include/cali_json.h
+                         firmware/components/cali_core/include/cali_json.h \
+                         firmware/components/cali_core/include/cali_auto_camper.h \
+                         firmware/components/cali_core/include/cali_pi_wake.h \
+                         firmware/components/cali_core/include/cali_battery.h \
+                         firmware/components/cali_core/include/cali_display_model.h \
+                         firmware/components/cali_core/include/cali_ble_exp.h \
+                         firmware/components/cali_core/include/cali_sensors.h
 EXCLUDE_PATTERNS       = */_deps/* */*_gen.h
 WARN_AS_ERROR          = YES
 WARN_NO_PARAMDOC       = YES

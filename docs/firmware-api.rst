@@ -90,3 +90,36 @@ JSON writer
 ~~~~~~~~~~~
 
 .. doxygenfile:: cali_json.h
+
+Device features
+---------------
+
+Auto camper
+~~~~~~~~~~~
+
+.. doxygenfile:: cali_auto_camper.h
+
+Pi wake and halt
+~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_pi_wake.h
+
+Battery
+~~~~~~~
+
+.. doxygenfile:: cali_battery.h
+
+Status display
+~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_display_model.h
+
+BLE experiment and idle policy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_ble_exp.h
+
+External sensors
+~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_sensors.h
