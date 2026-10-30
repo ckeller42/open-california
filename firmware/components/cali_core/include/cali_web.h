@@ -39,7 +39,7 @@
  *    Every static page and asset carries a strong ``ETag`` derived from its exact bytes, and a
  *    matching ``If-None-Match`` is answered ``304 Not Modified`` without a body; the pages and the
  *    manifest stay ``Cache-Control: no-cache`` (always revalidated, so a new firmware's UI shows on
- *    the next load), and ``/api/*`` is never cached; an unchanged ``/api/state`` answers 304 by its
+ *    the next load), and the ``/api/`` routes are never cached; an unchanged ``/api/state`` answers 304 by its
  *    weak ``ETag`` (``R_FW_STATE_ETAG``).
  * @endverbatim
  *
