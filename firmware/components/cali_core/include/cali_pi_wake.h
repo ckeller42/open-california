@@ -140,7 +140,10 @@ int cali_pw_wake(const char *reason);
  */
 int cali_pw_set_enabled(int on);
 
-/** @return 1 when the wake on ignition is on, else 0. */
+/**
+ * @brief Get the wake-on-ignition switch.
+ * @return 1 when the wake on ignition is on, else 0.
+ */
 int cali_pw_enabled(void);
 
 /**
@@ -172,10 +175,16 @@ int cali_ph_set_min(unsigned min);
  */
 int cali_ph_set_soc(unsigned pct);
 
-/** @return The halt delay in minutes (0 = off). */
+/**
+ * @brief Get the halt delay.
+ * @return The halt delay in minutes (0 = off).
+ */
 int cali_ph_min(void);
 
-/** @return The battery guard threshold in percent (0 = off). */
+/**
+ * @brief Get the battery guard threshold.
+ * @return The battery guard threshold in percent (0 = off).
+ */
 int cali_ph_soc(void);
 
 /**

@@ -124,11 +124,11 @@ linux() {   # CI's C toolchain (tools/docker/linux.Dockerfile: Linux amd64, gcc 
   "${run[@]}" -m linux_only tests/firmware/test_control_parity.py   # its -m32 leg (no NimBLE needed)
 }
 docs() {   # ci.yml's `docs` job in Docker (image oc-docs = docs/Dockerfile: doxygen + sphinx + breathe):
-           # doxygen firmware/Doxyfile, then the -W site build. Ends with `site -> /tmp/site`.
+           # doxygen firmware/Doxyfile, then the -W site build. Ends with `site -> docs/_build/site`.
   command -v docker >/dev/null || { echo "docs: needs Docker" >&2; exit 1; }
-  docker build -q -t oc-docs -f docs/Dockerfile . >/dev/null
+  tar -c docs/Dockerfile docs/requirements.txt | docker build -q -t oc-docs -f docs/Dockerfile - >/dev/null
   docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/w -w /w oc-docs \
-    sh -c 'doxygen --version && sh docs/build_site.sh /tmp/site'
+    sh -c 'doxygen --version && sh docs/build_site.sh docs/_build/site'
 }
 doc_offset() { "$PY" -m pytest tests/test_doc_offset_consistency.py -q -p no:cacheprovider; }
 needs_trace() { "$PY" -m pytest tests/test_needs_docstrings.py -q -p no:cacheprovider; }   # every need is autodoc'd

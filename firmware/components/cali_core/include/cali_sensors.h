@@ -132,7 +132,10 @@ int cali_sensors_remove(uint16_t id);
  */
 int cali_sensors_rename(uint16_t id, const char *alias);
 
-/** @return The scan state: "ok" or "paused". */
+/**
+ * @brief Get the sensor scan state.
+ * @return The scan state: "ok" or "paused".
+ */
 const char *cali_sensors_scan_state(void);
 
 /**

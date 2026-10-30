@@ -37,8 +37,10 @@
  *
  * The `device.time` object (cali_time_json()) reads `{"source":"sntp"|"unit"|"none",
  * "synced":bool,"boot":int}`, and with diag (`/api/state?diag=1`) also `"up":ms`. The source is
- * what the next record would use: `sntp` once synced, else `unit` while a unit anchor is held, else
- * `sntp` while SNTP runs but has not synced yet (synced false), else `none`. The synced flag comes
+ * the source the next record would use once SNTP is registered: `sntp` once synced, else `unit` while
+ * a unit anchor is held, else `sntp` while SNTP runs but has not synced yet (synced false), else
+ * `none`. In that last `sntp` case cali_time_ts() still returns CALI_TSRC_NONE, so the next record
+ * carries no `ts`. The synced flag comes
  * only from the SNTP callback of THIS boot (a RAM flag, never a "clock after 2020" check): a clock
  * that survived a reset or was restored is not synced.
  *

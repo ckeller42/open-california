@@ -87,12 +87,15 @@
  *    done) and when the function's state has been read on that link; it writes the planned frames
  *    one at a time with response, a lighting commit at least ``CODEC_FOLLOW_DELAY_MS`` after the
  *    previous ACK; it reports
- *    success only after every write was ACKed, a refused write or a lost link as a failure (no
- *    further frame), and gives up after ``CALI_CTL_DEADLINE_MS``; a second command while one runs
+ *    success only after every write was ACKed, a refused write or a link lost before any command
+ *    frame went out as a failure (no further frame), a link lost after one went out as
+ *    unconfirmed (``CALI_CTL_UNCONFIRMED``: the unit may have actuated it, so it is neither success
+ *    nor failure), and gives up after ``CALI_CTL_DEADLINE_MS``; a second command while one runs
  *    — or while a timed-out write still awaits its ACK — is refused (busy). The sequencer is
  *    ``firmware/components/cali_core/control_run.c``, ticked by the session. ``POST /api/command``
  *    (``web.c``) answers in calictl's request and response shape — ``applied`` never ``true`` (no
- *    readback check), a gate's refusal as ``{"applied":false,"refused":<text>}`` — and only after the
+ *    readback check), an unconfirmed outcome as 200 with ``"unconfirmed":true``, a gate's refusal as
+ *    ``{"applied":false,"refused":<text>}`` — and only after the
  *    sequencer's done callback: the HTTP core holds the connection (``CALI_HTTP_PENDING``, no idle
  *    timeout meanwhile) so a refused or timed-out write is a 502/504, never "Sent". Outside station
  *    mode (setup hotspot, setup-flow join, unprovisioned) it is ``403 setup_mode`` before anything

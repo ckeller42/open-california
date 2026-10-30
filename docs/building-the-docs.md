@@ -16,7 +16,7 @@ and simply shows an empty `incoming` — check `needs.json` for that.
 The firmware C API pages need `doxygen` (1.9.8 in the CI image) on the PATH: Breathe reads its XML
 from `firmware/_doxygen/xml`, and `docs/build_site.sh` runs `doxygen firmware/Doxyfile` first.
 Without sphinx and doxygen on the machine, `tools/ci.sh docs` builds the same site in the `oc-docs`
-Docker image (`docs/Dockerfile`) and ends with `site -> /tmp/site`.
+Docker image (`docs/Dockerfile`) and ends with `site -> docs/_build/site`.
 
 ```sh
 tools/ci.sh docs                         # Docker: doxygen + the -W site build

@@ -48,7 +48,7 @@ extern "C" {
 #define CALI_AC_WINDOW_MS 120000
 /** @brief Restore tries before the controller gives up. */
 #define CALI_AC_MAX_FAILS 3
-/** @brief Leisure battery level in percent at or below which the restore stands down. */
+/** @brief Leisure battery level in percent below which the restore stands down. */
 #define CALI_AC_MIN_SOC 20
 /** @brief The step period in ms: serve's poll interval, one decision (and at most one restore try) per step. */
 #define CALI_AC_STEP_MS 30000u
@@ -72,20 +72,20 @@ typedef struct {
     int prev_lights;         /**< Previous lights setting, -1 = None. */
 } cali_ac_state_t;
 
-/** @brief One step's inputs. Each flag is -1 when unknown this step. */
+/** @brief One step's inputs. Each flag is -1 when unknown this step, except `warning`. */
 typedef struct {
     int ign;        /**< Ignition. */
     int master;     /**< Camping master. */
     int usb;        /**< Camping USB. */
     int lights;     /**< Camping lights. */
     int soc;        /**< Leisure battery in percent, -1 = None. */
-    int warning;    /**< The unit's battery warning. */
+    int warning;    /**< The unit's battery warning: a Boolean, any nonzero value stands the restore down, so pass 0 when unknown. */
     int64_t now;    /**< The caller's clock, in the same unit as the window. */
 } cali_ac_in_t;
 
 /** @brief The decision's tuning. */
 typedef struct {
-    int min_soc;      /**< Stand down at or below this percent. */
+    int min_soc;      /**< Stand down below this percent. */
     int max_fails;    /**< Give up after this many tries. */
     int64_t window;   /**< The restore window, in the clock's unit. */
 } cali_ac_cfg_t;

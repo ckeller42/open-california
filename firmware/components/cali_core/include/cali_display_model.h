@@ -227,7 +227,10 @@ int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake);
 
 /* ---- display_cfg.c: the settings in NVS and the last painted state for /api/state ---- */
 
-/** @return The settings, loaded from the kv store on first use (defaults when missing or invalid). */
+/**
+ * @brief Get the display settings.
+ * @return The settings, loaded from the kv store on first use (defaults when missing or invalid).
+ */
 const cali_display_cfg_t *cali_display_cfg(void);
 
 /**

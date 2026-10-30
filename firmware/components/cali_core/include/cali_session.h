@@ -285,9 +285,11 @@ int cali_session_active(void);
 /**
  * @brief Whether the link is up.
  *
- * 1 only while the link is encrypted and past ENC_OK and discovery: 0 during CONNECTING and
- * CONNECTED (before encryption), during reconnect backoff, and whenever cali_session_active() is 0.
- * This is what /api/state reports as device.link.up.
+ * 1 once the link is encrypted (past ENC_OK): 0 during CONNECTING and CONNECTED (before
+ * encryption), during reconnect backoff, and whenever cali_session_active() is 0. Discovery may
+ * still be pending when this returns 1, so do not use it as proof that discovery finished: a caller
+ * that needs the link ready for commands uses cali_session_ready(). This is what /api/state
+ * reports as device.link.up.
  *
  * @return 1 when up, else 0.
  */
@@ -317,7 +319,11 @@ int cali_session_frame(size_t i, const uint8_t **frame, size_t *len);
 /**
  * @brief As cali_session_frame, but only a frame read or pushed on the current link.
  *
- * This is what the control gates run on (cali_control.h): never a previous link's state.
+ * This is what the control gates run on (cali_control.h): a previous link's state is not live.
+ * Two exceptions mark a frame live that still holds earlier data. A lighting frame that only
+ * carries configuration (a config or ack frame) leaves the stored lamp state in place and marks it
+ * live. A water frame the stale-latch guard rejects is replaced by the held baseline and marked
+ * live. A gate that needs a fresh lamp or water value cannot rely on this flag alone.
  *
  * @param i Index into CODEC_CHARS; must be below CODEC_NCHARS.
  * @param frame Receives a pointer to the stored frame.

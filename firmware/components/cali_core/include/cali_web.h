@@ -81,7 +81,9 @@
  * Static answers (`/`, `/app`, `/device`, the PWA assets) carry a strong ETag (FNV-1a 64 of the
  * bytes served); a matching If-None-Match gets the core's 304 (see cali_http.h). HTML and the
  * manifest are `Cache-Control: no-cache`, icons `max-age=86400`. JSON built by the handlers
- * (`/api/state`, `/api/wifi`, `/api/pairing`) is `Cache-Control: no-store`, without an ETag.
+ * (`/api/state`, `/api/wifi`, `/api/pairing`) is `Cache-Control: no-store`, without an ETag, except
+ * plain `GET /api/state` (not `?diag=1`), which carries a weak ETag (R_FW_STATE_ETAG) so a matching
+ * If-None-Match gets the core's 304.
  * Every error is `{"ok":false,"error":<code>}` unless a route says otherwise. Routes marked
  * "station mode only" answer 403 `{"error":"setup_mode"}` in every other WiFi mode.
  *
@@ -211,7 +213,8 @@
  *       `{"ok":true,"applied":null,"state":null,"error":null,"function":fn}`. `applied` is never
  *       true (no readback check). The body adds `"unconfirmed":true` when the link dropped after a
  *       frame went out. The answer can instead be 502 `write_failed` or 504 `write_timeout`. It
- *       waits for the write ACKs (at most CALI_CTL_DEADLINE_MS).
+ *       waits for the write ACKs (at most CALI_CTL_DEADLINE_MS, plus CODEC_CONFIG_PULL_MS when a
+ *       lighting wakeup must first pull the lighting configuration).
  *     - refused or handled elsewhere: 200 `{"ok":true,"applied":false,"refused":<reason>,
  *       "state":null,"error":null,"function":fn}` (calictl's shape).
  *     - bad value: 400 `bad_value`. No such control: 400 `unknown_control`. Busy: 409 `busy`. Not

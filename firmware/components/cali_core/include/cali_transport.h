@@ -72,8 +72,11 @@ typedef void (*cali_tsink_t)(const cali_tevent_t *e, void *ctx);
 /**
  * @brief The BLE stack as cali_core sees it: a table of async operations.
  *
- * Every operation returns 0 when started and nonzero when the stack could not start it. The
- * outcome comes back as an event (named per member) through the registered sink.
+ * Every operation except the two queries `has_bond` and `identity` returns 0 when started and
+ * nonzero when the stack could not start it. The outcome comes back as an event (named per member)
+ * through the registered sink, except for `subscribe`, which has no completion event (its notifications
+ * arrive later as NOTIFY). `has_bond`
+ * and `identity` answer at once with their value, so a nonzero result is not a failure.
  */
 typedef struct {
     /** Register the event sink. @param sink The receiver. @param ctx Passed back with each event. */
