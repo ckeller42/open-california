@@ -13,6 +13,14 @@ private enum Fx {
     static let camping = CamperGATT.stateChars["campingmode"]!
     static let energy = CamperGATT.stateChars["energy"]!
     static let generalV2: [UInt8] = [0, 0, 0, 0, 0, 0, 0, 0, 2]
+    static let water = CamperGATT.stateChars["water"]!
+    static let lighting = CamperGATT.stateChars["lighting"]!
+    /// `water` layout: FreshWaterLevel is byte 1, WasteWaterLevel byte 4 (liters, camper_codec.json).
+    static func waterFrame(fresh: UInt8, waste: UInt8 = 0) -> [UInt8] { [0, fresh, 0, 0, waste, 0] }
+    static func lights(pn: UInt8, mode: UInt8) -> [UInt8] {
+        [pn, mode, 0, 0, 0, 0, 0, 0, 0x55, 0x55, 0x55, 0x55, 0xd5, 0x5d, 0xdd, 0xdd]
+    }
+    static let wakeup: [UInt8] = [0, 20, 0x6a, 0xc5, 0xed, 0xf0, 0x01, 0x01, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee]
     static let campingOff: [UInt8] = [0x20]
     static let campingOn: [UInt8] = [0x21]
     static let noShore: [UInt8] = [0, 0, 0, 0, 0x00]
@@ -344,5 +352,58 @@ struct SessionTests {
         try await until("reconnect scheduled") { await r.s.pendingReconnect != nil }
         if case .rest = await r.s.link { Issue.record("rest during a command") }
         await r.s.endCommand()
+    }
+}
+
+/// The store path: the water stale-latch guard and the lamp-frame merge.
+struct StoreGuardTests {
+    /// A parked unit serves the stale 1 L latch: it never replaces a real level (ports.c, #274).
+    /// - Test: T_IOS_WATER_LATCH_HELD
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST, R_IOS_FUNCTIONS
+    @Test func staleLatchDoesNotReplaceARealLevel() async throws {
+        let r = Rig(Fx.frames().merging([Fx.water: Fx.waterFrame(fresh: 17)]) { $1 })
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        // Cold start: a first reading waits for 5 s of the same value before it is shown.
+        #expect(await r.s.state.fields["water"] == nil)
+        r.clock.advance(by: .seconds(6))
+        try await r.s.readAll()
+        var st = await r.s.state
+        #expect(st.fields["water"]?["FreshWaterLevel"] == 17)
+        #expect(st.waterHeld == false && st.waterGoodAt != nil)
+
+        // The latch, from a read and from a push: the 17 L stays and is marked held.
+        await r.fake.seed(Fx.water, Fx.waterFrame(fresh: 1))
+        try await r.s.readAll()
+        try await until("held push") { await r.s.state.waterHeld }
+        st = await r.s.state
+        #expect(st.fields["water"]?["FreshWaterLevel"] == 17)
+        #expect(st.waterHeld)
+        #expect(st.interpreted["water"] != nil)
+
+        // The latch alone never turns into the level, however long it lasts.
+        r.clock.advance(by: .seconds(60))
+        try await r.s.readAll()
+        #expect(await r.s.state.fields["water"]?["FreshWaterLevel"] == 17)
+
+        // A real measurement: the same new level for 5 s is adopted.
+        await r.fake.seed(Fx.water, Fx.waterFrame(fresh: 15))
+        try await r.s.readAll()
+        #expect(await r.s.state.fields["water"]?["FreshWaterLevel"] == 17)  // first sighting: held
+        r.clock.advance(by: .seconds(6))
+        try await r.s.readAll()
+        st = await r.s.state
+        #expect(st.fields["water"]?["FreshWaterLevel"] == 15)
+        #expect(st.waterHeld == false)
+    }
+
+    /// With no baseline the latch is stored as nothing, not as a fake 1 L.
+    /// - Test: T_IOS_WATER_COLD_LATCH
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
+    @Test func coldStartLatchStoresNothing() async throws {
+        let r = Rig(Fx.frames().merging([Fx.water: Fx.waterFrame(fresh: 1)]) { $1 })
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        let st = await r.s.state
+        #expect(st.fields["water"] == nil && st.interpreted["water"] == nil)
+        #expect(st.waterHeld)
     }
 }

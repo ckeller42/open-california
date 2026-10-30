@@ -13,7 +13,7 @@ let package = Package(
         .target(
             name: "CCodec",
             path: "csrc",
-            sources: ["codec.c"],
+            sources: ["codec.c", "ports.c"],
             publicHeadersPath: "."
         ),
         .target(

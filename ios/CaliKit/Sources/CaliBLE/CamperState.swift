@@ -18,6 +18,10 @@ public struct CamperState: Sendable, Equatable {
     /// This link's lighting config latch (`CALI_LCFG_KEYS` -> value) from the unit's own `1502`
     /// frames; cleared at each link up (control_run.c plans over the live latch only).
     public var lightConfig: [String: UInt32] = [:]
+    /// The stored `water` frame is the last plausible reading, held against a stale 1 L latch or a
+    /// measurement ramp (satellite `water_held`). `waterGoodAt` is when it was last adopted.
+    public var waterHeld = false
+    public var waterGoodAt: Date?
 
     /// The state the planner sees: the frames, with the lighting config latch answering like
     /// lighting fields (control_run.c `get_field`).

@@ -29,6 +29,9 @@ public actor CamperSession {
     private let charToFunction: [UInt16: String]
     /// Interpretations before `applySwCorrections` (it adds to its input, so it runs on these each time).
     private var uncorrected: [String: [String: JSONValue]] = [:]
+    private var waterGuard = WaterGuard()
+    /// Monotonic time for the water ramp debounce.
+    private let elapsed: @Sendable () -> Duration
     private var subscribers: [Int: AsyncStream<(CamperState, LinkState)>.Continuation] = [:]
     private var pushSubscribers: [Int: AsyncStream<Push>.Continuation] = [:]
     private var waiters: [Int: CheckedContinuation<Void, any Error>] = [:]
@@ -60,6 +63,7 @@ public actor CamperSession {
         self.transport = transport
         self.clock = clock
         self.semantics = semantics
+        elapsed = clock.stopwatch()
         charToFunction = Dictionary(uniqueKeysWithValues: CamperGATT.stateChars.map { ($1, $0) })
         let events = transport.events
         Task { [weak self] in
@@ -380,10 +384,28 @@ public actor CamperSession {
 
     private func store(_ char: UInt16, _ bytes: [UInt8]) {
         guard let fn = charToFunction[char], let fields = try? CaliCodec.decode(function: fn, bytes: bytes) else { return }
-        state.fields[fn] = fields
+        if fn == "water" {
+            // The stale-latch guard (ports.c): hold the last plausible reading, or store nothing on a cold start.
+            let t = elapsed().components
+            let ms = UInt64(max(0, t.seconds)) * 1000 + UInt64(max(0, t.attoseconds) / 1_000_000_000_000_000)
+            if waterGuard.settle(WaterLevels(fields: fields), nowMs: ms) {
+                state.waterHeld = false
+                state.waterGoodAt = Date()
+            } else {
+                state.waterHeld = true
+                guard state.fields["water"] != nil else { return }
+                liveFunctions.insert(fn)
+                state.asOf = Date()
+                publish()
+                return
+            }
+        }
         liveFunctions.insert(fn)
-        // A read or a push of the unit's own frame: never one of our writes (R4).
-        if fn == "lighting" { state.lightConfig = CaliControl.lightConfig(previous: state.lightConfig, frame: fields) }
+        if fn == "lighting" {
+            // A read or a push of the unit's own frame: never one of our writes (R4).
+            state.lightConfig = CaliControl.lightConfig(previous: state.lightConfig, frame: fields)
+        }
+        state.fields[fn] = fields
         do {
             uncorrected[fn] = try semantics.interpret(function: fn, fields: fields)
             state.semanticsErrors[fn] = nil
