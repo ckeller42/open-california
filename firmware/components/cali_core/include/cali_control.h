@@ -27,7 +27,9 @@
  *    ``tests/vectors/control.json`` (generated from the Python, ``--check`` in CI). The roof is
  *    answered "Only via buspi or the app"; ``lighting wakeup`` follows ``R_FW_WAKEUP``. The twin is
  *    ``firmware/components/cali_core/control.c`` (``cali_ctl_plan``), pure C99 over the generated
- *    ``csrc/control_consts.h``.
+ *    ``csrc/control_consts.h``. ``cali_ctl_plan_ctx``, ``cali_light_cfg_ctx`` and
+ *    ``cali_light_reports_state_ctx`` shall give the same answers over a state reader that carries
+ *    the caller's context; the functions without ``_ctx`` call them.
  * @endverbatim
  *
  * **The write allow-list** (cali_ctl_write_ok): a characteristic write is allowed only to one of
@@ -169,6 +171,20 @@ typedef struct {
 typedef int (*cali_ctl_get_t)(const char *fn, const char *field, uint32_t *out);
 
 /**
+ * @brief Reader of the decoded state behind a plan, with the caller's context.
+ *
+ * The _ctx functions take this reader and pass their ctx to every call unchanged, so a binding
+ * can keep its state in an object instead of a global.
+ *
+ * @param ctx The caller's context, as given to the _ctx function.
+ * @param fn Function name.
+ * @param field Field name.
+ * @param out Receives the decoded value.
+ * @return 1 with *out set, or 0 when unknown (no frame, or the frame too short for the field).
+ */
+typedef int (*cali_ctl_get_ctx_t)(void *ctx, const char *fn, const char *field, uint32_t *out);
+
+/**
  * @brief Completion callback of a command; called exactly once.
  * @param result CALI_CTL_OK, FAILED, UNCONFIRMED, TIMEOUT or REFUSED.
  * @param reason REFUSED's text, else NULL.
@@ -212,6 +228,14 @@ typedef struct {
 void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out);
 
 /**
+ * @brief cali_light_cfg over a reader with a context. Keeps no state of its own: reentrant.
+ * @param get Reader of the decoded state.
+ * @param ctx Passed to every get() call.
+ * @param out Receives the configuration.
+ */
+void cali_light_cfg_ctx(cali_ctl_get_ctx_t get, void *ctx, cali_light_cfg_t *out);
+
+/**
  * @brief Whether the 1502 frame get() answers reports the lamps and the active profile.
  *
  * True for Mode 4 outside ProfileNumber 1 to 7 and Mode 16 outside ProfileNumber 8; false for a
@@ -221,6 +245,14 @@ void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out);
  * @return 1 when the frame reports state, else 0.
  */
 int cali_light_reports_state(cali_ctl_get_t get);
+
+/**
+ * @brief cali_light_reports_state over a reader with a context. Keeps no state of its own: reentrant.
+ * @param get Reader of the decoded state.
+ * @param ctx Passed to every get() call.
+ * @return 1 when the frame reports state, else 0.
+ */
+int cali_light_reports_state_ctx(cali_ctl_get_ctx_t get, void *ctx);
 
 /**
  * @brief Plan a command exactly as calictl would.
@@ -233,6 +265,24 @@ int cali_light_reports_state(cali_ctl_get_t get);
  */
 void cali_ctl_plan(const char *fn, const char *what, const char *value, int64_t local_now,
                    cali_ctl_get_t get, cali_ctl_plan_t *out);
+
+/**
+ * @brief cali_ctl_plan over a reader with a context; cali_ctl_plan calls it.
+ *
+ * The state reaches the planner only through get(ctx, ...), so the caller needs no global.
+ * The planner still builds its frames in static scratch: two calls must not run at the same
+ * time (one owner task, or one lock around the call). Reentrant only with respect to the state.
+ *
+ * @param fn Function name.
+ * @param what Command name.
+ * @param value calictl's string form of the JSON value; shorter than CALI_CTL_VALUE_MAX.
+ * @param local_now The page's wall clock read as UTC, in seconds; below 0 = none.
+ * @param get Reader of the decoded state the gates run on.
+ * @param ctx Passed to every get() call.
+ * @param out Receives the plan.
+ */
+void cali_ctl_plan_ctx(const char *fn, const char *what, const char *value, int64_t local_now,
+                       cali_ctl_get_ctx_t get, void *ctx, cali_ctl_plan_t *out);
 
 /**
  * @brief The plan that pulls the unit's lighting config: REQUEST_CONFIG at 0, the commit at

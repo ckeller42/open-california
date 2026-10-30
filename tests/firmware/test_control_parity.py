@@ -11,6 +11,8 @@ write (char, delay, bytes), or bad/none.
    :id: T_FW_CONTROL_PARITY
    :links: R_FW_CONTROL_TWIN, R_FW_WAKEUP
 
+   Every vector runs twice on the host: through ``cali_ctl_plan`` and through ``cali_ctl_plan_ctx``.
+
 .. test:: The write allow-list is exactly the five control chars at their frame length
    :id: T_FW_WRITE_ALLOWLIST_PURE
    :links: R_FW_WRITE_ALLOWLIST
@@ -43,11 +45,15 @@ V = json.loads(gen_control_vectors.OUT.read_text(encoding="utf-8"))
 LONG_IS_4 = "typedef char long_is_4_bytes[sizeof(long) == 4 ? 1 : -1];\n"
 
 
-@pytest.fixture(scope="module", params=["native", pytest.param("m32", marks=pytest.mark.linux_only)])
+# The "ctx" leg builds the driver with -DCLI_CTX: every plan, latch and reports-state query goes through
+# the _ctx functions (cali_ctl_plan_ctx & co.) and must give the same answers as the old API.
+@pytest.fixture(scope="module", params=["native", "ctx", pytest.param("m32", marks=pytest.mark.linux_only)])
 def cli(request, tmp_path_factory):
     tmp = tmp_path_factory.mktemp("control")
-    if request.param == "native":
+    if request.param in ("native", "ctx"):
         cmd = [shutil.which("cc") or pytest.skip("no C compiler")]
+        if request.param == "ctx":
+            cmd.append("-DCLI_CTX")
     else:
         cmd = [os.environ.get("CROSS_COMPILE", "") + "gcc", "-m32"]
         probe = tmp / "long_is_4.c"
