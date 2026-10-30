@@ -121,8 +121,10 @@ A `BleakDeviceNotFoundError` / "no BLE session after retries" means the unit isn
 buspi's own stack is usually fine (check `hciconfig hci0` = UP RUNNING). The distinct causes, now
 recorded per-poll in `poll_outcomes.jsonl` and classified by `tools.analyze_battery`:
 
-- **Van deep-sleep** — parked/idle, the unit stops advertising; **self-resolves** on the next wake
-  (door/ignition). Expected. `outcome: asleep` once the supervisor backoff hits the cap.
+- **Unit unreachable** — out of range, or the unit ends links in power-save while camping mode is
+  off; a parked unit itself keeps advertising. `outcome: asleep` once the supervisor backoff hits
+  the cap (the label is historical: a multi-day "deep sleep" seen from buspi was a Bluetooth setup
+  fault on buspi, not the unit).
 - **Phone holds the single BLE slot** — the CaliforniaOnTour app is connected, so the unit stops
   advertising; **resolves when the app disconnects**. `outcome: ble_error`, short run.
 - **Unit Bluetooth DISABLED** (in the unit's own settings) — persistent `DeviceNotFound` that

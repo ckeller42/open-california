@@ -178,7 +178,7 @@ Bluetooth jobs at once. The how-to for owners is
   failure ("PIN or Key Missing", HCI 0x05/0x06, ATT 0x05/0x0F, `NotPermitted`), or a timeout
   after BlueZ reported `Device1.Connected` = True (the link came up but encryption never
   completed — a unit that forgot us after a Bluetooth reset). Everything else — HCI 0x3e from a
-  co-resident scanner, an **asleep unit** (parked, deep sleep) that BlueZ still lists with an old
+  co-resident scanner, an **unreachable unit** (out of range, or a link the unit ended) that BlueZ still lists with an old
   RSSI because another client keeps discovering, or no time left to probe — ends as
   `connect_failed` with the bond and `pairing.json` kept, so opening the wizard remotely while
   the van sleeps costs nothing. The in-flow drop keeps `pairing.json` too (the identity doesn't
@@ -251,7 +251,7 @@ one tier further: inside a virtme-ng VM, the real dbus/bleak/BlueZ stack — age
 scan, connect, `Device1.Pair()`, verify, `persist_bond`, the link release at flow end (the
 daemon reads straight after the wizard), the stale-bond probe/removal, an asleep unit keeping
 its bond, and `radio_busy` — runs against the Bumble fake unit over a virtual controller. That still is **not**
-a real camper unit: it doesn't exercise RSSI jitter, the unit's own advertising/deep-sleep
+a real camper unit: it doesn't exercise RSSI jitter, the unit's own advertising
 policy, WiFi coexistence on buspi's shared radio, or another client scanning at full duty and
 starving a real LE connect (HCI 0x3e) — the mechanism the 2026-09-25 btmon capture caught (see
 [Environment the wizard needs](#environment-the-wizard-needs)) was observed on real buspi
