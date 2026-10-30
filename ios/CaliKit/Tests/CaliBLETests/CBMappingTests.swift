@@ -70,30 +70,64 @@ struct CBMappingTests {
         #expect(p.route() == .saved(unit))
         let r1 = p.authenticated(unit); #expect(r1)
         let r2 = p.authenticated(other); #expect(!r2)
-        let r3 = p.pairingError(); #expect(!r3)  // a stale bond outside a first pairing ends the link
         #expect(PeerPolicy(saved: nil).route() == .refuse)
     }
 
-    /// A new unit is adopted only after it asked for pairing and the authenticated read then
-    /// succeeded (the passkey was typed); a `1004` that reads without pairing is not adopted.
+    /// A new unit is adopted only when the user picked it and its authenticated read succeeded
+    /// (a fresh passkey pairing or an existing bond); nothing without that action.
     ///
     /// - Test: T_IOS_CB_PEER_ADOPT
     /// - Verifies: R_IOS_PAIRING
-    @Test func adoptsOnlyAfterPairing() {
+    @Test func adoptsOnUserActionPlusAuthenticatedRead() {
         let old = UUID(), new = UUID()
+        var none = PeerPolicy(saved: nil)
+        let r1 = none.authenticated(new); #expect(!r1)  // no user action: never adopt
+        #expect(none.saved == nil)
+        #expect(none.route() == .refuse)
+
         var p = PeerPolicy(saved: old)
-        p.firstPairing = true
-        #expect(p.route() == .scan)
-        let r4 = p.authenticated(new); #expect(!r4)  // no pairing seen: a look-alike without encryption
-        #expect(p.saved == old)
-        let r5 = p.pairingError(); #expect(r5)       // the unit asks: read again while iOS pairs
-        let r6 = p.pairingError(); #expect(!r6)      // the pairing failed: end the link
-        p.linkEnded()
-        let r7 = p.pairingError(); #expect(r7)
-        let r8 = p.authenticated(new); #expect(r8)
+        p.chosen = new
+        #expect(p.route() == .chosen(new))
+        let r2 = p.authenticated(new); #expect(r2)
         #expect(p.saved == new)
         #expect(p.route() == .saved(new))
-        let r9 = p.authenticated(old); #expect(!r9)
+        let r3 = p.authenticated(old); #expect(!r3)  // the old unit is not taken back silently
+    }
+
+    /// The first pairing is one-shot: a link that ends without an adoption (a failed read, a missing
+    /// `1004`, a cancel or a timeout) falls back to the saved unit, or to nothing.
+    ///
+    /// - Test: T_IOS_CB_PEER_ONE_SHOT
+    /// - Verifies: R_IOS_PAIRING
+    @Test func firstPairingIsOneShot() {
+        let old = UUID(), new = UUID(), other = UUID()
+        var p = PeerPolicy(saved: old)
+        p.chosen = new
+        p.linkEnded()
+        #expect(p.route() == .saved(old))
+        #expect(p.saved == old)
+
+        var q = PeerPolicy(saved: nil)
+        q.chosen = new
+        let r1 = q.authenticated(other); #expect(!r1)  // not the picked unit: no adoption, mode over
+        #expect(q.route() == .refuse)
+        #expect(q.saved == nil)
+    }
+
+    /// Only the exact advertised name, one entry per unit, strongest first.
+    ///
+    /// - Test: T_IOS_CB_CANDIDATES
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pairingCandidates() {
+        let a = UUID(), b = UUID()
+        var l = CandidateList()
+        l.saw(id: a, name: "VWCAMPER", rssi: -80)
+        l.saw(id: b, name: "VWCAMPER", rssi: -60)
+        l.saw(id: a, name: "VWCAMPER", rssi: -70)
+        l.saw(id: UUID(), name: "VWCAMPER-X", rssi: -40)
+        l.saw(id: UUID(), name: "", rssi: -40)
+        #expect(l.sorted.map(\.id) == [b, a])
+        #expect(l.sorted.map(\.rssi) == [-60, -70])
     }
 
     /// - Test: T_IOS_CB_PENDING_OPS

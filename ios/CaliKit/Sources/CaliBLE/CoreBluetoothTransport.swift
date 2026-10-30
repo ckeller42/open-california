@@ -14,8 +14,13 @@ import Foundation
 /// calls `cancel()`.
 ///
 /// Which unit (`PeerPolicy`): only the adopted one, by its saved identifier. Without one,
-/// `connect()` reports `.pairingRequired` until the user starts `beginFirstPairing()`; that scans
-/// for the unit (service `1000`, name `VWCAMPER`) and adopts it only after the passkey pairing.
+/// `connect()` reports `.pairingRequired`. The first pairing is the user's: `pairingCandidates()`
+/// lists the units in range (service `1000`, name exactly `VWCAMPER`), the user picks one,
+/// `beginFirstPairing(with:)` arms it for ONE connect, and it is adopted only when its
+/// authenticated `1004` read succeeds. iOS runs the passkey pairing inside that held read, or uses a
+/// bond the iPhone already has. The real unit refuses Just Works pairing (evidence ledger, CAPTURE),
+/// so a genuine new pairing always shows the iOS passkey dialog, and its code must match the camper
+/// screen. A pairing prompt without a code is not the camper: the user cancels it.
 ///
 /// - Requirement: R_IOS_BLE_DIRECT, R_IOS_PAIRING, R_IOS_BACKGROUND_LINK, R_IOS_POWER_SAVE, R_IOS_HONEST
 public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked Sendable {
@@ -30,10 +35,11 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     private var servicesLeft = 0
     /// State restoration handed over a connected peripheral; its bring-up waits for `poweredOn`.
     private var restoredConnected = false
+    private var candidates: (list: CandidateList, k: CheckedContinuation<[PairingCandidate], Never>)?
     private var policy = PeerPolicy(saved: UserDefaults.standard.string(forKey: peripheralKey).flatMap(UUID.init(uuidString:)))
 
     private enum Phase: Int, Comparable {
-        case idle, waitingForPower, scanning, connecting, discovering, probing, up
+        case idle, waitingForPower, connecting, discovering, probing, up
         static func < (a: Phase, b: Phase) -> Bool { a.rawValue < b.rawValue }
     }
 
@@ -98,11 +104,30 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         return UInt16(s.dropFirst(4).prefix(4), radix: 16)
     }
 
-    /// The user starts the first pairing (the pairing guide): the next `connect()` scans for the
-    /// unit and adopts the one that pairs with the passkey from the camper screen. It replaces the
-    /// adopted unit only when that pairing succeeds.
-    public func beginFirstPairing() async {
-        queue.async { self.policy.firstPairing = true }
+    /// Scans for `window` and returns the units in range, strongest first, for the user to pick
+    /// (also when there is only one). Empty when Bluetooth is not on or a scan already runs.
+    public func pairingCandidates(window: Duration = .seconds(3)) async -> [PairingCandidate] {
+        await withCheckedContinuation { k in
+            queue.async {
+                guard self.central.state == .poweredOn, self.candidates == nil else { return k.resume(returning: []) }
+                self.candidates = (CandidateList(), k)
+                self.central.scanForPeripherals(withServices: [Self.generalService])
+                let ms = Int(window.components.seconds * 1000 + window.components.attoseconds / 1_000_000_000_000_000)
+                self.queue.asyncAfter(deadline: .now() + .milliseconds(ms)) {
+                    self.central.stopScan()
+                    guard let c = self.candidates else { return }
+                    self.candidates = nil
+                    c.k.resume(returning: c.list.sorted)
+                }
+            }
+        }
+    }
+
+    /// The user picked `id` and confirmed it: the next `connect()` goes to that unit, once. It is
+    /// adopted (and replaces the saved unit) only when its authenticated `1004` read succeeds; any
+    /// other end of that link, or `cancel()`, ends the first pairing.
+    public func beginFirstPairing(with id: UUID) async {
+        queue.async { self.policy.chosen = id }
     }
 
     // MARK: CamperTransport
@@ -157,12 +182,10 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         if let a = Self.availability(central.state) { sink.yield(.bluetoothUnavailable(a)); return }
         guard central.state == .poweredOn else { phase = .waitingForPower; return }
         switch policy.route() {
-        case .scan:
-            phase = .scanning
-            central.scanForPeripherals(withServices: [Self.generalService])
-        case .saved(let id):
+        case .chosen(let id), .saved(let id):
             // iOS resolves the unit's rotating address with the bond. Never another peripheral.
             guard let p = central.retrievePeripherals(withIdentifiers: [id]).first else {
+                policy.linkEnded()
                 sink.yield(.disconnected(reason: .failedToConnect))
                 return
             }
@@ -188,9 +211,8 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     private func stop() {
         switch phase {
         case .idle:
-            return
-        case .waitingForPower, .scanning, .connecting:
-            if phase == .scanning { central.stopScan() }
+            policy.linkEnded()
+        case .waitingForPower, .connecting:
             if phase == .connecting, let p = peripheral { central.cancelPeripheralConnection(p) }
             tearDown()
             sink.yield(.disconnected(reason: .localCancel))
@@ -203,7 +225,7 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     /// The link is gone: every pending call resumes (an issued write with `.linkLost`).
     private func tearDown() {
         phase = .idle
-        policy.linkEnded()
+        policy.linkEnded()  // a first pairing is one-shot
         chars = [:]
         servicesLeft = 0
         restoredConnected = false
@@ -239,11 +261,9 @@ extension CoreBluetoothTransport: CBCentralManagerDelegate {
 
     public func centralManager(_ central: CBCentralManager, didDiscover p: CBPeripheral,
                                advertisementData: [String: Any], rssi: NSNumber) {
-        // A cheap first screen only: the pairing is the check.
+        // A cheap first screen only: the user's pick and the passkey are the check.
         let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? p.name ?? ""
-        guard phase == .scanning, name.hasPrefix(CamperGATT.deviceName) else { return }
-        central.stopScan()
-        open(p)
+        candidates?.list.saw(id: p.identifier, name: name, rssi: rssi.intValue)
     }
 
     public func centralManager(_ central: CBCentralManager, didConnect p: CBPeripheral) {
@@ -309,12 +329,8 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
         guard p === peripheral, let s = Self.short(c.uuid) else { return }
         if phase == .probing, s == CamperGATT.auth {
             // The probe's value is discarded: the session reads every char after `.encrypted`.
-            if error == nil { return policy.authenticated(p.identifier) ? linkUp(p) : fail(p, CBATTError(.insufficientAuthentication)) }
-            if Self.needsPairing(error), policy.pairingError() {
-                sink.yield(.pairingRequired)  // iOS shows its passkey dialog; read again
-                return p.readValue(for: c)
-            }
-            return fail(p, error)
+            // An error here means the pairing failed or was cancelled (iOS pairs inside the held read).
+            return error == nil && policy.authenticated(p.identifier) ? linkUp(p) : fail(p, error)
         }
         let bytes = [UInt8](c.value ?? Data())
         let result: Result<[UInt8], any Error> = error.map { e in
@@ -352,45 +368,60 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
 }
 
 /// Which peripheral the transport may talk to. The saved identifier is the only one it connects
-/// to. A new one is adopted only in a first pairing that the user started, and only after the
-/// unit asked for pairing (an authentication error on `1004`) and the read then succeeded: the
-/// passkey from the camper screen was typed. A peripheral whose `1004` reads without that, in a
-/// first pairing, is not adopted (an unpaired look-alike serves it without encryption).
+/// to, and it never switches by itself. A new one is adopted only when the user picked it
+/// (`chosen`, one connect only) and its authenticated `1004` read succeeded (iOS pairs with the
+/// passkey inside that read, or uses the iPhone's existing bond, for example the vendor app's).
+/// Nothing is adopted in the background. A failed read or a missing `1004` never reaches
+/// `authenticated`; the link then ends, and with it the first pairing.
 ///
 /// - Requirement: R_IOS_PAIRING, R_IOS_BLE_DIRECT
 struct PeerPolicy {
     private(set) var saved: UUID?
-    var firstPairing = false
-    private var pairingSeen = false
+    /// The unit the user picked for a first pairing; nil outside one.
+    var chosen: UUID?
 
     init(saved: UUID?) { self.saved = saved }
 
-    enum Route: Equatable { case saved(UUID), scan, refuse }
+    enum Route: Equatable { case chosen(UUID), saved(UUID), refuse }
 
     func route() -> Route {
-        if firstPairing { return .scan }
+        if let chosen { return .chosen(chosen) }
         return saved.map(Route.saved) ?? .refuse
-    }
-
-    /// The `1004` read failed with a pairing error. True: read again (iOS runs the pairing);
-    /// false: end the link (outside a first pairing, or the pairing failed once already).
-    mutating func pairingError() -> Bool {
-        guard firstPairing, !pairingSeen else { return false }
-        pairingSeen = true
-        return true
     }
 
     /// The authenticated `1004` read succeeded on `id`. True: the link may be reported encrypted.
     mutating func authenticated(_ id: UUID) -> Bool {
-        guard firstPairing else { return id == saved }
-        guard pairingSeen else { return false }
+        guard let c = chosen else { return id == saved }
+        chosen = nil
+        guard id == c else { return false }
         saved = id
-        firstPairing = false
-        pairingSeen = false
         return true
     }
 
-    mutating func linkEnded() { pairingSeen = false }
+    /// The link ended, a connect failed, or the caller cancelled: the first pairing is over.
+    mutating func linkEnded() { chosen = nil }
+}
+
+/// A unit in range during a first pairing.
+public struct PairingCandidate: Sendable, Equatable {
+    public let id: UUID
+    public let name: String
+    public let rssi: Int
+}
+
+/// The units seen in a pairing scan: the exact advertised name only, one entry per identifier.
+///
+/// - Requirement: R_IOS_PAIRING
+struct CandidateList {
+    private var seen: [UUID: PairingCandidate] = [:]
+
+    mutating func saw(id: UUID, name: String, rssi: Int) {
+        guard name == CamperGATT.deviceName else { return }
+        seen[id] = PairingCandidate(id: id, name: name, rssi: rssi)
+    }
+
+    /// Strongest signal first.
+    var sorted: [PairingCandidate] { seen.values.sorted { $0.rssi > $1.rssi } }
 }
 
 /// The continuations of the calls in flight, per char, in issue order; each resumes exactly once.

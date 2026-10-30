@@ -9,14 +9,20 @@ the link itself. Run it on a real iPhone at the van.
 
 - **Finding the unit.** The app connects only to the unit that it adopted, by the identifier that
   iOS gives it (iOS resolves the rotating address with the bond). Without an adopted unit it
-  connects to nothing until the user starts the first pairing. The first pairing scans for the
-  general service `00001000-6c77-4b7d-bbf6-a5e587701f3d` and the name `VWCAMPER`.
+  connects to nothing until the user starts the first pairing. The first pairing scans for 3
+  seconds for the general service `00001000-6c77-4b7d-bbf6-a5e587701f3d` and lists each unit with
+  the exact name `VWCAMPER`. The user picks one, also when there is only one.
 - **Encryption.** After service discovery the app reads `1004`, the authenticated read, on every
   link. Only a successful read makes the link usable. A link without `1004`, or with a failed
   read, ends at once.
-- **Adoption.** In the first pairing the app adopts a unit only when the read of `1004` first fails
-  with an authentication error (the unit asks for pairing, iOS shows its passkey dialog) and then
-  succeeds. A unit whose `1004` reads without pairing is not adopted.
+- **Adoption.** The app adopts a new unit only when the user picked it, and only when the
+  authenticated read of `1004` succeeds. iOS runs the passkey pairing inside that read, or uses a
+  bond that the iPhone already has. The app stores the unit only after that read. The pick is good
+  for one connection: a link that ends without the adoption, a cancel or a timeout ends the first
+  pairing.
+- **Passkey rule.** The unit refuses Just Works pairing. A new pairing with the real unit always
+  shows the iOS passkey dialog, and its 6-digit code must match the camper screen. A pairing
+  prompt without a code is not the camper: cancel it.
 - **Hang-up.** The unit ends a link with HCI 0x13. iOS reports it as
   `CBError.peripheralDisconnected`, and the session treats it as the unit's hang-up.
 - **Writes** use "write with response". A write that went out before the link dropped reports
@@ -40,32 +46,30 @@ Do the checks in this order. Each check names what to see.
 1. On the iPhone, open *Settings → Bluetooth* and make sure that no bond to the unit exists.
 2. On the camper panel, start the pairing.
 3. Open the app and start the connection.
-4. Check that the app finds the unit. If it does not, the unit does not advertise the general
-   service: report it, because the scan filter must then change to the advertised name.
-5. Check that iOS shows its own pairing dialog.
+4. Check that the app lists the unit with the name `VWCAMPER`. If it does not, record the name
+   that the unit advertises and whether it advertises the general service: the scan filter must
+   then change.
+5. Pick the unit. Check that iOS shows its own pairing dialog with a field for a 6-digit code.
 6. Type the 6-digit passkey from the camper screen into the dialog.
 7. Check that the app shows the unit's state after the pairing.
-8. Check in the Console that the first read of `1004` failed with an authentication error before
-   the dialog, and that the app read `1004` again after it. If iOS shows the dialog but the app
-   never sees the error, the app cannot adopt the unit: report it, because the adoption rule must
-   then change.
+8. Check that the app connects for at least 60 seconds while the dialog is open, so that there is
+   time to type the passkey.
 9. Cancel the pairing dialog once (repeat steps 1–5). Check that the app shows "The camper unit
-   asks for pairing." and does not connect in a loop.
+   asks for pairing.", does not connect in a loop, and needs a new pick for the next try.
 10. Close the app and open it again. Check that it connects without a scan and without a dialog.
 
 ### A bond from the vendor app
 
 1. Use an iPhone on which the vendor app is already paired with the unit, and no adopted unit in
    this app.
-2. Start the first pairing in the app.
-3. Check what happens: no dialog appears because the bond exists. Record whether the app adopts
-   the unit. By the adoption rule it does not; the owner decides if that stays.
+2. Start the first pairing in the app and pick the unit.
+3. Check that no dialog appears, because the bond exists, and that the app adopts the unit and
+   shows its state.
 
 ### No unit without proof
 
-1. Run the fake unit peripheral without the `1004` characteristic, or with a `1004` that needs no
-   encryption.
-2. Start the first pairing in the app.
+1. Run the fake unit peripheral without the `1004` characteristic.
+2. Start the first pairing in the app and pick the fake unit.
 3. Check that the app ends the link after the service discovery or the read, that it never shows
    a state, and that it stores no unit.
 
