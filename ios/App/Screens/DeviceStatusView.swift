@@ -26,7 +26,7 @@ struct DeviceStatusView: View {
             StatusRow(label: "Connection", value: store.linkLabel(at: now))
             StatusRow(label: "Last update", value: store.age(at: now) ?? "—")
             switch store.bond {
-            case .paired: StatusRow(label: "Pairing", value: "Paired ✓")
+            case .paired: StatusRow(label: "Pairing", value: "Paired", symbol: "checkmark")
             case .notPaired, .stale: StatusRow(label: "Pairing", value: "Not paired")
             case .unknown: EmptyView()
             }
@@ -42,9 +42,19 @@ struct DeviceStatusView: View {
 private struct StatusRow: View {
     let label: LocalizedStringResource
     let value: LocalizedStringResource
+    /// A symbol after the value, not read by VoiceOver.
+    var symbol: String?
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        StackedRow(label: Text(label)) { Text(value).fontWeight(.medium) }
+        StackedRow(label: Text(label)) {
+            HStack(spacing: 4) {
+                Text(value).fontWeight(.medium)
+                    // "amb 0410 · comm 2" stays one line; at accessibility sizes it wraps (never cut).
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 1).minimumScaleFactor(0.8)
+                if let symbol { Image(systemName: symbol).accessibilityHidden(true) }
+            }
+        }
             .frame(minHeight: 32)
             .accessibilityElement(children: .combine)
     }

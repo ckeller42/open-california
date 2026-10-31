@@ -115,9 +115,9 @@ final class ControlUITests: XCTestCase {
 
 /// The Setup tab: the unit's status and the pairing guide, over the fake transport's one unit.
 final class SetupUITests: XCTestCase {
-    /// The guide from step 1 to the outcome "already paired" (the fake unit takes the pick at once,
-    /// like an iPhone that shares the vendor app's bond); each step passes the audit, in light and
-    /// dark.
+    /// The paired guide is collapsed; "Pair again…" opens step 1, and the guide runs to the outcome
+    /// "already paired" (the fake unit takes the pick at once, like an iPhone that shares the vendor
+    /// app's bond); "Close" collapses it again. Each step passes the audit, in light and dark.
     ///
     /// - Test: T_IOS_UI_SETUP_AUDIT
     /// - Verifies: R_IOS_PAIRING, R_IOS_LOOK, R_IOS_TESTED
@@ -130,6 +130,10 @@ final class SetupUITests: XCTestCase {
             app.launch()
             app.tabBars.buttons["Setup"].tap()
             XCTAssertTrue(app.navigationBars["Setup"].waitForExistence(timeout: 5))
+            // The fixture's launch connect pairs: the guide is collapsed.
+            XCTAssertTrue(app.buttons["Pair again…"].waitForExistence(timeout: 10))
+            try app.auditScreen()
+            app.buttons["Pair again…"].tap()
             XCTAssertTrue(app.staticTexts["Pair the camper unit"].waitForExistence(timeout: 5))
             try app.auditScreen()
             app.buttons["I'm on that screen"].tap()
@@ -139,6 +143,8 @@ final class SetupUITests: XCTestCase {
             unit.tap()
             XCTAssertTrue(app.staticTexts["This iPhone is already paired with the camper unit"].waitForExistence(timeout: 15))
             try app.auditScreen()
+            app.buttons["Close"].tap()
+            XCTAssertTrue(app.buttons["Pair again…"].waitForExistence(timeout: 5))
             app.terminate()
         }
     }

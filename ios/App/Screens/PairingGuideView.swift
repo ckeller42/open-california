@@ -2,25 +2,28 @@ import CaliBLE
 import SwiftUI
 
 /// The guided first pairing as steps: (1) open "Gerät verbinden" on the camper screen, search and
-/// pick the unit, (2) compare the code in the iOS dialog with the camper screen and type it in,
-/// (3) done. Pure: the view feeds it the store's answers, so each step and outcome can be shown
-/// and tested without a radio.
+/// pick the unit, (2) type the passcode from the camper screen into the iOS dialog, (3) done. Pure:
+/// the view feeds it the store's answers, so each step and outcome can be shown and tested without a
+/// radio. A paired iPhone sees the guide collapsed to one line and a "Pair again…" button.
 ///
 /// - Requirement: R_IOS_PAIRING
 struct PairingGuide: Equatable {
     enum Step: Equatable {
+        /// The iPhone is paired: one line and "Pair again…".
+        case collapsed
         /// Step 1: open Einstellungen → Bluetooth → Gerät verbinden on the camper screen.
         case openPanel
         case searching
         /// The units found, strongest first: the user picks one (never the app on its own).
         case pick([PairingCandidate])
+        /// Step 2 starts: the link to the pick is being made; iOS asks for the passcode next.
         case connecting
         /// Step 2: iOS shows its pairing dialog.
         case typeCode
         /// Step 3: paired now, or the iPhone was paired already (a shared bond).
         case done(PairingOutcome)
         case noUnit(NoUnit)
-        /// The pairing did not finish (no answer, a cancelled dialog, a wrong code).
+        /// The pairing did not finish (no answer, a cancelled dialog, a wrong passcode, time ran out).
         case failed
         /// The unit no longer knows this iPhone: Settings → Bluetooth → Forget This Device.
         case forgetDevice
@@ -31,7 +34,7 @@ struct PairingGuide: Equatable {
             case .openPanel, .searching, .pick: 1
             case .connecting, .typeCode: 2
             case .done: 3
-            case .noUnit, .failed, .forgetDevice: nil
+            case .collapsed, .noUnit, .failed, .forgetDevice: nil
             }
         }
 
@@ -45,20 +48,54 @@ struct PairingGuide: Equatable {
     }
 
     enum NoUnit: Equatable {
-        /// Bluetooth is off or not allowed.
-        case bluetooth
+        /// Bluetooth is switched off (Control Center).
+        case bluetoothOff
+        /// The app may not use Bluetooth (Settings).
+        case bluetoothDenied
+        /// Bluetooth is not usable and the cause is not known: both hints.
+        case bluetoothUnknown
         /// No `VWCAMPER` advertised: out of range, or the pairing screen is not open.
         case notFound
+        /// A scan already runs.
+        case busy
+
+        init(_ a: BluetoothAvailability?) {
+            switch a {
+            case .poweredOff?: self = .bluetoothOff
+            case .unauthorized?: self = .bluetoothDenied
+            case .unsupported?, nil: self = .bluetoothUnknown
+            }
+        }
     }
 
     private(set) var step: Step
+    /// The iPhone is paired: "Close" and "Cancel" return to the collapsed line.
+    private var paired = false
     /// "Asks for pairing" answers to a pick: the second one shows the forget-device help.
     private var staleAnswers = 0
 
     init(step: Step = .openPanel) { self.step = step }
 
-    /// The guide for the app's bond: a stale bond (the app paired before) starts on the help.
-    init(bond: Bond) { self.init(step: bond == .stale ? .forgetDevice : .openPanel) }
+    /// The guide for the app's bond: collapsed when paired; a stale bond (the app paired before)
+    /// starts on the help.
+    init(bond: Bond) {
+        self.init(step: .openPanel)
+        self.bond(bond)
+    }
+
+    /// The app learned its bond (after a connect): a guide at rest follows it.
+    mutating func bond(_ b: Bond) {
+        paired = b == .paired
+        guard step == .openPanel || step == .collapsed else { return }
+        switch b {
+        case .paired: step = .collapsed
+        case .stale: step = .forgetDevice
+        case .notPaired, .unknown: step = .openPanel
+        }
+    }
+
+    /// "Pair again…" on the collapsed line.
+    mutating func expand() { step = .openPanel }
 
     mutating func search() { step = .searching }
 
@@ -67,8 +104,9 @@ struct PairingGuide: Equatable {
         guard step == .searching else { return }
         switch r {
         case .success(let units): step = .pick(units)
-        case .failure(.bluetooth): step = .noUnit(.bluetooth)
-        case .failure(.noUnitFound), .failure(.busy): step = .noUnit(.notFound)
+        case .failure(.bluetooth(let a)): step = .noUnit(NoUnit(a))
+        case .failure(.noUnitFound): step = .noUnit(.notFound)
+        case .failure(.busy): step = .noUnit(.busy)
         }
     }
 
@@ -83,8 +121,10 @@ struct PairingGuide: Equatable {
     mutating func finished(_ r: Result<PairingOutcome, SessionError>) {
         guard step == .connecting || step == .typeCode else { return }
         switch r {
-        case .success(let o): step = .done(o)
-        case .failure(.bluetooth): step = .noUnit(.bluetooth)
+        case .success(let o):
+            paired = true
+            step = .done(o)
+        case .failure(.bluetooth(let a)): step = .noUnit(NoUnit(a))
         case .failure(.pairingRequired):
             staleAnswers += 1
             step = staleAnswers >= 2 ? .forgetDevice : .failed
@@ -92,13 +132,15 @@ struct PairingGuide: Equatable {
         }
     }
 
-    /// Cancel on a waiting step, or close an outcome: back to step 1.
-    mutating func cancel() { step = .openPanel }
+    /// Cancel on a waiting step, or close an outcome: back to the collapsed line when paired, else
+    /// to step 1.
+    mutating func cancel() { step = paired ? .collapsed : .openPanel }
 }
 
 /// The Setup tab's pairing card: the guide's current step with its words and buttons. VoiceOver
 /// announces each step change. No identifier, address or signal number is shown: the units differ
-/// only by their order (strongest first) and a signal word.
+/// only by their order (strongest first) and a signal word. The words follow the unit (it shows
+/// "Passcode:") and the web UI's pairing wizard.
 ///
 /// - Requirement: R_IOS_PAIRING, R_IOS_I18N, R_IOS_NO_VIN
 struct PairingGuideView: View {
@@ -107,6 +149,8 @@ struct PairingGuideView: View {
     /// +1 per action: the answer of a cancelled search or pick changes nothing.
     @State private var gen = 0
     @Environment(\.locale) private var locale
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.openURL) private var openURL
 
     init(store: CamperStore, guide: PairingGuide? = nil) {
         self.store = store
@@ -116,7 +160,7 @@ struct PairingGuideView: View {
     /// "No vehicle found": the two reasons the user can check, each its own text.
     static let notFoundChecks: [LocalizedStringResource] = [
         "Stand next to the van: the camper unit must be in range.",
-        "Check that “Gerät verbinden” is open on the camper unit.",
+        "Check that “Gerät verbinden” (Connect device) is open on the camper unit.",
     ]
 
     /// The forget-device help, in the order of the iPhone's own screens.
@@ -126,21 +170,36 @@ struct PairingGuideView: View {
         "Come back here and pair again.",
     ]
 
-    /// The step's headline: what VoiceOver announces when the step changes.
+    /// Step 2's instruction, shown from the connect on: the iOS dialog covers the card later.
+    static let passcodeHint: LocalizedStringResource = "When iOS asks for a code, type the passcode that the camper screen shows now."
+    static let closeGeraetVerbinden: LocalizedStringResource = "You can close “Gerät verbinden” on the camper unit."
+
+    /// The step's headline.
     static func headline(_ step: PairingGuide.Step) -> LocalizedStringResource {
         switch step {
-        case .openPanel: "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until this iPhone connects."
+        case .collapsed: "This iPhone is paired with the camper unit."
+        case .openPanel: "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden (in English: Settings → Bluetooth → Connect device). It shows “Passcode: ---” until this iPhone connects."
         case .searching: "Searching…"
         case .pick: "Pick your camper unit"
         case .connecting: "Connecting to the unit…"
-        case .typeCode: "Compare the code with the camper screen, then type it in"
+        case .typeCode: "Type the passcode from the camper screen into the iOS dialog"
         case .done(.paired): "This iPhone is now paired with the camper unit"
         case .done(.alreadyPaired): "This iPhone is already paired with the camper unit"
-        case .noUnit(.bluetooth): "Bluetooth is off or not allowed for this app"
+        case .noUnit(.bluetoothOff): "Bluetooth is off"
+        case .noUnit(.bluetoothDenied): "This app may not use Bluetooth"
+        case .noUnit(.bluetoothUnknown): "Bluetooth is off or not allowed for this app"
         case .noUnit(.notFound): "No vehicle found."
+        case .noUnit(.busy): "A search is already running — wait a moment, then try again."
         case .failed: "Could not connect to the camper unit."
         case .forgetDevice: "The camper unit no longer knows this iPhone"
         }
+    }
+
+    /// What VoiceOver announces on a step change: the headline, and from the connect on the
+    /// passcode instruction (the iOS dialog takes the focus at step 2).
+    static func spoken(_ step: PairingGuide.Step, _ locale: Locale) -> String {
+        let head = headline(step).string(locale)
+        return step == .connecting ? head + " " + passcodeHint.string(locale) : head
     }
 
     /// A signal strength in words (never the number).
@@ -150,12 +209,17 @@ struct PairingGuideView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Pair the camper unit").font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 8)
-                if let n = guide.step.number {
-                    Text("Step \(n) of 3").font(.subheadline)
+            if guide.step != .collapsed {
+                // At accessibility sizes the step goes under the title, so no word breaks.
+                let header = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                    : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+                header {
+                    Text("Pair the camper unit").font(.headline)
+                        .accessibilityAddTraits(.isHeader)
+                    if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                    if let n = guide.step.number {
+                        Text("Step \(n) of 3").font(.subheadline)
+                    }
                 }
             }
             content
@@ -165,19 +229,30 @@ struct PairingGuideView: View {
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
         .environment(\.pageStale, false)  // the guide's cards are not data: never muted
         .onChange(of: store.link) { _, l in guide.link(l) }
+        .onChange(of: store.bond) { _, b in guide.bond(b) }
         .onChange(of: guide.step) { _, step in
-            AccessibilityNotification.Announcement(Self.headline(step).string(locale)).post()
+            AccessibilityNotification.Announcement(Self.spoken(step, locale)).post()
         }
     }
 
     @ViewBuilder private var content: some View {
         let step = guide.step
         switch step {
+        case .collapsed:
+            Label { Text(Self.headline(step)) } icon: { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.onGreen) }
+            action("Pair again…", prominent: false) { guide.expand() }
         case .openPanel:
             Text(Self.headline(step))
+            Text("The passcode is valid for about 30 seconds; each attempt shows a new one.").font(.subheadline)
+            Text("Close the California On Tour app while pairing — its reconnects can collide with the passkey window.")
+                .font(.subheadline)
             action("I'm on that screen", prominent: true) { search() }
-        case .searching, .connecting:
+        case .searching:
             Label { Text(Self.headline(step)) } icon: { ProgressView() }
+            cancelButton
+        case .connecting:
+            Label { Text(Self.headline(step)) } icon: { ProgressView() }
+            Text(Self.passcodeHint).font(.headline)
             cancelButton
         case .pick(let units):
             Text(Self.headline(step)).font(.subheadline.weight(.semibold))
@@ -188,6 +263,7 @@ struct PairingGuideView: View {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(verbatim: unit.name).font(.body.weight(.semibold))
+                                .lineLimit(1).minimumScaleFactor(0.7)  // the name stays one word
                             Text(Self.signal(unit.rssi)).font(.subheadline)
                         }
                     } icon: {
@@ -202,25 +278,42 @@ struct PairingGuideView: View {
             }
             cancelButton
         case .typeCode:
-            Label { Text(Self.headline(step)).font(.subheadline.weight(.semibold)) } icon: { Image(systemName: "number") }
-            Text("iOS asks for the 6-digit code. A pairing request without a code is not the camper unit: cancel it.")
-                .font(.subheadline)
+            Label { Text(Self.headline(step)).font(.headline) } icon: { Image(systemName: "number") }
+            Text("Type it within about 30 seconds. Each attempt shows a new passcode.").font(.subheadline)
+            Text("A pairing request without a passcode is not the camper unit: cancel it.").font(.subheadline)
             cancelButton
-        case .done:
+        case .done(let outcome):
             Label { Text(Self.headline(step)) } icon: { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.onGreen) }
+            if outcome == .alreadyPaired {
+                Text("The California On Tour app on this iPhone uses the same pairing, so no code was needed.").font(.subheadline)
+            }
+            Text(Self.closeGeraetVerbinden).font(.subheadline)
             action("Close", prominent: false) { guide.cancel() }
         case .noUnit(let why):
             AlertCard(text: Self.headline(step))
-            if why == .notFound {
+            switch why {
+            case .notFound:
                 ForEach(Self.notFoundChecks.indices, id: \.self) { i in
                     Label { Text(Self.notFoundChecks[i]) } icon: { Image(systemName: i == 0 ? "location" : "gearshape") }
                         .font(.subheadline)
                 }
+            case .bluetoothOff, .bluetoothDenied, .bluetoothUnknown:
+                if why != .bluetoothDenied {
+                    Text("Turn on Bluetooth in Control Center, then tap Try again.").font(.subheadline)
+                }
+                if why != .bluetoothOff {
+                    Text("Allow Bluetooth for this app in Settings.").font(.subheadline)
+                    action("Open Settings", prominent: false) {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                    }
+                }
+            case .busy:
+                EmptyView()
             }
             retryButtons
         case .failed:
             AlertCard(text: Self.headline(step))
-            Text("Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and try again.")
+            Text("Wrong passcode, or the time ran out. Reopen “Gerät verbinden” on the camper unit and try again: it shows a new passcode.")
                 .font(.subheadline)
             retryButtons
         case .forgetDevice:
@@ -229,7 +322,9 @@ struct PairingGuideView: View {
                 Text(verbatim: "\(i + 1). ") + Text(Self.forgetSteps[i])
             }
             .font(.subheadline)
-            action("Try again", prominent: true) { guide.cancel() }
+            Text("A new pairing also serves the California On Tour app on this iPhone.").font(.subheadline)
+            action("Try again", prominent: true) { guide.expand() }
+            action("Cancel", prominent: false) { guide.cancel() }
         }
     }
 

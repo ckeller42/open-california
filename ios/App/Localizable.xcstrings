@@ -69,6 +69,57 @@
         }
       }
     },
+    "A new pairing also serves the California On Tour app on this iPhone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die neue Kopplung gilt auch für die California-On-Tour-App auf diesem iPhone."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new pairing also serves the California On Tour app on this iPhone."
+          }
+        }
+      }
+    },
+    "A pairing request without a passcode is not the camper unit: cancel it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Kopplungsanfrage ohne Passcode kommt nicht von der Camper-Einheit: Brich sie ab."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A pairing request without a passcode is not the camper unit: cancel it."
+          }
+        }
+      }
+    },
+    "A search is already running — wait a moment, then try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Suche läuft bereits — warte einen Moment und versuche es dann erneut."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A search is already running — wait a moment, then try again."
+          }
+        }
+      }
+    },
     "Active": {
       "extractionState": "manual",
       "localizations": {
@@ -184,6 +235,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "All lights"
+          }
+        }
+      }
+    },
+    "Allow Bluetooth for this app in Settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erlaube Bluetooth für diese App in den Einstellungen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Bluetooth for this app in Settings."
           }
         }
       }
@@ -358,6 +426,23 @@
         }
       }
     },
+    "Bluetooth is off": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth ist aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth is off"
+          }
+        }
+      }
+    },
     "Bluetooth is off or not allowed for this app": {
       "extractionState": "manual",
       "localizations": {
@@ -494,7 +579,7 @@
         }
       }
     },
-    "Check that “Gerät verbinden” is open on the camper unit.": {
+    "Check that “Gerät verbinden” (Connect device) is open on the camper unit.": {
       "extractionState": "manual",
       "localizations": {
         "de": {
@@ -506,7 +591,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Check that “Gerät verbinden” is open on the camper unit."
+            "value": "Check that “Gerät verbinden” (Connect device) is open on the camper unit."
           }
         }
       }
@@ -524,6 +609,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Close"
+          }
+        }
+      }
+    },
+    "Close the California On Tour app while pairing — its reconnects can collide with the passkey window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schließe während der Kopplung die California-On-Tour-App — ihre Verbindungsversuche können das Passcode-Fenster stören."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close the California On Tour app while pairing — its reconnects can collide with the passkey window."
           }
         }
       }
@@ -575,23 +677,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Come back here and pair again."
-          }
-        }
-      }
-    },
-    "Compare the code with the camper screen, then type it in": {
-      "extractionState": "manual",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vergleiche den Code mit dem Bildschirm der Camper-Einheit und gib ihn dann ein"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Compare the code with the camper screen, then type it in"
           }
         }
       }
@@ -830,6 +915,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnected to save energy — tap to connect"
+          }
+        }
+      }
+    },
+    "Dismiss": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausblenden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss"
           }
         }
       }
@@ -1633,7 +1735,7 @@
         }
       }
     },
-    "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until this iPhone connects.": {
+    "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden (in English: Settings → Bluetooth → Connect device). It shows “Passcode: ---” until this iPhone connects.": {
       "extractionState": "manual",
       "localizations": {
         "de": {
@@ -1645,7 +1747,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until this iPhone connects."
+            "value": "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden (in English: Settings → Bluetooth → Connect device). It shows “Passcode: ---” until this iPhone connects."
           }
         }
       }
@@ -1701,6 +1803,23 @@
         }
       }
     },
+    "Open Settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
+          }
+        }
+      }
+    },
     "Open Settings → Bluetooth on this iPhone.": {
       "extractionState": "manual",
       "localizations": {
@@ -1714,6 +1833,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Settings → Bluetooth on this iPhone."
+          }
+        }
+      }
+    },
+    "Pair again…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut koppeln…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pair again…"
           }
         }
       }
@@ -1735,19 +1871,19 @@
         }
       }
     },
-    "Paired ✓": {
+    "Paired": {
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gekoppelt ✓"
+            "value": "Gekoppelt"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Paired ✓"
+            "value": "Paired"
           }
         }
       }
@@ -2483,19 +2619,19 @@
         }
       }
     },
-    "Tap to dismiss": {
+    "The California On Tour app on this iPhone uses the same pairing, so no code was needed.": {
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zum Schließen tippen"
+            "value": "Die California-On-Tour-App auf diesem iPhone nutzt dieselbe Kopplung, darum war kein Code nötig."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tap to dismiss"
+            "value": "The California On Tour app on this iPhone uses the same pairing, so no code was needed."
           }
         }
       }
@@ -2636,6 +2772,23 @@
         }
       }
     },
+    "The passcode is valid for about 30 seconds; each attempt shows a new one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Passcode gilt etwa 30 Sekunden; jeder Versuch zeigt einen neuen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The passcode is valid for about 30 seconds; each attempt shows a new one."
+          }
+        }
+      }
+    },
     "The previous command is still running — try again in a moment": {
       "extractionState": "manual",
       "localizations": {
@@ -2772,6 +2925,23 @@
         }
       }
     },
+    "This app may not use Bluetooth": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese App darf Bluetooth nicht verwenden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This app may not use Bluetooth"
+          }
+        }
+      }
+    },
     "This camper unit is not supported yet": {
       "extractionState": "manual",
       "localizations": {
@@ -2836,6 +3006,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "This iPhone is now paired with the camper unit"
+          }
+        }
+      }
+    },
+    "This iPhone is paired with the camper unit.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses iPhone ist mit der Camper-Einheit gekoppelt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This iPhone is paired with the camper unit."
           }
         }
       }
@@ -2938,6 +3125,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn off continuous heating? You can only turn continuous heating on again using the controls in your California."
+          }
+        }
+      }
+    },
+    "Turn on Bluetooth in Control Center, then tap Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schalte Bluetooth im Kontrollzentrum ein und tippe dann auf „Erneut versuchen“."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on Bluetooth in Control Center, then tap Try again."
+          }
+        }
+      }
+    },
+    "Type it within about 30 seconds. Each attempt shows a new passcode.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib ihn innerhalb von etwa 30 Sekunden ein. Jeder Versuch zeigt einen neuen Passcode."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type it within about 30 seconds. Each attempt shows a new passcode."
+          }
+        }
+      }
+    },
+    "Type the passcode from the camper screen into the iOS dialog": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib den Passcode vom Bildschirm der Camper-Einheit in den iOS-Dialog ein"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the passcode from the camper screen into the iOS dialog"
           }
         }
       }
@@ -3061,19 +3299,53 @@
         }
       }
     },
-    "Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and try again.": {
+    "When iOS asks for a code, type the passcode that the camper screen shows now.": {
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Falscher Passcode, oder die Camper-Einheit hat den Kopplungsmodus verlassen. Öffne „Gerät verbinden“ an der Camper-Einheit erneut und versuche es noch einmal."
+            "value": "Wenn iOS nach einem Code fragt, gib den Passcode ein, den die Camper-Einheit jetzt anzeigt."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and try again."
+            "value": "When iOS asks for a code, type the passcode that the camper screen shows now."
+          }
+        }
+      }
+    },
+    "Wrong passcode, or the time ran out. Reopen “Gerät verbinden” on the camper unit and try again: it shows a new passcode.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falscher Passcode, oder die Zeit ist abgelaufen. Öffne „Gerät verbinden“ an der Camper-Einheit erneut und versuche es noch einmal: Sie zeigt einen neuen Passcode."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong passcode, or the time ran out. Reopen “Gerät verbinden” on the camper unit and try again: it shows a new passcode."
+          }
+        }
+      }
+    },
+    "You can close “Gerät verbinden” on the camper unit.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kannst „Gerät verbinden“ an der Camper-Einheit schließen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can close “Gerät verbinden” on the camper unit."
           }
         }
       }
@@ -3176,23 +3448,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "error"
-          }
-        }
-      }
-    },
-    "iOS asks for the 6-digit code. A pairing request without a code is not the camper unit: cancel it.": {
-      "extractionState": "manual",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iOS fragt nach dem 6-stelligen Code. Eine Kopplungsanfrage ohne Code kommt nicht von der Camper-Einheit: Brich sie ab."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iOS asks for the 6-digit code. A pairing request without a code is not the camper unit: cancel it."
           }
         }
       }

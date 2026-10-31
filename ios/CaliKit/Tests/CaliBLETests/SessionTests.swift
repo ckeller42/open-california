@@ -41,6 +41,10 @@ private actor Counting: CamperTransport {
     /// While set, every read waits until `releaseReads()` (`hang`: forever, ignoring cancellation).
     var holdReads = false
     var held: [CheckedContinuation<Void, Never>] = []
+    /// The next heartbeat write waits until `releaseBeat()`, then fails with `.linkLost` (CoreBluetooth
+    /// drains a write in flight that way when the link ends).
+    var holdNextBeat = false
+    var heldBeat: CheckedContinuation<Void, Never>?
     init(_ inner: FakeCamperTransport) { self.inner = inner; events = inner.events }
     func connect() async { connects += 1; await inner.connect() }
     func cancel() async { cancels += 1; await inner.cancel() }
@@ -48,7 +52,17 @@ private actor Counting: CamperTransport {
         if holdReads { await withCheckedContinuation { held.append($0) } }
         return try await inner.read(char)
     }
-    func write(_ char: UInt16, _ bytes: [UInt8]) async throws { try await inner.write(char, bytes) }
+    func write(_ char: UInt16, _ bytes: [UInt8]) async throws {
+        if holdNextBeat, char == CamperGATT.heartbeat {
+            holdNextBeat = false
+            await withCheckedContinuation { heldBeat = $0 }
+            throw TransportError.linkLost
+        }
+        try await inner.write(char, bytes)
+    }
+    func set(holdNextBeat h: Bool) { holdNextBeat = h }
+    var beatHeld: Bool { heldBeat != nil }
+    func releaseBeat() { heldBeat?.resume(); heldBeat = nil }
     func subscribe(_ chars: [UInt16]) async throws {
         if failSubscribe { failSubscribe = false; throw TransportError.writeRejected }
         try await inner.subscribe(chars)
@@ -381,6 +395,28 @@ struct SessionTests {
         await r.fake.completePairing()
         #expect(try await call.value == .paired)
         #expect(await r.s.isReady)
+    }
+
+    /// A heartbeat write of the saved link is in flight when a pick ends that link; it fails late with
+    /// `.linkLost`. That failure belongs to the old link and must not end the pick.
+    ///
+    /// - Test: T_IOS_SESSION_PICK_OLD_BEAT
+    /// - Verifies: R_IOS_PAIRING
+    @Test func lateHeartbeatFailureOfTheOldLinkDoesNotEndThePick() async throws {
+        let r = Rig()
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        await r.t.set(holdNextBeat: true)
+        try await until("beat sleeping") { r.clock.sleeperCount > 0 }
+        r.clock.advance(by: CamperGATT.heartbeatPeriod)
+        try await until("beat in flight") { await r.t.beatHeld }
+        await r.fake.pairNextConnect()
+        let call = Task { try await r.s.firstPairing(with: UUID()) }
+        try await until("pairing") { await r.s.link == .pairing }
+        await r.t.releaseBeat()
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await r.s.link == .pairing)
+        await r.fake.completePairing()
+        #expect(try await call.value == .paired)
     }
 
     /// A pick of a unit the iPhone is already paired with (shared bond): no dialog, `.alreadyPaired`.

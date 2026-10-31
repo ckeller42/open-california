@@ -234,7 +234,15 @@ public actor CamperSession {
     /// A first pairing's bring-up: always its own link (the transport ends the current one first).
     private func pairUp(_ id: UUID) async throws {
         if let left = cooldownLeft() { try await clock.sleep(for: left) }
-        if link != .up { setLink(.connecting) }
+        if link == .up {
+            // Retire the old link now: its heartbeat (a write may be in flight and fail late) and its
+            // read pass no longer count, and the session is not ready on it during the teardown.
+            stopHeartbeat()
+            linkGen += 1
+            ready = false
+        } else {
+            setLink(.connecting)
+        }
         try await waitForLink { [transport] in await transport.beginFirstPairing(with: id) }
         try await subscribeAndRead()
     }

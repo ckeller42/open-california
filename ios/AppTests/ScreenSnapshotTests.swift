@@ -179,15 +179,19 @@ struct ScreenSnapshotTests {
     /// - Test: T_IOS_SNAPSHOT_SETUP
     /// - Verifies: R_IOS_PAIRING, R_IOS_LOOK, R_IOS_I18N, R_IOS_NO_VIN
     @Test func setupScreensSnapshot() {
-        let steps: [(String, PairingGuide.Step)] = [
-            ("open", .openPanel), ("searching", .searching), ("pick", .pick(PairingGuideTests.units)),
-            ("connecting", .connecting), ("code", .typeCode), ("paired", .done(.paired)),
-            ("already", .done(.alreadyPaired)), ("notfound", .noUnit(.notFound)), ("bluetooth", .noUnit(.bluetooth)),
-            ("failed", .failed), ("forget", .forgetDevice),
+        // Each state with the bond it comes with, so the status card above it matches.
+        let steps: [(String, PairingGuide.Step, Bond)] = [
+            ("collapsed", .collapsed, .paired), ("open", .openPanel, .notPaired), ("searching", .searching, .notPaired),
+            ("pick", .pick(PairingGuideTests.units), .notPaired), ("connecting", .connecting, .notPaired),
+            ("code", .typeCode, .notPaired), ("paired", .done(.paired), .paired), ("already", .done(.alreadyPaired), .paired),
+            ("notfound", .noUnit(.notFound), .notPaired), ("busy", .noUnit(.busy), .notPaired),
+            ("bluetooth-off", .noUnit(.bluetoothOff), .unknown), ("bluetooth-denied", .noUnit(.bluetoothDenied), .unknown),
+            ("bluetooth-unknown", .noUnit(.bluetoothUnknown), .unknown), ("failed", .failed, .notPaired),
+            ("forget", .forgetDevice, .stale),
         ]
-        for (name, step) in steps {
-            let store = CamperStore.preview(.parked, now: Self.now)
-            store.bond = .paired
+        for (name, step, bond) in steps {
+            let store = CamperStore.preview(bond == .paired ? .parked : .unreachable, now: Self.now)
+            store.bond = bond
             let view = NavigationStack { SetupView(store: store, guide: PairingGuide(step: step)) }
             check(view, "setup-\(name)")
             snap(view, "setup-\(name)-de", locale: Locale(identifier: "de_DE"))

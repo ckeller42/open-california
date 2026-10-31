@@ -210,6 +210,45 @@ struct CBMappingTests {
         #expect(p.route() == .saved(new))
     }
 
+    /// A pick ends with the pairing budget, counted from the pick: it can no longer start a connect,
+    /// and `expire` ends a running one. Before the deadline nothing expires.
+    ///
+    /// - Test: T_IOS_CB_PICK_DEADLINE
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pickExpiresWithItsBudget() {
+        let old = UUID(), new = UUID()
+        let t0 = ContinuousClock.now
+        var p = PeerPolicy(saved: old)
+        p.pick(new, now: t0)
+        let early = p.expire(now: t0.advanced(by: .seconds(30))); #expect(!early)
+        let late = p.startPick(now: t0.advanced(by: PeerPolicy.pairingBudget)); #expect(late == nil)  // too late for its connect
+        #expect(!p.inPick)
+        #expect(p.route() == .saved(old))
+
+        var q = PeerPolicy(saved: old)
+        q.pick(new, now: t0)
+        let started = q.startPick(now: t0.advanced(by: .seconds(1))); #expect(started == new)
+        let ended = q.expire(now: t0.advanced(by: PeerPolicy.pairingBudget)); #expect(ended)
+        #expect(!q.inPick)
+        #expect(q.route() == .saved(old))
+        let r = q.authenticated(new); #expect(r == .reject)
+    }
+
+    /// Bluetooth goes away while a pick waits for the old link to end: the transport cancels the
+    /// pick after the teardown, so the next "powered on" connects to the saved unit, not the pick.
+    ///
+    /// - Test: T_IOS_CB_PICK_POWER_LOSS
+    /// - Verifies: R_IOS_PAIRING
+    @Test func powerLossEndsAPendingPick() {
+        let old = UUID(), new = UUID()
+        var p = PeerPolicy(saved: old)
+        p.pick(new)
+        p.linkEnded()  // tearDown of the old link
+        p.cancelPick()  // the not-powered-on path
+        let none = p.startPick(); #expect(none == nil)
+        #expect(p.route() == .saved(old))
+    }
+
     /// The re-reads of a first pairing stop at a cap of their own.
     ///
     /// - Test: T_IOS_CB_PAIRING_READ_CAP

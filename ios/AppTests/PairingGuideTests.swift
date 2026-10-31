@@ -44,8 +44,9 @@ struct PairingGuideTests {
         }
     }
 
-    /// No unit in the scan: Bluetooth off has its own text; "no VWCAMPER found" lists the two
-    /// checks (in range, the pairing screen open). A late scan result after a cancel changes nothing.
+    /// No unit in the scan: Bluetooth off, not allowed and unknown each have their own outcome; "no
+    /// VWCAMPER found" lists the two checks (in range, the pairing screen open); a scan that already
+    /// runs is not "not found". A late scan result after a cancel changes nothing.
     ///
     /// - Test: T_IOS_GUIDE_NO_UNIT
     /// - Verifies: R_IOS_PAIRING, R_IOS_I18N
@@ -56,7 +57,16 @@ struct PairingGuideTests {
         #expect(g.step == .noUnit(.notFound))
         g.search()
         g.found(.failure(.bluetooth(.poweredOff)))
-        #expect(g.step == .noUnit(.bluetooth))
+        #expect(g.step == .noUnit(.bluetoothOff))
+        g.search()
+        g.found(.failure(.bluetooth(.unauthorized)))
+        #expect(g.step == .noUnit(.bluetoothDenied))
+        g.search()
+        g.found(.failure(.bluetooth(nil)))
+        #expect(g.step == .noUnit(.bluetoothUnknown))
+        g.search()
+        g.found(.failure(.busy))
+        #expect(g.step == .noUnit(.busy))  // not "No vehicle found"
         g.search()
         g.cancel()
         g.found(.success(Self.units))  // the scan of the cancelled search
@@ -87,6 +97,35 @@ struct PairingGuideTests {
         #expect(PairingGuide(bond: .notPaired).step == .openPanel)
         let de = Locale(identifier: "de_DE")
         #expect(PairingGuideView.forgetSteps.map { $0.string(de) }.joined().contains("Dieses Gerät ignorieren"))
+    }
+
+    /// A paired iPhone sees the guide collapsed ("Pair again…"); it expands to step 1 on that tap,
+    /// and "Close" after a pairing, or "Cancel", returns to the collapsed line. A guide at rest
+    /// follows the bond the app learns later.
+    ///
+    /// - Test: T_IOS_GUIDE_COLLAPSED
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pairedGuideIsCollapsed() {
+        var g = PairingGuide(bond: .paired)
+        #expect(g.step == .collapsed)
+        #expect(g.step.number == nil)
+        g.expand()
+        #expect(g.step == .openPanel)
+        g.search()
+        g.cancel()
+        #expect(g.step == .collapsed)
+
+        var first = PairingGuide(bond: .unknown)
+        #expect(first.step == .openPanel)
+        first.bond(.paired)  // the launch connect came up
+        #expect(first.step == .collapsed)
+        var fresh = PairingGuide()
+        fresh.search()
+        fresh.found(.success(Self.units))
+        fresh.picked()
+        fresh.finished(.success(.paired))
+        fresh.cancel()  // "Close"
+        #expect(fresh.step == .collapsed)
     }
 
     /// The store's first pairing over the fake transport: the scan lists the units, the pick

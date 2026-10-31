@@ -51,8 +51,6 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     private var restoredConnected = false
     private var candidates: (list: CandidateList, k: CheckedContinuation<[PairingCandidate], any Error>)?
     private var policy = PeerPolicy(saved: UserDefaults.standard.string(forKey: peripheralKey).flatMap(UUID.init(uuidString:)))
-    /// +1 per pick: the budget timer of an earlier pick ends nothing.
-    private var pickGen = 0
 
     private enum Phase: Int, Comparable {
         case idle, waitingForPower, connecting, discovering, probing, up
@@ -158,13 +156,10 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
                 return
             }
             self.policy.pick(id)
-            self.pickGen += 1
-            let gen = self.pickGen
+            // The deadline lives in the policy: this timer only ends the link of an expired pick.
             let budget = PeerPolicy.pairingBudget.components
             self.queue.asyncAfter(deadline: .now() + .seconds(Int(budget.seconds))) {
-                guard self.pickGen == gen, self.policy.inPick else { return }
-                self.policy.cancelPick()
-                self.stop()
+                if self.policy.expire() { self.stop() }
             }
             switch self.phase {
             case .idle, .waitingForPower:
@@ -228,7 +223,8 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     // MARK: link (on `queue`)
 
     private func startConnect() {
-        if phase == .up { sink.yield(.encrypted); return }
+        // The up link is never the answer for a pick (it ends first; see `beginFirstPairing`).
+        if phase == .up, !policy.inPick { sink.yield(.encrypted); return }
         guard phase == .idle else { return }
         if let a = Self.availability(central.state) { policy.linkEnded(); sink.yield(.bluetoothUnavailable(a)); return }
         // A pick never waits for Bluetooth: only the saved unit's connect does.
@@ -305,6 +301,7 @@ extension CoreBluetoothTransport: CBCentralManagerDelegate {
         // Not powered on: CoreBluetooth sends no disconnect for the links it dropped.
         let was = phase
         if was > .waitingForPower { tearDown() }
+        policy.cancelPick()  // a pick never waits for Bluetooth (tearDown may have promoted one)
         if was >= .discovering { sink.yield(.disconnected(reason: .linkLost)) }
         if let a = Self.availability(central.state) {
             if was == .waitingForPower { tearDown() }
@@ -459,6 +456,8 @@ struct PeerPolicy {
     /// The unit of the first pairing's own connect; nil outside one.
     private(set) var chosen: UUID?
     private var pairingReads = 0
+    /// When the current pick ends (`pairingBudget` after the pick).
+    private var deadline: ContinuousClock.Instant?
     /// The re-reads of `1004` in one first pairing (one per second): a hard cap of its own, so a
     /// caller that gave up without `cancel()` leaves no endless reads.
     static let maxPairingReads = 90
@@ -483,24 +482,36 @@ struct PeerPolicy {
         return saved.map(Route.saved) ?? .refuse
     }
 
-    /// The user picked `id`; it replaces an earlier pick. Its connect starts with `startPick()`.
-    mutating func pick(_ id: UUID) {
+    /// The user picked `id` at `now`; it replaces an earlier pick and ends `pairingBudget` later.
+    /// Its connect starts with `startPick()`.
+    mutating func pick(_ id: UUID, now: ContinuousClock.Instant = .now) {
         linkEnded()
         pending = id
+        deadline = now.advanced(by: Self.pairingBudget)
     }
 
-    /// No link runs now: the pending pick becomes the one for the next connect. Returns it.
-    mutating func startPick() -> UUID? {
+    /// No link runs now: the pending pick becomes the one for the next connect. Returns it; nil
+    /// without a pick or after its deadline (the pick is then over).
+    mutating func startPick(now: ContinuousClock.Instant = .now) -> UUID? {
         guard let p = pending else { return nil }
+        guard !expire(now: now) else { return nil }
         pending = nil
         chosen = p
         pairingReads = 0
         return p
     }
 
+    /// Ends the pick when its deadline has passed at `now`. True: it ended (end its link too).
+    mutating func expire(now: ContinuousClock.Instant = .now) -> Bool {
+        guard inPick, let deadline, now >= deadline else { return false }
+        cancelPick()
+        return true
+    }
+
     /// The caller cancelled or gave up: no pick is left.
     mutating func cancelPick() {
         pending = nil
+        deadline = nil
         linkEnded()
     }
 
