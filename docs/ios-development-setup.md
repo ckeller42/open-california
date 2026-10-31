@@ -48,13 +48,30 @@ how an iPhone is prepared for development builds.
   xcodegen generate --spec ios/project.yml
   ```
 
-- The app's tests run in the simulator. Pick an iPhone from
-  `xcrun simctl list devices available`:
+- The app's tests run in the simulator. The snapshot references are recorded on the iPhone 17
+  simulator with iOS 26.2, so the snapshot tests compare only on that simulator. Install the
+  runtime in Xcode (*Settings → Components*) if `xcrun simctl list devices available` does not
+  show it:
 
   ```sh
   xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
-    -destination 'platform=iOS Simulator,name=iPhone 17' | xcbeautify
+    -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' | xcbeautify
   ```
+
+  `xcodebuild test` can hang after the UI tests; wrap it in a timeout (`gtimeout 1500 …`) in a
+  script. To record the references again after an intended change of the look, run the same
+  command with `TEST_RUNNER_SNAPSHOT_TESTING_RECORD=all` in the environment, then look at every
+  changed image before you commit it.
+- Lint before a commit. SwiftLint reads `ios/.swiftlint.yml` and the nested configs, so run it
+  from `ios/`. swift-format reads `ios/.swift-format`, and `swift format format` fixes the layout
+  it reports:
+
+  ```sh
+  (cd ios && swiftlint --strict)
+  swift format lint --strict --recursive ios/
+  ```
+
+  The pre-commit hooks run both on the staged Swift files when the tools are installed.
 
   The UI tests start the app with the launch argument `-UITestFixture <name>`. The app then uses
   a fake camper unit, never real Bluetooth. The simulator has no Bluetooth: the Bluetooth tests

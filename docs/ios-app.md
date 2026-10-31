@@ -229,6 +229,11 @@ the simulator over a fake transport in light and dark; a real iPhone against the
 peripheral; the van with an owner checklist; and a manual Siri checklist in both languages.
 ```
 
+{doc}`ios-development-setup` has the commands for the automated tiers; CI runs them in the `ios`
+job. The two manual tiers have their own checklists: {doc}`ios-app-radio-checklist` (a real
+iPhone against the fake unit peripheral and the van) and {doc}`ios-app-siri-checklist` (Siri in
+English and German).
+
 ## Architecture decisions
 
 ```{decision} Bluetooth first, satellite as the upgrade
