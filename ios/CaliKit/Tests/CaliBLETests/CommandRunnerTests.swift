@@ -62,9 +62,14 @@ private struct Rig {
     func warm() async throws {
         try await s.ensureConnected(timeout: .seconds(10))
         try await until("first beat") { await s.sinceFirstBeat != nil }
-        clock.advance(by: CamperGATT.armDelay)
-        // The beat this advance released is written: no heartbeat write is pending any more.
-        try await until("second beat") { await heartbeats().count == 2 }
+        // Beat by beat (a beat more than two periods late restarts the arm delay), up to the arm delay.
+        let beats = Int(CamperGATT.armDelay / CamperGATT.heartbeatPeriod)
+        for n in 1...beats {
+            try await until("beat sleeper \(n)") { clock.deadlines.contains(CamperGATT.heartbeatPeriod * n) }
+            clock.advance(by: CamperGATT.heartbeatPeriod)
+            // The beat this advance released is written: no heartbeat write is pending any more.
+            try await until("beat \(n + 1)") { await heartbeats().count == n + 1 }
+        }
     }
 
     func start(_ cmd: Command) -> Task<CommandResult, Never> { Task { await s.run(cmd) } }

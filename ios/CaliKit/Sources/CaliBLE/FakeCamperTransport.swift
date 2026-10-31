@@ -77,6 +77,19 @@ public actor FakeCamperTransport: CamperTransport {
     /// A later read of `char` fails (the unit does not offer it).
     public func remove(_ char: UInt16) { frames[char] = nil }
     public func failNextConnect() { connectWillFail = true }
+    private var outOfRange = false
+    private var connectPending = false
+    /// The unit is out of range: a `connect()` stays pending, like a CoreBluetooth connect (no
+    /// timeout), until `comeIntoRange()` completes it or `cancel()` ends it.
+    public func goOutOfRange() { outOfRange = true }
+    public func comeIntoRange() {
+        outOfRange = false
+        guard connectPending else { return }
+        connectPending = false
+        connected = true
+        sink.yield(.connected)
+        sink.yield(.encrypted)
+    }
     /// `connect()` reports `.bluetoothUnavailable` until called with `nil`.
     public func setBluetooth(unavailable: BluetoothAvailability?) { self.unavailable = unavailable }
     /// The link drops without the unit's hang-up (out of range).
@@ -140,6 +153,10 @@ public actor FakeCamperTransport: CamperTransport {
             sink.yield(.notPaired)
             return
         }
+        if outOfRange {
+            connectPending = true
+            return
+        }
         if pairOnConnect {
             pairOnConnect = false
             pairingOpen = true
@@ -157,6 +174,10 @@ public actor FakeCamperTransport: CamperTransport {
     public func cancel() {
         cancels += 1
         pairingOpen = false
+        if connectPending {
+            connectPending = false
+            sink.yield(.disconnected(reason: .localCancel))
+        }
         end(.localCancel)
     }
 

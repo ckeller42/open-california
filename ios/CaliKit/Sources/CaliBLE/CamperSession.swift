@@ -55,7 +55,9 @@ public actor CamperSession {
     private var reconnect: Task<Void, Never>?
     private var backoffStep = 0
     /// The delay of the scheduled automatic reconnect; nil when none is scheduled.
-    private(set) var pendingReconnect: Duration?
+    public private(set) var pendingReconnect: Duration?
+    /// A background-hold redial is pending at the transport without a deadline (see `redial`).
+    private var heldDial = false
     /// The current first pairing saw the iOS passkey dialog (`.pairing`).
     private var sawPairing = false
 
@@ -314,6 +316,7 @@ public actor CamperSession {
         case .connected, .written:
             break
         case .encrypted:
+            heldDial = false
             linkGen += 1
             ready = false
             state.liveFunctions = []
@@ -361,6 +364,10 @@ public actor CamperSession {
             resumeWaiters(.failure(.unreachable))
             return
         }
+        if !wasUp, heldDial {  // the held redial failed (CoreBluetooth reports an error): the next one waits its turn
+            heldDial = false
+            return scheduleReconnect()
+        }
         guard wasUp else { return }
         for c in pushSubscribers.values { c.yield(.linkDown) }
         sinceLost = clock.stopwatch()
@@ -379,13 +386,23 @@ public actor CamperSession {
         }
     }
 
-    /// session.c `rest_conditions`: camping master off and shore power neither active nor standby,
-    /// both known, and no command in flight. A missing frame or field means "reconnect as usual".
+    /// session.c `rest_conditions`: camping master off, shore power neither active nor standby, both
+    /// known, the ignition known off, and no command in flight. A missing frame or field means
+    /// "reconnect as usual".
     private var restConditions: Bool {
-        guard commands == 0, state.fields["campingmode"]?["State"] == 0,
+        guard commands == 0, state.fields["campingmode"]?["State"] == 0, ignitionKnownOff,
             case .string(let shore)? = state.interpreted["energy"]?["shore_state"]
         else { return false }
         return shore != "active" && shore != "standby"
+    }
+
+    /// auto_camper_run.c `cali_ac_ignition() == 0`: `vehicle` TerminalOneFive and `campingmode` Enable
+    /// are both 0 where known, and at least one is known. While driving, a hang-up is no rest.
+    private var ignitionKnownOff: Bool {
+        let t15 = state.fields["vehicle"]?["TerminalOneFive"]
+        let enable = state.fields["campingmode"]?["Enable"]
+        guard t15 != nil || enable != nil else { return false }
+        return (t15 ?? 0) == 0 && (enable ?? 0) == 0
     }
 
     private func scheduleReconnect() {
@@ -400,9 +417,19 @@ public actor CamperSession {
         }
     }
 
+    /// The reconnect after the backoff. While camping holds the link in the background, the dial has
+    /// no deadline: iOS keeps a pending CoreBluetooth connect while the app is suspended and wakes it
+    /// once the unit is in range (a deadline would cancel the connect it needs). The `.encrypted`
+    /// handler reads the link; a failed dial schedules the next one. A user action replaces it.
     private func redial() async {
         reconnect = nil
         pendingReconnect = nil
+        if holdsInBackground {
+            heldDial = true
+            setLink(.connecting)
+            await transport.connect()
+            return
+        }
         do {
             try await ensureConnected(timeout: Self.redialTimeout)
         } catch {
@@ -426,11 +453,14 @@ public actor CamperSession {
 
     /// The `1003` heartbeat: 4-byte big-endian counter from `CODEC_HEARTBEAT_START`, +1 every
     /// `CODEC_HEARTBEAT_PERIOD_MS`, first beat at link up, until the link goes down. A beat that
-    /// cannot be written ends the link (session.c `link_lost("heartbeat")`).
+    /// cannot be written ends the link (session.c `link_lost("heartbeat")`). A beat more than two
+    /// periods after the previous one (iOS suspended the app, and the beat with it) restarts the
+    /// arm delay: `sinceFirstBeat` counts from it again (session.c `s_hb_since`).
     private func startHeartbeat(gen: Int) {
         stopHeartbeat()
         heartbeat = Task { [transport, clock] in
             var counter = CamperGATT.heartbeatStart
+            var sinceLast: (@Sendable () -> Duration)?
             while !Task.isCancelled {
                 do {
                     try await transport.write(CamperGATT.heartbeat, withUnsafeBytes(of: counter.bigEndian, Array.init))
@@ -440,7 +470,8 @@ public actor CamperSession {
                     await self.heartbeatFailed(gen)
                     return
                 }
-                if counter == CamperGATT.heartbeatStart { self.firstBeatWritten(gen) }
+                if sinceLast.map({ $0() > CamperGATT.heartbeatPeriod * 2 }) ?? true { self.firstBeatWritten(gen) }
+                sinceLast = clock.stopwatch()
                 counter &+= 1
                 do { try await clock.sleep(for: CamperGATT.heartbeatPeriod) } catch { return }
             }

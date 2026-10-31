@@ -166,17 +166,45 @@ struct SessionTests {
         #expect(await r.s.pendingReconnect == nil)
     }
 
-    /// Shore power active keeps the reconnects going (the app's rule), so no rest.
+    /// Shore power active (the app's rule) or the ignition on (`campingmode` Enable; session.c
+    /// `rest_conditions`, `cali_ac_ignition`) keeps the reconnects going, so no rest.
     /// - Test: T_IOS_SESSION_SHORE_NO_REST
     /// - Verifies: R_IOS_TESTED, R_IOS_POWER_SAVE
-    @Test func hangUpWithShorePowerDoesNotRest() async throws {
-        let r = Rig(Fx.frames(energy: Fx.shore))
+    @Test(arguments: [Fx.frames(energy: Fx.shore), Fx.frames(camping: [0x30])])  // 0x30: Installed + Enable, State 0
+    func hangUpWithShorePowerOrIgnitionDoesNotRest(_ frames: [UInt16: [UInt8]]) async throws {
+        let r = Rig(frames)
         try await r.s.ensureConnected(timeout: .seconds(10))
         await r.fake.hangUp(after: .seconds(30))
         try await until("heartbeat + hang-up sleepers") { r.clock.sleeperCount >= 2 }
         r.clock.advance(by: .seconds(30))
         try await until("reconnect scheduled") { await r.s.pendingReconnect != nil }
-        if case .rest = await r.s.link { Issue.record("rest with shore power") }
+        if case .rest = await r.s.link { Issue.record("rest with shore power or the ignition on") }
+    }
+
+    /// While camping holds the link, the redial after the cooldown has no deadline: the pending
+    /// connect stays at the transport (iOS completes it while the app is suspended) until the unit is
+    /// back in range; nothing cancels it.
+    /// - Test: T_IOS_SESSION_HELD_REDIAL
+    /// - Verifies: R_IOS_TESTED, R_IOS_BACKGROUND_LINK
+    @Test func backgroundHoldRedialHasNoDeadline() async throws {
+        let r = Rig(Fx.frames(camping: Fx.campingOn))
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        await r.fake.goOutOfRange()
+        await r.fake.dropLink()
+        try await until("reconnect in 7 s") { await r.s.pendingReconnect == .seconds(7) }
+        try await until("one sleeper") { r.clock.sleeperCount == 1 }
+        r.clock.advance(by: .seconds(7))
+        try await until("the held dial") { await r.t.connects == 2 }
+        for _ in 0..<12 {
+            r.clock.advance(by: .seconds(10))
+            await Task.yield()
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await r.t.cancels == 0)
+        #expect(await r.s.link == .connecting)
+        #expect(await r.t.connects == 2)
+        await r.fake.comeIntoRange()
+        try await until("read on the new link") { await r.s.isReady }
     }
 
     /// - Test: T_IOS_SESSION_REST_COOLDOWN
@@ -349,6 +377,22 @@ struct SessionTests {
     }
 
     /// A semantics.js failure keeps the raw fields, leaves the interpretation out and records why.
+    /// A beat more than two periods late (iOS suspended the app) restarts the arm delay: the time
+    /// since the first beat counts from that beat (session.c `s_hb_since`).
+    /// - Test: T_IOS_SESSION_BEAT_RESTART
+    /// - Verifies: R_IOS_TESTED, R_IOS_BLE_DIRECT, R_IOS_SIRI
+    @Test func lateBeatRestartsTheArmDelay() async throws {
+        let r = Rig()
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        // 600 ms: on time; 5 s: the app was suspended; then on time again.
+        for (n, (step, since)) in [(600, 600), (5000, 0), (600, 600)].enumerated() {
+            try await until("beat \(n + 1) and its sleeper") { await r.heartbeats().count == n + 1 && r.clock.sleeperCount == 1 }
+            r.clock.advance(by: .milliseconds(step))
+            try await until("beat \(n + 2)") { await r.heartbeats().count == n + 2 }
+            #expect(await r.s.sinceFirstBeat == .milliseconds(since))
+        }
+    }
+
     /// - Test: T_IOS_SESSION_SEMANTICS_ERROR
     /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
     @Test func semanticsErrorIsSurfacedNotEmpty() async throws {
