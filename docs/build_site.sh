@@ -12,7 +12,7 @@ command -v doxygen >/dev/null || { echo "doxygen is required (firmware C API doc
 doxygen --version
 (cd "$DOCS/.." && doxygen firmware/Doxyfile)
 # the iOS app's code and tests as needs (imported by ios-app.md; the file must exist before Sphinx runs)
-(cd "$DOCS/.." && "$PY" -m tools.swift_needs --out "$DOCS/_build/ios-needs.json")
+(cd "$DOCS/.." && "$PY" -m tools.swift_needs --out "$DOCS/_build/ios-needs.json" --commit "${OC_COMMIT:-${GITHUB_SHA:-}}")
 "$PY" -m sphinx -b html -W "$DOCS" "$OUT"
 "$PY" -m sphinx -b html -W -t evidence "$DOCS" "$DOCS/_build/evidence"
 mkdir -p "$OUT/business-logic"

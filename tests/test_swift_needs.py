@@ -90,3 +90,55 @@ def test_duplicateTestIdFails(tmp_path):
     ios = _tree(tmp_path, **{"A.swift": body, "B.swift": body})
     _, errors = swift_needs.scan(ios, KNOWN, repo=tmp_path)
     assert any("T_IOS_DUP" in e and "duplicate" in e for e in errors)
+
+
+def _cli(tmp_path, ios):
+    return subprocess.run(
+        [sys.executable, "-m", "tools.swift_needs", "--ios", str(ios), "--out", str(tmp_path / "o.json")],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+    ).returncode
+
+
+def test_emptyOrMissingTreeFails(tmp_path):
+    ios = _tree(tmp_path, **{"A.swift": "struct A {}\n"})
+    assert _cli(tmp_path, ios) == 1
+    assert _cli(tmp_path, tmp_path / "nope") == 1
+
+
+def test_verifiesNotDirectlyUnderTestAndDigitIds(tmp_path):
+    ios = _tree(
+        tmp_path,
+        **{
+            "A.swift": "/// - Test: T_IOS_V2_CHECK\n///\n/// More text.\n/// - Verifies: R_IOS_V2_ONLY\nfunc t() {}\n"
+        },
+    )
+    needs, errors = swift_needs.scan(ios, {"R_IOS_V2_ONLY"}, repo=tmp_path)
+    assert errors == []
+    assert needs["T_IOS_V2_CHECK"]["links"] == ["R_IOS_V2_ONLY"]
+
+
+def test_verifiesOfTheNextTestIsNotBorrowed(tmp_path):
+    ios = _tree(
+        tmp_path,
+        **{"A.swift": "/// - Test: T_ONE\n/// - Test: T_TWO\n/// - Verifies: R_IOS_A\n"},
+    )
+    _, errors = swift_needs.scan(ios, KNOWN, repo=tmp_path)
+    assert any("T_ONE" in e and "Verifies" in e for e in errors)
+    assert not any("T_TWO" in e for e in errors)
+
+
+def test_requirementWithoutIdsFails(tmp_path):
+    ios = _tree(tmp_path, **{"A.swift": "/// - Requirement:\nstruct A {}\n"})
+    _, errors = swift_needs.scan(ios, KNOWN, repo=tmp_path)
+    assert any("names no id" in e for e in errors)
+
+
+def test_knownIdsIgnoresFencedExamples(tmp_path):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "calictl").mkdir()
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "docs" / "a.md").write_text(
+        "```{req} Real\n:id: R_REAL\n```\n\n```text\n:id: R_EXAMPLE\n```\n", encoding="utf-8"
+    )
+    assert swift_needs.known_ids(tmp_path) == {"R_REAL"}

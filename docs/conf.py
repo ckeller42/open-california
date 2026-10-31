@@ -47,11 +47,18 @@ needs_id_required = True
 needs_id_regex = r"^[A-Z0-9_]{3,}$"
 needs_extra_options = ["source"]  # the GitHub line URL of an imported iOS code/test need
 # ios-app.md imports _build/ios-needs.json (written by tools.swift_needs in build_site.sh); a bare
-# sphinx run without it gets an empty import instead of failing -W.
+# sphinx run without it gets an empty import instead of failing -W. The stub is removed when the
+# build ends, so a later run never reuses it unnoticed.
 _ios_needs = Path(__file__).parent / "_build" / "ios-needs.json"
-if not _ios_needs.exists():
+_ios_stub = not _ios_needs.exists()
+if _ios_stub:
     _ios_needs.parent.mkdir(exist_ok=True)
     _ios_needs.write_text('{"current_version": "1.0", "versions": {"1.0": {"needs": {}}}}')
+
+
+def setup(app):
+    if _ios_stub:
+        app.connect("build-finished", lambda *_: _ios_needs.unlink(missing_ok=True))
 needs_types = [
     dict(directive="req", title="Requirement", prefix="R_", color="#BFD8D2", style="node"),
     dict(directive="spec", title="Specification", prefix="S_", color="#FFCC00", style="node"),
