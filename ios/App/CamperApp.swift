@@ -39,24 +39,3 @@ struct CamperApp: App {
         }
     }
 }
-
-/// The Setup tab's placeholder until the setup screens: the link, the age of the data and the gate.
-struct StatusView: View {
-    let store: CamperStore
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Text(store.linkLabel)
-                .font(.title)
-            if store.isStale, let asOf = store.state.asOf {
-                Text("Last update")
-                Text(asOf, style: .relative)
-            }
-            if case .unsupported = store.state.gate {
-                Text("This camper unit is not supported yet")
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .padding()
-    }
-}

@@ -113,6 +113,37 @@ final class ControlUITests: XCTestCase {
     }
 }
 
+/// The Setup tab: the unit's status and the pairing guide, over the fake transport's one unit.
+final class SetupUITests: XCTestCase {
+    /// The guide from step 1 to the outcome "already paired" (the fake unit takes the pick at once,
+    /// like an iPhone that shares the vendor app's bond); each step passes the audit, in light and
+    /// dark.
+    ///
+    /// - Test: T_IOS_UI_SETUP_AUDIT
+    /// - Verifies: R_IOS_PAIRING, R_IOS_LOOK, R_IOS_TESTED
+    @MainActor
+    func testSetupPassesAccessibilityAudit() throws {
+        for dark in [false, true] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-UITestFixture", "parked", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+            if dark { app.launchArguments += ["-UIUserInterfaceStyle", "dark"] }
+            app.launch()
+            app.tabBars.buttons["Setup"].tap()
+            XCTAssertTrue(app.navigationBars["Setup"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["Pair the camper unit"].waitForExistence(timeout: 5))
+            try app.auditScreen()
+            app.buttons["I'm on that screen"].tap()
+            let unit = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '1. VWCAMPER'")).firstMatch
+            XCTAssertTrue(unit.waitForExistence(timeout: 10))
+            try app.auditScreen()
+            unit.tap()
+            XCTAssertTrue(app.staticTexts["This iPhone is already paired with the camper unit"].waitForExistence(timeout: 15))
+            try app.auditScreen()
+            app.terminate()
+        }
+    }
+}
+
 extension XCUIApplication {
     /// One audit pass: the labels it exempted, and the labels that were inside the clear part of the
     /// screen and had no issue.

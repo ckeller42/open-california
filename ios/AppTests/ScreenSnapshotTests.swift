@@ -171,6 +171,48 @@ struct ScreenSnapshotTests {
         }
     }
 
+    /// The Setup tab: the unit's status card and every step and outcome of the pairing guide (step
+    /// 1 to 3, already paired, not found, Bluetooth off, failed, the forget-device help), in light,
+    /// dark, German, the largest accessibility text size (whole scroll height) and at 375 pt. Also
+    /// the status of a unit that is not paired yet and of a stale state.
+    ///
+    /// - Test: T_IOS_SNAPSHOT_SETUP
+    /// - Verifies: R_IOS_PAIRING, R_IOS_LOOK, R_IOS_I18N, R_IOS_NO_VIN
+    @Test func setupScreensSnapshot() {
+        let steps: [(String, PairingGuide.Step)] = [
+            ("open", .openPanel), ("searching", .searching), ("pick", .pick(PairingGuideTests.units)),
+            ("connecting", .connecting), ("code", .typeCode), ("paired", .done(.paired)),
+            ("already", .done(.alreadyPaired)), ("notfound", .noUnit(.notFound)), ("bluetooth", .noUnit(.bluetooth)),
+            ("failed", .failed), ("forget", .forgetDevice),
+        ]
+        for (name, step) in steps {
+            let store = CamperStore.preview(.parked, now: Self.now)
+            store.bond = .paired
+            let view = NavigationStack { SetupView(store: store, guide: PairingGuide(step: step)) }
+            check(view, "setup-\(name)")
+            snap(view, "setup-\(name)-de", locale: Locale(identifier: "de_DE"))
+            snap(view, "setup-\(name)-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: 2600))
+            snap(view, "setup-\(name)-se", layout: .fixed(width: 375, height: 1100))
+        }
+        let notPaired = CamperStore.preview(.unreachable, now: Self.now)
+        notPaired.bond = .notPaired
+        check(NavigationStack { SetupView(store: notPaired) }, "setup-not-paired")
+        check(NavigationStack { SetupView(store: CamperStore.preview(.staleRestore, now: Self.now)) }, "setup-stale")
+    }
+
+    /// The feedback banner sits under the pill, so the pill's offline or stale state stays readable;
+    /// at the largest accessibility text size too.
+    ///
+    /// - Test: T_IOS_SNAPSHOT_BANNER_UNDER_PILL
+    /// - Verifies: R_IOS_HONEST, R_IOS_LOOK
+    @Test func bannerSitsUnderThePill() {
+        let store = CamperStore.preview(.unreachable, now: Self.now)
+        store.feedback = .result(.failed(.unreachable), function: "campingmode")
+        let view = NavigationStack { CampingView(store: store) }
+        snap(view, "banner-under-pill-light")
+        snap(view, "banner-under-pill-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: 2400))
+    }
+
     /// Every feedback the user can see: each command result (each refusal and failure), sending,
     /// connecting and the cooldown, in English and German.
     ///

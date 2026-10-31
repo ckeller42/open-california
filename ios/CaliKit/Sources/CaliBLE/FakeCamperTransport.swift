@@ -34,10 +34,12 @@ public actor FakeCamperTransport: CamperTransport {
     /// Every write attempt, in order, including a rejected one.
     public private(set) var writes: [Write] = []
 
-    public init(clock: any Clock<Duration> = ContinuousClock(), frames: [UInt16: [UInt8]] = [:]) {
+    public init(clock: any Clock<Duration> = ContinuousClock(), frames: [UInt16: [UInt8]] = [:],
+                candidates: [PairingCandidate] = []) {
         (events, sink) = AsyncStream.makeStream()
         self.clock = clock
         self.frames = frames
+        self.candidates = candidates
     }
 
     // MARK: test controls

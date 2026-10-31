@@ -89,6 +89,7 @@ struct StatusPage<Content: View>: View {
                     PathPill(store: store, now: tick)
                         .onChange(of: visible(at: tick), initial: true) { changedAt = tick }
                 }
+                .anchorPreference(key: PillBounds.self, value: .bounds) { $0 }
                 if case .unsupported = store.state.gate {
                     AlertCard(text: "This camper unit is not supported yet")
                 }
@@ -103,21 +104,45 @@ struct StatusPage<Content: View>: View {
             .padding()
         }
         .hardTopEdge()
-        // The sending state and the result stay in sight wherever the user tapped. An overlay: the
-        // content does not move under the finger when the banner comes or goes.
-        .overlay(alignment: .top) {
+        // The sending state and the result stay in sight wherever the user tapped, under the pill
+        // (its stale or offline state stays readable) and at the top once the pill scrolled away. An
+        // overlay: the content does not move under the finger when the banner comes or goes. A tap
+        // hides a result.
+        .overlayPreferenceValue(PillBounds.self) { pill in
             if let feedback = store.feedback {
-                FeedbackBanner(feedback: feedback, clock: store.now)
-                    .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 16))
-                    .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
-                    .padding(.horizontal)
-                    .padding(.top, 4)
+                // The pill's anchor resolves in the overlay's own space (safe area and scroll included).
+                GeometryReader { g in
+                    FeedbackBanner(feedback: feedback, clock: store.now)
+                        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 16))
+                        .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+                        .dismissible(feedback.dismissible) { store.dismissFeedback() }
+                        .padding(.horizontal)
+                        .padding(.top, max(4, (pill.map { g[$0].maxY } ?? 0) + 6))
+                }
             }
         }
     }
 }
 
+/// The pill's bounds, for the feedback banner under it.
+private struct PillBounds: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) { value = value ?? nextValue() }
+}
+
 extension View {
+    /// A tap (VoiceOver: the default action) runs `dismiss`, when `on`.
+    @ViewBuilder func dismissible(_ on: Bool, _ dismiss: @escaping () -> Void) -> some View {
+        if on {
+            onTapGesture(perform: dismiss)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(Text("Tap to dismiss"))
+                .accessibilityAction(.default, dismiss)
+        } else {
+            self
+        }
+    }
+
     /// iOS 26: content scrolled under the navigation bar is cut off at a hard edge, not blurred, so no
     /// half-readable text shows behind the bar.
     @ViewBuilder func hardTopEdge() -> some View {

@@ -163,7 +163,8 @@ final class CamperStore {
     var linkLabel: LocalizedStringResource { linkLabel(at: now()) }
 
     func linkLabel(at date: Date) -> LocalizedStringResource {
-        switch link {
+        if bond == .notPaired, link != .up { return "not paired" }
+        return switch link {
         case .up: isStale(at: date) ? "offline" : "live"
         case .connecting: "connecting…"
         case .pairing: "Pairing"
@@ -212,8 +213,10 @@ final class CamperStore {
     func connect() async -> ConnectOutcome {
         do {
             try await session.ensureConnected(timeout: .seconds(20))
+            bond = .paired
             return .connected
         } catch {
+            note(error)
             if case .resting(let s) = Failure(error) { return .resting(until: now().addingTimeInterval(TimeInterval(s))) }
             return .failed(Failure(error))
         }
@@ -222,6 +225,58 @@ final class CamperStore {
     func send(_ cmd: Command) async -> CommandResult {
         await session.run(cmd)
     }
+
+    // MARK: first pairing
+
+    /// What the app knows of the iPhone's bond with the unit, from the last connect or pairing.
+    var bond = Bond.unknown
+
+    private func note(_ error: Error) {
+        switch error as? SessionError {
+        case .notPaired?: bond = .notPaired
+        case .pairingRequired?: bond = .stale
+        default: break
+        }
+    }
+
+    /// The units in range for the guide's pick list (a 3 s scan).
+    ///
+    /// - Requirement: R_IOS_PAIRING
+    func pairingCandidates() async -> Result<[PairingCandidate], PairingScanError> {
+        do { return .success(try await session.pairingCandidates()) } catch { return .failure(error as? PairingScanError ?? .busy) }
+    }
+
+    /// The user's pick: the session ends the current link and pairs with `id` (`firstPairing`).
+    ///
+    /// - Requirement: R_IOS_PAIRING
+    func firstPairing(with id: UUID) async -> Result<PairingOutcome, SessionError> {
+        do {
+            let outcome = try await session.firstPairing(with: id)
+            bond = .paired
+            return .success(outcome)
+        } catch {
+            note(error)
+            return .failure(error as? SessionError ?? .unreachable)
+        }
+    }
+
+    /// The user cancelled a waiting step of the guide: the pick's link ends.
+    func cancelPairing() async { await session.cancelPairing() }
+
+    /// Hides a shown result (a tap on the banner); "Sending…" and "Connecting…" stay.
+    func dismissFeedback() {
+        if feedback?.dismissible == true { show(nil, clearAfter: nil) }
+    }
+}
+
+/// The iPhone's bond with the unit, as far as the app knows it.
+enum Bond: Equatable {
+    case unknown
+    /// No unit adopted yet: the guide starts at step 1.
+    case notPaired
+    case paired
+    /// The unit no longer knows this iPhone (for example after a Bluetooth reset on the unit).
+    case stale
 }
 
 /// What the user sees of their last action.
@@ -231,6 +286,14 @@ enum Feedback: Equatable {
     /// A tap-to-connect: the dial waits until `until` (the unit's cooldown), nil = dialling now.
     case connecting(until: Date?)
     case connect(ConnectOutcome)
+
+    /// A result the user can tap away (not the waiting states).
+    var dismissible: Bool {
+        switch self {
+        case .result, .connect: true
+        case .sending, .connecting: false
+        }
+    }
 }
 
 /// The outcome of a connect attempt.
@@ -318,7 +381,9 @@ enum Fixture: String, CaseIterable {
         let byChar = self == .unreachable ? [:] : Dictionary(uniqueKeysWithValues: frames.compactMap { fn, bytes in
             CamperGATT.stateChars[fn].map { ($0, bytes) }
         })
-        return CamperSession(transport: FakeCamperTransport(frames: byChar), clock: ContinuousClock())
+        // One unit in range for the pairing guide's scan (the UI tests pick it).
+        let unit = PairingCandidate(id: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!, name: CamperGATT.deviceName, rssi: -60)
+        return CamperSession(transport: FakeCamperTransport(frames: byChar, candidates: [unit]), clock: ContinuousClock())
     }
 
     /// The state as a read pass would leave it, `asOf` = `now` (10 min earlier for `unreachable`,

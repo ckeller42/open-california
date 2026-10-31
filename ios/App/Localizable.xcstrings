@@ -392,6 +392,23 @@
         }
       }
     },
+    "Camper unit": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camper-Einheit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camper unit"
+          }
+        }
+      }
+    },
     "Camping mode": {
       "extractionState": "manual",
       "localizations": {
@@ -477,6 +494,40 @@
         }
       }
     },
+    "Check that “Gerät verbinden” is open on the camper unit.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prüfe, dass „Gerät verbinden“ an der Camper-Einheit geöffnet ist."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check that “Gerät verbinden” is open on the camper unit."
+          }
+        }
+      }
+    },
+    "Close": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schließen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        }
+      }
+    },
     "Closed": {
       "extractionState": "manual",
       "localizations": {
@@ -511,6 +562,40 @@
         }
       }
     },
+    "Come back here and pair again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Komm hierher zurück und kopple erneut."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Come back here and pair again."
+          }
+        }
+      }
+    },
+    "Compare the code with the camper screen, then type it in": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vergleiche den Code mit dem Bildschirm der Camper-Einheit und gib ihn dann ein"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare the code with the camper screen, then type it in"
+          }
+        }
+      }
+    },
     "Connecting in %lld s…": {
       "extractionState": "manual",
       "localizations": {
@@ -528,6 +613,23 @@
         }
       }
     },
+    "Connecting to the unit…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung wird aufgebaut…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting to the unit…"
+          }
+        }
+      }
+    },
     "Connecting…": {
       "extractionState": "manual",
       "localizations": {
@@ -541,6 +643,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connecting…"
+          }
+        }
+      }
+    },
+    "Connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection"
           }
         }
       }
@@ -626,6 +745,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cooling level"
+          }
+        }
+      }
+    },
+    "Could not connect to the camper unit.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Verbindung zur Camper-Einheit."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not connect to the camper unit."
           }
         }
       }
@@ -1089,6 +1225,23 @@
         }
       }
     },
+    "I'm on that screen": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ich bin auf diesem Bildschirm"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I'm on that screen"
+          }
+        }
+      }
+    },
     "Ignition": {
       "extractionState": "manual",
       "localizations": {
@@ -1293,6 +1446,23 @@
         }
       }
     },
+    "No vehicle found.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Fahrzeug gefunden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No vehicle found."
+          }
+        }
+      }
+    },
     "Normal": {
       "extractionState": "manual",
       "localizations": {
@@ -1395,6 +1565,23 @@
         }
       }
     },
+    "Not paired": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gekoppelt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not paired"
+          }
+        }
+      }
+    },
     "Not sent: this app does not write this setting": {
       "extractionState": "manual",
       "localizations": {
@@ -1442,6 +1629,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "On"
+          }
+        }
+      }
+    },
+    "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until this iPhone connects.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffne an der Camper-Einheit Einstellungen → Bluetooth → Gerät verbinden. Dort steht „Passcode: ---“, bis dieses iPhone sich verbindet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until this iPhone connects."
           }
         }
       }
@@ -1497,6 +1701,57 @@
         }
       }
     },
+    "Open Settings → Bluetooth on this iPhone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffne auf diesem iPhone Einstellungen → Bluetooth."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings → Bluetooth on this iPhone."
+          }
+        }
+      }
+    },
+    "Pair the camper unit": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camper-Einheit koppeln"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pair the camper unit"
+          }
+        }
+      }
+    },
+    "Paired ✓": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gekoppelt ✓"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paired ✓"
+          }
+        }
+      }
+    },
     "Pairing": {
       "extractionState": "manual",
       "localizations": {
@@ -1510,6 +1765,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pairing"
+          }
+        }
+      }
+    },
+    "Pick your camper unit": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle deine Camper-Einheit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick your camper unit"
           }
         }
       }
@@ -1752,6 +2024,23 @@
         }
       }
     },
+    "Searching…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching…"
+          }
+        }
+      }
+    },
     "Second battery": {
       "extractionState": "manual",
       "localizations": {
@@ -1973,6 +2262,23 @@
         }
       }
     },
+    "Stand next to the van: the camper unit must be in range.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stell dich neben das Fahrzeug: Die Camper-Einheit muss in Reichweite sein."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stand next to the van: the camper unit must be in range."
+          }
+        }
+      }
+    },
     "Start the fuel-burning air heater now for %lld min at %@? It is not live-verified.": {
       "extractionState": "manual",
       "localizations": {
@@ -2058,6 +2364,23 @@
         }
       }
     },
+    "Step %lld of 3": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schritt %lld von 3"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step %lld of 3"
+          }
+        }
+      }
+    },
     "Stop the timer first": {
       "extractionState": "manual",
       "localizations": {
@@ -2109,6 +2432,23 @@
         }
       }
     },
+    "Tap the info button next to VWCAMPER, then Forget This Device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tippe auf die Info-Taste neben VWCAMPER, dann auf „Dieses Gerät ignorieren“."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the info button next to VWCAMPER, then Forget This Device."
+          }
+        }
+      }
+    },
     "Tap to connect": {
       "extractionState": "manual",
       "localizations": {
@@ -2139,6 +2479,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tap to connect (in %lld s)"
+          }
+        }
+      }
+    },
+    "Tap to dismiss": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Schließen tippen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to dismiss"
           }
         }
       }
@@ -2207,6 +2564,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "The camper unit is not reachable"
+          }
+        }
+      }
+    },
+    "The camper unit no longer knows this iPhone": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Camper-Einheit kennt dieses iPhone nicht mehr"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camper unit no longer knows this iPhone"
           }
         }
       }
@@ -2292,6 +2666,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "The refrigerator box's settings are not known yet — try again in a moment"
+          }
+        }
+      }
+    },
+    "The strongest signal is first: the camper unit is the one you are standing next to.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das stärkste Signal steht oben: Die Camper-Einheit ist die, neben der du stehst."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The strongest signal is first: the camper unit is the one you are standing next to."
           }
         }
       }
@@ -2415,6 +2806,40 @@
         }
       }
     },
+    "This iPhone is already paired with the camper unit": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses iPhone ist bereits mit der Camper-Einheit gekoppelt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This iPhone is already paired with the camper unit"
+          }
+        }
+      }
+    },
+    "This iPhone is now paired with the camper unit": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses iPhone ist jetzt mit der Camper-Einheit gekoppelt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This iPhone is now paired with the camper unit"
+          }
+        }
+      }
+    },
     "This value is not valid": {
       "extractionState": "manual",
       "localizations": {
@@ -2445,6 +2870,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Time remaining"
+          }
+        }
+      }
+    },
+    "Try again": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut versuchen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
           }
         }
       }
@@ -2496,6 +2938,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn off continuous heating? You can only turn continuous heating on again using the controls in your California."
+          }
+        }
+      }
+    },
+    "Unit firmware": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Firmware der Einheit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unit firmware"
           }
         }
       }
@@ -2602,6 +3061,23 @@
         }
       }
     },
+    "Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falscher Passcode, oder die Camper-Einheit hat den Kopplungsmodus verlassen. Öffne „Gerät verbinden“ an der Camper-Einheit erneut und versuche es noch einmal."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and try again."
+          }
+        }
+      }
+    },
     "active": {
       "extractionState": "manual",
       "localizations": {
@@ -2615,6 +3091,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "active"
+          }
+        }
+      }
+    },
+    "amb %@ · comm %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "amb %1$@ · comm %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "amb %1$@ · comm %2$@"
           }
         }
       }
@@ -2683,6 +3176,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "error"
+          }
+        }
+      }
+    },
+    "iOS asks for the 6-digit code. A pairing request without a code is not the camper unit: cancel it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS fragt nach dem 6-stelligen Code. Eine Kopplungsanfrage ohne Code kommt nicht von der Camper-Einheit: Brich sie ab."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS asks for the 6-digit code. A pairing request without a code is not the camper unit: cancel it."
           }
         }
       }
@@ -2789,6 +3299,23 @@
         }
       }
     },
+    "medium signal": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mittleres Signal"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "medium signal"
+          }
+        }
+      }
+    },
     "none": {
       "extractionState": "manual",
       "localizations": {
@@ -2802,6 +3329,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "none"
+          }
+        }
+      }
+    },
+    "not paired": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nicht gekoppelt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "not paired"
           }
         }
       }
@@ -2874,6 +3418,23 @@
         }
       }
     },
+    "strong signal": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "starkes Signal"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "strong signal"
+          }
+        }
+      }
+    },
     "unreachable": {
       "extractionState": "manual",
       "localizations": {
@@ -2887,6 +3448,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "unreachable"
+          }
+        }
+      }
+    },
+    "weak signal": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "schwaches Signal"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "weak signal"
+          }
+        }
+      }
+    },
+    "—": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "—"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "—"
           }
         }
       }

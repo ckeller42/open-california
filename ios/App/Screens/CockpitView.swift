@@ -17,7 +17,7 @@ struct RootView: View {
                 .tabItem { Label("Energy", systemImage: "bolt.batteryblock") }
             NavigationStack { WaterView(store: store).navigationTitle("Water").navigationBarTitleDisplayMode(.inline) }
                 .tabItem { Label("Water", systemImage: "drop") }
-            NavigationStack { StatusView(store: store).navigationTitle("Setup").navigationBarTitleDisplayMode(.inline) }
+            NavigationStack { SetupView(store: store).navigationTitle("Setup").navigationBarTitleDisplayMode(.inline) }
                 .tabItem { Label("Setup", systemImage: "gearshape") }
         }
         // VoiceOver hears the sending state, the result and the connect outcome where it is.
