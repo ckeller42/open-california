@@ -28,6 +28,8 @@ public actor FakeCamperTransport: CamperTransport {
     private var pairOnConnect = false
     private var pairingOpen = false
     private var pairingRequiredOnConnect = false
+    private var notPairedOnConnect = false
+    private var candidates: [PairingCandidate] = []
 
     /// Every write attempt, in order, including a rejected one.
     public private(set) var writes: [Write] = []
@@ -87,6 +89,13 @@ public actor FakeCamperTransport: CamperTransport {
     }
     /// The next `connect()` finds a stale bond: `.pairingRequired`, no link.
     public func requirePairingOnNextConnect() { pairingRequiredOnConnect = true }
+    /// The next `connect()` finds no adopted unit: `.notPaired`, no link.
+    public func notPairedOnNextConnect() { notPairedOnConnect = true }
+    /// The units a pairing scan finds (none: the scan throws `.noUnitFound`).
+    public func setCandidates(_ list: [PairingCandidate]) { candidates = list }
+
+    /// Every pick, in order.
+    public private(set) var picks: [UUID] = []
 
     // MARK: CamperTransport
 
@@ -98,6 +107,7 @@ public actor FakeCamperTransport: CamperTransport {
         if let unavailable { sink.yield(.bluetoothUnavailable(unavailable)); return }
         if connectWillFail { connectWillFail = false; sink.yield(.disconnected(reason: .failedToConnect)); return }
         if pairingRequiredOnConnect { pairingRequiredOnConnect = false; sink.yield(.pairingRequired); return }
+        if notPairedOnConnect { notPairedOnConnect = false; sink.yield(.notPaired); return }
         if pairOnConnect {
             pairOnConnect = false
             pairingOpen = true
@@ -138,6 +148,20 @@ public actor FakeCamperTransport: CamperTransport {
             throw TransportError.writeRejected
         }
         sink.yield(.written(char: char, ok: true))
+    }
+
+    /// Like the real transport: Bluetooth off throws, an empty scan throws `.noUnitFound`; strongest first.
+    public func pairingCandidates(window: Duration) throws -> [PairingCandidate] {
+        if let unavailable { throw PairingScanError.bluetooth(unavailable) }
+        guard !candidates.isEmpty else { throw PairingScanError.noUnitFound }
+        return candidates.sorted { $0.rssi > $1.rssi }
+    }
+
+    /// Like the real transport: the current link ends (`.localCancel`), then one connect at once.
+    public func beginFirstPairing(with id: UUID) {
+        picks.append(id)
+        end(.localCancel)
+        connect()
     }
 
     /// Like the real unit, sends nothing on subscribe: the caller must `read` each char.

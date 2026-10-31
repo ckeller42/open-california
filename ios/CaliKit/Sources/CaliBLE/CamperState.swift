@@ -52,4 +52,16 @@ public enum SessionError: Error, Equatable, Sendable {
     case inRest(retryAfter: Duration)
     case unreachable
     case bluetooth(BluetoothAvailability)
+    /// The saved unit's bond is stale: *Settings → Bluetooth → Forget This Device*, then pair again.
+    case pairingRequired
+    /// No unit is adopted yet: the user picks one (`firstPairing`).
+    case notPaired
+}
+
+/// How a first pairing ended.
+public enum PairingOutcome: Sendable, Equatable {
+    /// iOS paired the iPhone with the unit just now (its passkey dialog was shown).
+    case paired
+    /// The iPhone was already paired with the unit (a shared bond, AD_IOS_SHARED_BOND): no dialog.
+    case alreadyPaired
 }

@@ -14,14 +14,16 @@ import Foundation
 /// calls `cancel()`.
 ///
 /// Which unit (`PeerPolicy`): only the adopted one, by its saved identifier. Without one,
-/// `connect()` reports `.pairingRequired`. The first pairing is the user's: `pairingCandidates()`
-/// lists the units in range (service `1000`, name exactly `VWCAMPER`), the user picks one,
-/// `beginFirstPairing(with:)` arms it for ONE connect, and it is adopted when its authenticated
+/// `connect()` reports `.notPaired`. The first pairing is the user's: `pairingCandidates()`
+/// lists the units in range (service `1000`, name exactly `VWCAMPER`), the user picks one, and
+/// `beginFirstPairing(with:)` ends the current link (also a saved unit's), then connects to the pick
+/// ONCE, at once. The pick ends with that link, on `cancel()`, at the read cap or after
+/// `PeerPolicy.pairingBudget`; it never waits for a later connect. It is adopted when its authenticated
 /// `1004` read succeeds on that link (lenient, AD_IOS_SHARED_BOND): after a seen pairing (the first
 /// read fails with an authentication error, iOS shows the passkey dialog, a later read succeeds),
 /// or at once with the bond the iPhone already has (iOS keeps one bond per accessory, shared with
 /// the vendor app). The real unit refuses Just Works pairing (evidence ledger, CAPTURE), so a
-/// genuine new pairing always shows the iOS passkey dialog, and its code must match the camper
+/// new pairing always shows the iOS passkey dialog, and its code must match the camper
 /// screen. A pairing prompt without a code is not the camper: the user cancels it.
 ///
 /// Residual risk: CoreBluetooth exposes no encryption state, so a look-alike that serves `1004`
@@ -49,6 +51,8 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     private var restoredConnected = false
     private var candidates: (list: CandidateList, k: CheckedContinuation<[PairingCandidate], any Error>)?
     private var policy = PeerPolicy(saved: UserDefaults.standard.string(forKey: peripheralKey).flatMap(UUID.init(uuidString:)))
+    /// +1 per pick: the budget timer of an earlier pick ends nothing.
+    private var pickGen = 0
 
     private enum Phase: Int, Comparable {
         case idle, waitingForPower, connecting, discovering, probing, up
@@ -117,8 +121,9 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     }
 
     /// Scans for `window` and returns the units in range, strongest first, for the user to pick
-    /// (also when there is only one). Empty means no unit in range.
-    /// - Throws: `PairingScanError.bluetooth` when Bluetooth is not on, `.busy` when a scan already runs.
+    /// (also when there is only one).
+    /// - Throws: `PairingScanError.bluetooth` when Bluetooth is not on, `.busy` when a scan already
+    ///   runs, `.noUnitFound` when no `VWCAMPER` advertised in the window.
     public func pairingCandidates(window: Duration = .seconds(3)) async throws -> [PairingCandidate] {
         try await withCheckedThrowingContinuation { k in
             queue.async {
@@ -133,17 +138,43 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
                     self.central.stopScan()
                     guard let c = self.candidates else { return }
                     self.candidates = nil
-                    c.k.resume(returning: c.list.sorted)
+                    let found = c.list.sorted
+                    if found.isEmpty { c.k.resume(throwing: PairingScanError.noUnitFound) } else { c.k.resume(returning: found) }
                 }
             }
         }
     }
 
-    /// The user picked `id` and confirmed it: the next `connect()` goes to that unit, once. It is
-    /// adopted (and replaces the saved unit) when its `1004` read succeeds (see the class comment);
-    /// any other end of that link, or `cancel()`, ends the first pairing.
+    /// The user picked `id`: the current link (also a saved unit's) ends, then the transport connects
+    /// to `id` at once, once. It is adopted (and replaces the saved unit) when its `1004` read
+    /// succeeds (see the class comment); any other end of that link, `cancel()`, the read cap or
+    /// `PeerPolicy.pairingBudget` ends the first pairing. With Bluetooth not on, no pick is kept:
+    /// it reports `.bluetoothUnavailable`.
     public func beginFirstPairing(with id: UUID) async {
-        queue.async { self.policy.chosen = id }
+        queue.async {
+            guard self.central.state == .poweredOn else {
+                self.policy.cancelPick()
+                self.sink.yield(.bluetoothUnavailable(Self.availability(self.central.state) ?? .poweredOff))
+                return
+            }
+            self.policy.pick(id)
+            self.pickGen += 1
+            let gen = self.pickGen
+            let budget = PeerPolicy.pairingBudget.components
+            self.queue.asyncAfter(deadline: .now() + .seconds(Int(budget.seconds))) {
+                guard self.pickGen == gen, self.policy.inPick else { return }
+                self.policy.cancelPick()
+                self.stop()
+            }
+            switch self.phase {
+            case .idle, .waitingForPower:
+                self.phase = .idle
+                _ = self.policy.startPick()
+                self.startConnect()
+            case .connecting, .discovering, .probing, .up:
+                self.stop()  // `tearDown` starts the pick's connect once this link has ended
+            }
+        }
     }
 
     // MARK: CamperTransport
@@ -152,8 +183,12 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         queue.async { self.startConnect() }
     }
 
+    /// Ends the link, or the connect in progress, and any pick.
     public func cancel() async {
-        queue.async { self.stop() }
+        queue.async {
+            self.policy.cancelPick()
+            self.stop()
+        }
     }
 
     public func read(_ char: UInt16) async throws -> [UInt8] {
@@ -195,8 +230,9 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     private func startConnect() {
         if phase == .up { sink.yield(.encrypted); return }
         guard phase == .idle else { return }
-        if let a = Self.availability(central.state) { sink.yield(.bluetoothUnavailable(a)); return }
-        guard central.state == .poweredOn else { phase = .waitingForPower; return }
+        if let a = Self.availability(central.state) { policy.linkEnded(); sink.yield(.bluetoothUnavailable(a)); return }
+        // A pick never waits for Bluetooth: only the saved unit's connect does.
+        guard central.state == .poweredOn else { policy.linkEnded(); phase = .waitingForPower; return }
         switch policy.route() {
         case .chosen(let id), .saved(let id):
             // iOS resolves the unit's rotating address with the bond. Never another peripheral.
@@ -207,7 +243,7 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
             }
             open(p)
         case .refuse:
-            sink.yield(.pairingRequired)
+            sink.yield(.notPaired)
         }
     }
 
@@ -239,7 +275,8 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         }
     }
 
-    /// The link is gone: every pending call resumes (an issued write with `.linkLost`).
+    /// The link is gone: every pending call resumes (an issued write with `.linkLost`). A pick that
+    /// waited for this link to end connects now (after this link's `.disconnected`, on the queue).
     private func tearDown() {
         phase = .idle
         policy.linkEnded()  // a first pairing is one-shot
@@ -247,6 +284,7 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         servicesLeft = 0
         restoredConnected = false
         ops.drain()
+        if policy.startPick() != nil { queue.async { self.startConnect() } }
     }
 
     private func fail(_ p: CBPeripheral, _ error: Error?) {
@@ -402,21 +440,31 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
 }
 
 /// Which peripheral the transport may talk to. The saved identifier is the only one it connects
-/// to, and it never switches by itself. A new one is adopted only when the user picked it
-/// (`chosen`, one connect only) and its authenticated `1004` read succeeded, after a pairing or at
-/// once with the iPhone's existing bond (for example the vendor app's): lenient, AD_IOS_SHARED_BOND.
-/// Nothing is adopted in the background. A failed read or a missing `1004` never reaches
-/// `authenticated`; the link then ends, and with it the first pairing.
+/// to, and it never switches by itself. A new one is adopted only when the user picked it and its
+/// authenticated `1004` read succeeded on the pick's own link, after a pairing or at once with the
+/// iPhone's existing bond (for example the vendor app's): lenient, AD_IOS_SHARED_BOND. Nothing is
+/// adopted in the background. A failed read or a missing `1004` never reaches `authenticated`; the
+/// link then ends, and with it the first pairing.
+///
+/// A pick is `pending` while a link the pick did not open still runs (no link is verified then, so
+/// the saved unit is never reported as the picked one); `startPick()` makes it `chosen` for exactly
+/// the connect that starts next. Any end of that link, `cancelPick()` or the read cap ends it: a later
+/// connect (an automatic redial) can never use an old pick.
 ///
 /// - Requirement: R_IOS_PAIRING, R_IOS_BLE_DIRECT
 struct PeerPolicy {
     private(set) var saved: UUID?
-    /// The unit the user picked for a first pairing; nil outside one.
-    var chosen: UUID?
+    /// The unit the user picked; its connect waits until the current link has ended.
+    private(set) var pending: UUID?
+    /// The unit of the first pairing's own connect; nil outside one.
+    private(set) var chosen: UUID?
     private var pairingReads = 0
     /// The re-reads of `1004` in one first pairing (one per second): a hard cap of its own, so a
     /// caller that gave up without `cancel()` leaves no endless reads.
     static let maxPairingReads = 90
+    /// How long a pick may take, from the pick to the adoption: the transport ends it after this
+    /// (the passkey dialog may be open for a while; at least 60 s).
+    static let pairingBudget = Duration.seconds(90)
 
     init(saved: UUID?) { self.saved = saved }
 
@@ -427,9 +475,33 @@ struct PeerPolicy {
         case reject
     }
 
+    /// True while a pick waits for its connect or runs it.
+    var inPick: Bool { pending != nil || chosen != nil }
+
     func route() -> Route {
         if let chosen { return .chosen(chosen) }
         return saved.map(Route.saved) ?? .refuse
+    }
+
+    /// The user picked `id`; it replaces an earlier pick. Its connect starts with `startPick()`.
+    mutating func pick(_ id: UUID) {
+        linkEnded()
+        pending = id
+    }
+
+    /// No link runs now: the pending pick becomes the one for the next connect. Returns it.
+    mutating func startPick() -> UUID? {
+        guard let p = pending else { return nil }
+        pending = nil
+        chosen = p
+        pairingReads = 0
+        return p
+    }
+
+    /// The caller cancelled or gave up: no pick is left.
+    mutating func cancelPick() {
+        pending = nil
+        linkEnded()
     }
 
     /// The `1004` read failed with a pairing error. True: in a first pairing, iOS pairs and the read
@@ -440,8 +512,10 @@ struct PeerPolicy {
         return true
     }
 
-    /// The authenticated `1004` read succeeded on `id`. Ends a first pairing (adopted or not).
+    /// The authenticated `1004` read succeeded on `id`. Ends a first pairing (adopted or not). While
+    /// a pick waits for its own link, no link is verified.
     mutating func authenticated(_ id: UUID) -> Verdict {
+        guard pending == nil else { return .reject }
         guard let c = chosen else { return id == saved ? .up : .reject }
         linkEnded()
         guard id == c else { return .reject }
@@ -449,7 +523,8 @@ struct PeerPolicy {
         return .up
     }
 
-    /// The link ended, a connect failed, or the caller cancelled: the first pairing is over.
+    /// The link ended, a connect failed, or the caller cancelled: the pick's own connect is over. A
+    /// pending pick (waiting for this link to end) stays.
     mutating func linkEnded() {
         chosen = nil
         pairingReads = 0
@@ -462,13 +537,20 @@ public enum PairingScanError: Error, Equatable, Sendable {
     case bluetooth(BluetoothAvailability?)
     /// Another candidate scan runs.
     case busy
+    /// No unit advertised `VWCAMPER` in the scan window: out of range, asleep, or its pairing screen
+    /// is not open.
+    case noUnitFound
 }
 
 /// A unit in range during a first pairing.
-public struct PairingCandidate: Sendable, Equatable {
+public struct PairingCandidate: Sendable, Equatable, Hashable {
     public let id: UUID
     public let name: String
     public let rssi: Int
+
+    public init(id: UUID, name: String, rssi: Int) {
+        (self.id, self.name, self.rssi) = (id, name, rssi)
+    }
 }
 
 /// The units seen in a pairing scan: the exact advertised name only, one entry per identifier.

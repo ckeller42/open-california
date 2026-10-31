@@ -85,7 +85,7 @@ struct CBMappingTests {
     @Test func adoptsAfterASeenPairing() {
         let old = UUID(), new = UUID()
         var p = PeerPolicy(saved: old)
-        p.chosen = new
+        p.begin(new)
         #expect(p.route() == .chosen(new))
         let e = p.pairingError(); #expect(e)  // iOS shows the passkey dialog; read again
         let r1 = p.authenticated(new); #expect(r1 == .up)
@@ -102,7 +102,7 @@ struct CBMappingTests {
     @Test func existingBondIsAdoptedDuringAPick() {
         let old = UUID(), new = UUID()
         var p = PeerPolicy(saved: old)
-        p.chosen = new
+        p.begin(new)
         let r = p.authenticated(new); #expect(r == .up)
         #expect(p.saved == new)
         #expect(p.route() == .saved(new))  // one-shot: the pick is over
@@ -134,7 +134,7 @@ struct CBMappingTests {
     @Test func firstPairingIsOneShot() {
         let old = UUID(), new = UUID(), other = UUID()
         var p = PeerPolicy(saved: old)
-        p.chosen = new
+        p.begin(new)
         _ = p.pairingError()
         p.linkEnded()
         #expect(p.route() == .saved(old))
@@ -142,18 +142,19 @@ struct CBMappingTests {
         #expect(p.saved == old)
 
         var q = PeerPolicy(saved: nil)
-        q.chosen = new
+        q.begin(new)
         _ = q.pairingError()
         let r1 = q.authenticated(other); #expect(r1 == .reject)  // not the picked unit
         #expect(q.route() == .refuse)
         #expect(q.saved == nil)
 
         var a = PeerPolicy(saved: nil)
-        a.chosen = new
+        a.begin(new)
         let r2 = a.authenticated(new); #expect(r2 == .up)
+        #expect(a.route() == .saved(new))
         let r3 = a.authenticated(other); #expect(r3 == .reject)  // the pick is used up
         #expect(a.saved == new)
-        a.chosen = other  // a second pick
+        a.begin(other)  // a second pick
         let r4 = a.authenticated(other); #expect(r4 == .up)
         #expect(a.saved == other)
 
@@ -163,17 +164,63 @@ struct CBMappingTests {
         let r5 = a.authenticated(other); #expect(r5 == .up)
     }
 
+    /// A pick that ends without a successful pairing leaves nothing behind: a later connect (an
+    /// automatic redial) goes to the saved unit, verifies it as before and never adopts the pick.
+    /// A cancel ends a pick that still waits for its connect.
+    ///
+    /// - Test: T_IOS_CB_PICK_EXPIRES
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pickWithoutPairingDoesNotAdoptLater() {
+        let old = UUID(), new = UUID()
+        var p = PeerPolicy(saved: old)
+        p.begin(new)
+        let e = p.pairingError(); #expect(e)
+        p.linkEnded()  // the dialog was cancelled, the link timed out or the budget ran out
+        #expect(p.route() == .saved(old))
+        let r1 = p.authenticated(new); #expect(r1 == .reject)
+        let r2 = p.authenticated(old); #expect(r2 == .up)
+        #expect(p.saved == old)
+
+        var c = PeerPolicy(saved: old)
+        c.pick(new)
+        c.cancelPick()
+        c.linkEnded()
+        #expect(c.startPick() == nil)
+        #expect(c.route() == .saved(old))
+    }
+
+    /// A pick while the saved unit's link is up waits until that link has ended; until then no link
+    /// is verified (the saved unit is not reported as the new one), and the pick does not route.
+    /// Once the old link has ended the pick connects, and only the picked unit is adopted.
+    ///
+    /// - Test: T_IOS_CB_PICK_REPLACES_LINK
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pickWhileSavedLinkIsUpWaitsForItsOwnLink() {
+        let old = UUID(), new = UUID()
+        var p = PeerPolicy(saved: old)
+        p.pick(new)
+        #expect(p.route() == .saved(old))  // nothing dials for the pick before the old link ended
+        let late = p.authenticated(old); #expect(late == .reject)
+        #expect(p.saved == old)
+        p.linkEnded()  // the old link's end keeps the pick
+        #expect(p.startPick() == new)
+        #expect(p.route() == .chosen(new))
+        let r = p.authenticated(new); #expect(r == .up)
+        #expect(p.saved == new)
+        #expect(p.route() == .saved(new))
+    }
+
     /// The re-reads of a first pairing stop at a cap of their own.
     ///
     /// - Test: T_IOS_CB_PAIRING_READ_CAP
     /// - Verifies: R_IOS_PAIRING
     @Test func pairingReadsAreCapped() {
         var p = PeerPolicy(saved: nil)
-        p.chosen = UUID()
+        p.begin(UUID())
         for _ in 0..<PeerPolicy.maxPairingReads { let ok = p.pairingError(); #expect(ok) }
         let more = p.pairingError(); #expect(!more)
         p.linkEnded()
-        p.chosen = UUID()
+        p.begin(UUID())
         let again = p.pairingError(); #expect(again)  // a new pick starts a new count
     }
 
@@ -267,5 +314,13 @@ private final class Box: @unchecked Sendable {
     /// Waits until the tasks registered their continuations.
     func until(_ ok: (Box) -> Bool) async throws {
         while !ok(self) { try await Task.sleep(for: .milliseconds(1)) }
+    }
+}
+
+extension PeerPolicy {
+    /// A pick with no link up: its connect starts at once.
+    mutating func begin(_ id: UUID) {
+        pick(id)
+        _ = startPick()
     }
 }

@@ -53,6 +53,8 @@ private actor Counting: CamperTransport {
         if failSubscribe { failSubscribe = false; throw TransportError.writeRejected }
         try await inner.subscribe(chars)
     }
+    func pairingCandidates(window: Duration) async throws -> [PairingCandidate] { try await inner.pairingCandidates(window: window) }
+    func beginFirstPairing(with id: UUID) async { connects += 1; await inner.beginFirstPairing(with: id) }
     func set(failSubscribe f: Bool) { failSubscribe = f }
     func set(holdReads h: Bool) { holdReads = h }
     func releaseReads() { holdReads = false; held.forEach { $0.resume() }; held = [] }
@@ -340,9 +342,82 @@ struct SessionTests {
     @Test func staleBondFailsTheConnect() async throws {
         let r = Rig()
         await r.fake.requirePairingOnNextConnect()
-        await #expect(throws: SessionError.unreachable) { try await r.s.ensureConnected(timeout: .seconds(90)) }
+        await #expect(throws: SessionError.pairingRequired) { try await r.s.ensureConnected(timeout: .seconds(90)) }
         #expect(await r.s.link == .unreachable("The camper unit asks for pairing."))
         try await until("transport cancelled") { await r.fake.cancels >= 1 }
+    }
+
+    /// No unit adopted yet: the connect fails with its own error (the app shows the guide, not the
+    /// stale-bond help).
+    ///
+    /// - Test: T_IOS_SESSION_NOT_PAIRED
+    /// - Verifies: R_IOS_PAIRING
+    @Test func noAdoptedUnitFailsTheConnectAsNotPaired() async throws {
+        let r = Rig()
+        await r.fake.notPairedOnNextConnect()
+        await #expect(throws: SessionError.notPaired) { try await r.s.ensureConnected(timeout: .seconds(20)) }
+        #expect(await r.s.link == .unreachable("No camper unit is paired yet."))
+    }
+
+    /// A pick while the saved unit's link is up: that link ends first, and the call returns only
+    /// once the picked unit's own link is up and read. While the passkey dialog is open (well past
+    /// the 20 s redial budget) the session is not ready, so the saved unit is never reported as the
+    /// picked one. A pick with a dialog is `.paired`.
+    ///
+    /// - Test: T_IOS_SESSION_PICK_REPLACES_LINK
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pickEndsTheSavedLinkAndWaitsForItsOwn() async throws {
+        let r = Rig()
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        let id = UUID()
+        await r.fake.pairNextConnect()
+        let call = Task { try await r.s.firstPairing(with: id) }
+        try await until("pairing") { await r.s.link == .pairing }
+        #expect(await r.s.isReady == false)
+        #expect(await r.fake.picks == [id])
+        r.clock.advance(by: .seconds(30))
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(await r.s.link == .pairing)
+        await r.fake.completePairing()
+        #expect(try await call.value == .paired)
+        #expect(await r.s.isReady)
+    }
+
+    /// A pick of a unit the iPhone is already paired with (shared bond): no dialog, `.alreadyPaired`.
+    ///
+    /// - Test: T_IOS_SESSION_PICK_SHARED_BOND
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pickWithAnExistingBondIsAlreadyPaired() async throws {
+        let r = Rig()
+        #expect(try await r.s.firstPairing(with: UUID()) == .alreadyPaired)
+        #expect(await r.s.isReady)
+    }
+
+    /// A pick that meets a stale bond fails with `.pairingRequired` (the guide counts it).
+    ///
+    /// - Test: T_IOS_SESSION_PICK_STALE
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pickWithAStaleBondFails() async throws {
+        let r = Rig()
+        await r.fake.requirePairingOnNextConnect()
+        await #expect(throws: SessionError.pairingRequired) { try await r.s.firstPairing(with: UUID()) }
+    }
+
+    /// A pick that does not finish within the pairing budget ends: the transport is cancelled (which
+    /// ends the pick), and the call throws.
+    ///
+    /// - Test: T_IOS_SESSION_PICK_BUDGET
+    /// - Verifies: R_IOS_PAIRING
+    @Test func pickEndsWithItsBudget() async throws {
+        let r = Rig()
+        #expect(CamperSession.pairingBudget >= .seconds(60))
+        await r.fake.pairNextConnect()
+        let call = Task { try await r.s.firstPairing(with: UUID()) }
+        try await until("pairing") { await r.s.link == .pairing }
+        try await until("budget timer") { r.clock.deadlines.contains(CamperSession.pairingBudget) }
+        r.clock.advance(by: CamperSession.pairingBudget)
+        await #expect(throws: SessionError.unreachable) { try await call.value }
+        try await until("cancelled") { await r.fake.cancels >= 1 }
     }
 
     /// - Test: T_IOS_SESSION_HEARTBEAT_REJECTED

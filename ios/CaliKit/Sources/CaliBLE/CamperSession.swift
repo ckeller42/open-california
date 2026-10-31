@@ -22,6 +22,8 @@ public actor CamperSession {
     /// A link that held this long resets the backoff (`CALI_SESSION_STABLE_MS`).
     static let stable = Duration.seconds(60)
     static let redialTimeout = Duration.seconds(20)
+    /// The budget of a first pairing: the iOS passkey dialog may be open for a while (at least 60 s).
+    public static let pairingBudget = PeerPolicy.pairingBudget
 
     let transport: CamperTransport
     let clock: any Clock<Duration>
@@ -54,6 +56,8 @@ public actor CamperSession {
     private var backoffStep = 0
     /// The delay of the scheduled automatic reconnect; nil when none is scheduled.
     private(set) var pendingReconnect: Duration?
+    /// The current first pairing saw the iOS passkey dialog (`.pairing`).
+    private var sawPairing = false
 
     public init(transport: CamperTransport, clock: any Clock<Duration>) {
         self.init(transport: transport, clock: clock, semantics: .shared)
@@ -122,6 +126,46 @@ public actor CamperSession {
         guard isReady else { throw SessionError.unreachable }
     }
 
+    /// The units in range for a first pairing, strongest first (a 3 s scan).
+    /// - Throws: `PairingScanError`.
+    public func pairingCandidates() async throws -> [PairingCandidate] {
+        try await transport.pairingCandidates(window: .seconds(3))
+    }
+
+    /// The user's first pairing with the unit `id` they picked: the current link (also a saved
+    /// unit's) and any bring-up end, then the transport connects to `id` once; the call returns when
+    /// that link is up, subscribed and read. `.paired` when iOS showed its passkey dialog,
+    /// `.alreadyPaired` when the iPhone's bond worked at once (AD_IOS_SHARED_BOND). A scheduled
+    /// reconnect is dropped. The unit's reconnect cooldown after its own hang-up is waited out first.
+    /// - Throws: `SessionError.pairingRequired` (a stale bond), `.bluetooth`, `.unreachable` (no
+    ///   answer within `timeout`, or the caller's `cancelPairing()`).
+    ///
+    /// - Requirement: R_IOS_PAIRING
+    public func firstPairing(with id: UUID, timeout: Duration = pairingBudget) async throws -> PairingOutcome {
+        cancelReconnect()
+        while let old = flight {
+            await transport.cancel()
+            _ = try? await old.value
+        }
+        sawPairing = false
+        let f = Task {
+            defer { self.flightDone() }
+            do {
+                try await race(clock, timeout) { try await self.pairUp(id) }
+            } catch {
+                await self.dropLink("The camper unit did not answer.")
+                throw error is SessionError ? error : SessionError.unreachable
+            }
+        }
+        flight = f
+        try await f.value
+        guard isReady else { throw SessionError.unreachable }
+        return sawPairing ? .paired : .alreadyPaired
+    }
+
+    /// The user cancelled the first pairing: its link ends, and with it the pick.
+    public func cancelPairing() async { await transport.cancel() }
+
     /// Reads every state function once; each frame replaces that function's last one.
     /// A function whose read fails (not offered by the unit) is skipped.
     public func readAll() async throws {
@@ -182,8 +226,20 @@ public actor CamperSession {
         if let left = cooldownLeft() { try await clock.sleep(for: left) }
         if link != .up {
             setLink(.connecting)
-            try await waitForLink()
+            try await waitForLink { [transport] in await transport.connect() }
         }
+        try await subscribeAndRead()
+    }
+
+    /// A first pairing's bring-up: always its own link (the transport ends the current one first).
+    private func pairUp(_ id: UUID) async throws {
+        if let left = cooldownLeft() { try await clock.sleep(for: left) }
+        if link != .up { setLink(.connecting) }
+        try await waitForLink { [transport] in await transport.beginFirstPairing(with: id) }
+        try await subscribeAndRead()
+    }
+
+    private func subscribeAndRead() async throws {
         let gen = linkGen
         do {
             try await transport.subscribe(Array(CamperGATT.stateChars.values))
@@ -196,14 +252,15 @@ public actor CamperSession {
         publish()
     }
 
-    /// Waits for `.encrypted`; a failed connect, Bluetooth off or cancellation (the deadline) fails it.
-    private func waitForLink() async throws {
+    /// Waits for `.encrypted` after `dial`; a failed connect, Bluetooth off or cancellation (the
+    /// deadline) fails it.
+    private func waitForLink(_ dial: @escaping @Sendable () async -> Void) async throws {
         let id = takeID()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, any Error>) in
                 waiters[id] = cont
                 // Connect only once the waiter is registered: the fake answers inside connect().
-                Task { await transport.connect() }
+                Task { await dial() }
             }
         } onCancel: {
             Task { await self.failWaiter(id) }
@@ -262,12 +319,16 @@ public actor CamperSession {
             resumeWaiters(.failure(.bluetooth(a)))
         case .pairing:
             // The caller keeps waiting within its own budget (a first pairing needs a long one).
+            sawPairing = true
             if link == .connecting { setLink(.pairing) }
         case .pairingRequired:
-            setLink(.unreachable("The camper unit asks for pairing."))
-            resumeWaiters(.failure(.unreachable))
+            setLink(.unreachable(Self.asksForPairing))
+            resumeWaiters(.failure(.pairingRequired))
             // The transport may still hold or probe a link that nobody waits for now.
             Task { await transport.cancel() }
+        case .notPaired:
+            setLink(.unreachable(Self.notPaired))
+            resumeWaiters(.failure(.notPaired))
         case .disconnected(let reason):
             lost(reason)
         }
@@ -281,7 +342,7 @@ public actor CamperSession {
         dropReason = nil
         ready = false
         stopHeartbeat()
-        if !waiters.isEmpty {  // a connect in progress failed: its caller decides what follows
+        if !waiters.isEmpty, !wasUp {  // a connect in progress failed: its caller decides what follows
             if link == .connecting || link == .pairing { setLink(.unreachable("The camper unit did not answer.")) }
             resumeWaiters(.failure(.unreachable))
             return
@@ -290,6 +351,8 @@ public actor CamperSession {
         for c in pushSubscribers.values { c.yield(.linkDown) }
         sinceLost = clock.stopwatch()
         if held { backoffStep = 0 }
+        // A first pairing ended this link for its own connect, which goes on.
+        if !waiters.isEmpty { return setLink(.connecting) }
         if reason == .localCancel {
             setLink(.off)
         } else if reason == .remoteHangUp, restConditions {
@@ -435,6 +498,10 @@ public actor CamperSession {
         state.asOf = Date()
         publish()
     }
+
+    /// The link texts of the two pairing failures (the app maps them to its own words).
+    static let asksForPairing = "The camper unit asks for pairing."
+    static let notPaired = "No camper unit is paired yet."
 
     private func setLink(_ l: LinkState) {
         guard l != link else { return }
