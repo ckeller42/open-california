@@ -128,7 +128,8 @@ struct ScreenSnapshotTests {
     }
 
     /// A control screen locked in the rest (the tap-to-connect card), while connecting and offline;
-    /// the cooler while a command is on its way; the cockpit in the cooldown after a tap; the air
+    /// the cooler and Lighting while a command is on its way, Lighting with a result; the cockpit in
+    /// the cooldown after a tap; the air
     /// heater with an error, running and in continuous heating.
     ///
     /// - Test: T_IOS_SNAPSHOT_CONTROL_STATES
@@ -145,8 +146,16 @@ struct ScreenSnapshotTests {
         sending.feedback = .sending(function: "cooler")
         check(NavigationStack { CoolerView(store: sending) }, "control-cooler-sending")
 
+        // Lighting, the long page: the feedback stays in sight over the content.
+        for (name, feedback) in [("sending", Feedback.sending(function: "lighting")), ("result", .result(.sent, function: "lighting"))] {
+            let store = CamperStore.preview(.campingOn, now: Self.now)
+            store.feedback = feedback
+            snap(NavigationStack { LightsView(store: store) }, "control-lighting-\(name)-light")
+            snap(NavigationStack { LightsView(store: store) }, "control-lighting-\(name)-de", locale: Locale(identifier: "de_DE"))
+        }
+
         let cooldown = CamperStore.preview(.faults, now: Self.now)
-        cooldown.feedback = .connect(.resting(until: Self.now.addingTimeInterval(5)))
+        cooldown.feedback = .connecting(until: Self.now.addingTimeInterval(5))
         check(NavigationStack { CockpitView(store: cooldown) }, "cockpit-rest-cooldown")
 
         let heater: [(String, [String: JSONValue])] = [
@@ -168,7 +177,8 @@ struct ScreenSnapshotTests {
     /// - Test: T_IOS_SNAPSHOT_BANNERS
     /// - Verifies: R_IOS_HONEST, R_IOS_I18N
     @Test func feedbackBanners() {
-        let all: [Feedback] = [.sending(function: "cooler"), .connecting, .connect(.resting(until: Self.now.addingTimeInterval(5))),
+        let all: [Feedback] = [.sending(function: "cooler"), .connecting(until: nil), .connecting(until: Self.now.addingTimeInterval(5)),
+                               .connect(.resting(until: Self.now.addingTimeInterval(5))),
                                .connect(.failed(.unreachable)), .result(.sent, function: "lighting")]
             + CommandMappingTests.allResults.map { .result($0, function: "cooler") }
         let gallery = VStack(spacing: 8) {

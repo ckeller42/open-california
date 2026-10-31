@@ -90,7 +90,11 @@ public actor FakeCamperTransport: CamperTransport {
 
     // MARK: CamperTransport
 
+    /// Counts every dial.
+    public private(set) var connects = 0
+
     public func connect() {
+        connects += 1
         if let unavailable { sink.yield(.bluetoothUnavailable(unavailable)); return }
         if connectWillFail { connectWillFail = false; sink.yield(.disconnected(reason: .failedToConnect)); return }
         if pairingRequiredOnConnect { pairingRequiredOnConnect = false; sink.yield(.pairingRequired); return }

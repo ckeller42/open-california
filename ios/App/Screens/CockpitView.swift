@@ -7,6 +7,7 @@ import SwiftUI
 struct RootView: View {
     let store: CamperStore
     @Environment(\.locale) private var locale
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView {
@@ -21,10 +22,11 @@ struct RootView: View {
         }
         // VoiceOver hears the sending state, the result and the connect outcome where it is.
         .onChange(of: store.feedback) { _, f in
-            if let f, let text = FeedbackBanner.text(f, now: store.now()) {
-                AccessibilityNotification.Announcement(text.string(locale)).post()
+            if let f, let text = FeedbackBanner.spoken(f, now: store.now(), locale: locale) {
+                AccessibilityNotification.Announcement(text).post()
             }
         }
+        .onChange(of: scenePhase, initial: true) { _, phase in store.inForeground = phase == .active }
     }
 }
 

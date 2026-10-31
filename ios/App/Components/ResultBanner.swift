@@ -11,6 +11,19 @@ struct ResultBanner: View {
     let result: CommandResult
     let function: String
 
+    /// The function's name in the banner ("Lighting: Sent — check the lamp"): the banner shows on
+    /// every tab.
+    static func title(_ function: String) -> LocalizedStringResource {
+        switch function {
+        case "campingmode": "Camping mode"
+        case "lighting": "Lighting"
+        case "cooler": "Cooler"
+        case "airheater": "Air heater"
+        case "energy": "Energy mode"
+        default: LocalizedStringResource(String.LocalizationValue(function))
+        }
+    }
+
     static func text(_ r: CommandResult, function: String) -> LocalizedStringResource {
         switch r {
         case .applied: "Applied"
@@ -40,7 +53,7 @@ struct ResultBanner: View {
         case .favouriteEmpty: "This favourite is empty on the unit"
         case .notOnOff, .badValue: "This value is not valid"
         case .quietNeedsFridgeOn: "Switch the refrigerator box on first"
-        case .roofReading: "only when the pop-up roof is open"
+        case .roofReading: "Only when the pop-up roof is open"
         case .wakeupNoArea: "The wake-up light needs at least one area"
         case .wakeupClock: "The wake-up light needs the time — set it again"
         case .wakeupUnknown: "The unit has not reported its wake-up light settings yet"
@@ -62,7 +75,7 @@ struct ResultBanner: View {
     }
 
     var body: some View {
-        let text = Self.text(result, function: function)
+        let text = Text(Self.title(function)) + Text(verbatim: ": ") + Text(Self.text(result, function: function))
         switch result {
         case .applied: Note(text: text, symbol: "checkmark.circle.fill", tint: .onGreen)
         case .sent where function == "lighting": Note(text: text, symbol: "paperplane", tint: .primary)
@@ -76,19 +89,29 @@ struct ResultBanner: View {
 
 /// A neutral card with one symbol and a text.
 struct Note: View {
-    let text: LocalizedStringResource
+    let text: Text
     let symbol: String
     let tint: Color
     var busy = false
 
+    init(text: Text, symbol: String, tint: Color, busy: Bool = false) {
+        (self.text, self.symbol, self.tint, self.busy) = (text, symbol, tint, busy)
+    }
+
+    init(text: LocalizedStringResource, symbol: String, tint: Color, busy: Bool = false) {
+        self.init(text: Text(text), symbol: symbol, tint: tint, busy: busy)
+    }
+
     var body: some View {
         Label {
-            Text(text)
+            text
         } icon: {
             if busy { ProgressView() } else { Image(systemName: symbol).foregroundStyle(tint) }
         }
+        .font(.subheadline)
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
     }
@@ -103,11 +126,12 @@ struct FeedbackBanner: View {
     /// The clock of the countdown (the store's, so a snapshot can fix it).
     var clock: () -> Date = Date.init
 
-    /// The text at `now` (VoiceOver announces it); nil when there is nothing to say.
+    /// The text at `now`, without the function's name; nil when there is nothing to say.
     static func text(_ f: Feedback, now: Date) -> LocalizedStringResource? {
         switch f {
         case .sending: "Sending…"
         case .result(let r, let fn): ResultBanner.text(r, function: fn)
+        case .connecting(let until?) where until > now: "Connecting in \(max(1, Int(until.timeIntervalSince(now).rounded(.up)))) s…"
         case .connecting: "Connecting…"
         case .connect(.connected): nil
         case .connect(.resting(let until)):
@@ -116,10 +140,23 @@ struct FeedbackBanner: View {
         }
     }
 
+    /// What VoiceOver announces: the text with the function's name.
+    static func spoken(_ f: Feedback, now: Date, locale: Locale) -> String? {
+        guard let text = text(f, now: now)?.string(locale) else { return nil }
+        switch f {
+        case .sending(let fn), .result(_, let fn): return ResultBanner.title(fn).string(locale) + ": " + text
+        case .connecting, .connect: return text
+        }
+    }
+
     var body: some View {
         switch feedback {
-        case .sending, .connecting:
-            Note(text: Self.text(feedback, now: clock()) ?? "", symbol: "", tint: .primary, busy: true)
+        case .sending(let fn):
+            Note(text: Text(ResultBanner.title(fn)) + Text(verbatim: ": ") + Text("Sending…"), symbol: "", tint: .primary, busy: true)
+        case .connecting:
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                Note(text: Self.text(feedback, now: clock()) ?? "", symbol: "", tint: .primary, busy: true)
+            }
         case .result(let r, let fn): ResultBanner(result: r, function: fn)
         case .connect(.resting):
             TimelineView(.periodic(from: .now, by: 1)) { _ in
@@ -136,12 +173,15 @@ struct FeedbackBanner: View {
 ///
 /// - Requirement: R_IOS_LOOK, R_IOS_HONEST
 struct AlertCard: View {
-    let text: LocalizedStringResource
+    let text: Text
     @Environment(\.pageStale) private var stale
+
+    init(text: Text) { self.text = text }
+    init(text: LocalizedStringResource) { self.text = Text(text) }
 
     var body: some View {
         Label {
-            Text(text).foregroundStyle(stale ? Color.staleText : Color.primary)
+            text.foregroundStyle(stale ? Color.staleText : Color.primary)
         } icon: {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(stale ? Color.staleText : Color.orange)
         }
@@ -161,13 +201,21 @@ struct RestCard: View {
 
     var body: some View {
         Button { Task { await store.tapToConnect() } } label: {
-            Label { Text("Disconnected to save energy — tap to connect") } icon: { Image(systemName: "arrow.clockwise") }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.horizontal, 12)
-                .background(Color.onGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+            // The pill already says why the link is down; the card says what a tap does, and how
+            // long the unit's reconnect cooldown still runs.
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                let left: Int? = if case .rest(let until) = store.link, until > store.now() {
+                    max(1, Int(until.timeIntervalSince(store.now()).rounded(.up)))
+                } else { nil }
+                Label { Text(left.map { "Tap to connect (in \($0) s)" } ?? "Tap to connect") } icon: { Image(systemName: "arrow.clockwise") }
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .background(Color.onGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+            }
         }
         .buttonStyle(.plain)
-        .disabled(store.feedback == .connecting)
+        .disabled(store.feedback != nil)
     }
 }
 
@@ -273,7 +321,7 @@ struct ControlRow<Control: View>: View {
             control()
                 .frame(minHeight: 44)
                 .disabled(disabledBecause != nil)
-                .accessibilityHint((disabledBecause ?? sectionLock ?? hint).map { Text($0) } ?? Text(verbatim: ""))
+                .accessibilityHint((sectionLock ?? disabledBecause ?? hint).map { Text($0) } ?? Text(verbatim: ""))
             // A locked section has its reason in the lock card; a row note would contradict it.
             if sectionLock == nil, let note = disabledBecause ?? hint {
                 Text(note).font(.footnote).accessibilityHidden(true)

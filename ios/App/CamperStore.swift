@@ -121,12 +121,23 @@ final class CamperStore {
         return r
     }
 
-    /// The user's tap in the power-save rest: "Connecting…" until `connect()` returns, then its
-    /// outcome (the cooldown's countdown, or why it failed); nothing once connected.
+    /// The app is in the foreground (`RootView` follows the scene phase).
+    var inForeground = true
+
+    /// The user's tap in the power-save rest: "Connecting in N s…" while the unit's reconnect cooldown
+    /// runs, then one dial ("Connecting…") and its outcome; nothing once connected. A tap that the app
+    /// left for the background before the cooldown ended does not dial (`R_IOS_POWER_SAVE`: only a
+    /// user action dials, once).
     ///
     /// - Requirement: R_IOS_POWER_SAVE, R_IOS_HONEST
     func tapToConnect() async {
-        show(.connecting, clearAfter: nil)
+        var until: Date?
+        if case .rest(let u) = link, u > now() { until = u }
+        show(.connecting(until: until), clearAfter: nil)
+        if let until {
+            try? await Task.sleep(for: .seconds(until.timeIntervalSince(now())))
+            guard inForeground else { return show(nil, clearAfter: nil) }
+        }
         let outcome = await connect()
         switch outcome {
         case .connected: show(nil, clearAfter: nil)
@@ -193,13 +204,12 @@ final class CamperStore {
         save()
     }
 
-    /// One connect attempt and its outcome. No redial loop (`R_IOS_POWER_SAVE`); inside the power-save
-    /// rest it does not dial and says when a dial can work.
+    /// One connect attempt and its outcome; it waits out the unit's reconnect cooldown first. No
+    /// redial loop (`R_IOS_POWER_SAVE`).
     ///
     /// - Requirement: R_IOS_BLE_DIRECT, R_IOS_POWER_SAVE
     @discardableResult
     func connect() async -> ConnectOutcome {
-        if case .rest(let until) = link, until > now() { return .resting(until: until) }
         do {
             try await session.ensureConnected(timeout: .seconds(20))
             return .connected
@@ -218,7 +228,8 @@ final class CamperStore {
 enum Feedback: Equatable {
     case sending(function: String)
     case result(CommandResult, function: String)
-    case connecting
+    /// A tap-to-connect: the dial waits until `until` (the unit's cooldown), nil = dialling now.
+    case connecting(until: Date?)
     case connect(ConnectOutcome)
 }
 

@@ -511,6 +511,23 @@
         }
       }
     },
+    "Connecting in %lld s…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde in %lld s …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting in %lld s…"
+          }
+        }
+      }
+    },
     "Connecting…": {
       "extractionState": "manual",
       "localizations": {
@@ -1446,6 +1463,23 @@
         }
       }
     },
+    "Only when the pop-up roof is open": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur bei geöffnetem Aufstelldach"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only when the pop-up roof is open"
+          }
+        }
+      }
+    },
     "Open": {
       "extractionState": "manual",
       "localizations": {
@@ -2071,6 +2105,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch the refrigerator box on first"
+          }
+        }
+      }
+    },
+    "Tap to connect": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Verbinden tippen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to connect"
+          }
+        }
+      }
+    },
+    "Tap to connect (in %lld s)": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Verbinden tippen (in %lld s)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to connect (in %lld s)"
           }
         }
       }

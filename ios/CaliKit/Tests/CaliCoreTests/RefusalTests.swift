@@ -15,19 +15,37 @@ struct RefusalTests {
         let define = try Regex(#"#define (CALI_REASON_\w+|CALI_WAKEUP_UNKNOWN) "((?:[^"\\]|\\.)*)""#)
         var seen = 0
         for m in header.matches(of: define) {
-            // The header writes non-ASCII as octal escapes (\342\200\224 = "—").
-            var bytes: [UInt8] = []
-            var it = String(m.output[2].substring!).utf8.makeIterator()
-            while let b = it.next() {
-                if b == UInt8(ascii: "\\"), let d1 = it.next(), let d2 = it.next(), let d3 = it.next() {
-                    bytes.append(UInt8(String(decoding: [d1, d2, d3], as: UTF8.self), radix: 8)!)
-                } else { bytes.append(b) }
+            guard let text = Self.unescape(String(m.output[2].substring!)) else {
+                Issue.record("\(m.output[1].substring!): an escape this test does not know"); continue
             }
-            let text = String(decoding: bytes, as: UTF8.self)
             #expect(Refusal(planner: text) != .unknown, "\(m.output[1].substring!) has no Refusal case")
             seen += 1
         }
         #expect(seen >= 16)
         #expect(Refusal(planner: "something new") == .unknown)
+        #expect(Self.unescape(#"a\?b\"c\\d\342\200\224"#) == "a?b\"c\\d—")
+        #expect(Self.unescape(#"bad \q"#) == nil)
+    }
+
+    /// A C string literal's body as the compiler reads it: octal escapes (`\342\200\224` = "—", as
+    /// `tools/gen_c_dict.py` writes non-ASCII) and `\?`, `\"`, `\\`, `\n`; nil for any other escape.
+    static func unescape(_ s: String) -> String? {
+        var bytes: [UInt8] = []
+        var it = Array(s.utf8)[...]
+        while let b = it.popFirst() {
+            guard b == UInt8(ascii: "\\") else { bytes.append(b); continue }
+            guard let e = it.popFirst() else { return nil }
+            switch e {
+            case UInt8(ascii: "0")...UInt8(ascii: "7"):
+                var digits = [e]
+                while digits.count < 3, let d = it.first, (UInt8(ascii: "0")...UInt8(ascii: "7")).contains(d) { digits.append(it.removeFirst()) }
+                guard let v = UInt8(String(decoding: digits, as: UTF8.self), radix: 8) else { return nil }
+                bytes.append(v)
+            case UInt8(ascii: "?"), UInt8(ascii: "\""), UInt8(ascii: "\\"), UInt8(ascii: "'"): bytes.append(e)
+            case UInt8(ascii: "n"): bytes.append(10)
+            default: return nil
+            }
+        }
+        return String(decoding: bytes, as: UTF8.self)
     }
 }

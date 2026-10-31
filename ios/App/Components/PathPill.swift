@@ -103,13 +103,15 @@ struct StatusPage<Content: View>: View {
             .padding()
         }
         .hardTopEdge()
-        // The sending state and the result stay in sight wherever the user tapped.
-        .safeAreaInset(edge: .top, spacing: 0) {
+        // The sending state and the result stay in sight wherever the user tapped. An overlay: the
+        // content does not move under the finger when the banner comes or goes.
+        .overlay(alignment: .top) {
             if let feedback = store.feedback {
                 FeedbackBanner(feedback: feedback, clock: store.now)
+                    .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
                     .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    .background(Color(uiColor: .systemBackground))
+                    .padding(.top, 4)
             }
         }
     }

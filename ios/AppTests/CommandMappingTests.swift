@@ -163,7 +163,7 @@ struct CommandMappingTests {
         func de(_ key: String) -> String? {
             ((((strings[key] as? [String: Any])?["localizations"] as? [String: Any])?["de"] as? [String: Any])?["stringUnit"] as? [String: Any])?["value"] as? String
         }
-        var keys = Set<String>()
+        var keys: Set<String> = ["Connecting in %lld s…", "Tap to connect", "Tap to connect (in %lld s)"]
         for r in Self.allResults { for fn in ["lighting", "cooler"] { keys.insert(ResultBanner.text(r, function: fn).key) } }
         keys.insert("Unknown fault of the energy system")
         for k in keys { #expect(de(k)?.isEmpty == false, "no German for \(k)") }
@@ -172,22 +172,41 @@ struct CommandMappingTests {
             == "Die Camper-Einheit spart Energie — in 5 s erneut versuchen")
     }
 
-    /// A command shows "Sending…" and then its result where the user looks (pinned under the pill);
-    /// a tap in the power-save rest shows the cooldown instead of dialling.
+    /// A command shows "Sending…" and then its result where the user looks (pinned under the pill).
+    /// A tap in the power-save rest shows "Connecting in N s…" during the unit's cooldown, then dials
+    /// once; a tap that the app left for the background before the cooldown ended does not dial.
     ///
     /// - Test: T_IOS_FEEDBACK
     /// - Verifies: R_IOS_HONEST, R_IOS_POWER_SAVE
-    @Test func feedbackShowsSendingResultAndCooldown() async {
+    @Test func feedbackShowsSendingResultAndCooldown() async throws {
         let store = CamperStore.preview(.unsupportedV3)
         let r = await store.run(CampingView.master(true))
         #expect(r == .notSupported)
         #expect(store.feedback == .result(.notSupported, function: "campingmode"))
 
-        let until = Date().addingTimeInterval(5)
-        store.link = .rest(until: until)
-        await store.tapToConnect()
-        #expect(store.feedback == .connect(.resting(until: until)))
-        #expect(FeedbackBanner.text(store.feedback!, now: until.addingTimeInterval(-3))?.string(Self.en)
-            == "The camper unit saves power — try again in 3 s")
+        func resting() -> (CamperStore, FakeCamperTransport) {
+            let fake = FakeCamperTransport(frames: Dictionary(uniqueKeysWithValues: Fixture.parked.frames.compactMap { fn, b in
+                CamperGATT.stateChars[fn].map { ($0, b) } }))
+            let s = CamperStore(session: CamperSession(transport: fake, clock: ContinuousClock()),
+                                state: Fixture.parked.state(now: Date()), link: .rest(until: Date().addingTimeInterval(0.6)))
+            return (s, fake)
+        }
+        let (store2, fake) = resting()
+        let tap = Task { await store2.tapToConnect() }
+        try await Task.sleep(for: .milliseconds(100))
+        guard case .connecting(let until?) = store2.feedback else { Issue.record("no countdown: \(String(describing: store2.feedback))"); return }
+        #expect(FeedbackBanner.text(.connecting(until: until), now: until.addingTimeInterval(-3))?.string(Self.en) == "Connecting in 3 s…")
+        #expect(await fake.connects == 0)  // the cooldown runs
+        await tap.value
+        #expect(await fake.connects == 1)
+        #expect(store2.feedback == nil)  // connected: nothing to say
+
+        let (store3, fake3) = resting()
+        let tap3 = Task { await store3.tapToConnect() }
+        try await Task.sleep(for: .milliseconds(100))
+        store3.inForeground = false
+        await tap3.value
+        #expect(await fake3.connects == 0)
+        #expect(store3.feedback == nil)
     }
 }

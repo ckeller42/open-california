@@ -145,10 +145,11 @@ extension XCUIApplication {
             passes.append(try audit(scrolled: true))
         }
         let clean = passes.reduce(into: Set<String>()) { $0.formUnion($1.clean) }
-        // A cut row leaves at most a few pieces; more would hide real text without an element.
-        for p in passes where p.cutGlyphs > 12 { XCTFail("\(p.cutGlyphs) element-less text issues in one scrolled pass", file: file, line: line) }
-        for label in passes.flatMap(\.exempt) where !clean.contains(label) {
-            XCTFail("\(label): exempt, but never audited inside the clear screen", file: file, line: line)
+        // Measured on Lighting (the longest page): 8 such issues in one pass. More would hide real
+        // text without an element.
+        for p in passes where p.cutGlyphs > 8 { XCTFail("\(p.cutGlyphs) element-less text issues in one scrolled pass", file: file, line: line) }
+        for key in passes.flatMap(\.exempt) where !clean.contains(key) {
+            XCTFail("\(key): exempt, but never audited inside the clear screen", file: file, line: line)
         }
         // Back to the top for the caller.
         for _ in 0..<passes.count { swipeDown() }
@@ -167,12 +168,19 @@ extension XCUIApplication {
         return last
     }
 
-    /// The frames of the labelled elements (one snapshot: a cheap check whether the content moved).
+    /// The frames of the labelled elements, keyed "label#n" (the n-th element with that label in tree
+    /// order), so two rows with one name ("Background lighting") are two keys. One snapshot: also a
+    /// cheap check whether the content moved.
     @MainActor
     private func frames() -> [String: CGRect] {
         var out: [String: CGRect] = [:]
+        var seen: [String: Int] = [:]
         func walk(_ e: XCUIElementSnapshot) {
-            if !e.label.isEmpty { out[e.label] = e.frame }
+            if !e.label.isEmpty {
+                let n = seen[e.label, default: 0]
+                seen[e.label] = n + 1
+                out["\(e.label)#\(n)"] = e.frame
+            }
             e.children.forEach(walk)
         }
         if let s = try? snapshot() { walk(s) }
@@ -187,8 +195,9 @@ extension XCUIApplication {
     /// bar or in the 44 pt band under it. There the system blurs scrolled content (the scroll edge
     /// effect) or there is nothing to measure. `auditScreen` checks that each exempt element was
     /// audited cleanly in another pass. Also exempt after a scroll only: an "inaccessible text"
-    /// issue with no element, from glyphs cut at the edge under a bar (at most 12 per pass). Each
-    /// exemption is attached to the result (kept on success).
+    /// issue with no element, and only when a labelled element crosses the navigation bar's lower
+    /// edge in that pass (a row really is cut there; at most 8 per pass). Each exemption is attached
+    /// to the result (kept on success).
     @MainActor
     func audit(scrolled: Bool) throws -> AuditPass {
         print("AUDIT pass on \(navigationBars.firstMatch.identifier) scrolled=\(scrolled)")
@@ -197,13 +206,23 @@ extension XCUIApplication {
         let bottom = tabBars.firstMatch.exists ? tabBars.firstMatch.frame.minY - 44 : screen.maxY
         let clear = CGRect(x: screen.minX, y: top, width: screen.width, height: max(0, bottom - top))
         var pass = AuditPass()
-        pass.clean = Set(frames().filter { clear.contains($0.value) }.keys)
+        let all = frames()
+        pass.clean = Set(all.filter { clear.contains($0.value) }.keys)
+        let edge = navigationBars.firstMatch.exists ? navigationBars.firstMatch.frame.maxY : screen.minY
+        let rowCut = scrolled && all.values.contains { $0.minY < edge && $0.maxY > edge }
         try performAccessibilityAudit { issue in
-            let label = issue.element?.label ?? "-"
+            // The element's key: the element with that label nearest to the issue's frame.
+            let label = issue.element.map { el in
+                let frame = el.frame
+                return all.filter { $0.key.hasPrefix(el.label + "#") }
+                    .min { abs($0.value.midY - frame.midY) + abs($0.value.midX - frame.midX) < abs($1.value.midY - frame.midY) + abs($1.value.midX - frame.midX) }?
+                    .key ?? el.label + "#?"
+            } ?? "-"
             pass.clean.remove(label)
-            // After a scroll, the rows cut at the hard edge under the bars leave glyph pieces with no
-            // element ("potentially inaccessible text"); the same rows are elements in the top pass.
-            let cutGlyphs = scrolled && issue.element == nil && issue.auditType == .elementDetection
+            // After a scroll, a row cut at the hard edge under the navigation bar leaves glyph pieces
+            // with no element ("potentially inaccessible text"); the same rows are elements in the
+            // top pass.
+            let cutGlyphs = rowCut && issue.element == nil && issue.auditType == .elementDetection
             if cutGlyphs { pass.cutGlyphs += 1 }
             let outside = cutGlyphs || issue.element.map { !clear.contains($0.frame) } ?? false
                 && [.contrast, .dynamicType, .textClipped].contains(issue.auditType)
