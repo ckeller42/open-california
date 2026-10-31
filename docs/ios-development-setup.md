@@ -54,6 +54,7 @@ how an iPhone is prepared for development builds.
   show it:
 
   ```sh
+  set -o pipefail  # else the pipe returns xcbeautify's exit code, and a failed run looks green
   xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
     -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' | xcbeautify
   ```
