@@ -1,7 +1,7 @@
 # Simulation and testing
 
-The {term}`camper unit` is usually out of reach. It sits in a parked van, deep-sleeps for days, and
-drives real loads. So nearly all of `calictl` is tested against
+The {term}`camper unit` is usually out of reach. It sits in a parked van, often out of
+Bluetooth range, and drives real loads. So nearly all of `calictl` is tested against
 **fakes of the unit**, in layers. Each layer is closer to real hardware than the one below it and
 runs less often. This page lists the layers, what each one proves, what it does *not* prove, and
 which CI job runs it. For a usage-first walkthrough — how to actually run the mock and point
@@ -130,7 +130,7 @@ What it models:
   held travel; a release mid-travel gives `2303` → `2300`.
 - **Clock-driven dynamics.** Heater and cooler countdowns and timers. Ignition sheds camping mode.
   Ignition off zeroes roll/pitch and sets `CarLevelPopUp` 1. The link drops for about a minute at
-  engine crank. Deep sleep (`drop()`/`wake()`). Several clients connect at once, as on the real
+  engine crank. An unreachable unit (`drop()`/`wake()`). Several clients connect at once, as on the real
   unit; `one_slot` is an opt-in single-slot model.
 - **Pairing.** `FakePairingTransport` scripts the guided-pairing wizard's happy path and
   wrong-passkey path for the web e2e. It stands in for BlueZ, so it does no radio work.
@@ -248,8 +248,8 @@ on a host: it starts its own system D-Bus and `bluetoothd` and mounts over `/var
 bash tests/realstack/vm.sh      # passes when the rig prints "ALL PASS"
 ```
 
-What CI still can't show is the real unit's radio behaviour: RSSI jitter, its advertising policy
-and deep sleep, WiFi coexistence on buspi, and other clients starving LE connects. Those need a
+What CI still can't show is the real unit's radio behaviour: RSSI jitter, its advertising policy,
+WiFi coexistence on buspi, and other clients starving LE connects. Those need a
 session at the van. See {doc}`protocol-sequences` (`S_SEQ_PAIRING`) and
 {doc}`howto-pair-your-camper`.
 

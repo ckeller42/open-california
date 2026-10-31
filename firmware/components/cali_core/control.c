@@ -15,6 +15,19 @@
 #define N_OF(a) (sizeof (a) / sizeof *(a))
 #define WS " \t\n\r\v\f"
 
+/* strtok(s, WS) without its hidden static state: skip WS, cut the token, advance *p; NULL at the end */
+static char *next_tok(char **p) {
+    char *t = *p + strspn(*p, WS), *e;
+    if (!*t) {
+        *p = t;
+        return NULL;
+    }
+    e = t + strcspn(t, WS);
+    *p = *e ? e + 1 : e;
+    *e = '\0';
+    return t;
+}
+
 /* ---- Python value coercions ---- */
 
 static int is_ws(char c) { return c && strchr(WS, c) != NULL; }
@@ -123,9 +136,9 @@ static void put(vals_t *v, const char *name, uint32_t value) {
 }
 
 /* state.get(field, dflt) */
-static uint32_t st(cali_ctl_get_t get, const char *fn, const char *field, uint32_t dflt) {
+static uint32_t st(cali_ctl_get_ctx_t get, void *ctx, const char *fn, const char *field, uint32_t dflt) {
     uint32_t v;
-    return get(fn, field, &v) ? v : dflt;
+    return get(ctx, fn, field, &v) ? v : dflt;
 }
 
 static const struct cali_ctl_char *ctl_char(const char *fn) {
@@ -177,7 +190,7 @@ static void reset(vals_t *v) { v->n = 0; v->overflow = 0; }
  * (_cooler_neutral, ruling R1), which codec_encode fills in for every field not put here. Only
  * night_on/night_off carry the current state (_cooler_values; the hour bytes are literal, #99) and
  * need a known cooler state (ruling R4; the gate refuses first). */
-static int b_cooler(const char *what, const char *value, cali_ctl_get_t get, cali_ctl_plan_t *p) {
+static int b_cooler(const char *what, const char *value, cali_ctl_get_ctx_t get, void *ctx, cali_ctl_plan_t *p) {
     vals_t *v = &s_v;
     long a, b;
     char k[CALI_CTL_VALUE_MAX];
@@ -204,17 +217,17 @@ static int b_cooler(const char *what, const char *value, cali_ctl_get_t get, cal
     } else if (strcmp(what, "night_on") == 0 || strcmp(what, "night_off") == 0) {
         uint32_t x;
         if (!int_range(value, 0, 23, &a)) return CALI_CTL_BAD_VALUE;
-        if (!get("cooler", "State", &x)) return CALI_CTL_BAD_VALUE;   /* R4: no state -> CommandError */
-        put(v, "State", st(get, "cooler", "State", 1));               /* _cooler_values */
-        put(v, "Mode", st(get, "cooler", "Mode", 4));
-        put(v, "Level", st(get, "cooler", "Level", 3));
+        if (!get(ctx, "cooler", "State", &x)) return CALI_CTL_BAD_VALUE;   /* R4: no state -> CommandError */
+        put(v, "State", st(get, ctx, "cooler", "State", 1));               /* _cooler_values */
+        put(v, "Mode", st(get, ctx, "cooler", "Mode", 4));
+        put(v, "Level", st(get, ctx, "cooler", "Level", 3));
         put(v, "TimerStart", CALI_SENTINEL);
         put(v, "TimerCancel", CALI_SENTINEL);
-        put(v, "NightTimerSet", st(get, "cooler", "NightTimerSet", 0));
-        put(v, "NightTimerHourOn", st(get, "cooler", "NightTimerHourOn", 0));
-        put(v, "NightTimerHourOff", st(get, "cooler", "NightTimerHourOff", 0));
-        put(v, "TimerHour", st(get, "cooler", "TimerHourSet", 0));
-        put(v, "TimerMin", st(get, "cooler", "TimerMinSet", 0));
+        put(v, "NightTimerSet", st(get, ctx, "cooler", "NightTimerSet", 0));
+        put(v, "NightTimerHourOn", st(get, ctx, "cooler", "NightTimerHourOn", 0));
+        put(v, "NightTimerHourOff", st(get, ctx, "cooler", "NightTimerHourOff", 0));
+        put(v, "TimerHour", st(get, ctx, "cooler", "TimerHourSet", 0));
+        put(v, "TimerMin", st(get, ctx, "cooler", "TimerMinSet", 0));
         put(v, strcmp(what, "night_on") == 0 ? "NightTimerHourOn" : "NightTimerHourOff", (uint32_t)a);
     } else {
         return CALI_CTL_NONE;
@@ -318,22 +331,22 @@ static void zones_real(vals_t *v, uint32_t b) {
 }
 
 /* control._saved_zones: every real zone at its reported level 0-11, else unchanged */
-static void zones_saved(vals_t *v, cali_ctl_get_t get) {
+static void zones_saved(vals_t *v, cali_ctl_get_ctx_t get, void *ctx) {
     for (size_t i = 0; i < N_OF(CALI_LIGHT_ZONE_FIELDS); i++) {
         const char *z = CALI_LIGHT_ZONE_FIELDS[i];
         uint32_t x;
-        put(v, z, is_real_zone(z) && get("lighting", z, &x) && x <= CALI_LIGHT_MAX_SET ? x : CALI_LIGHT_UNCHANGED);
+        put(v, z, is_real_zone(z) && get(ctx, "lighting", z, &x) && x <= CALI_LIGHT_MAX_SET ? x : CALI_LIGHT_UNCHANGED);
     }
 }
 
 /* control._save_profile_args: "N" or "N <colour>" (N 1-7) -> *n, *colour (-1 = none); 0 = bad */
 static int save_args(const char *value, long *n, long *colour) {
     char s[CALI_CTL_VALUE_MAX];
-    char *t0, *t1, *t2;
+    char *t0, *t1, *t2, *rest = s;
     snprintf(s, sizeof s, "%s", value);
-    t0 = strtok(s, WS);
-    t1 = t0 ? strtok(NULL, WS) : NULL;
-    t2 = t1 ? strtok(NULL, WS) : NULL;
+    t0 = next_tok(&rest);
+    t1 = t0 ? next_tok(&rest) : NULL;
+    t2 = t1 ? next_tok(&rest) : NULL;
     if (!t0 || t2 || !int_range(t0, 1, 7, n)) return 0;
     *colour = -1;
     if (!t1) return 1;
@@ -353,16 +366,16 @@ const char *const CALI_LCFG_KEYS[CALI_LCFG_N] = {"WakeupTimestamp", "WakeupLight
 #define LCFG_SET(c, k, x) ((c)->v[k] = (x), (c)->have |= 1u << (k))
 
 /* semantics.lighting_config(None, state) over get(): the carried keys, then this frame's own config */
-void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out) {
+void cali_light_cfg_ctx(cali_ctl_get_ctx_t get, void *ctx, cali_light_cfg_t *out) {
     uint32_t mode, pn, lv, ts;
     int p, l;
     memset(out, 0, sizeof *out);
     for (int k = 0; k < CALI_LCFG_N; k++)
-        if (get("lighting", CALI_LCFG_KEYS[k], &out->v[k])) out->have |= 1u << k;
-    if (!get("lighting", "Mode", &mode)) return;
-    p = get("lighting", "ProfileNumber", &pn);
-    l = get("lighting", "LightValue", &lv);
-    if (mode == CALI_LIGHT_MODE_WAKEUP_TIME && l && get("lighting", "Timestamp", &ts)) {
+        if (get(ctx, "lighting", CALI_LCFG_KEYS[k], &out->v[k])) out->have |= 1u << k;
+    if (!get(ctx, "lighting", "Mode", &mode)) return;
+    p = get(ctx, "lighting", "ProfileNumber", &pn);
+    l = get(ctx, "lighting", "LightValue", &lv);
+    if (mode == CALI_LIGHT_MODE_WAKEUP_TIME && l && get(ctx, "lighting", "Timestamp", &ts)) {
         LCFG_SET(out, CALI_LCFG_WAKE_TS, ts);
         LCFG_SET(out, CALI_LCFG_WAKE_LV, lv);
     } else if (mode == CALI_LIGHT_MODE_SET_PROFILE && p && pn == CALI_LIGHT_PROFILE_DOOR_CONTACT && l) {
@@ -375,17 +388,17 @@ void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out) {
     }
 }
 
-int cali_light_reports_state(cali_ctl_get_t get) {
+int cali_light_reports_state_ctx(cali_ctl_get_ctx_t get, void *ctx) {
     uint32_t mode, pn;
     int p;
-    if (!get("lighting", "Mode", &mode)) return 0;
-    p = get("lighting", "ProfileNumber", &pn);
+    if (!get(ctx, "lighting", "Mode", &mode)) return 0;
+    p = get(ctx, "lighting", "ProfileNumber", &pn);
     if (mode == CALI_LIGHT_MODE_SET_BRIGHTNESS) return !(p && pn >= 1 && pn <= 7);
     return mode == CALI_LIGHT_MODE_SET_PROFILE && !(p && pn == CALI_LIGHT_PROFILE_DOOR_CONTACT);
 }
 
 /* control._lighting (wakeup: p_wakeup) + preface_for + commit_for */
-static int b_lighting(const char *what, const char *value, cali_ctl_get_t get, cali_ctl_plan_t *p) {
+static int b_lighting(const char *what, const char *value, cali_ctl_get_ctx_t get, void *ctx, cali_ctl_plan_t *p) {
     vals_t *v = &s_v;
     long n, colour;
     int on;
@@ -407,11 +420,11 @@ static int b_lighting(const char *what, const char *value, cali_ctl_get_t get, c
             put(&s_c, "Mode", CALI_LIGHT_MODE_SET_COLOR);
             put(&s_c, "Timestamp", 0);
             put(&s_c, "LightValue", (uint32_t)colour);
-            zones_saved(&s_c, get);
+            zones_saved(&s_c, get, ctx);
             if (add(p, "lighting", &s_c, 0) || add_commit(p)) return CALI_CTL_BAD_VALUE;
         }
         put(v, "ProfileNumber", (uint32_t)n);
-        zones_saved(v, get);
+        zones_saved(v, get, ctx);
     } else if (strcmp(what, "door_contact") == 0) {
         if ((on = onoff(value)) < 0) return CALI_CTL_BAD_VALUE;
         put(v, "Mode", CALI_LIGHT_MODE_SET_PROFILE);
@@ -467,7 +480,7 @@ static int wake_areas(char *s, uint32_t *areas) {
 /* control.wakeup_request over semantics.wakeup_config(cfg): 1 ok, 0 malformed (ValueError).
  * *switched: an on/off token was given (command_precondition's R5 test). */
 static int wake_request(const char *value, const cali_light_cfg_t *cfg, wake_t *w, int *switched) {
-    char s[CALI_CTL_VALUE_MAX], k[8], *tok, *pos[3] = {NULL, NULL, NULL};
+    char s[CALI_CTL_VALUE_MAX], k[8], *tok, *rest = s, *pos[3] = {NULL, NULL, NULL};
     int npos = 0, ntok = 0, timed = 0, known = wake_known(cfg);
     long b;
     uint32_t ts = cfg->v[CALI_LCFG_WAKE_TS], lv = cfg->v[CALI_LCFG_WAKE_LV];
@@ -489,7 +502,7 @@ static int wake_request(const char *value, const cali_light_cfg_t *cfg, wake_t *
     }
     *switched = 0;
     snprintf(s, sizeof s, "%s", value);
-    for (tok = strtok(s, WS); tok; tok = strtok(NULL, WS)) {
+    for (tok = next_tok(&rest); tok; tok = next_tok(&rest)) {
         ntok++;
         norm(tok, k, sizeof k);
         if (strcmp(k, "on") == 0 || strcmp(k, "off") == 0) {
@@ -527,7 +540,7 @@ static int64_t next_wakeup(long h, long m, int64_t now) {
 }
 
 /* command_precondition's wake-up gates, then the Mode-20 frame (dg/h.m0) + commit */
-static int p_wakeup(const char *value, int64_t now, cali_ctl_get_t get, cali_ctl_plan_t *p) {
+static int p_wakeup(const char *value, int64_t now, cali_ctl_get_ctx_t get, void *ctx, cali_ctl_plan_t *p) {
     vals_t *v = &s_v;
     cali_light_cfg_t cfg;
     wake_t w;
@@ -535,7 +548,7 @@ static int p_wakeup(const char *value, int64_t now, cali_ctl_get_t get, cali_ctl
     int64_t ts;
     /* ponytail: a >= 64-byte value is BAD here even when Python would parse it (web.c caps the value at 63) */
     if (strlen(value) >= CALI_CTL_VALUE_MAX) return CALI_CTL_BAD_VALUE;
-    cali_light_cfg(get, &cfg);
+    cali_light_cfg_ctx(get, ctx, &cfg);
     if (!wake_request(value, &cfg, &w, &switched)) return CALI_CTL_BAD_VALUE;
     if (w.enabled && !w.areas) {
         p->reason = CALI_REASON_WAKEUP_NO_AREA;
@@ -586,56 +599,56 @@ static int is_onoff_command(const char *fn, const char *what) {
     return 0;
 }
 
-static const char *gate(const char *fn, const char *what, const char *value, cali_ctl_get_t get) {
+static const char *gate(const char *fn, const char *what, const char *value, cali_ctl_get_ctx_t get, void *ctx) {
     uint32_t x;
     long n;
     int cooler = strcmp(fn, "cooler") == 0, lighting = strcmp(fn, "lighting") == 0;
     if (is_onoff_command(fn, what) && onoff(value) < 0) return CALI_REASON_NOT_ONOFF;   /* R3 */
     if (lighting && strcmp(what, "roof-reading") == 0 && py_int(value, &n) && n > 0 &&
-        get("roof", "Position", &x))
+        get(ctx, "roof", "Position", &x))
         for (size_t i = 0; i < N_OF(CALI_ROOF_CLOSED_POSITIONS); i++)
             if (x == CALI_ROOF_CLOSED_POSITIONS[i]) return CALI_REASON_ROOF_READING;
     if (cooler && (strcmp(what, "timer_set") == 0 || strcmp(what, "timer_start") == 0) &&
-        get("cooler", "State", &x) && x == 1)
+        get(ctx, "cooler", "State", &x) && x == 1)
         return CALI_REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF;
     if (cooler && (strcmp(what, "mode") == 0 || strcmp(what, "night_on") == 0 || strcmp(what, "night_off") == 0) &&
-        get("cooler", "State", &x) && x == 0)
+        get(ctx, "cooler", "State", &x) && x == 0)
         return CALI_REASON_QUIET_NEEDS_FRIDGE_ON;
     /* R4: `not states.get("cooler")` — a decoded cooler frame always carries State (byte 0) */
-    if (cooler && (strcmp(what, "night_on") == 0 || strcmp(what, "night_off") == 0) && !get("cooler", "State", &x))
+    if (cooler && (strcmp(what, "night_on") == 0 || strcmp(what, "night_off") == 0) && !get(ctx, "cooler", "State", &x))
         return CALI_REASON_COOLER_STATE_UNKNOWN;
     if (strcmp(fn, "campingmode") == 0 && (strcmp(what, "lights") == 0 || strcmp(what, "usb") == 0) &&
-        get("campingmode", "State", &x) && x == 0)
+        get(ctx, "campingmode", "State", &x) && x == 0)
         return CALI_REASON_CAMPING_NEEDS_MASTER;
     if (strcmp(fn, "airheater") == 0) {   /* app 5.4.0: ON under ErrorCode 5, run time under permanent, time while armed */
-        if (strcmp(what, "power") == 0 && onoff(value) == 1 && get("airheater", "ErrorCode", &x) && x == 5)
+        if (strcmp(what, "power") == 0 && onoff(value) == 1 && get(ctx, "airheater", "ErrorCode", &x) && x == 5)
             return CALI_REASON_AIRHEATER_NOT_POSSIBLE;
-        if (strcmp(what, "runtime") == 0 && get("airheater", "PermanentOperation", &x) && x == 1)
+        if (strcmp(what, "runtime") == 0 && get(ctx, "airheater", "PermanentOperation", &x) && x == 1)
             return CALI_REASON_AIRHEATER_RUNTIME_PERMANENT;
-        if (strcmp(what, "timer") == 0 && get("airheater", "OperationModeAirHeater", &x) && x == 3)
+        if (strcmp(what, "timer") == 0 && get(ctx, "airheater", "OperationModeAirHeater", &x) && x == 3)
             return CALI_REASON_AIRHEATER_TIMER_ARMED;
     }
     if (strcmp(fn, "energy") == 0 && strcmp(what, "mode") == 0) {
         char k[CALI_CTL_VALUE_MAX];
-        if (get("energy", "EnergyModeNotSelectable", &x) && x == 1) return CALI_REASON_ENERGY_LOCKED;
+        if (get(ctx, "energy", "EnergyModeNotSelectable", &x) && x == 1) return CALI_REASON_ENERGY_LOCKED;
         /* ECO only with PvInstalled = 1, as the app offers it; unknown refuses */
         norm(value, k, sizeof k);
-        if (strcmp(k, "eco") == 0 && !(get("energy", "PvInstalled", &x) && x == 1))
+        if (strcmp(k, "eco") == 0 && !(get(ctx, "energy", "PvInstalled", &x) && x == 1))
             return CALI_REASON_ENERGY_ECO_NEEDS_SOLAR;
     }
     /* command_precondition's favourite rule over the latch (semantics.lighting_config): refuse only a
      * slot the unit positively reported empty */
     if (lighting && strcmp(what, "profile") == 0 && py_int(value, &n) && n >= 1 && n <= 7) {
         cali_light_cfg_t cfg;
-        cali_light_cfg(get, &cfg);
+        cali_light_cfg_ctx(get, ctx, &cfg);
         if ((cfg.have >> CALI_LCFG_FAVS & 1u) && !(cfg.v[CALI_LCFG_FAVS] >> (n - 1) & 1u))
             return CALI_REASON_FAVOURITE_EMPTY;
     }
     return NULL;
 }
 
-void cali_ctl_plan(const char *fn, const char *what, const char *value, int64_t local_now,
-                   cali_ctl_get_t get, cali_ctl_plan_t *out) {
+void cali_ctl_plan_ctx(const char *fn, const char *what, const char *value, int64_t local_now,
+                       cali_ctl_get_ctx_t get, void *ctx, cali_ctl_plan_t *out) {
     memset(out, 0, sizeof *out);
     if (!ctl_char(fn)) {
         out->rc = CALI_CTL_ELSEWHERE;
@@ -647,12 +660,12 @@ void cali_ctl_plan(const char *fn, const char *what, const char *value, int64_t 
             out->rc = CALI_CTL_ELSEWHERE;
             out->reason = CALI_REASON_WAKEUP_CLOCK;
         } else {
-            out->rc = p_wakeup(value, local_now, get, out);
+            out->rc = p_wakeup(value, local_now, get, ctx, out);
         }
         if (out->rc != CALI_CTL_OK) out->n = 0;
         return;
     }
-    out->reason = gate(fn, what, value, get);
+    out->reason = gate(fn, what, value, get, ctx);
     if (out->reason) {
         out->rc = CALI_CTL_REFUSED;
         return;
@@ -664,12 +677,26 @@ void cali_ctl_plan(const char *fn, const char *what, const char *value, int64_t 
         out->rc = CALI_CTL_BAD_VALUE;
         return;
     }
-    if (strcmp(fn, "cooler") == 0) out->rc = b_cooler(what, value, get, out);
+    if (strcmp(fn, "cooler") == 0) out->rc = b_cooler(what, value, get, ctx, out);
     else if (strcmp(fn, "campingmode") == 0) out->rc = b_camping(what, value, out);
     else if (strcmp(fn, "energy") == 0) out->rc = b_energy(what, value, out);
     else if (strcmp(fn, "airheater") == 0) out->rc = b_airheater(what, value, out);
-    else out->rc = b_lighting(what, value, get, out);
+    else out->rc = b_lighting(what, value, get, ctx, out);
     if (out->rc != CALI_CTL_OK) out->n = 0;
+}
+
+/* The old callback-only API: the callback rides through ctx (its address; a function pointer is no void *) */
+static int via_get(void *ctx, const char *fn, const char *field, uint32_t *out) {
+    return (*(const cali_ctl_get_t *)ctx)(fn, field, out);
+}
+
+void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out) { cali_light_cfg_ctx(via_get, &get, out); }
+
+int cali_light_reports_state(cali_ctl_get_t get) { return cali_light_reports_state_ctx(via_get, &get); }
+
+void cali_ctl_plan(const char *fn, const char *what, const char *value, int64_t local_now,
+                   cali_ctl_get_t get, cali_ctl_plan_t *out) {
+    cali_ctl_plan_ctx(fn, what, value, local_now, via_get, &get, out);
 }
 
 int cali_ctl_write_ok(uint16_t chr, size_t len) {

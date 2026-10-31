@@ -15,7 +15,7 @@ is not built yet: every requirement is `open` until its implementation and test 
    except the pop-top roof, plus Siri and Shortcuts.
 2. **Satellite upgrade.** Set up a freshly flashed satellite by QR code. From then on the app
    picks the best path by itself: Bluetooth near the van, the satellite over the van WiFi or
-   Tailscale (later LoRa) far away.
+   {term}`Tailscale` (later LoRa) far away.
 3. **Later.** The pop-top roof (after its live test at the van), widgets, and distribution beyond
    the owner's iPhone.
 
@@ -28,7 +28,7 @@ is not built yet: every requirement is `open` until its implementation and test 
 :status: open
 :tags: ios
 
-The app connects to the camper unit directly over Bluetooth Low Energy (CoreBluetooth). It needs
+The app connects to the camper unit directly over Bluetooth Low Energy ({term}`CoreBluetooth`). It needs
 no satellite, no Pi and no network for any phase-1 function.
 ```
 
@@ -39,8 +39,11 @@ no satellite, no Pi and no network for any phase-1 function.
 
 The app guides the first pairing: it tells the user to start pairing on the camper panel and to
 type the 6-digit passkey from the camper screen into the iOS pairing dialog. On a stale bond it
-guides the user to *Settings → Bluetooth → Forget This Device* and back. (iOS runs the pairing and
-owns the bond; an app cannot delete a bond itself.)
+guides the user to *Settings → Bluetooth → Forget This Device* and back. An iPhone that is already
+paired with the camper (for example through the vendor app) needs no new pairing; both apps share
+the bond. The real camper always asks for a passkey when it pairs; a pairing prompt without a code
+is not the camper and is cancelled.
+(iOS runs the pairing and owns the bond; an app cannot delete a bond itself.)
 ```
 
 ```{req} Protocol version 2 only
@@ -171,7 +174,7 @@ Amber marks light, green marks "on". The app follows the iPhone's light and dark
 :tags: ios
 
 Every text exists in English and German and uses the unit's own vocabulary (for example
-*Flüstermodus*, *Sofortheizen*).
+{term}`Flüstermodus`, {term}`Sofortheizen`).
 ```
 
 ### Satellite upgrade (phase 2)
@@ -181,7 +184,7 @@ Every text exists in English and German and uses the unit's own vocabulary (for 
 :status: open
 :tags: ios
 
-The app finds a satellite on the local network by mDNS and talks to it over the same HTTP API as
+The app finds a satellite on the local network by {term}`mDNS` and talks to it over the same HTTP API as
 the web UI (`/api/state`, `/api/command`, …). It picks the path in this order: Bluetooth when the
 unit is in range, the satellite on the van WiFi, the satellite over Tailscale. Siri uses the same
 order.
@@ -194,8 +197,11 @@ order.
 
 A freshly flashed satellite shows a QR code on its screen. The user scans it with the app. The app
 joins the satellite's first-time-setup WiFi hotspot and guides the WiFi setup, the camper pairing
-and the sensors over it. The QR code carries no secrets: only the device id, the setup hotspot
-(the standard `WIFI:` form with a one-time password) and the device's pairing endpoint.
+and the sensors over it. With the free Apple account ({need}`AD_IOS_FREE_ACCOUNT`) the iPhone
+camera joins the hotspot from the QR code and the app takes over once the iPhone is on it. The QR
+code carries no long-lived secret: only the device id, the setup hotspot (the standard `WIFI:` form
+with a one-time password) and the device's pairing endpoint. The satellite makes a new hotspot
+password each time it opens the setup hotspot and drops it when it leaves setup mode.
 ```
 
 ```{req} Secrets only after a pairing code
@@ -206,7 +212,7 @@ and the sensors over it. The QR code carries no secrets: only the device id, the
 A device hands over its secrets (for example the keys for a LoRa network server) only after the
 user enters the 6-digit code that the device shows on its screen for a short time. The device sends
 them once; wrong codes and the timeout close the window. The app keeps the secrets in the iOS
-Keychain. A setup link or QR code never overwrites stored secrets; only a new pairing does.
+{term}`Keychain`. A setup link or QR code never overwrites stored secrets; only a new pairing does.
 ```
 
 ### Testing
@@ -222,9 +228,6 @@ power-save rules against a fake transport and the Siri action resolution; UI and
 the simulator over a fake transport in light and dark; a real iPhone against the fake unit
 peripheral; the van with an owner checklist; and a manual Siri checklist in both languages.
 ```
-
-The checks of the Bluetooth link on a real iPhone are in {doc}`ios-app-radio-checklist`.
-What a Mac needs to build and test the app is in {doc}`ios-development-setup`.
 
 ## Architecture decisions
 
@@ -251,14 +254,23 @@ flow are Swift code against CoreBluetooth, because iOS runs pairing and owns the
 That code is tested against the same parity rules as the C session.
 ```
 
-```{decision} The bond belongs to the iPhone
+```{decision} The bond belongs to the iPhone, shared with the vendor app
 :id: AD_IOS_SHARED_BOND
 :status: accepted
 :tags: ios
 :links: R_IOS_PAIRING
 
-iOS keeps one bond per accessory for the whole phone. On an iPhone that already uses the vendor
-app with this camper, the app uses that bond and needs no new pairing. A new user pairs once.
+iOS keeps one bond per accessory for the whole phone, so the app and the vendor app work in
+parallel on the same iPhone. The app adopts a camper during the user-started setup in two cases:
+it sees the pairing happen (the first read of a protected characteristic is refused, iOS asks for
+the passkey, the read then succeeds), or the iPhone is already paired with the camper and the read
+succeeds at once. The app never adopts a device in the background and never switches silently to
+another one.
+
+Known risk: iOS does not tell an app whether a link is encrypted. In the second case a nearby
+look-alike device that serves the data without encryption could be adopted, if the user picks it
+from the list during the first setup. The setup lists every candidate with its signal strength,
+and the real camper is the one the user is standing next to.
 ```
 
 ```{decision} SwiftUI, iOS 17 or later
@@ -267,8 +279,8 @@ app with this camper, the app uses that bond and needs no new pairing. A new use
 :tags: ios
 :links: R_IOS_LOOK
 
-The app is written in SwiftUI with Swift strict concurrency and targets iOS 17 or later (App
-Intents with App Shortcuts, Observation).
+The app is written in {term}`SwiftUI` with Swift strict concurrency and targets iOS 17 or later (App
+Intents with App Shortcuts, {term}`Observation`).
 ```
 
 ```{decision} The app lives in this repository
@@ -313,7 +325,7 @@ test counterpart, not as a product path.
 
 The prototype runs as a development build on the owner's iPhone with a free Apple account: it is
 re-installed every 7 days. App Intents and the Bluetooth background mode work without a paid
-account. Widgets (App Groups) and joining a WiFi from the app (Hotspot Configuration) need the paid
+account. Widgets (App Groups) and joining a WiFi from the app ({term}`Hotspot Configuration`) need the paid
 account and come with it. Until then the setup QR code uses the standard `WIFI:` format, so the
 iPhone camera can join the satellite's hotspot.
 ```

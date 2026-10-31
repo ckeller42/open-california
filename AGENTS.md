@@ -101,6 +101,7 @@ python3 -m tools.trace_compare ~/ble.jsonl           # replay that trace through
 python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_runner_fake.py tests/firmware/test_session_fake.py tests/firmware/test_control_parity.py -v   # firmware pure-C tiers, no BLE, macOS OK
 python3 -m tools.gen_control_vectors --check && python3 -m tools.gen_c_dict --check   # ESP control vectors + control_consts.h fresh (regenerate after any calictl.control change)
 tools/ci.sh linux                                    # the C tests in CI's gcc (Linux amd64 + -m32, Docker): catches what Apple clang lets through
+tools/ci.sh docs                                     # doxygen + `sphinx -W` site build in Docker (the Mac has no sphinx); skill `document-c-api`
 make -C firmware/host cali-host && python -m pytest tests/firmware -v   # firmware host+NimBLE tier (Linux only; tools/ci.sh firmware)
 docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build'   # firmware QEMU tier build
 python -m tools.ux_gallery --esp --out docs/screenshots   # ESP page shots for the docs (stub + fixtures, no firmware)
@@ -119,11 +120,11 @@ run, so `main` silently flashes the previous build (`gh run rerun <id>` first). 
 `tools/ci.sh` covers ci.yml's `pre-commit` (via `pre-commit run --all-files`, incl. the whole-tree
 vendor/MAC/VIN guard) + `test` (one python, not the 3.11–3.13 matrix); its pytest run also covers
 `codec-parity` (C tests only with a C compiler) and `gui-e2e` (only with Playwright + Chromium, else
-they skip). **Only GitHub runs:** `install-script` (shellcheck), `docs` (the `sphinx -W` site build on
-every PR — locally `sh docs/build_site.sh`), `pairing-real-stack` (calictl's real `BluezTransport` vs
+they skip). **Only GitHub runs:** `install-script` (shellcheck), `pairing-real-stack` (calictl's real `BluezTransport` vs
 the Bumble fake unit over real BlueZ in a VM, `tests/realstack/vm.sh`; not a required check yet), the
 firmware jobs, and — on push to `main` only — `docs.yml` (the same build + Pages deploy) and
 `screenshots.yml` (commits `docs/screenshots` to `main` with `[skip ci]`).
+The `docs` job (doxygen + the `sphinx -W` site build on every PR) runs locally as `tools/ci.sh docs`.
 Test layers + harnesses: `docs/simulation-and-testing.md`.
 
 **Required checks (keep stable; verify in repo settings):** `test (3.11)`, `test (3.12)`,
@@ -168,8 +169,9 @@ buspi's own adapter). Warm the fast session first with `POST /api/session {"acti
   heartbeat ticks through the move, no `ARM_DELAY_S`. The web roof page streams STOP frames while open so a
   press reuses the counter. Release → lock-free `_roof_stop`; 1000 ms re-press debounce; auto-stop at end of
   travel/limit. See `protocol-alignment.md` + `protocol-sequences`.
-- **Reads go stale; the parked unit deep-sleeps** and stops advertising (access is intermittent; `serve`
-  persists last-state + "as of", the UI shows an offline banner). Water is measurement-gated: a parked read
+- **Reads go stale; access is intermittent.** A parked unit keeps advertising (the old "deep-sleeps for
+  days" reading was a Bluetooth setup fault on buspi), but with camping off and no shore power it ends links after ~30 s, and
+  range or our own BLE stack can fail. `serve` persists last-state + "as of"; the UI shows an offline banner. Water is measurement-gated: a parked read
   may return the stale latch FreshWaterLevel = 1, which `freshness.implausible_water_drop` (+ C twins) holds
   back (#274) — a deliberate deviation from the app. See `value-freshness.md`.
 - **`vehicle` (char 1004)** is **hand-added to `dictionary.yaml`, NOT emitted by `extract_protocol` —

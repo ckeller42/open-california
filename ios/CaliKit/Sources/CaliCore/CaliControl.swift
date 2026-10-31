@@ -96,11 +96,11 @@ public enum CaliControl {
 
         let reason = plan.reason.map { String(cString: $0) }
         switch Int32(plan.rc) {
-        case Int32(CALI_CTL_OK):
+        case Int32(CALI_CTL_OK.rawValue):
             return .frames(frames(plan))
-        case Int32(CALI_CTL_REFUSED):
+        case Int32(CALI_CTL_REFUSED.rawValue):
             return plan.pull == 1 ? .needsLightConfig : .refused(reason ?? "")
-        case Int32(CALI_CTL_ELSEWHERE):
+        case Int32(CALI_CTL_ELSEWHERE.rawValue):
             return .elsewhere(reason ?? "")
         default:  // BAD_VALUE, NONE
             return .badValue
@@ -168,7 +168,7 @@ public enum CaliControl {
 
     /// `CALI_LCFG_KEYS`, in its order.
     static let lightConfigKeys: [String] = withUnsafeBytes(of: CALI_LCFG_KEYS) { raw in
-        raw.bindMemory(to: UnsafePointer<CChar>?.self).prefix(Int(CALI_LCFG_N)).map { String(cString: $0!) }
+        raw.bindMemory(to: UnsafePointer<CChar>?.self).prefix(Int(CALI_LCFG_N.rawValue)).map { String(cString: $0!) }
     }
 
     private static func frames(_ plan: cali_ctl_plan_t) -> [ControlFrame] {

@@ -15495,6 +15495,326 @@
    }
   },
   {
+   "id": "lighting/save_profile/\"  3 \\t amber  \"@seed",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "  3 \t amber  ",
+   "state": "seed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000300000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"  3 \\t amber  \"@empty",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "  3 \t amber  ",
+   "state": "empty",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0306000000000003eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0304000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"  3 \\t amber  \"@roof_closed",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "  3 \t amber  ",
+   "state": "roof_closed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000300000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"  3 \\t amber  \"@roof_closed_14",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "  3 \t amber  ",
+   "state": "roof_closed_14",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000300000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"  3 \\t amber  \"@roof_open",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "  3 \t amber  ",
+   "state": "roof_open",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000300000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"  3 \\t amber  \"@fav_3_empty",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "  3 \t amber  ",
+   "state": "fav_3_empty",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000300000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"  3 \\t amber  \"@fav_request_echo",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "  3 \t amber  ",
+   "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000300000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"  3 \\t amber  \"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "  3 \t amber  ",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000300000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"  3 \\t amber  \"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "  3 \t amber  ",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000300000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"  3 \\t amber  \"@lighting_levels",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "  3 \t amber  ",
+   "state": "lighting_levels",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0306000000000003e5000000eb0eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0304000000000000e5000000eb0eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/door_contact/\"on\"@seed",
    "function": "lighting",
    "what": "door_contact",
@@ -27018,6 +27338,210 @@
    "function": "lighting",
    "what": "wakeup",
    "value": "x",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" 08:15\\t 1,3  5 20 on \\t\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " 08:15\t 1,3  5 20 on \t",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff841555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" 08:15\\t 1,3  5 20 on \\t\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " 08:15\t 1,3  5 20 on \t",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff841555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" 08:15\\t 1,3  5 20 on \\t\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " 08:15\t 1,3  5 20 on \t",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff843555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" 08:15\\t 1,3  5 20 on \\t\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " 08:15\t 1,3  5 20 on \t",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff843555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" 08:15\\t 1,3  5 20 on \\t\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " 08:15\t 1,3  5 20 on \t",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff841555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" 08:15\\t 1,3  5 20 on \\t\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " 08:15\t 1,3  5 20 on \t",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff842555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" \\t \"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " \t ",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" \\t \"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " \t ",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" \\t \"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " \t ",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" \\t \"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " \t ",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" \\t \"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " \t ",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\" \\t \"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": " \t ",
    "state": "wakeup_frame",
    "local_now": 1791354615,
    "expect": {

@@ -73,8 +73,8 @@ traceability table on the index page):
   - Daemon poll cycle
   - Lock, read, decode, interpret, guards, cache with as-of time, fan out, offline path.
 * - {need}`S_SEQ_SLEEP`
-  - Reachability / deep-sleep
-  - A parked unit stops advertising, the daemon serves the last known state.
+  - Reachability
+  - The unit cannot be reached, the daemon serves the last known state.
 * - {need}`S_SEQ_POWER_SAVE_HANGUP`
   - Power-save hang-up
   - Camping off, no shore power: the unit ends each link 30 s in, the 7 s reconnect cooldown.
@@ -368,8 +368,8 @@ an asleep unit keeping its bond, and `radio_busy`. That job is not yet a require
 unit's pairing behaviour is cross-checked against the vendor app ([protocol-crosscheck-applab.md](https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html),
 "Pairing"). On the real unit, a re-pair after a unit-side Bluetooth reset hit `AlreadyExists`
 from the stale local bond; the Pair() recovery above handles that case ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)).
-CI does **not** cover the real unit's radio behaviour (RSSI jitter, advertising policy and
-deep sleep, WiFi coexistence on buspi, other clients starving LE connects); a full live unbond
+CI does **not** cover the real unit's radio behaviour (RSSI jitter, advertising policy,
+WiFi coexistence on buspi, other clients starving LE connects); a full live unbond
 and re-pair with the wizard has not been run. Details: [guided-pairing.md](https://ckeller42.github.io/open-california/business-logic/guided-pairing.html); owner guide:
 {doc}`howto-pair-your-camper`; test layers: {doc}`simulation-and-testing`.
 
@@ -1142,20 +1142,22 @@ sequenceDiagram
 ```
 
 **Evidence.** Live-verified: this is the loop buspi runs, and the outcome log is
-how telemetry gaps are classified after the fact (deep-sleep rows versus connection-loss rows
+how telemetry gaps are classified after the fact (`asleep` rows versus connection-loss rows
 versus no rows at all). The pairing skip, the lock ordering, the cache persistence across a
 restart and the offline flag are covered by `tests/test_web_serve.py`. The water guard is
 described in [value-freshness.md](https://ckeller42.github.io/open-california/business-logic/value-freshness.html).
 
-## Reachability / deep-sleep
+## Reachability
 
-```{spec} Parked deep-sleep makes access intermittent
+```{spec} An unreachable unit makes access intermittent
 :id: S_SEQ_SLEEP
 :status: live-verified
 :links: R_SESSION_SUPERVISOR, R_SERVE_STATE_CACHE
 
-**Contract.** Parked and idle, the unit BLE-deep-sleeps and stops advertising. Only physical use
-(door, ignition) wakes it. Access is therefore inherently intermittent:
+**Contract.** The unit is not always reachable: the van is out of range, the unit ends links in
+power-save while camping mode is off ({need}`S_SEQ_POWER_SAVE_HANGUP`), or Bluetooth fails on
+the central's side. A parked unit itself keeps advertising: the satellite's rest probe reaches it
+every 30 minutes over two weeks parked. Access is therefore intermittent:
 
 * A connect exhausts its retries and raises `ConnectionUnavailable`. The poll is skipped and
   logged `asleep` or `ble_error` in the outcome log.
@@ -1164,22 +1166,23 @@ described in [value-freshness.md](https://ckeller42.github.io/open-california/bu
 * `serve` keeps serving the persisted last-known state with an "as of" time, and the web UI
   shows an offline banner ({need}`S_SEQ_POLL`). Nothing is published to MQTT meanwhile, so the
   Home Assistant sensors expire and go unavailable ({need}`S_SEQ_MQTT`).
-* Once the unit advertises again, the next connect succeeds and polling resumes.
+* Once a connect succeeds again, polling resumes.
 ```
 
 ```mermaid
 sequenceDiagram
     participant C as buspi (serve)
     participant U as Camper unit
-    Note over U: parked and idle, BLE deep-sleep (no advertising)
+    Note over U: out of reach (range, power-save hang-up, a central-side BLE fault)
     C--xU: connect, 3 attempts fail, ConnectionUnavailable
     Note over C: supervisor backs off, state asleep, serve shows last-known state and the offline banner
-    Note over U: door or ignition wakes it, advertising resumes
-    U-->>C: advertising
+    Note over C: the next connect after the backoff
     C->>U: connect OK, polls resume (fresh reads)
 ```
 
-**Evidence.** Live-verified on the real unit ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). Once awake, with buspi
+**Evidence.** The supervisor behaviour is live-verified on the real unit ([evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)).
+A parked unit keeps advertising; the multi-day outages buspi once saw came from a Bluetooth setup
+fault on buspi, not from the unit. With buspi
 holding the session and the heartbeat ticking, the link is stable, also when the van is locked.
 A unit with **Bluetooth disabled in its own settings** stays unreachable for days even while the
 van is in use. That is why `ConnectionUnavailable`'s message lists "Bluetooth disabled in the

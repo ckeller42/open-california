@@ -52,9 +52,9 @@ Now [Range validation](https://ckeller42.github.io/open-california/protocol-sequ
 Now [Fresh state read under heartbeat](https://ckeller42.github.io/open-california/protocol-sequences.html#fresh-state-read-under-heartbeat)
 (`S_SEQ_READ`).
 
-## 5. Reachability / deep-sleep
+## 5. Reachability
 
-Now [Reachability / deep-sleep](https://ckeller42.github.io/open-california/protocol-sequences.html#reachability-deep-sleep)
+Now [Reachability](https://ckeller42.github.io/open-california/protocol-sequences.html#reachability)
 (`S_SEQ_SLEEP`).
 
 ## 6. Added with the architecture restructure

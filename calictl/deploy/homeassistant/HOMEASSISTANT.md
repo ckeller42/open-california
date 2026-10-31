@@ -18,7 +18,7 @@ serves several centrals — the single-owner rule is the Pi's adapter).
 **Phone app alongside:** the camper unit serves several centrals at once
 (phone app + buspi + ESP connected simultaneously, captured 2026-10-10), so
 the official VW app being connected does not lock calictl out. If the unit is
-unreachable (deep sleep while parked), calictl retries and republishes state
+unreachable (out of range, power-save with camping mode off, a BLE fault), calictl retries and republishes state
 once it is back; sensors in HA simply stop updating for that window rather
 than showing wrong data.
 

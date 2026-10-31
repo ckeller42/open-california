@@ -163,8 +163,8 @@ and retries silently — so they are calictl's own contribution, not a mirror of
 
 ## Not testable in the lab (unit-side; keep DEVICE/CAPTURE tier)
 
-`0x0E` link drop on out-of-range values; water measurement-gating / stale [latch](https://ckeller42.github.io/open-california/glossary.html#term-Water-latch); deep-sleep and
-advertising stop when parked; real motor withhold (~3 s) and travel time; `1502` Mode-4 ramp
+`0x0E` link drop on out-of-range values; water measurement-gating / stale [latch](https://ckeller42.github.io/open-california/glossary.html#term-Water-latch); the power-save
+hang-up with camping mode off; real motor withhold (~3 s) and travel time; `1502` Mode-4 ramp
 notifications; readback-is-an-echo; RPA rotation.
 
 ## Automated recordings (harness)

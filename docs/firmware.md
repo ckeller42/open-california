@@ -7,7 +7,8 @@ independently of `calictl` and {term}`buspi`. It is the device target of the pai
 
 The full build and porting detail (every NimBLE/Bumble adaptation, exact pins, warnings policy) is
 in [`firmware/README.md`](https://github.com/ckeller42/open-california/blob/main/firmware/README.md)
-in the repository. This page is the reference and traceability view.
+in the repository. This page is the reference and traceability view. The C headers' API is on
+the [firmware C API](firmware-api.rst) page.
 
 ## Overview
 
@@ -242,54 +243,6 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    probe`` and returns to the mode (``off``: disconnect). A probe that cannot connect logs
    ``ok:false`` and is not retried. The probe writes nothing but the 1003 heartbeat.
 
-.. req:: BLE power experiment
-   :id: R_FW_BLE_EXP
-   :status: open
-
-   ``ble exp <phase_min> [HH-HH]`` (console; ``POST /api/ble {"exp_min":N,"from":H,"to":H}``) runs
-   the night experiment: inside the window (default 22-06, Europe/Berlin local time from SNTP or the
-   unit's clock) it cycles the modes ``hold -> quiet -> off -> hold …``, each ``phase_min`` (1-720)
-   long, with a probe at the end of every phase; outside the window the mode is ``hold``. Without a
-   wall clock it is refused (``no_time``). A viewer (``GET /api/state``, or the page load ``GET /`` / ``/app``), a mode change from outside
-   (a control command in ``quiet`` or ``off``, ``ble mode``, ``/api/ble``, pairing — also while the
-   phase-end probe runs) or, on an up link, the van's ignition (terminal 15, ``cali_ac_ignition``)
-   ends the running phase as ``aborted`` and returns to ``hold``; the cycle then holds 10 min
-   (``CALI_BX_IDLE_MS``, renewed by every further viewer poll and every tick with the ignition on, so a
-   night drive never reaches the next phase) and goes on with the next phase. The unit's own advert is
-   the sleep indicator: a sensor window (``sensors on`` only — no window runs otherwise) that sees an
-   advert whose address is the bond's identity (resolved by the controller, or an RPA resolving with
-   the bond's IRK) logs ``evt unit_adv`` ``seen:true`` on the first sighting, ``seen:false`` after
-   ``CALI_BX_GONE_MS`` (3 scan periods + one window, 185 s) without one (also from the start, when
-   never seen). A reappearance in ``quiet`` or ``off`` after a ``seen:false`` logged in that same mode
-   **with the link down** is a wake (door, ignition) and counts as activity. The first sighting is not,
-   and neither is a sighting after a gone logged with the link up, nor the adverts after the link
-   drops (our ``hold -> off`` disconnect, the unit dropping a ``quiet`` link). Each phase end logs
-   ``evt ble_phase`` with its ``dur_ms``, start/stop ``evt ble_exp``; stopping or restarting
-   mid-phase logs that phase ``aborted`` first; a refused phase-end probe logs ``evt probe`` with
-   ``ok:false``, reason ``refused``. ``ble exp off`` (``{"exp_min":0}``) ends it in ``hold``; a
-   reboot ends it too (not persisted). ``tools/esplab/soak_report.py`` polls ``/api/state`` and so
-   counts as a viewer: do not run it during an experiment night.
-
-.. req:: BLE idle policy
-   :id: R_FW_BLE_IDLE
-   :status: open
-
-   ``POST /api/ble {"idle_min":N}`` (0-60, stored in NVS key ``ble_idle``, read at boot; missing = 0;
-   the Satellite settings' *Connection* select) sets how the session idles. ``0`` (the default) =
-   ``hold``: the link stays up. ``N`` > 0: the link is held while someone is active and dropped
-   otherwise — activity is a viewer (the page load ``GET /`` or ``/app``, so the reconnect starts while the
-   page loads; ``GET /api/state``: the web UI polls it every 2 s; not ``/api/ble`` or ``/api/log``), a mode the
-   policy did not set (a control command in ``off`` switches to ``hold``, ``ble mode``, ``/api/ble``),
-   the van's ignition (terminal 15) on an up link (also during a probe), or a new setting; after
-   ``CALI_BX_IDLE_MS`` (10 min) without one the mode goes ``off`` (``evt ble_mode`` ``why`` ``idle``),
-   and every ``N`` minutes while ``off`` a :term:`Probe` reads every function (``evt probe``; skipped
-   with no bond). Activity during a probe lets it finish, then ``hold``. A running experiment
-   (``R_FW_BLE_EXP``) owns the session; the policy waits and holds 10 min after it ends. Outside
-   ``hold`` the Pi wake and an auto-camper restore see the ignition only through a probe (``R_FW_BLE_MODE``),
-   so they react up to ``N`` minutes late; a GUI opened while ``off`` shows the last probe's data until
-   the reconnect (≈1 s) and the read-all (≈6 s) are done. The reasons for the policy are in
-   ``docs/business-logic/DECISIONS.md``.
-
 .. req:: Power-save rest: no reconnect while camping is off
    :id: R_FW_BLE_REST
    :status: implemented
@@ -356,7 +309,7 @@ handling. The measurements (drop counts, delays, the tap-to-accept times) are in
    viewer the rest and all its no-rest conditions (a command in flight, the ignition on or unknown,
    a camping restore owed, camping on, shore power active or standby) work as in ``R_FW_BLE_REST``.
 
-   When a reconnect out of the rest never brings a link up (the unit deep-sleeps, so the connects
+   When a reconnect out of the rest never brings a link up (the unit is out of reach, so the connects
    fail or time out), the first such failure after the viewer is gone re-enters the rest (``evt
    rest`` ``why`` ``unreachable``) instead of backing off without end. While the viewer stays, or a
    command is in flight, the backoff goes on.
@@ -1467,17 +1420,7 @@ is touched. No chip, a failed read or no screen (host, QEMU): every member `null
 
 ## External sensors (`R_FW_SENSORS`)
 
-```{eval-rst}
-.. req:: External BLE sensors
-   :id: R_FW_SENSORS
-   :status: open
-
-   Behind exp_sensors (R_FW_EXPERIMENTAL): a 5 s passive scan window every 60 s (skipped while a
-   connect is pending or a pairing flow runs) delivers manufacturer-data adverts; configured
-   addresses decode by type (govee, victron_mppt, victron_battery) into /api/state ext.<alias> and
-   an ext SD record at most once a minute; unconfigured ones fill a 16-row seen table with
-   boot-local ids. The list (<= 16, NVS sens_list) survives the flag; keys never leave the ESP.
-```
+The requirement `R_FW_SENSORS` lives with the sensor API: see {doc}`firmware-api`.
 
 The satellite's Energy screen derives a **House load** row from the Victron chargers' `battery_current`
 and the unit's own currents; the derivation, evidence and limits are in
@@ -1740,33 +1683,22 @@ can be checked on the CoreS3 only. They are the expected behaviours; none of the
 
 ## Traceability
 
-Requirements are authored as `sphinx-needs` objects next to the code they constrain (or, where the
-implementation is C — not autodoc'd — in the docstring of the Python test module that verifies
-it, a "shim" `sphinx-needs` can parse; see `firmware/README.md`'s own traceability section for the
-human-readable version of the same trace). `docs/api.md` pulls those test modules in via
-`.. automodule::` so their objects are collected here.
+The control, pairing, Wi-Fi, web, device-feature, OTA, time, SD-log and diagnostics requirements live with their C API: see {doc}`firmware-api`.
+
+Requirements are authored as `sphinx-needs` objects next to the code they constrain. The public C
+API requirements live in the header comments of `firmware/components/cali_core/include/` (a
+`@verbatim embed:rst:leading-asterisk` block holding a `.. req::`) and render on {doc}`firmware-api`.
+The remaining ones live on this page. The verifying `.. test::` objects live in the docstrings of the
+Python test modules; `docs/api.md` pulls those modules in via `.. automodule::` so their objects are
+collected here. `firmware/README.md` has the human-readable version of the same trace.
 
 ```{eval-rst}
 .. req:: The firmware writes no control frame: its only characteristic-value write is the 1003 heartbeat
    :id: R_FW_READ_ONLY
    :status: retired
 
-   Retired: the firmware writes control frames. Superseded by ``R_FW_WRITE_ALLOWLIST`` (what may be
-   written) and ``R_FW_CONTROL_API`` (when and how); no test links here.
-
-.. req:: The firmware's control frames and gates are byte-identical to calictl's
-   :id: R_FW_CONTROL_TWIN
-   :status: implemented
-   :tags: esp32, control
-
-   For cooler, campingmode, lighting (power, zones, ``all``, ``profile``, ``save_profile`` with its
-   SET_COLOR preface, ``door_contact``), airheater and energy, the firmware shall plan exactly the
-   writes ``calictl.control`` would — the same ``command_precondition`` refusal texts, the same
-   frames from ``control.build``, the same lighting commit after each frame — on every vector of
-   ``tests/vectors/control.json`` (generated from the Python, ``--check`` in CI). The roof is
-   answered "Only via buspi or the app"; ``lighting wakeup`` follows ``R_FW_WAKEUP``. The twin is
-   ``firmware/components/cali_core/control.c`` (``cali_ctl_plan``), pure C99 over the generated
-   ``csrc/control_consts.h``.
+   Retired: the firmware writes control frames. Superseded by :need:`R_FW_WRITE_ALLOWLIST` (what may be
+   written) and :need:`R_FW_CONTROL_API` (when and how); no test links here.
 
 .. req:: The satellite sets the wake-up light with the page's clock and the unit's own config
    :id: R_FW_WAKEUP
@@ -1778,43 +1710,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    refused with the clock reason. The edit's unit-reported fields come only from the unit's own 1502
    frames on the current link; with none known the firmware shall pull them with REQUEST_CONFIG, wait
    at most ``CODEC_CONFIG_PULL_MS`` and then build or refuse with ``WAKEUP_UNKNOWN``.
-
-.. req:: The firmware writes only the five control chars at their frame length, and the 1003 heartbeat
-   :id: R_FW_WRITE_ALLOWLIST
-   :status: implemented
-   :tags: esp32, control, safety
-
-   The firmware's only characteristic-value writes shall be the ``1003`` liveness heartbeat
-   (``write_heartbeat``) and control frames to the five chars of ``CALI_CTL_CHARS``
-   (``csrc/control_consts.h``, generated from ``tools/gen_c_dict.ESP_CONTROL_FUNCTIONS``: ``1101``
-   cooler, ``1201`` camping mode, ``1501`` lighting, ``1601`` energy, ``1701`` air heater), each at
-   exactly its control frame length. One function, ``cali_ctl_write_ok``
-   (``firmware/components/cali_core/control.c``), decides it, and both the sequencer
-   (``control_run.c``, before every write) and the NimBLE transport's ``write`` (``ble_nimble.c``
-   ``t_write``, for any caller) call it. The roof's ``1401`` is never on the list (the generator
-   asserts it); no roof builder exists. CCCD writes only enable notifications.
-
-.. req:: Control commands: armed link, one at a time, station mode only
-   :id: R_FW_CONTROL_API
-   :status: implemented
-   :tags: esp32, control, web
-
-   The firmware shall accept a control command from ``POST /api/command`` (calictl's request and
-   response shape) only in station mode, and from the console ``set <fn> <what> [value]``; a
-   command is accepted only on an armed link (up ``CODEC_ARM_DELAY_MS`` with its first read-all
-   done) and when the function's state has been read on that link; it writes the planned frames
-   one at a time with response, a lighting commit at least ``CODEC_FOLLOW_DELAY_MS`` after the
-   previous ACK; it reports
-   success only after every write was ACKed, a refused write or a lost link as a failure (no
-   further frame), and gives up after ``CALI_CTL_DEADLINE_MS``; a second command while one runs
-   — or while a timed-out write still awaits its ACK — is refused (busy). The sequencer is
-   ``firmware/components/cali_core/control_run.c``, ticked by the session. ``POST /api/command``
-   (``web.c``) answers in calictl's request and response shape — ``applied`` never ``true`` (no
-   readback check), a gate's refusal as ``{"applied":false,"refused":<text>}`` — and only after the
-   sequencer's done callback: the HTTP core holds the connection (``CALI_HTTP_PENDING``, no idle
-   timeout meanwhile) so a refused or timed-out write is a 502/504, never "Sent". Outside station
-   mode (setup hotspot, setup-flow join, unprovisioned) it is ``403 setup_mode`` before anything
-   reaches the control module; ``/api/state`` reports it as ``device.control.writes``.
 
 .. req:: SM I/O capability and MITM must be set before any link exists
    :id: R_FW_IO_CAP_BEFORE_LINK
@@ -1834,96 +1729,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    firmware (and the test setup) would actually catch this class of regression, not just assert
    it away. Never compiled into a device build (``#error`` if ``ESP_PLATFORM`` is also defined).
 
-.. req:: WiFi provisioning — setup hotspot, captive portal, station join with retry, credentials in the kv store
-   :id: R_FW_WIFI_PROVISION
-
-   A satellite with no saved WiFi opens a WPA2 setup hotspot (``calictl-esp-setup``, fixed
-   passphrase, address ``192.168.4.1``) whose DNS answers every A query with its own address and whose
-   HTTP server redirects the OS captive-portal probe paths to the web UI (``http://192.168.4.1/``),
-   which opens on its WiFi-setup screen, so a phone that joins is led to it. Credentials entered there (or with the console's ``wifi set``) are validated (SSID
-   1-32 bytes, PSK 8-63 bytes — open networks unsupported), stored in the kv store (``wifi_ssid`` /
-   ``wifi_psk``) and joined as a station; on success mDNS announces ``calictl-esp.local`` and the
-   hotspot closes ``NET_AP_CLOSE_MS`` later. A failed join of credentials typed in the current setup
-   flow clears them and returns to the hotspot; credentials that joined before or were loaded from
-   flash are never wiped by a failure — the station retries on a 1 s to 60 s doubling backoff and
-   reopens the hotspot alongside after ``NET_SETUP_AFTER_MS`` (5 min) without a join. ``wifi forget``
-   / ``DELETE /api/wifi`` erase them and reopen the hotspot from any state. ``GET /api/wifi`` lists
-   networks over the hotspot and while online (a scan at most every ``NET_SCAN_MIN_INTERVAL_MS``,
-   never during a join or a BLE pairing flow). The state machine is a pure C twin of
-   ``tools/wifi_sm_ref.py`` (golden-vector parity). A board whose WiFi driver cannot start boots with
-   WiFi off and the BLE side unaffected.
-
-.. req:: A failed WiFi replacement returns to the previous, joined network by itself
-   :id: R_FW_WIFI_ROLLBACK
-   :status: implemented
-   :tags: esp32, wifi
-
-   New credentials (``POST /api/wifi`` or ``wifi set``) for a station whose current credentials have
-   joined keep those as the fallback (RAM only, never logged). If the new join fails (network not
-   found, wrong password, any other failure or the join timeout), the firmware shall restore the
-   previous credentials in RAM and in the kv store, rejoin them on the retry backoff, close the setup
-   hotspot ``NET_AP_CLOSE_MS`` after it is back, and report ``"reverted": true`` with ``last_error``
-   = the replacement's reason on ``GET /api/wifi`` until the next credential change or forget. A
-   replacement that joins drops the fallback. Without a joined network (first setup) a failed join
-   clears the typed credentials and stays in setup, as in ``R_FW_WIFI_PROVISION``.
-
-.. req:: Web pages and JSON state over a bounded, non-blocking, single-connection HTTP server
-   :id: R_FW_HTTP_STATUS
-
-   The firmware serves, on both tiers from the same C code, a WiFi recovery page at ``GET /device`` (one
-   generated byte array from ``firmware/web/index.html``, EN + DE) and ``GET /api/state``: the
-   ``fn`` object of the console's ``SNAP`` line plus the device's pairing, link, WiFi, uptime and
-   firmware version, built as one consistent snapshot into a fixed ``NET_JSON_MAX`` (8192 B) buffer
-   — an overflow answers 500, never a truncated body. The HTTP core serves one connection at a
-   time, one request each, ``Connection: close``, with bounded request/body sizes, and streams a
-   response across ticks without ever blocking or spinning the tick that also drives BLE. Its only
-   control endpoint is ``POST /api/command`` (``R_FW_CONTROL_API``), whose answer may stay pending
-   across polls (``CALI_HTTP_PENDING``) but never beyond ``CALI_HTTP_PENDING_MAX_MS``.
-
-.. req:: The satellite pairs from its web page with calictl's wizard contract, also over the setup hotspot
-   :id: R_FW_PAIRING_WIZARD
-   :status: implemented
-   :tags: esp32, web, pairing
-
-   The firmware shall answer ``GET /api/pairing`` and ``POST /api/pairing``
-   ``{"action":"start"|"passkey"|"cancel"|"reset"}`` in calictl's request and response shape —
-   the snapshot ``state, attempts, error, address, radio_busy`` (``radio_busy`` always ``false``)
-   with calictl's state and error names, and web.py's ``400 bad_action`` / ``confirm_required`` /
-   ``bad_passkey`` — by driving the same runner calls as the console's ``pair`` / ``passkey N`` /
-   ``forget`` (plus cancel), in every WiFi mode including the setup hotspot. ``start`` is
-   idempotent; ``passkey`` takes only a 6-digit string; ``reset`` needs ``confirm:true`` and drops
-   the bond; ``start`` and ``reset`` answer ``409 busy`` while a control command is pending. The
-   calictl web UI, served at ``GET /`` and ``/app`` in every mode, runs its
-   pairing wizard unchanged on the satellite; only the device-specific hints differ. Pairing writes
-   no control characteristic.
-
-.. req:: The CoreS3 screen shows device, WiFi and camper-unit status
-   :id: R_FW_STATUS_DISPLAY
-   :status: implemented
-   :tags: esp32, display
-
-   The satellite's screen shall show three rows — device running, WiFi (setup hotspot / joining /
-   online with SSID, IP and signal / off with reason), camper unit (not paired / pairing / connected
-   with data age / stale after ``DISPLAY_STALE_MS`` (90 s) without a snapshot / link lost) — in German or English, using the same status
-   snapshot as ``/api/state``; when it is lit and how bright: ``R_FW_DISPLAY_WAKE``.
-
-.. req:: The CoreS3 screen wakes on a tap, a hand near, motion or an alert, and follows the room light
-   :id: R_FW_DISPLAY_WAKE
-   :status: implemented
-   :tags: esp32, display
-
-   The satellite's screen shall be on for 60 s after a wake event — a touch, a hand near the
-   LTR-553 proximity sensor (two reads in a row over the threshold, with hysteresis), motion on the
-   BMI270 accelerometer (the accel vector's change between reads over a high threshold two reads in a
-   row; the rising edge only, re-armed after a still period, so continuous shaking never keeps it on;
-   no reading or no sensor = no motion wake), or a status row newly turning red or amber — then dim, and off (backlight off) after 5 min; a tap that wakes it
-   shall not reach a widget. Its brightness shall follow the LTR-553 ambient light on a log curve
-   between a minimum and a maximum, smoothed (EMA, ~3 s) and changed only beyond a 15 % deadband,
-   falling back to fixed levels after 5 s without a valid reading. The settings (auto brightness,
-   wake on hand, wake on motion, min, max, a −50…+50 brightness offset clamped to min..max) persist in NVS, ``/api/state`` reports ``device.display`` and
-   ``POST /api/display`` changes them (station mode only); Satellite settings shows it, EN + DE.
-   Diagnostic aid: ``POST /api/display {"dfs"}`` switches dynamic frequency scaling at
-   once without storing it; ``device.display.dfs``/``pm`` (``/api/state?diag=1``) report the live PM config.
 
 .. req:: A failed touch-controller read never aborts the firmware
    :id: R_FW_TOUCH_NO_ABORT
@@ -1936,187 +1741,6 @@ human-readable version of the same trace). `docs/api.md` pulls those test module
    The record shall carry the last failure's context (CPU MHz, USB/charging, screen state, the
    owner task's last I2C device and ms since, the controller's power mode), each ``null`` when unknown.
 
-.. req:: The satellite reports its own battery and a measured runtime estimate
-   :id: R_FW_BATTERY
-   :status: implemented
-   :tags: esp32, display
-
-   The firmware shall read the CoreS3's AXP2101 every 10 s (fuel-gauge percent, battery voltage, USB
-   present, charging) with only the battery-voltage ADC and the fuel-gauge enable bits ever written,
-   and estimate the runtime from the measured percent slope while discharging (a 10-min window; an
-   estimate only after ≥ 5 min and ≥ 2 points dropped; reset on USB or charging). ``/api/state``
-   reports ``device.battery`` ``{pct, mv, usb, charging, runtime_min}`` (each ``null`` when unknown);
-   the screen shows it in the station footer only (never a wake trigger), the shared UI's Device status
-   shows it, EN + DE.
-
-.. req:: WiFi never disturbs the BLE session; scans wait for an active pairing flow
-   :id: R_FW_WIFI_BLE_COEX
-
-   WiFi events (join, loss, retries, hotspot up/down) never call into the BLE session: the link,
-   the ``1003`` heartbeat cadence and notification-driven ``SNAP`` lines continue unchanged through a
-   WiFi loss and reconnect. The only coupling is scans: a WiFi scan is deferred while a BLE pairing
-   flow is **active** (runner state not idle, bonded or error — a failed pairing does not block it)
-   and started on the first tick after it ends.
-
-.. req:: The satellite updates itself on request from the GitHub release, verified, with rollback
-   :id: R_FW_OTA
-   :status: implemented
-   :tags: esp32, ota
-
-   On request only (``POST /api/ota``, station mode only, or the console), the firmware shall fetch
-   its channel's release's (``esp-stable`` by default, ``esp-latest`` once the stored channel is
-   ``latest``) ``manifest.json`` over HTTPS on its own task (never blocking the BLE
-   session or the web server), report ``up_to_date`` when its sha is the running build's and
-   ``available`` otherwise, and on install write ``cali_fw.bin`` into the inactive OTA slot, check
-   the SHA-256 of what landed against the manifest, and only on a match switch the boot partition
-   and restart; any failure leaves the boot partition untouched. A new image stays revocable until
-   it has run 60 s healthy (tick alive, web server listening); a reset before that boots the
-   previous slot. Progress is ``device.ota`` in ``/api/state``. The channel (``stable``: the build the
-   ``esp-stable`` tag points at; ``latest``: every main merge) is persisted and set with
-   ``POST /api/ota {"channel"}``.
-
-.. req:: The satellite counts its boots and keeps SNTP or unit-clock time for the log stamps
-   :id: R_FW_TIME
-   :status: implemented
-   :tags: esp32, time
-
-   The firmware shall count every boot in NVS (``boot``, +1 per boot, under its own key) and, whenever
-   the WiFi station has a lease, sync its clock over SNTP (``pool.ntp.org`` plus the DHCP-offered
-   server), so a log record can carry ``boot``, ``up`` (uptime ms), ``ts`` (epoch ms UTC) and
-   ``tsrc``. Source order: ``ntp`` once this boot's first sync completed; else ``unit``, the camper
-   unit's clock from the last usable ``1004`` frame (local Europe/Berlin, converted with
-   ``CET-1CEST,M3.5.0,M10.5.0/3``, advanced by uptime; a day-0 frame or one in the DST-ambiguous
-   hour is skipped); else none. ``/api/state`` reports ``device.time``
-   ``{source: sntp|unit|none, synced, boot, up}`` (``synced`` only from this boot's SNTP sync, never a
-   plausible-clock check) and the shared UI's Device status shows it.
-
-.. req:: The satellite logs every unit frame to its SD card, stamped, in 1 MB segments
-   :id: R_FW_SD_LOG
-   :status: implemented
-   :tags: esp32, sd, log
-
-   The firmware shall append every unit frame the session sees (notify and read), every link up/down
-   and, every 5 min while linked, a snapshot of every held frame to ``/sdcard/log/<first seq>.jsonl``
-   as JSON lines in calictl's ``CALICTL_BLE_TRACE`` shape plus ``seq``/``boot``/``up``/``ts``/``tsrc``
-   (stamped at log time, ``R_FW_TIME``); roll segments at 1 MB, resume ``seq`` from the newest
-   segment's last complete line (truncating a line cut by a power loss), delete the oldest segment
-   above 90 % full, ``fsync`` at least every 10 s, and never block the owner task (a bounded queue;
-   overflow drops and counts). A missing or unreadable card never aborts or reboots the firmware: it
-   retries the mount every 5 min. ``/api/state`` reports ``device.sd``
-   ``{state: absent|error|ok, total_mb, free_mb, dropped}`` (``last_seq`` with ``?diag=1``), shown as a
-   Storage row in the shared UI's Device status card, EN + DE.
-
-.. req:: The page's state poll carries only what the page shows; diagnostics on request
-   :id: R_FW_STATE_DIAG
-   :status: implemented
-   :tags: esp32, web, diagnostics
-
-   ``GET /api/state`` shall leave out the members the page never shows and that change on their own
-   (the clock ``t`` and ``time.up``, ``sd.last_seq``, ``res``, ``ble.probing``,
-   ``ble.unit_adv_seen_ms_ago``, the raw screen sensors ``display.lux``/``prox``/``motion`` and
-   ``display.dfs``/``pm``); ``?diag=1`` shall add them. The shared UI's Device status › Diagnostics
-   screen shows them, fetched with ``?diag=1`` only while it is open; the SD log keeps them (the
-   ``diag`` record; the ``screen`` record for the raw screen sensors).
-
-.. req:: The satellite records its own health, events, timings and warnings on the SD log
-   :id: R_FW_DIAG_LOG
-   :status: implemented
-   :tags: esp32, sd, log, diagnostics
-
-   The firmware shall append to the SD log (``R_FW_SD_LOG``), with the same stamp: a ``diag``
-   record every 60 s (heap, PSRAM, CPU, per-task stack high-water marks, WiFi/BLE RSSI, link,
-   uptime); ``evt`` records for boot (with the reset reason), BLE link up/down (reason, duration,
-   reconnect time, attempts), WiFi up/down and join failures, every control command's result
-   (function and control name, never the value; latency; source), OTA transitions, auto camper
-   decisions and SD errors; a ``perf`` record per HTTP response (route, status, bytes, time) and per
-   BLE operation, sampled per characteristic; and ``ESP_LOGW``/``ESP_LOGE`` lines as ``log``
-   records, at most 20 a minute plus a dropped count. Records come from any task without blocking
-   (dropped and counted when the queue is full) and never hold a client's MAC or IP address.
-
-.. req:: The satellite keeps the backtrace of a panic and logs it on the next boot
-   :id: R_FW_PANIC_CAPTURE
-   :status: implemented
-   :tags: esp32, diagnostics, sd
-
-   On a panic, the firmware shall keep the task name, the panic reason (cut) and up to 16 backtrace
-   PCs in RTC no-init memory, guarded by a magic and a checksum, without a coredump partition (an
-   OTA-only change). The next boot shall print it on the console and log it as an ``evt`` ``panic``
-   record after the boot record (``R_FW_DIAG_LOG``), then clear it; a capture that fails its magic,
-   depth or checksum is never logged. CI shall keep each build's ``cali_fw.elf`` so the PCs can be
-   symbolized.
-
-.. req:: The satellite restores camping mode after you park, as calictl serve does
-   :id: R_FW_AUTO_CAMPER
-   :status: implemented
-   :tags: esp32, automation, camping
-
-   The firmware shall run calictl's restore-after-park decision (``R_AUTO_CAMPER_RESTORE``) as a C
-   twin held equal by vectors generated from the Python function: remember the pre-drive camping
-   config when the engine sheds it, re-assert it through the control path on the ignition falling
-   edge within a bounded window and tries, respect a manual off and stand down on low battery or a
-   warning. The toggle (default on) and the restore debt persist in NVS; ``/api/state`` reports
-   ``device.auto_camper`` ``{enabled, state}``, ``POST /api/auto_camper`` switches it (station mode
-   only) and Satellite settings shows and switches it (EN + DE).
-
-.. req:: The satellite wakes the halted Raspberry Pi through a GPIO
-   :id: R_FW_PI_WAKE
-   :status: implemented
-   :tags: esp32, gpio, power
-
-   The firmware shall drive Port B GPIO9 as an open-drain output that is released (high-Z) from
-   boot and never driven high, and pull it low for 200 ms on the ignition rising edge (vehicle
-   terminal 15 or campingmode Enable; previous 0 or unknown -> 1, a read gap never an edge), at most
-   once per 60 s, while "Wake on ignition" is on (NVS ``pw_ign``, default on). ``POST /api/pi_wake``
-   (station mode only, 409 while a pulse runs) and the console wake it by hand; ``POST
-   /api/pi_wake_setting`` switches the setting; ``/api/state`` reports ``device.pi_wake``
-   ``{enabled, last_s, reason}``; Satellite settings shows the box (EN + DE).
-
-.. req:: The satellite halts the Raspberry Pi after parking and on a low battery
-   :id: R_FW_PI_HALT
-   :status: implemented
-   :tags: esp32, gpio, power
-   :links: R_FW_PI_WAKE
-
-   The firmware shall drive Port B GPIO8 as GPIO9 (open drain, released from boot, never driven
-   high) and pull it low for 500 ms once the van has been parked (the boot, the ignition 0 after 1
-   or unknown, or a wake pulse; unknown ignition keeps the state) for the "Shut down after parking"
-   minutes (NVS ``ph_min``, 0 off, default 30), or at most 10 minutes while the battery is low and
-   the guard is on (NVS ``ph_soc``, default 30 %: SleepWarning, WarningLevelTwo, or the SoC level ×10
-   at or below it). Once per park: only a wake pulse or the ignition re-arms it. The two lines are
-   never low together. ``POST /api/pi_halt`` (station mode only, 409 busy) and the console halt it
-   by hand; ``POST /api/pi_wake_setting`` sets both settings; ``/api/state`` reports the halt in
-   ``device.pi_wake``; Satellite settings shows it (EN + DE).
-
-.. req:: The satellite serves its SD log page by page over HTTP
-   :id: R_FW_LOG_API
-   :status: implemented
-   :tags: esp32, sd, log
-
-   ``GET /api/log?since=<seq>&max=<n>`` shall answer the complete log records with ``seq > since``
-   in seq order across segments, at most ``max`` (default 2000) and what fits the page buffer, then
-   a trailer ``{"next", "more", "boot", "lost"}`` (``lost`` = seqs in deleted segments, the page
-   resuming from the oldest one); never a half-written line. The card is read only by the SD task;
-   no card = 503 with a JSON error.
-
-.. req:: The satellite serves the calictl web UI from its own BLE data, controls live except the roof
-   :id: R_FW_SHARED_UI
-   :status: implemented
-   :tags: esp32, web
-
-   In every WiFi mode the firmware shall serve at ``GET /`` (and ``/app``) the calictl web UI — the same
-   ``calictl/webui`` sources inlined and gzipped into one generated byte array — which interprets
-   the firmware's raw ``/api/state`` in the browser with ``calictl/webui/semantics.js``, a twin of
-   ``calictl/semantics.py`` held equal by golden vectors. The UI shows its controls live when the
-   firmware reports ``device.control.writes`` (station mode), posting calictl's ``/api/command``
-   body (with the page's clock ``local_now`` on every wake-up edit), except the pop-top roof, which
-   stays greyed with the firmware's own refusal text ("Only via buspi or the app"); without the
-   flag every control is greyed; over the setup hotspot the UI opens on its WiFi-setup screen. A
-   minimal WiFi recovery page stays at ``GET /device``.
-   Every static page and asset carries a strong ``ETag`` derived from its exact bytes, and a
-   matching ``If-None-Match`` is answered ``304 Not Modified`` without a body; the pages and the
-   manifest stay ``Cache-Control: no-cache`` (always revalidated, so a new firmware's UI shows on
-   the next load), and ``/api/*`` is never cached; an unchanged ``/api/state`` answers 304 by its
-   weak ``ETag`` (``R_FW_STATE_ETAG``).
 
 .. req:: The shared web UI opens instantly and offline on a secure origin, and is installable
    :id: R_UI_PWA_OFFLINE

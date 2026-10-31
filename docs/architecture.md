@@ -17,7 +17,7 @@ not affiliated with Volkswagen.
 
 1. **Safe actuation** — A control write goes to a real vehicle (heaters, roof, loads). Frames are validated before they are written, and a readback is never taken as proof that something happened.
 2. **Truthful values** — A signal is shown only with a unit and scale that were verified. Unverified values stay labelled as levels.
-3. **Tolerates an absent unit** — The parked unit deep-sleeps and stops advertising. Access is intermittent by nature, so the last state is kept with an "as of" time.
+3. **Tolerates an absent unit** — The unit is not always reachable: the van is out of BLE range, the unit ends links in power-save while camping mode is off, or Bluetooth fails on the central's side. Access is intermittent, so the last state is kept with an "as of" time.
 4. **One BLE owner on the Pi** — The Pi's adapter (`hci0`) is shared with other readers, so exactly one daemon talks to the unit from it, over one link. The unit itself serves several centrals at once (phone app, Pi, ESP satellite).
 5. **Drift is caught** — Every protocol field has a recorded decision, and CI fails when one is dropped.
 
@@ -32,7 +32,7 @@ map, and the downstream consumers Home Assistant and Grafana.
 - **Runtime `calictl/*` imports only the standard library at import time** — The suite runs with no BLE or MQTT installed. `bleak`, `paho`, `influxdb_client` and `yaml` import lazily
 - **The BLE codec is MSB-first and control frames are full-packet** — That is how the unit and the vendor app behave. Every field is resent, and unchanged fields carry the {term}`leave-unchanged sentinel <Sentinel>`
 - **No vendor material in the repository** — The APK, decompiled sources and manuals are never committed. VW material appears as citations only
-- **The unit deep-sleeps when parked** — {term}`Buspi` cannot connect for days until physical use wakes it
+- **The unit is not always reachable** — A parked unit keeps advertising, but with camping mode off and no shore power it ends every link after about 30 s, and a Bluetooth fault on the central's side (a stale bond, a kernel regression on {term}`Buspi`) can keep a central out for days
 - **The web UI is un-built JavaScript** — `tsc --checkJs` is its hard gate, since no build step would catch an undeclared identifier
 - **Runs on a Raspberry Pi with Python 3.11 to 3.13** — The deployment target is buspi
 
@@ -306,7 +306,7 @@ depicts, so they are not repeated here. Read them in [Protocol sequences](https:
 - **Persistent session** (`S_SEQ_SESSION`): hold the armed session while the web UI is active, release it when idle, backoff
 - **Fresh read** (`S_SEQ_READ`): a cold read under the heartbeat: subscribe, read every characteristic, a later push wins
 - **Poll cycle** (`S_SEQ_POLL`): lock, read, decode, interpret, guards, cache with its "as of" time, fan out, the offline path
-- **Deep sleep** (`S_SEQ_SLEEP`): a parked unit stops advertising, `serve` keeps the last known state
+- **Unreachable unit** (`S_SEQ_SLEEP`): connects fail, `serve` keeps the last known state
 - **Home Assistant** (`S_SEQ_MQTT`): MQTT discovery, state publish, and a command arriving through `serve.on_command`
 - **Heartbeat-armed write** (`S_SEQ_ACTUATE`): the `1003` heartbeat spanning one control write, cold and persistent paths
 - **Cooler command** (`S_SEQ_COOLER`): the app-faithful frame (untargeted fields at leave-unchanged), the applied-check
@@ -409,7 +409,7 @@ flowchart TB
   - *Notes:* `serve` runs under a virtualenv, and the installed unit adds `--web 8088` through a `systemctl edit` drop-in rather than the committed template. Secrets live in root-only files under `/etc/buspi/`.
 - **Camper unit**
   - *What runs there:* the vehicle's own firmware
-  - *Notes:* Deep-sleeps when parked, so buspi cannot connect for days until physical use wakes it.
+  - *Notes:* Keeps advertising when parked, in every probe observed so far (its behaviour with no central at all for days is not yet observed). With camping mode off and no shore power it ends every link about 30 s after encryption (the {term}`power-save hang-up <Power-save hang-up>`).
 - **ESP32 satellite**
   - *What runs there:* independent firmware on a CoreS3
   - *Notes:* Its own BLE bond to the unit, connected alongside buspi and the phone. Joins WiFi through a setup hotspot and serves the same web UI. It writes only in station mode, through a single allow-list, and never the roof.
@@ -445,7 +445,7 @@ only the camper-unit part.
   - *How it works:* {term}`Full-packet` frames, width and range validation in `protocol.encode`, preconditions per command, a single lock, and an applied-check that treats readback as an echo.
   - *Where:* `control`, `protocol`, `postcheck`
 - **Freshness**
-  - *How it works:* Reads go stale and the unit deep-sleeps. The last state is persisted with an "as of" time, and implausible drops (water) are held and flagged stale.
+  - *How it works:* Reads go stale while the unit is unreachable. The last state is persisted with an "as of" time, and implausible drops (water) are held and flagged stale.
   - *Where:* `freshness`, [value freshness](https://ckeller42.github.io/open-california/business-logic/value-freshness.html)
 - **Honest units**
   - *How it works:* A value gets a unit only when it is verified. SoC is a coarse level, temperatures are raw levels, and currents are amps since they were checked against the app.
@@ -546,7 +546,7 @@ block or a quality goal.
   - *Scenario:* A poll and a command arrive together. They run one after the other.
   - *How it is checked:* the lock in `serve`, the e2e tests over the mock
 - **Absent unit**
-  - *Scenario:* The unit is asleep for days. The UI shows the last state and an offline banner, not an error.
+  - *Scenario:* The unit is unreachable for days. The UI shows the last state and an offline banner, not an error.
   - *How it is checked:* persisted last state, web e2e tests
 - **Drift is caught**
   - *Scenario:* The C codec and the Python codec disagree. CI fails.
@@ -577,7 +577,7 @@ what each job proves is in [simulation and testing](https://ckeller42.github.io/
     temperature), so they are confirmed from the decompiled app only, and the sign of the leveling
     angles is not yet compared with the app's display.
   - *Status:* Per signal in the [signal catalog](https://ckeller42.github.io/open-california/protocol/signal-matrix.html).
-- **The unit deep-sleeps and the vendor firmware can change**
+- **The unit is not always reachable and the vendor firmware can change**
   - *Impact:* Access is intermittent, and a firmware update could move a field.
   - *Status:* Mitigated by firmware-drift capture and plausibility anchors, but not removable.
 - **Semantic correctness is not auto-checked**

@@ -125,6 +125,7 @@ GRID: dict[str, dict[str, list]] = {
             None,
             5,
             "3 red" + " " * 62 + " extra",
+            "  3 \t amber  ",  # whitespace runs, leading + trailing (the C tokenizer)
         ],
         "door_contact": ["on", "off", "1", "0", "true", "false", "maybe", None],
         "color": ["red"],
@@ -162,6 +163,8 @@ WAKEUP_VALUES = [
     None,
     5,
     "x",
+    " 08:15\t 1,3  5 20 on \t",  # whitespace runs, leading + trailing (the C tokenizer)
+    " \t ",
 ]
 WAKEUP_EDGE_VALUES = ["07:00 on", "00:00 off", "23:59 on", "07:00"]
 # The page's wall clock read as UTC (seconds): a plain morning, the exact target minute (-> tomorrow),

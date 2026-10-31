@@ -13,7 +13,13 @@ and simply shows an empty `incoming` — check `needs.json` for that.
 
 ## Build
 
+The firmware C API pages need `doxygen` (1.9.8 in the CI image) on the PATH: Breathe reads its XML
+from `firmware/_doxygen/xml`, and `docs/build_site.sh` runs `doxygen firmware/Doxyfile` first.
+Without sphinx and doxygen on the machine, `tools/ci.sh docs` builds the same site in the `oc-docs`
+Docker image (`docs/Dockerfile`) and ends with `site -> docs/_build/site`.
+
 ```sh
+tools/ci.sh docs                         # Docker: doxygen + the -W site build
 python3 -m venv .venv
 .venv/bin/pip install -r docs/requirements.txt
 # HTML (warnings-as-errors keeps traceability honest):
@@ -31,10 +37,10 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
   `sh docs/build_site.sh docs/_build/html` (both builds, `-W`) with `docs/requirements.txt` on
   Python 3.12, so a `sphinx -W` failure (a broken `:links:`, a bad cross-reference, a new page
   missing from a toctree) fails the PR instead of first showing up after merge. It only builds;
-  nothing is published from a PR. `tools/ci.sh` does not build the docs — run
-  `sh docs/build_site.sh` locally for fast feedback.
+  nothing is published from a PR. The default `tools/ci.sh` gate does not build the docs — run
+  `tools/ci.sh docs` (or `sh docs/build_site.sh` where sphinx and doxygen are installed) locally.
 - **On `main`:** `.github/workflows/docs.yml` runs on a push to `main` that touches `docs/**`,
-  `calictl/**`, `tests/**`, `tools/gen_c_dict.py`, `tools/gen_codec_vectors.py` or the workflow itself (plus a manual `workflow_dispatch`).
+  `calictl/**`, `tests/**`, `firmware/components/cali_core/include/**`, `firmware/Doxyfile`, `tools/gen_c_dict.py`, `tools/gen_codec_vectors.py` or the workflow itself (plus a manual `workflow_dispatch`).
 - **Deploy:** its `build` job runs `sh docs/build_site.sh docs/_build/html` (both builds, `-W`) with
   `docs/requirements.txt` on Python 3.12, uploads the result as a Pages artifact, and the `deploy`
   job publishes it with `actions/deploy-pages` to <https://ckeller42.github.io/open-california/>.
@@ -85,6 +91,49 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
   ```` ```{eval-rst} ```` blocks) so its needs are collected.
 - `needs_id_required = True` — every need must have an explicit ID.
 - Verify a trace resolved: `needs.json` → the req's `links_back` lists its test.
+
+## Firmware C API
+
+`docs/firmware-api.rst` renders the public headers in `firmware/components/cali_core/include/`
+through Doxygen and Breathe. Doxygen is strict (`WARN_AS_ERROR`): every public declaration needs a
+`@brief`, every `@param` and an `@return` for a non-void function. The skill `document-c-api` has
+the comment template.
+
+A C requirement is a `.. req::` inside the header comment, wrapped so Breathe passes it to Sphinx:
+
+```c
+/**
+ * @brief Write allow-list.
+ *
+ * @verbatim embed:rst:leading-asterisk
+ * .. req:: Only the control characteristics are written
+ *    :id: R_FW_EXAMPLE
+ *    :status: implemented
+ *
+ *    The firmware shall write only the allow-listed characteristics.
+ * @endverbatim
+ */
+```
+
+Use `embed:rst:leading-asterisk`: with plain `embed:rst` the `*` prefix stays and the option lines
+(`:id:`) are not parsed. `tests/test_needs_docstrings.py` reads `:id: R_*` from the headers, so a
+header requirement counts as defined. The verifying `.. test::` stays in a Python test docstring
+with `:links: R_FW_EXAMPLE`. To verify the trace, run `sphinx -b needs` and check that the
+requirement's `links_back` in `needs.json` lists the test.
+
+Common warnings and their fixes:
+
+| Warning | Cause | Fix |
+|---|---|---|
+| `Need could not be created: No ID defined` | `embed:rst` keeps the leading `*` | use `embed:rst:leading-asterisk` |
+| `Invalid C++ declaration: Expected identifier in nested name` | anonymous `enum { … }` | give the enum a tag (`enum cali_x_e { … }`) |
+| `Unsupported xml/html tag <word>` | Doxygen reads `<word>` as HTML | write the word in a code span or without angle brackets |
+| `parameters of member … are not documented`, `argument … not found` | `@param` missing or its name differs from the declaration | one `@param` per argument, same name |
+| undocumented macro in an `#else` branch | every branch of a conditional macro is a declaration | add a `/** @brief … */` to each branch |
+| duplicate or conflicting documentation for a function | the same function has a doc comment in the `.h` and the `.c` | document it in the header only |
+| `-Wcomment` error in the gcc build | `/*` or `*/` inside a comment (for example `/api/*`) | write "the /api/ routes" |
+| `Problems running dot` | graphs enabled | keep `HAVE_DOT = NO` in the Doxyfile |
+| `unknown outgoing link 'R_FW_…'` on a test | the requirement was not created (see the first row) | fix the embed block |
 
 ## Writing reader pages
 
