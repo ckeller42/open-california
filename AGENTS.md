@@ -21,6 +21,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
 | `ui/` | GUI specs (`screens/*.yaml`) — **authoritative for app UI semantics** — + `prototype.html` (an RE preview, not the served UI). VW icons are **never committed** (`ui/assets/` untracked; placeholders without them). |
 | `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
+| `ios/` | the iPhone app (`docs/ios-app.md`): `CaliKit/` (the Swift package of `Package.swift`: the C codec + control twin linked as they are, the BLE session), `App/` (SwiftUI + Siri), `AppTests/` (incl. the snapshot references), `AppUITests/`, `project.yml` (XcodeGen; the `.xcodeproj` is generated). Setup + lint: `docs/ios-development-setup.md` |
 | `firmware/` | ESP32-S3 satellite (#154): `cali_core` (platform-free C: pairing, session, `control` twin of `calictl.control`, WiFi, HTTP, web endpoints), `cali_ble_nimble`, `platform`, `web/` (edit `index.html` = the `/device` recovery page, `strings.json` = the display's texts; `gen_c_dict` renders the rest), `host`/`qemu`/`main` builds. No roof. Features + requirements: `docs/firmware.md` |
 
 ## Hard rules (don't break these)
@@ -77,8 +78,10 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
   (Account → Vehicle, and in app 5.4.0 Vehicle → Help → Vehicle Settings).
 - **One web UI for buspi and the ESP.** `calictl/webui/` is served by buspi and bundled into the
   firmware (`firmware/web/app_bundle_gen.h`; the ESP decodes raw frames in the browser with the
-  `semantics.js` twin). Any webui/semantics change: `python3 -m tools.gen_c_dict` (+
-  `tools.gen_semantics_vectors`) in the same PR, then deploy buspi AND flash the ESP. Show only what the
+  `semantics.js` twin). The iOS app runs byte copies of `semantics.js` + `semantics_tables.js`
+  (`ios/CaliKit/Sources/CaliCore/Resources/`, written by `gen_c_dict`, checked by CI `ios`). Any
+  webui/semantics change: `python3 -m tools.gen_c_dict` (+ `tools.gen_semantics_vectors`) in the same PR,
+  then deploy buspi AND flash the ESP, and let the `ios` job run. Show only what the
   van has: no "not installed" rows/tiles (owner 2026-10-10).
 - **Mermaid diagrams render in the browser, not at build** — `sphinx -W` won't catch a broken
   one. Keep `;`, `&`, bare `<`/`>`, and label-`:` out of ```mermaid fences (root `*.md` +
@@ -102,6 +105,8 @@ python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_ru
 python3 -m tools.gen_control_vectors --check && python3 -m tools.gen_c_dict --check   # ESP control vectors + control_consts.h fresh (regenerate after any calictl.control change)
 tools/ci.sh linux                                    # the C tests in CI's gcc (Linux amd64 + -m32, Docker): catches what Apple clang lets through
 tools/ci.sh docs                                     # doxygen + `sphinx -W` site build in Docker (the Mac has no sphinx); skill `document-c-api`
+swift test                                           # the iOS Swift package (CaliKit) on the Mac; tools/ios_sanitize.sh = ASan + UBSan
+set -o pipefail; xcodegen generate --spec ios/project.yml && gtimeout 1500 xcodebuild test -project ios/Camper.xcodeproj -scheme Camper -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' | xcbeautify   # the iOS app tests (snapshots need exactly this simulator)
 make -C firmware/host cali-host && python -m pytest tests/firmware -v   # firmware host+NimBLE tier (Linux only; tools/ci.sh firmware)
 docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build'   # firmware QEMU tier build
 python -m tools.ux_gallery --esp --out docs/screenshots   # ESP page shots for the docs (stub + fixtures, no firmware)
@@ -121,8 +126,9 @@ run, so `main` silently flashes the previous build (`gh run rerun <id>` first). 
 vendor/MAC/VIN guard) + `test` (one python, not the 3.11–3.13 matrix); its pytest run also covers
 `codec-parity` (C tests only with a C compiler) and `gui-e2e` (only with Playwright + Chromium, else
 they skip). **Only GitHub runs:** `install-script` (shellcheck), `pairing-real-stack` (calictl's real `BluezTransport` vs
-the Bumble fake unit over real BlueZ in a VM, `tests/realstack/vm.sh`; not a required check yet), the
-firmware jobs, and — on push to `main` only — `docs.yml` (the same build + Pages deploy) and
+the Bumble fake unit over real BlueZ in a VM, `tests/realstack/vm.sh`; not a required check yet), `ios`
+(macOS: the Swift package + the app tests on the simulator, when a PR touches the app or what it links;
+not required yet), the firmware jobs, and — on push to `main` only — `docs.yml` (the same build + Pages deploy) and
 `screenshots.yml` (commits `docs/screenshots` to `main` with `[skip ci]`).
 The `docs` job (doxygen + the `sphinx -W` site build on every PR) runs locally as `tools/ci.sh docs`.
 Test layers + harnesses: `docs/simulation-and-testing.md`.

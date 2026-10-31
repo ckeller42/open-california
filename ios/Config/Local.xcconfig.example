@@ -1,0 +1,5 @@
+// Copy to ios/Config/Local.xcconfig (gitignored) for a build on your iPhone.
+// Your team ID: Xcode → Settings → Accounts → your Apple ID → the team ("Personal Team").
+DEVELOPMENT_TEAM = ABCDE12345
+// A prefix of your own: bundle IDs are unique per Apple account.
+BUNDLE_ID_PREFIX = com.example.yourname
