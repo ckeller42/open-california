@@ -146,7 +146,7 @@ final class CamperStore {
         }
     }
 
-    private func show(_ f: Feedback?, clearAfter seconds: TimeInterval?) {
+    func show(_ f: Feedback?, clearAfter seconds: TimeInterval?) {
         feedbackGen += 1
         let gen = feedbackGen
         feedback = f
@@ -376,14 +376,19 @@ enum Fixture: String, CaseIterable {
     /// The UI tests connect to the fake on launch only for these; the others keep their state.
     var isLive: Bool { ![.unreachable, .staleRestore, .faults].contains(self) }
 
-    /// A session over the fake transport, which answers with this fixture's frames.
-    func makeSession() -> CamperSession {
+    /// The fake transport, which answers with this fixture's frames.
+    func makeTransport() -> FakeCamperTransport {
         let byChar = self == .unreachable ? [:] : Dictionary(uniqueKeysWithValues: frames.compactMap { fn, bytes in
             CamperGATT.stateChars[fn].map { ($0, bytes) }
         })
         // One unit in range for the pairing guide's scan (the UI tests pick it).
         let unit = PairingCandidate(id: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!, name: CamperGATT.deviceName, rssi: -60)
-        return CamperSession(transport: FakeCamperTransport(frames: byChar, candidates: [unit]), clock: ContinuousClock())
+        return FakeCamperTransport(frames: byChar, candidates: [unit])
+    }
+
+    /// A session over `makeTransport()`.
+    func makeSession() -> CamperSession {
+        CamperSession(transport: makeTransport(), clock: ContinuousClock())
     }
 
     /// The state as a read pass would leave it, `asOf` = `now` (10 min earlier for `unreachable`,

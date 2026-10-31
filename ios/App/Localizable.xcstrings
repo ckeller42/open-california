@@ -18,6 +18,23 @@
         }
       }
     },
+    "%@: sent, not confirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: gesendet, nicht bestätigt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: sent, not confirmed"
+          }
+        }
+      }
+    },
     "%lld d ago": {
       "extractionState": "manual",
       "localizations": {
@@ -65,6 +82,91 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld min ago"
+          }
+        }
+      }
+    },
+    "1": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1"
+          }
+        }
+      }
+    },
+    "2": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2"
+          }
+        }
+      }
+    },
+    "3": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3"
+          }
+        }
+      }
+    },
+    "4": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4"
+          }
+        }
+      }
+    },
+    "A": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A"
           }
         }
       }
@@ -239,6 +341,40 @@
         }
       }
     },
+    "All lights are off": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Lichter sind aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All lights are off"
+          }
+        }
+      }
+    },
+    "All lights are on": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Lichter sind an"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All lights are on"
+          }
+        }
+      }
+    },
     "Allow Bluetooth for this app in Settings.": {
       "extractionState": "manual",
       "localizations": {
@@ -358,6 +494,23 @@
         }
       }
     },
+    "B": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "B"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "B"
+          }
+        }
+      }
+    },
     "Background lighting": {
       "extractionState": "manual",
       "localizations": {
@@ -460,6 +613,23 @@
         }
       }
     },
+    "C": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "C"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "C"
+          }
+        }
+      }
+    },
     "Cabinet": {
       "extractionState": "manual",
       "localizations": {
@@ -507,6 +677,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Camping mode"
+          }
+        }
+      }
+    },
+    "Camping mode is off": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Campingmodus ist aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camping mode is off"
+          }
+        }
+      }
+    },
+    "Camping mode is on": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Campingmodus ist an"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camping mode is on"
           }
         }
       }
@@ -851,6 +1055,23 @@
         }
       }
     },
+    "D": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "D"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "D"
+          }
+        }
+      }
+    },
     "Data age": {
       "extractionState": "manual",
       "localizations": {
@@ -1119,6 +1340,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Favourite %@"
+          }
+        }
+      }
+    },
+    "Favourite %@ is on": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorit %@ ist an"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favourite %@ is on"
           }
         }
       }
@@ -1480,6 +1718,23 @@
         }
       }
     },
+    "Light favourite": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lichtfavorit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Light favourite"
+          }
+        }
+      }
+    },
     "Lighting": {
       "extractionState": "manual",
       "localizations": {
@@ -1493,6 +1748,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lighting"
+          }
+        }
+      }
+    },
+    "Lighting: sent, check the lamp": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beleuchtung: gesendet, prüfe die Lampe"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lighting: sent, check the lamp"
           }
         }
       }
@@ -1544,6 +1816,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Max"
+          }
+        }
+      }
+    },
+    "No answer from the van": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Antwort vom Fahrzeug"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No answer from the van"
           }
         }
       }
@@ -2058,6 +2347,40 @@
         }
       }
     },
+    "Recall Light Favourite": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lichtfavorit abrufen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recall Light Favourite"
+          }
+        }
+      }
+    },
+    "Recall light favourite ${favourite}": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lichtfavorit ${favourite} abrufen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recall light favourite ${favourite}"
+          }
+        }
+      }
+    },
     "Refrigerator box": {
       "extractionState": "manual",
       "localizations": {
@@ -2483,6 +2806,23 @@
         }
       }
     },
+    "State": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zustand"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "State"
+          }
+        }
+      }
+    },
     "Status": {
       "extractionState": "manual",
       "localizations": {
@@ -2534,6 +2874,57 @@
         }
       }
     },
+    "Switch All Lights": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Lichter schalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch All Lights"
+          }
+        }
+      }
+    },
+    "Switch Camping Mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Campingmodus schalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch Camping Mode"
+          }
+        }
+      }
+    },
+    "Switch Cooler": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kühlbox schalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch Cooler"
+          }
+        }
+      }
+    },
     "Switch the refrigerator box off first": {
       "extractionState": "manual",
       "localizations": {
@@ -2564,6 +2955,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch the refrigerator box on first"
+          }
+        }
+      }
+    },
+    "Switches the lights to a favourite stored on the camper unit.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schaltet das Licht auf einen Favoriten, der auf der Camper-Einheit gespeichert ist."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switches the lights to a favourite stored on the camper unit."
           }
         }
       }
@@ -2738,6 +3146,23 @@
         }
       }
     },
+    "The camper unit saves power — try again in %lld seconds": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Camper-Einheit spart Energie — in %lld Sekunden erneut versuchen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camper unit saves power — try again in %lld seconds"
+          }
+        }
+      }
+    },
     "The charging cable is still plugged into the vehicle's external socket. Please remove it.": {
       "extractionState": "manual",
       "localizations": {
@@ -2751,6 +3176,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "The charging cable is still plugged into the vehicle's external socket. Please remove it."
+          }
+        }
+      }
+    },
+    "The cooler is off": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Kühlbox ist aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cooler is off"
+          }
+        }
+      }
+    },
+    "The cooler is on": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Kühlbox ist an"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cooler is on"
           }
         }
       }
@@ -3078,6 +3537,40 @@
         }
       }
     },
+    "Turn all lights ${state}": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Lichter ${state} schalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn all lights ${state}"
+          }
+        }
+      }
+    },
+    "Turn camping mode ${state}": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Campingmodus ${state} schalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn camping mode ${state}"
+          }
+        }
+      }
+    },
     "Turn camping mode on first": {
       "extractionState": "manual",
       "localizations": {
@@ -3142,6 +3635,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn on Bluetooth in Control Center, then tap Try again."
+          }
+        }
+      }
+    },
+    "Turn the cooler ${state}": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kühlbox ${state} schalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn the cooler ${state}"
+          }
+        }
+      }
+    },
+    "Turns all lights of the camper on or off.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schaltet alle Lichter im Camper an oder aus."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turns all lights of the camper on or off."
+          }
+        }
+      }
+    },
+    "Turns the camping mode of the camper unit on or off.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schaltet den Campingmodus der Camper-Einheit an oder aus."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turns the camping mode of the camper unit on or off."
+          }
+        }
+      }
+    },
+    "Turns the cooler on or off.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schaltet die Kühlbox an oder aus."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turns the cooler on or off."
           }
         }
       }
@@ -3605,6 +4166,23 @@
         }
       }
     },
+    "off": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "off"
+          }
+        }
+      }
+    },
     "offline": {
       "extractionState": "manual",
       "localizations": {
@@ -3618,6 +4196,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "offline"
+          }
+        }
+      }
+    },
+    "on": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "an"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "on"
           }
         }
       }
