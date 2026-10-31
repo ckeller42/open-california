@@ -32,7 +32,7 @@ switched only on its own screen in the app.
 
 The refusals use the app's own texts, for example "Turn camping mode on first".
 
-On a locked iPhone, Siri asks for Face ID before it switches anything.
+On a locked iPhone, Siri switches without Face ID.
 
 The unit does not take a new link for about 7 seconds after it ended the last one. While more
 than about 2 seconds of this wait are left, Siri answers "try again" and does not connect. Later,
@@ -55,9 +55,8 @@ action, check the unit's own screen: it is the ground truth.
 
 1. Lock the iPhone.
 2. Say "Turn the cooler on in Camper".
-3. Check that Siri asks for Face ID or the passcode, and that the cooler does not change before
-   you unlock.
-4. Unlock. Check that the cooler switches on and that Siri answers.
+3. Check that Siri does not ask for Face ID or the passcode.
+4. Check that the cooler switches on and that Siri answers.
 
 ### With the link open
 

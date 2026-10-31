@@ -357,6 +357,19 @@ for sphinx-needs does not parse Swift.)
     @Test func campingPhraseResolvesToMasterOn() { … }
 ```
 
+```{decision} Siri works on a locked iPhone
+:id: AD_IOS_SIRI_LOCKED
+:status: accepted
+:tags: ios
+:links: R_IOS_SIRI
+
+The four voice commands (camping mode, lighting, light favourite, cooler) run on a locked iPhone
+without Face ID. Voice control at the van is the purpose of the app, and each of these actions is
+harmless and easy to undo. The accepted risk: anyone who can speak to the locked iPhone can
+trigger them. Siri's voice recognition is not a security barrier. The air heater has no voice
+command ({need}`R_IOS_SIRI_NO_HEATER`).
+```
+
 ## Code and tests
 
 The tables list the Swift code and the Swift tests that trace to the requirements above. The

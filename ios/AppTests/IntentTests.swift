@@ -116,19 +116,21 @@ struct IntentTests {
         #expect(await fake.writes.isEmpty)
     }
 
-    /// Every state-changing intent asks for Face ID or the passcode on a locked iPhone.
+    /// Every voice command runs on a locked iPhone without Face ID; any other policy fails.
     ///
     /// - Test: T_IOS_SIRI_AUTH
-    /// - Verifies: R_IOS_SIRI
-    @Test func intentsNeedAnUnlockedDevice() {
+    /// - Verifies: R_IOS_SIRI, AD_IOS_SIRI_LOCKED
+    @Test func intentsRunOnALockedDevice() {
         let policies: [IntentAuthenticationPolicy] = [
             SetCampingModeIntent.authenticationPolicy, SetLightsIntent.authenticationPolicy,
             ActivateLightFavouriteIntent.authenticationPolicy, SetCoolerIntent.authenticationPolicy,
         ]
-        let wanted = String(describing: IntentAuthenticationPolicy.requiresLocalDeviceAuthentication)
-        #expect(String(describing: IntentAuthenticationPolicy.alwaysAllowed) != wanted)  // the comparison can fail
+        let wanted = String(describing: IntentAuthenticationPolicy.alwaysAllowed)
+        // The comparison can fail: the other policies describe differently.
+        #expect(String(describing: IntentAuthenticationPolicy.requiresLocalDeviceAuthentication) != wanted)
+        #expect(String(describing: IntentAuthenticationPolicy.requiresAuthentication) != wanted)
         for p in policies {
-            #expect(String(describing: p) == String(describing: IntentAuthenticationPolicy.requiresLocalDeviceAuthentication))
+            #expect(String(describing: p) == wanted)
         }
     }
 

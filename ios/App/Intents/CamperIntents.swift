@@ -40,12 +40,12 @@ enum LightFavourite: String, AppEnum, CaseIterable {
 
 /// Camping mode on or off: `campingmode master on|off`.
 ///
-/// - Requirement: R_IOS_SIRI, R_IOS_SIRI_HONEST
+/// - Requirement: R_IOS_SIRI, R_IOS_SIRI_HONEST, AD_IOS_SIRI_LOCKED
 struct SetCampingModeIntent: AppIntent {
     static let title: LocalizedStringResource = "Switch Camping Mode"
     static let description = IntentDescription("Turns the camping mode of the camper unit on or off.")
-    /// On a locked iPhone, Siri asks for Face ID or the passcode before it switches anything.
-    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+    /// Runs on a locked iPhone without Face ID (`AD_IOS_SIRI_LOCKED`).
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
     @Parameter(title: "State") var state: OnOff
 
@@ -65,12 +65,12 @@ struct SetCampingModeIntent: AppIntent {
 /// All lights on or off: `lighting power on|off` (the web UI's "All lights"; `lighting all` takes a
 /// brightness).
 ///
-/// - Requirement: R_IOS_SIRI, R_IOS_SIRI_HONEST
+/// - Requirement: R_IOS_SIRI, R_IOS_SIRI_HONEST, AD_IOS_SIRI_LOCKED
 struct SetLightsIntent: AppIntent {
     static let title: LocalizedStringResource = "Switch All Lights"
     static let description = IntentDescription("Turns all lights of the camper on or off.")
-    /// On a locked iPhone, Siri asks for Face ID or the passcode before it switches anything.
-    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+    /// Runs on a locked iPhone without Face ID (`AD_IOS_SIRI_LOCKED`).
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
     @Parameter(title: "State") var state: OnOff
 
@@ -89,12 +89,12 @@ struct SetLightsIntent: AppIntent {
 
 /// A light favourite A–D: `lighting profile 1|5|6|7`.
 ///
-/// - Requirement: R_IOS_SIRI, R_IOS_SIRI_HONEST
+/// - Requirement: R_IOS_SIRI, R_IOS_SIRI_HONEST, AD_IOS_SIRI_LOCKED
 struct ActivateLightFavouriteIntent: AppIntent {
     static let title: LocalizedStringResource = "Recall Light Favourite"
     static let description = IntentDescription("Switches the lights to a favourite stored on the camper unit.")
-    /// On a locked iPhone, Siri asks for Face ID or the passcode before it switches anything.
-    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+    /// Runs on a locked iPhone without Face ID (`AD_IOS_SIRI_LOCKED`).
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
     @Parameter(title: "Light favourite") var favourite: LightFavourite
 
@@ -113,12 +113,12 @@ struct ActivateLightFavouriteIntent: AppIntent {
 
 /// The cooler on or off: `cooler power on|off`.
 ///
-/// - Requirement: R_IOS_SIRI, R_IOS_SIRI_HONEST
+/// - Requirement: R_IOS_SIRI, R_IOS_SIRI_HONEST, AD_IOS_SIRI_LOCKED
 struct SetCoolerIntent: AppIntent {
     static let title: LocalizedStringResource = "Switch Cooler"
     static let description = IntentDescription("Turns the cooler on or off.")
-    /// On a locked iPhone, Siri asks for Face ID or the passcode before it switches anything.
-    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+    /// Runs on a locked iPhone without Face ID (`AD_IOS_SIRI_LOCKED`).
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
     @Parameter(title: "State") var state: OnOff
 
