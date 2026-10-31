@@ -352,6 +352,30 @@ for sphinx-needs does not parse Swift.)
     @Test func campingPhraseResolvesToMasterOn() { … }
 ```
 
+## Code and tests
+
+The tables list the Swift code and the Swift tests that trace to the requirements above. The
+docs build generates them from the `- Requirement:` and `- Test:` tags (see
+{need}`AD_IOS_TRACE`); each row links to its source line.
+
+```{needimport} _build/ios-needs.json
+:tags: ios
+```
+
+```{needtable}
+:types: impl
+:tags: ios
+:columns: id, title, links
+:style: table
+```
+
+```{needtable}
+:types: test
+:tags: ios
+:columns: id, links, source
+:style: table
+```
+
 ## Verified early
 
 These points decide the shape of phase 1 and are checked on the real radio before anything else:

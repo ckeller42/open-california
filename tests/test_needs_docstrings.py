@@ -161,3 +161,14 @@ def test_every_need_is_autodocd_in_api_md():
         "needs whose docstring docs/api.md never renders (add an auto*:: directive, else the "
         "need silently drops out of the sphinx-needs trace):\n" + "\n".join(bad)
     )
+
+
+def test_swift_tags_resolve():
+    """Swift ``- Requirement:``/``- Verifies:`` tags name existing R_/AD_ ids; a ``- Test:`` has ``- Verifies:``."""
+    from tools import swift_needs
+
+    known = {o["id"] for _w, _m, _q, k, o in NEEDS if k == "req" and "id" in o} | _doc_reqs()
+    for p in (ROOT / "docs").glob("*.md"):
+        known |= set(re.findall(r"^\s*:id:\s*(AD_\w+)", p.read_text(encoding="utf-8"), re.M))
+    _needs, errors = swift_needs.scan(ROOT / "ios", known)
+    assert not errors, "\n".join(errors)
