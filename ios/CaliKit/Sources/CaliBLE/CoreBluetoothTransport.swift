@@ -300,6 +300,7 @@ extension CoreBluetoothTransport: CBCentralManagerDelegate {
         }
         // Not powered on: CoreBluetooth sends no disconnect for the links it dropped.
         let was = phase
+        let picking = policy.inPick
         if was > .waitingForPower { tearDown() }
         policy.cancelPick()  // a pick never waits for Bluetooth (tearDown may have promoted one)
         if was >= .discovering { sink.yield(.disconnected(reason: .linkLost)) }
@@ -309,6 +310,8 @@ extension CoreBluetoothTransport: CBCentralManagerDelegate {
         } else if was > .idle {
             phase = .waitingForPower  // resetting: connect again once it is back
         }
+        // The pick is over: its caller fails now, so the saved unit's later link never answers it.
+        if picking { sink.yield(.disconnected(reason: .failedToConnect)) }
     }
 
     public func centralManager(_ central: CBCentralManager, didDiscover p: CBPeripheral,

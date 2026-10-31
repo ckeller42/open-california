@@ -172,6 +172,8 @@ struct PairingGuideView: View {
 
     /// Step 2's instruction, shown from the connect on: the iOS dialog covers the card later.
     static let passcodeHint: LocalizedStringResource = "When iOS asks for a code, type the passcode that the camper screen shows now."
+    /// The safety line: the real unit always asks for a passcode (it refuses Just Works).
+    static let noPasscodeNotCamper: LocalizedStringResource = "A pairing request without a passcode is not the camper unit: cancel it."
     static let closeGeraetVerbinden: LocalizedStringResource = "You can close “Gerät verbinden” on the camper unit."
 
     /// The step's headline.
@@ -253,6 +255,7 @@ struct PairingGuideView: View {
         case .connecting:
             Label { Text(Self.headline(step)) } icon: { ProgressView() }
             Text(Self.passcodeHint).font(.headline)
+            Text(Self.noPasscodeNotCamper).font(.subheadline)
             cancelButton
         case .pick(let units):
             Text(Self.headline(step)).font(.subheadline.weight(.semibold))
@@ -280,12 +283,12 @@ struct PairingGuideView: View {
         case .typeCode:
             Label { Text(Self.headline(step)).font(.headline) } icon: { Image(systemName: "number") }
             Text("Type it within about 30 seconds. Each attempt shows a new passcode.").font(.subheadline)
-            Text("A pairing request without a passcode is not the camper unit: cancel it.").font(.subheadline)
+            Text(Self.noPasscodeNotCamper).font(.subheadline)
             cancelButton
         case .done(let outcome):
             Label { Text(Self.headline(step)) } icon: { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.onGreen) }
             if outcome == .alreadyPaired {
-                Text("The California On Tour app on this iPhone uses the same pairing, so no code was needed.").font(.subheadline)
+                Text("This iPhone already has a pairing with the camper unit (for example from the California On Tour app), so no code was needed.").font(.subheadline)
             }
             Text(Self.closeGeraetVerbinden).font(.subheadline)
             action("Close", prominent: false) { guide.cancel() }

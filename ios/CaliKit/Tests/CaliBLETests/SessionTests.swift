@@ -419,6 +419,23 @@ struct SessionTests {
         #expect(try await call.value == .paired)
     }
 
+    /// Bluetooth resets while a pick waits for the saved link to end: the transport ends the pick
+    /// (`.failedToConnect`), so the call fails and a later connect of the saved unit can never answer
+    /// it as "already paired".
+    ///
+    /// - Test: T_IOS_SESSION_PICK_RESET
+    /// - Verifies: R_IOS_PAIRING, R_IOS_HONEST
+    @Test func bluetoothResetDuringAPickFailsIt() async throws {
+        let r = Rig()
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        await r.fake.holdNextPick()
+        let call = Task { try await r.s.firstPairing(with: UUID()) }
+        try await until("pick issued") { await r.fake.picks.count == 1 }
+        await r.fake.resetBluetooth()
+        await #expect(throws: SessionError.unreachable) { try await call.value }
+        #expect(await r.s.isReady == false)
+    }
+
     /// A pick of a unit the iPhone is already paired with (shared bond): no dialog, `.alreadyPaired`.
     ///
     /// - Test: T_IOS_SESSION_PICK_SHARED_BOND

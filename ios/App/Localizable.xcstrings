@@ -2619,23 +2619,6 @@
         }
       }
     },
-    "The California On Tour app on this iPhone uses the same pairing, so no code was needed.": {
-      "extractionState": "manual",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Die California-On-Tour-App auf diesem iPhone nutzt dieselbe Kopplung, darum war kein Code nötig."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The California On Tour app on this iPhone uses the same pairing, so no code was needed."
-          }
-        }
-      }
-    },
     "The camper unit did not answer in time": {
       "extractionState": "manual",
       "localizations": {
@@ -2972,6 +2955,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "This favourite is empty on the unit"
+          }
+        }
+      }
+    },
+    "This iPhone already has a pairing with the camper unit (for example from the California On Tour app), so no code was needed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses iPhone ist bereits mit der Camper-Einheit gekoppelt (zum Beispiel über die California-On-Tour-App), darum war kein Code nötig."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This iPhone already has a pairing with the camper unit (for example from the California On Tour app), so no code was needed."
           }
         }
       }
@@ -3322,7 +3322,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Falscher Passcode, oder die Zeit ist abgelaufen. Öffne „Gerät verbinden“ an der Camper-Einheit erneut und versuche es noch einmal: Sie zeigt einen neuen Passcode."
+            "value": "Falscher Passcode, oder die Zeit ist abgelaufen. Öffne „Gerät verbinden“ an der Camper-Einheit erneut und versuche es noch einmal. Die Camper-Einheit zeigt dann einen neuen Passcode."
           }
         },
         "en": {

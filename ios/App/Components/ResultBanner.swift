@@ -103,17 +103,20 @@ struct Note: View {
     }
 
     var body: some View {
-        Label {
-            text
-        } icon: {
-            if busy { ProgressView() } else { Image(systemName: symbol).foregroundStyle(tint) }
+        HStack(spacing: 0) {
+            Label {
+                text
+            } icon: {
+                if busy { ProgressView() } else { Image(systemName: symbol).foregroundStyle(tint) }
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            CloseButton()
         }
         .font(.subheadline)
-        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -180,16 +183,43 @@ struct AlertCard: View {
     init(text: LocalizedStringResource) { self.text = Text(text) }
 
     var body: some View {
-        Label {
-            text.foregroundStyle(stale ? Color.staleText : Color.primary)
-        } icon: {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(stale ? Color.staleText : Color.orange)
+        HStack(spacing: 0) {
+            Label {
+                text.foregroundStyle(stale ? Color.staleText : Color.primary)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(stale ? Color.staleText : Color.orange)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            CloseButton()
         }
         .font(.subheadline)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background((stale ? Color.gray : Color.orange).opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
-        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Hides the shown feedback (set by `StatusPage` for a dismissible banner); nil: no close button.
+struct DismissAction {
+    let run: @MainActor () -> Void
+}
+
+extension EnvironmentValues {
+    @Entry var bannerDismiss: DismissAction?
+}
+
+/// The banner's close button inside its card: 44 pt, only when the banner can be dismissed.
+private struct CloseButton: View {
+    @Environment(\.bannerDismiss) private var dismiss
+
+    var body: some View {
+        if let dismiss {
+            Button { dismiss.run() } label: {
+                Image(systemName: "xmark").font(.body.weight(.semibold)).frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Dismiss"))
+        }
     }
 }
 

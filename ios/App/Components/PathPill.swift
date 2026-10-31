@@ -112,17 +112,9 @@ struct StatusPage<Content: View>: View {
             if let feedback = store.feedback {
                 // The pill's anchor resolves in the overlay's own space (safe area and scroll included).
                 GeometryReader { g in
-                    HStack(spacing: 0) {
-                        FeedbackBanner(feedback: feedback, clock: store.now)
-                        // A result hides by itself after a few seconds; this hides it at once.
-                        if feedback.dismissible {
-                            Button { store.dismissFeedback() } label: {
-                                Image(systemName: "xmark").font(.body.weight(.semibold)).frame(width: 44, height: 44)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(Text("Dismiss"))
-                        }
-                    }
+                    // A result hides by itself after a few seconds; its close button hides it at once.
+                    FeedbackBanner(feedback: feedback, clock: store.now)
+                        .environment(\.bannerDismiss, feedback.dismissible ? DismissAction { store.dismissFeedback() } : nil)
                     .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 16))
                     .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
                     .onTapGesture { store.dismissFeedback() }

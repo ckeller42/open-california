@@ -98,6 +98,19 @@ public actor FakeCamperTransport: CamperTransport {
 
     /// Every pick, in order.
     public private(set) var picks: [UUID] = []
+    private var holdPick = false
+    private var pickWaiting = false
+    /// The next pick waits for the old link's end (it stays up) until `resetBluetooth()` or forever.
+    public func holdNextPick() { holdPick = true }
+    /// Bluetooth resets (no availability): the link drops (`.linkLost`), and a pick in progress ends
+    /// with `.failedToConnect`, like the real transport.
+    public func resetBluetooth() {
+        let picking = pickWaiting || pairingOpen
+        pickWaiting = false
+        pairingOpen = false
+        end(.linkLost)
+        if picking { sink.yield(.disconnected(reason: .failedToConnect)) }
+    }
 
     // MARK: CamperTransport
 
@@ -162,6 +175,7 @@ public actor FakeCamperTransport: CamperTransport {
     /// Like the real transport: the current link ends (`.localCancel`), then one connect at once.
     public func beginFirstPairing(with id: UUID) {
         picks.append(id)
+        if holdPick { holdPick = false; pickWaiting = true; return }
         end(.localCancel)
         connect()
     }
