@@ -409,3 +409,98 @@ jobs:
           . "$IDF_PATH/export.sh"
           pip install pytest
           CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v
+
+  # Which PRs touch the iOS app: its Swift sources, the C codec + control planner the Swift package
+  # links (Package.swift), the golden vectors and semantics.js it runs, and this workflow. Runs on a
+  # Linux runner, so a PR without iOS changes never pays for a macOS runner. A push to main always
+  # runs the iOS job.
+  ios-changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ios: ${{ steps.filter.outputs.ios }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2   # a PR checks out its merge commit: HEAD^1 is the base, the diff is the whole PR
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then echo "ios=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          paths='^(ios/|Package\.(swift|resolved)$|csrc/(codec\.c|ports\.c|[^/]*\.h|swiftpm/)|firmware/components/cali_core/(control\.c$|include/|swiftpm/)|tests/vectors/|calictl/webui/semantics[^/]*\.js$|tools/(swift_needs\.py|ios_sanitize\.sh)$|\.github/workflows/ci\.yml$)'
+          if git diff --name-only HEAD^1 HEAD | grep -Eq "$paths"; then ios=true; else ios=false; fi
+          echo "ios=$ios" | tee -a "$GITHUB_OUTPUT"
+
+  # The iPhone app (docs/ios-app.md): the Swift package tests (plain, ASan, UBSan), SwiftLint +
+  # swift-format, then the app's unit, snapshot and UI tests on the simulator. The snapshot
+  # references are recorded on the iPhone 17 simulator with iOS 26.2; macos-26 is the image that
+  # ships that runtime (the Xcode 27 image has only iOS 27), and Xcode 26.2 is the Xcode of that
+  # SDK. The references use perceptualPrecision 0.98 for the rendering of a different host. Not a
+  # required check.
+  ios:
+    needs: ios-changes
+    if: needs.ios-changes.outputs.ios == 'true'
+    runs-on: macos-26
+    timeout-minutes: 40
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Generated artifacts are fresh (incl. the semantics tables the Swift package bundles)
+        run: |
+          pip install pyyaml
+          python -m tools.gen_c_dict --check
+      - name: Install XcodeGen 2.46.0 + SwiftLint 0.63.2 (release binaries, SHA-256 checked)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLo xcodegen.zip https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          curl -fsSLo swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.63.2/portable_swiftlint.zip
+          shasum -a 256 -c <<'SUMS'
+          4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  xcodegen.zip
+          c59a405c85f95b92ced677a500804e081596a4cae4a6a485af76065557d6ed29  swiftlint.zip
+          SUMS
+          unzip -q xcodegen.zip && unzip -q swiftlint.zip -d swiftlint
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/swiftlint" >> "$GITHUB_PATH"
+      - name: Tool versions
+        run: |
+          xcodebuild -version
+          xcodegen --version
+          swiftlint version
+          swift format --version
+          xcbeautify --version
+      - name: SwiftLint
+        working-directory: ios
+        run: swiftlint --strict
+      - name: swift-format
+        run: swift format lint --strict --recursive ios/
+      - name: Swift package tests
+        run: swift test
+      - name: Swift package tests under ASan + UBSan
+        run: tools/ios_sanitize.sh
+      - name: Generate the Xcode project
+        run: xcodegen generate --spec ios/project.yml
+      - name: App tests on the simulator (unit, snapshot, UI)
+        timeout-minutes: 25   # xcodebuild can hang after the UI tests
+        env:
+          TEST_RUNNER_SNAPSHOT_ARTIFACTS: ${{ runner.temp }}/snapshot-diffs
+        run: |
+          set -o pipefail
+          xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' \
+            -resultBundlePath "$RUNNER_TEMP/Camper.xcresult" | xcbeautify
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-test-results
+          path: |
+            ${{ runner.temp }}/snapshot-diffs
+            ${{ runner.temp }}/Camper.xcresult
+          if-no-files-found: ignore
