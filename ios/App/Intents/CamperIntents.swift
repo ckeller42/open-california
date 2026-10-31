@@ -10,7 +10,10 @@ enum OnOff: String, AppEnum {
     case on, off
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "State"
-    static let caseDisplayRepresentations: [OnOff: DisplayRepresentation] = [.on: "on", .off: "off"]
+    static let caseDisplayRepresentations: [OnOff: DisplayRepresentation] = [
+        .on: DisplayRepresentation(title: "on", synonyms: ["switched on"]),
+        .off: "off",
+    ]
 }
 
 /// The light favourites A–D of the web UI's tiles (unit profiles 1/5/6/7, `LightsView.favourites`);
@@ -38,6 +41,8 @@ enum LightFavourite: String, AppEnum, CaseIterable {
 struct SetCampingModeIntent: AppIntent {
     static let title: LocalizedStringResource = "Switch Camping Mode"
     static let description = IntentDescription("Turns the camping mode of the camper unit on or off.")
+    /// On a locked iPhone, Siri asks for Face ID or the passcode before it switches anything.
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "State") var state: OnOff
 
@@ -58,6 +63,8 @@ struct SetCampingModeIntent: AppIntent {
 struct SetLightsIntent: AppIntent {
     static let title: LocalizedStringResource = "Switch All Lights"
     static let description = IntentDescription("Turns all lights of the camper on or off.")
+    /// On a locked iPhone, Siri asks for Face ID or the passcode before it switches anything.
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "State") var state: OnOff
 
@@ -77,6 +84,8 @@ struct SetLightsIntent: AppIntent {
 struct ActivateLightFavouriteIntent: AppIntent {
     static let title: LocalizedStringResource = "Recall Light Favourite"
     static let description = IntentDescription("Switches the lights to a favourite stored on the camper unit.")
+    /// On a locked iPhone, Siri asks for Face ID or the passcode before it switches anything.
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "Light favourite") var favourite: LightFavourite
 
@@ -96,6 +105,8 @@ struct ActivateLightFavouriteIntent: AppIntent {
 struct SetCoolerIntent: AppIntent {
     static let title: LocalizedStringResource = "Switch Cooler"
     static let description = IntentDescription("Turns the cooler on or off.")
+    /// On a locked iPhone, Siri asks for Face ID or the passcode before it switches anything.
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "State") var state: OnOff
 

@@ -67,24 +67,58 @@ struct IntentTests {
         #expect(SetCoolerIntent(on: false).command == CoolerView.power(false))
     }
 
-    /// No App Shortcut runs the air heater, and no intent source can build an `airheater` command.
+    /// No App Shortcut runs the air heater; the app declares exactly the four known intents (the
+    /// Shortcuts app shows every `AppIntent` of the target), each of them builds only camping,
+    /// lighting or cooler commands for every parameter value, and the runner refuses an
+    /// `airheater` command without a dial.
     ///
     /// - Test: T_IOS_SIRI_NO_HEATER
     /// - Verifies: R_IOS_SIRI_NO_HEATER
-    @Test func noHeaterIntentExists() throws {
+    @Test func noHeaterIntentExists() async throws {
         let shortcuts = CamperShortcuts.appShortcuts
         #expect(shortcuts.count == 4)
         for s in shortcuts {
             #expect(!String(reflecting: s).localizedCaseInsensitiveContains("heater"), "\(s)")
         }
-        let dir = Self.root.appending(path: "ios/App/Intents")
-        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).filter { $0.pathExtension == "swift" }
-        #expect(files.count >= 3)
-        for url in files {
+        // Every `: AppIntent` conformer in ios/App/**.
+        let app = Self.root.appending(path: "ios/App")
+        let files = try #require(FileManager.default.enumerator(at: app, includingPropertiesForKeys: nil)?.allObjects as? [URL])
+        let conformer = try Regex(#"(?:struct|class|enum)\s+(\w+)\s*:[^{]*\bAppIntent\b"#)
+        var intents: Set<String> = []
+        for url in files where url.pathExtension == "swift" {
             let src = try String(contentsOf: url, encoding: .utf8)
-            #expect(!src.localizedCaseInsensitiveContains("airheater"), "\(url.lastPathComponent)")
-            #expect(!src.contains("AirHeaterView"), "\(url.lastPathComponent)")
+            for m in src.matches(of: conformer) { intents.insert(String(m.output[1].substring!)) }
         }
+        #expect(intents == ["SetCampingModeIntent", "SetLightsIntent", "ActivateLightFavouriteIntent", "SetCoolerIntent"])
+
+        // What each one can send, for every parameter value.
+        var commands = [true, false].flatMap { on in
+            [SetCampingModeIntent(on: on).command, SetLightsIntent(on: on).command, SetCoolerIntent(on: on).command]
+        }
+        commands += LightFavourite.allCases.map { ActivateLightFavouriteIntent(favourite: $0).command }
+        for c in commands { #expect(["campingmode", "lighting", "cooler"].contains(c.function), "\(c)") }
+
+        // The choke point refuses the heater.
+        let (session, fake) = rig()
+        let outcome = await IntentRunner.perform(Command(function: "air" + "heater", what: "power", value: "on"), session: session)
+        #expect(!outcome.success)
+        #expect(outcome.dialog.string(Self.en) == "Not available in this app")
+        #expect(await fake.connects == 0)
+        #expect(await fake.writes.isEmpty)
+    }
+
+    /// Every state-changing intent asks for Face ID or the passcode on a locked iPhone.
+    ///
+    /// - Test: T_IOS_SIRI_AUTH
+    /// - Verifies: R_IOS_SIRI
+    @Test func intentsNeedAnUnlockedDevice() {
+        let policies: [IntentAuthenticationPolicy] = [
+            SetCampingModeIntent.authenticationPolicy, SetLightsIntent.authenticationPolicy,
+            ActivateLightFavouriteIntent.authenticationPolicy, SetCoolerIntent.authenticationPolicy,
+        ]
+        let wanted = String(describing: IntentAuthenticationPolicy.requiresLocalDeviceAuthentication)
+        #expect(String(describing: IntentAuthenticationPolicy.alwaysAllowed) != wanted)  // the comparison can fail
+        for p in policies { #expect(String(describing: p) == String(describing: IntentAuthenticationPolicy.requiresLocalDeviceAuthentication)) }
     }
 
     /// Review Focus 2: Siri with Bluetooth off (or not allowed) names it, well within the budget.
@@ -104,7 +138,7 @@ struct IntentTests {
         }
     }
 
-    /// A van that never answers: Siri says so when the budget runs out, not later.
+    /// The budget ends before any frame went out (the arm delay): the app's "did not answer in time".
     ///
     /// - Test: T_IOS_SIRI_BUDGET
     /// - Verifies: R_IOS_SIRI_HONEST
@@ -115,8 +149,28 @@ struct IntentTests {
         let outcome = await IntentRunner.perform(SetCoolerIntent(on: true).command, session: session, budget: .seconds(1))
         #expect(ContinuousClock.now - start < .seconds(2))
         #expect(!outcome.success)
-        #expect(outcome.dialog.string(Self.en) == "No answer from the van")
-        #expect(outcome.dialog.string(Self.de) == "Keine Antwort vom Fahrzeug")
+        #expect(outcome.dialog.string(Self.en) == "The camper unit did not answer in time")
+        #expect(outcome.dialog.string(Self.de) == "Die Camper-Einheit hat nicht rechtzeitig geantwortet")
+    }
+
+    /// The budget ends after the frame went out, and the unit's push comes later: Siri says it was
+    /// sent (never "no answer"), and the real result still reaches the banner.
+    ///
+    /// - Test: T_IOS_SIRI_BUDGET_SENT
+    /// - Verifies: R_IOS_SIRI_HONEST, R_IOS_HONEST
+    @Test func budgetEndsAfterTheFrameSaysSent() async throws {
+        let (session, fake) = rig()
+        try await session.ensureConnected(timeout: .seconds(5))
+        try await until("the arm delay") { await (session.sinceFirstBeat ?? .zero) > CamperGATT.armDelay }
+        var late: CommandResult?
+        let outcome = await IntentRunner.perform(CampingView.master(true), session: session, budget: .milliseconds(500)) { late = $0 }
+        #expect(!outcome.success)
+        #expect(outcome.dialog.string(Self.en) == "Camping mode: sent, but the camper unit did not confirm in time")
+        #expect(outcome.dialog.string(Self.de) == "Campingmodus: gesendet, aber die Camper-Einheit hat es nicht rechtzeitig bestätigt")
+        #expect(late == nil)
+        await fake.seed(try #require(CamperGATT.stateChars["campingmode"]), [0x21])
+        try await until("the late result") { late != nil }
+        #expect(late == .applied)
     }
 
     /// Right after the power-save hang-up, Siri does not dial into the unit's cooldown: it says when
@@ -136,6 +190,23 @@ struct IntentTests {
         let text = outcome.dialog.string(Self.en)
         #expect(text.hasPrefix("The camper unit saves power — try again in ") && text.hasSuffix(" seconds"), "\(text)")
         #expect(outcome.dialog.string(Self.de).hasPrefix("Die Camper-Einheit spart Energie — in "))
+    }
+
+    /// Later in the cooldown (about 3.5 s left) Siri still says "try again" and does not dial: the
+    /// rest of the cooldown and a connect do not fit the budget.
+    ///
+    /// - Test: T_IOS_SIRI_REST_LATE
+    /// - Verifies: R_IOS_SIRI_HONEST, R_IOS_POWER_SAVE
+    @Test func restLateInTheCooldownAnswersTryAgain() async throws {
+        let (session, fake) = rig()
+        try await session.ensureConnected(timeout: .seconds(5))
+        await fake.hangUp(after: .zero)
+        try await until("rest") { if case .rest = await session.link { true } else { false } }
+        try await Task.sleep(for: .milliseconds(3500))
+        let dials = await fake.connects
+        let outcome = await IntentRunner.perform(CoolerView.power(true), session: session)
+        #expect(await fake.connects == dials)
+        #expect(outcome.dialog.string(Self.en) == "The camper unit saves power — try again in 4 seconds")
     }
 
     /// Only `.applied` says "is on/off"; a sent command says it was not confirmed, lighting says

@@ -18,6 +18,23 @@
         }
       }
     },
+    "%@: sent, but the camper unit did not confirm in time": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: gesendet, aber die Camper-Einheit hat es nicht rechtzeitig bestätigt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: sent, but the camper unit did not confirm in time"
+          }
+        }
+      }
+    },
     "%@: sent, not confirmed": {
       "extractionState": "manual",
       "localizations": {
@@ -1820,23 +1837,6 @@
         }
       }
     },
-    "No answer from the van": {
-      "extractionState": "manual",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keine Antwort vom Fahrzeug"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No answer from the van"
-          }
-        }
-      }
-    },
     "No vehicle found.": {
       "extractionState": "manual",
       "localizations": {
@@ -3543,7 +3543,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Alle Lichter ${state} schalten"
+            "value": "Alle Lichter ${state}"
           }
         },
         "en": {
@@ -3560,7 +3560,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Campingmodus ${state} schalten"
+            "value": "Campingmodus ${state}"
           }
         },
         "en": {
@@ -3645,7 +3645,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kühlbox ${state} schalten"
+            "value": "Kühlbox ${state}"
           }
         },
         "en": {
@@ -4281,6 +4281,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "strong signal"
+          }
+        }
+      }
+    },
+    "switched on": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ein"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "switched on"
           }
         }
       }

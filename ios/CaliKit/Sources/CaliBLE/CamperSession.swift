@@ -96,6 +96,8 @@ public actor CamperSession {
     /// A control command is running from now until `endCommand()`. While one runs, the unit's
     /// hang-up does not start the power-save rest (session.c `!cali_ctl_busy()`): it reconnects.
     public func beginCommand() { commands += 1 }
+    /// The running (or last) command issued a frame to the unit: it may have acted on it.
+    public internal(set) var commandIssuedFrame = false
     public func endCommand() { commands = max(0, commands - 1) }
 
     /// Every change of `state` or `link`, starting with the current values.
@@ -108,16 +110,19 @@ public actor CamperSession {
         return stream
     }
 
+    /// The least time a connect, subscribe and read pass needs after the cooldown.
+    static let minConnect = Duration.seconds(3)
+
     /// Brings the link up, subscribes and reads every state function; returns at once when the link
     /// is already ready. `timeout` is the total budget of the whole call. After a lost link it waits
-    /// until the unit's 7 s cooldown has passed; when that does not fit the budget it throws
-    /// `inRest(retryAfter:)` at once. It ends the power-save rest and replaces a scheduled reconnect.
+    /// until the unit's 7 s cooldown has passed; when the rest of the cooldown plus `minConnect`
+    /// does not fit the budget it throws `inRest(retryAfter:)` at once (no dial). It ends the power-save rest and replaces a scheduled reconnect.
     /// Concurrent callers share one bring-up.
     public func ensureConnected(timeout: Duration) async throws {
         let remaining = clock.countdown(timeout)
         if isReady { return }
         if flight == nil {
-            if let left = cooldownLeft(), left > timeout { throw SessionError.inRest(retryAfter: left) }
+            if let left = cooldownLeft(), left + Self.minConnect > timeout { throw SessionError.inRest(retryAfter: left) }
             cancelReconnect()
             startFlight(budget: timeout)
         }

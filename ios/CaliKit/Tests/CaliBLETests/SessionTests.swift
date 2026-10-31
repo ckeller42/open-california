@@ -177,6 +177,25 @@ struct SessionTests {
         #expect(await r.s.link == .up)
     }
 
+    /// Later in the cooldown: 4 s left do not leave a 5 s budget the time to connect (the cooldown
+    /// end plus `minConnect` is past it), so the caller learns at once how long to wait, and nothing dials.
+    ///
+    /// - Test: T_IOS_SESSION_REST_LATE
+    /// - Verifies: R_IOS_TESTED, R_IOS_POWER_SAVE
+    @Test func cooldownPlusConnectBeyondTimeoutThrowsInRest() async throws {
+        let r = Rig()
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        await r.fake.hangUp(after: .seconds(30))
+        try await until("heartbeat + hang-up sleepers") { r.clock.sleeperCount >= 2 }
+        r.clock.advance(by: .seconds(30))
+        try await until("rest") { if case .rest = await r.s.link { true } else { false } }
+        r.clock.advance(by: .seconds(3))
+        await #expect(throws: SessionError.inRest(retryAfter: .seconds(4))) {
+            try await r.s.ensureConnected(timeout: .seconds(5))
+        }
+        #expect(await r.t.connects == 1)
+    }
+
     /// - Test: T_IOS_SESSION_BACKOFF
     /// - Verifies: R_IOS_TESTED, R_IOS_BACKGROUND_LINK, R_IOS_POWER_SAVE
     @Test func linkLostWithCampingOnBacksOff() async throws {

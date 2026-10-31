@@ -80,6 +80,7 @@ extension CamperSession {
         // from starting the power-save rest (session.c `!cali_ctl_busy()`).
         guard commands == 0 else { return .busy }
         beginCommand()
+        commandIssuedFrame = false
         defer { endCommand() }
         do {
             try await ensureConnected(timeout: connectTimeout)
@@ -129,7 +130,7 @@ extension CamperSession {
             let (id, pushes) = pushes()
             defer { unsubscribePushes(id) }
             let left = clock.countdown(CaliControl.deadline)
-            if let r = await write(frames, until: left) { return r }
+            if let r = await write(frames, until: left, issuing: true) { return r }
             return await confirm(cmd, pushes: pushes, within: left())
         case .refused(let why): return .refused(Refusal(planner: why))
         case .elsewhere(let why): return .refused(Refusal(planner: why))
@@ -140,7 +141,9 @@ extension CamperSession {
 
     /// Writes `frames` in order within the time `left` gives; nil when every frame was ACKed, else
     /// the result. A frame outside the write allow-list refuses the whole command before any write.
-    func write(_ frames: [ControlFrame], until left: @Sendable () -> Duration) async -> CommandResult? {
+    /// - Parameter issuing: the frames are the command's own (not the config pull): mark
+    ///   `commandIssuedFrame` as each one goes out.
+    func write(_ frames: [ControlFrame], until left: @Sendable () -> Duration, issuing: Bool = false) async -> CommandResult? {
         // The satellite's allow-list (cali_ctl_write_ok); the V3 deny-list stays as an extra check.
         if frames.contains(where: { !CaliControl.writeOK($0.char, $0.data.count) || CamperGATT.forbiddenWrites.contains($0.char) }) {
             return .refused(.forbiddenWrite)
@@ -150,6 +153,7 @@ extension CamperSession {
             if f.delayMs > 0 { try? await clock.sleep(for: .milliseconds(Int(f.delayMs))) }
             let budget = left()
             if budget <= .zero { return .timeout }
+            if issuing { commandIssuedFrame = true }
             do {
                 try await race(clock, budget) { [transport] in try await transport.write(f.char, f.data) }
                 acked = true

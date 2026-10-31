@@ -23,12 +23,20 @@ switched only on its own screen in the app.
 | The unit confirmed it | "Camping mode is on", "All lights are off", "Favourite B is on", "The cooler is on" | "Campingmodus ist an", "Alle Lichter sind aus", "Favorit B ist an", "Die Kühlbox ist an" |
 | Sent, the unit did not confirm it | "Camping mode: sent, not confirmed" | "Campingmodus: gesendet, nicht bestätigt" |
 | Lights sent | "Lighting: sent, check the lamp" | "Beleuchtung: gesendet, prüfe die Lampe" |
-| Power-save rest | "The camper unit saves power — try again in 7 seconds" | "Die Camper-Einheit spart Energie — in 7 Sekunden erneut versuchen" |
+| Power-save rest, early in the unit's reconnect wait | "The camper unit saves power — try again in 5 seconds" | "Die Camper-Einheit spart Energie — in 5 Sekunden erneut versuchen" |
 | Bluetooth off or not allowed | "Bluetooth is off or not allowed for this app" | "Bluetooth ist aus oder für diese App nicht erlaubt" |
-| No answer within 9 seconds | "No answer from the van" | "Keine Antwort vom Fahrzeug" |
 | Out of range | "The camper unit is not reachable" | "Die Camper-Einheit ist nicht erreichbar" |
+| Another command still runs | "The previous command is still running — try again in a moment" | "Der vorige Befehl läuft noch — bitte gleich noch einmal versuchen" |
+| 9 seconds passed, a frame went out | "Camping mode: sent, but the camper unit did not confirm in time" | "Campingmodus: gesendet, aber die Camper-Einheit hat es nicht rechtzeitig bestätigt" |
+| 9 seconds passed, nothing went out | "The camper unit did not answer in time" | "Die Camper-Einheit hat nicht rechtzeitig geantwortet" |
 
 The refusals use the app's own texts, for example "Turn camping mode on first".
+
+On a locked iPhone, Siri asks for Face ID before it switches anything.
+
+The unit does not take a new link for about 7 seconds after it ended the last one. While more
+than about 2 seconds of this wait are left, Siri answers "try again" and does not connect. Later,
+Siri connects once and runs the action.
 
 ## Before you start
 
@@ -43,6 +51,14 @@ Do each check once with the iPhone in English and once in German (*Settings → 
 Language & Region*, and the Siri language). Use the phrases of the table above. After each
 action, check the unit's own screen: it is the ground truth.
 
+### Locked iPhone
+
+1. Lock the iPhone.
+2. Say "Turn the cooler on in Camper".
+3. Check that Siri asks for Face ID or the passcode, and that the cooler does not change before
+   you unlock.
+4. Unlock. Check that the cooler switches on and that Siri answers.
+
 ### With the link open
 
 1. Open the app and wait until it shows "live".
@@ -56,24 +72,38 @@ action, check the unit's own screen: it is the ground truth.
 ### With the link closed (camping mode off)
 
 1. Turn camping mode off and make sure that no shore power is connected.
-2. Close the app and wait at least 40 seconds. The unit ends the link to save power.
-3. Say "Turn the cooler on in Camper". Check that the cooler switches on within about 9 seconds
-   and that Siri answers.
-4. Within 7 seconds after the unit ended a link, say the phrase again. Check that Siri says "The
-   camper unit saves power — try again in N seconds" and that the app does not connect in a loop.
+2. Keep the app open and wait until the pill shows "Disconnected to save energy". The unit ended
+   the link to save power.
+3. Within 3 seconds, say "Turn the cooler on in Camper". Check that Siri says "The camper unit
+   saves power — try again in N seconds" and that the app does not connect.
+4. Close the app. Wait 10 seconds.
+5. Say "Turn the cooler on in Camper". Start a stopwatch at the end of the phrase. Check that the
+   cooler switches on and that Siri answers. Write down the time until the unit's screen changes:
+   it must stay well under 10 seconds, the time that Siri gives an action.
+6. Wait for the next "Disconnected to save energy", then 10 seconds. Repeat step 5 with "Turn the
+   lights on in Camper", "Light favourite A in Camper" and "Turn camping mode on in Camper".
+7. After camping mode on, check that the app keeps the link (the unit does not end it after 30
+   seconds).
+
+### Another command still runs
+
+1. Open the app on the cooler screen while the link is open.
+2. Switch the cooler and, while the banner shows "Sending…", say "Turn the lights on in Camper".
+3. Check that Siri says "The previous command is still running — try again in a moment" and that
+   the lights do not change.
 
 ### Out of range
 
 1. Walk away from the van until the app shows "unreachable".
-2. Say "Turn camping mode on in Camper".
-3. Check that Siri answers within about 10 seconds with "The camper unit is not reachable" or "No
-   answer from the van", and never with "is on".
+2. Say each of the four actions.
+3. Check that Siri answers within about 10 seconds with "The camper unit is not reachable" or "The
+   camper unit did not answer in time", and never with "is on".
 
 ### With Bluetooth off
 
 1. Turn Bluetooth off in *Settings → Bluetooth* (not only in the Control Center).
 2. Force-close the app.
-3. Say "Turn the lights on in Camper".
+3. Say each of the four actions.
 4. Check that Siri says "Bluetooth is off or not allowed for this app" within a few seconds.
 5. Turn Bluetooth on again. In *Settings → Privacy & Security → Bluetooth*, turn the app off, and
    repeat steps 3 and 4.
