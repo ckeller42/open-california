@@ -36,9 +36,12 @@ struct EnergyView: View {
     private func wav(_ v: Double?, _ a: Double?) -> (String, String) {
         guard v != nil || a != nil else { return ("—", "—") }
         let w = v.flatMap { v in a.map { (v * $0).rounded() } }
-        let text = "\(w.map { String(Int($0)) } ?? "—")\(nbsp)W\(nbsp)· \(a.map(fmt) ?? "—")\(nbsp)A\(nbsp)· \(v.map(fmt) ?? "—")\(nbsp)V"
-        let words = [w.map { spoken($0, UnitPower.watts, locale) }, a.map { spoken($0, UnitElectricCurrent.amperes, locale) },
-                     v.map { spoken($0, UnitElectricPotentialDifference.volts, locale) }].map { $0 ?? "—" }
+        let watts = w.map { String(Int($0)) } ?? "—"
+        let text = "\(watts)\(nbsp)W\(nbsp)· \(a.map(fmt) ?? "—")\(nbsp)A\(nbsp)· \(v.map(fmt) ?? "—")\(nbsp)V"
+        let words = [
+            w.map { spoken($0, UnitPower.watts, locale) }, a.map { spoken($0, UnitElectricCurrent.amperes, locale) },
+            v.map { spoken($0, UnitElectricPotentialDifference.volts, locale) },
+        ].map { $0 ?? "—" }
         return (text, words.joined(separator: ", "))
     }
 
@@ -51,10 +54,15 @@ struct EnergyView: View {
     private func source(_ prefix: String) -> (String, String) {
         let st = store.value("energy", "\(prefix)_state")?.string
         let word = st.map { Self.sourceState[$0].map { $0.string(locale) } ?? $0 } ?? "—"
-        let w = num("\(prefix)_power"), a = num("\(prefix)_current")
-        return ("\(word) (\(w.map { String(Int($0)) } ?? "—")\(nbsp)W\(nbsp)· \(a.map(fmt) ?? "—")\(nbsp)A)",
-                [word, w.map { spoken($0, UnitPower.watts, locale) } ?? "—",
-                 a.map { spoken($0, UnitElectricCurrent.amperes, locale) } ?? "—"].joined(separator: ", "))
+        let w = num("\(prefix)_power")
+        let a = num("\(prefix)_current")
+        return (
+            "\(word) (\(w.map { String(Int($0)) } ?? "—")\(nbsp)W\(nbsp)· \(a.map(fmt) ?? "—")\(nbsp)A)",
+            [
+                word, w.map { spoken($0, UnitPower.watts, locale) } ?? "—",
+                a.map { spoken($0, UnitElectricCurrent.amperes, locale) } ?? "—",
+            ].joined(separator: ", ")
+        )
     }
 
     var body: some View {
@@ -63,14 +71,18 @@ struct EnergyView: View {
                 EnergyModeView(store: store)
                 // The unit's starter data is stale while the starter subsystem sleeps (age 255).
                 let starterStale = store.value("energy", "stale")?.bool == true
-                let batt2 = wav(num("batt2_v"), num("batt2_current")), batt1 = wav(num("batt1_v"), num("batt1_current"))
+                let batt2 = wav(num("batt2_v"), num("batt2_current"))
+                let batt1 = wav(num("batt1_v"), num("batt1_current"))
                 VStack(spacing: 0) {
                     Row("Second battery", Text(verbatim: pct("soc2_pct")), bar: num("soc2_pct"))
                     Row("Second battery power", Text(verbatim: batt2.0), spoken: batt2.1)
-                    Row("Time remaining", Text(verbatim: num("batt2_remaining_h").map { "\(Int($0))\(nbsp)h" } ?? "—"),
+                    Row(
+                        "Time remaining", Text(verbatim: num("batt2_remaining_h").map { "\(Int($0))\(nbsp)h" } ?? "—"),
                         spoken: num("batt2_remaining_h").map { spoken($0, UnitDuration.hours, locale) })
                     Row("Starter battery", Text(verbatim: pct("soc1_pct")), bar: num("soc1_pct"), dimmed: starterStale)
-                    Row("Data age", starterAge(starterStale), spoken: starterAgeSpoken(starterStale), dimmed: starterStale, clock: starterStale)
+                    Row(
+                        "Data age", starterAge(starterStale), spoken: starterAgeSpoken(starterStale), dimmed: starterStale,
+                        clock: starterStale)
                     Row("Starter power", Text(verbatim: batt1.0), spoken: batt1.1, dimmed: starterStale)
                     if store.value("energy", "dcdc_installed")?.bool == true {
                         let r = source("dcdc")
@@ -128,7 +140,10 @@ struct Row: View {
     @Environment(\.pageStale) private var pageStale
     @Environment(\.pageStaleSpoken) private var staleSpoken
 
-    init(_ label: LocalizedStringResource, _ value: Text, spoken: String? = nil, bar: Double? = nil, dimmed: Bool = false, clock: Bool = false) {
+    init(
+        _ label: LocalizedStringResource, _ value: Text, spoken: String? = nil, bar: Double? = nil, dimmed: Bool = false,
+        clock: Bool = false
+    ) {
         self.clock = clock
         self.label = label
         self.value = value

@@ -16,15 +16,18 @@ struct PathPill: View {
         let stale = store.isStale(at: now)
         let label = store.linkLabel(at: now).string(locale)
         let age = stale ? store.state.asOf.map { now.timeIntervalSince($0) } : nil
-        PillLabel(stale: stale, live: store.link == .up && !stale, label: label,
-                  asOf: age.map { LocalizedStringResource("as of \(ageText($0).string(locale))").string(locale) },
-                  spoken: age.map { "\(label), " + LocalizedStringResource("as of \(spokenAge($0, locale))").string(locale) } ?? label)
+        PillLabel(
+            stale: stale, live: store.link == .up && !stale, label: label,
+            asOf: age.map { LocalizedStringResource("as of \(ageText($0).string(locale))").string(locale) },
+            spoken: age.map { "\(label), " + LocalizedStringResource("as of \(spokenAge($0, locale))").string(locale) } ?? label)
     }
 }
 
 /// What the pill draws: plain values, so SwiftUI skips it while they stay equal.
 struct PillLabel: View, Equatable {
-    nonisolated static func == (a: Self, b: Self) -> Bool { (a.stale, a.live, a.label, a.asOf, a.spoken) == (b.stale, b.live, b.label, b.asOf, b.spoken) }
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        (a.stale, a.live, a.label, a.asOf, a.spoken) == (b.stale, b.live, b.label, b.asOf, b.spoken)
+    }
 
     let stale: Bool
     /// The link is up and the data fresh: only then the icon is green.
@@ -75,9 +78,10 @@ struct StatusPage<Content: View>: View {
 
     /// What the page shows of the clock: the stale state and the minute-level ages.
     private func visible(at now: Date) -> [String] {
-        [String(store.isStale(at: now))] + [store.state.asOf, store.state.waterGoodAt].map { at in
-            at.map { ageText(now.timeIntervalSince($0)).string(locale) } ?? "-"
-        }
+        [String(store.isStale(at: now))]
+            + [store.state.asOf, store.state.waterGoodAt].map { at in
+                at.map { ageText(now.timeIntervalSince($0)).string(locale) } ?? "-"
+            }
     }
 
     var body: some View {
@@ -97,9 +101,12 @@ struct StatusPage<Content: View>: View {
                 VStack(spacing: 12) { content() }
                     .environment(\.pageNow, now)
                     .environment(\.pageStale, store.isStale(at: now))
-                    .environment(\.pageStaleSpoken, store.isStale(at: now) ? store.state.asOf.map {
-                        LocalizedStringResource("as of \(spokenAge(now.timeIntervalSince($0), locale))").string(locale)
-                    } : nil)
+                    .environment(
+                        \.pageStaleSpoken,
+                        store.isStale(at: now)
+                            ? store.state.asOf.map {
+                                LocalizedStringResource("as of \(spokenAge(now.timeIntervalSince($0), locale))").string(locale)
+                            } : nil)
             }
             .padding()
         }
@@ -115,10 +122,10 @@ struct StatusPage<Content: View>: View {
                     // A result hides by itself after a few seconds; its close button hides it at once.
                     FeedbackBanner(feedback: feedback, clock: store.now)
                         .environment(\.bannerDismiss, feedback.dismissible ? DismissAction { store.dismissFeedback() } : nil)
-                    .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 16))
-                    .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
-                    .onTapGesture { store.dismissFeedback() }
-                    .padding(.horizontal)
+                        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 16))
+                        .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+                        .onTapGesture { store.dismissFeedback() }
+                        .padding(.horizontal)
                         .padding(.top, max(4, (pill.map { g[$0].maxY } ?? 0) + 6))
                 }
             }

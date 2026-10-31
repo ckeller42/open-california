@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import CaliCore
 
 struct ControlVectorTests {
@@ -30,15 +31,16 @@ struct ControlVectorTests {
         let want: PlanResult
         switch kind {
         case "frames":
-            want = .frames((e["frames"] as! [[String: Any]]).map {
-                ControlFrame(
-                    char: UInt16($0["char"] as! String, radix: 16)!,
-                    delayMs: UInt16(truncating: $0["delay_ms"] as! NSNumber),
-                    data: bytes(hex: $0["hex"] as! String))
-            })
+            want = .frames(
+                (e["frames"] as! [[String: Any]]).map {
+                    ControlFrame(
+                        char: UInt16($0["char"] as! String, radix: 16)!,
+                        delayMs: UInt16(truncating: $0["delay_ms"] as! NSNumber),
+                        data: bytes(hex: $0["hex"] as! String))
+                })
         case "refused": want = reason == pull ? .needsLightConfig : .refused(reason!)
         case "elsewhere": want = .elsewhere(reason!)
-        case "bad", "none": want = .badValue   // C rc NONE (build returned None) is a bad value for the app
+        case "bad", "none": want = .badValue  // C rc NONE (build returned None) is a bad value for the app
         default: fatalError("unknown kind \(kind)")
         }
         #expect(got == want, "\(id)")

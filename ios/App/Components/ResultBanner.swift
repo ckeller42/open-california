@@ -134,7 +134,8 @@ struct FeedbackBanner: View {
         switch f {
         case .sending: "Sending…"
         case .result(let r, let fn): ResultBanner.text(r, function: fn)
-        case .connecting(let until?) where until > now: "Connecting in \(max(1, Int(until.timeIntervalSince(now).rounded(.up)))) s…"
+        case .connecting(let until?) where until > now:
+            "Connecting in \(max(1, Int(until.timeIntervalSince(now).rounded(.up)))) s…"
         case .connecting: "Connecting…"
         case .connect(.connected): nil
         case .connect(.resting(let until)):
@@ -155,7 +156,9 @@ struct FeedbackBanner: View {
     var body: some View {
         switch feedback {
         case .sending(let fn):
-            Note(text: Text(ResultBanner.title(fn)) + Text(verbatim: ": ") + Text("Sending…"), symbol: "", tint: .primary, busy: true)
+            Note(
+                text: Text(ResultBanner.title(fn)) + Text(verbatim: ": ") + Text("Sending…"), symbol: "", tint: .primary,
+                busy: true)
         case .connecting:
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 Note(text: Self.text(feedback, now: clock()) ?? "", symbol: "", tint: .primary, busy: true)
@@ -214,7 +217,9 @@ private struct CloseButton: View {
 
     var body: some View {
         if let dismiss {
-            Button { dismiss.run() } label: {
+            Button {
+                dismiss.run()
+            } label: {
                 Image(systemName: "xmark").font(.body.weight(.semibold)).frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
@@ -230,18 +235,25 @@ struct RestCard: View {
     let store: CamperStore
 
     var body: some View {
-        Button { Task { await store.tapToConnect() } } label: {
+        Button {
+            Task { await store.tapToConnect() }
+        } label: {
             // The pill already says why the link is down; the card says what a tap does, and how
             // long the unit's reconnect cooldown still runs.
             TimelineView(.periodic(from: .now, by: 1)) { _ in
-                let left: Int? = if case .rest(let until) = store.link, until > store.now() {
-                    max(1, Int(until.timeIntervalSince(store.now()).rounded(.up)))
-                } else { nil }
-                Label { Text(left.map { "Tap to connect (in \($0) s)" } ?? "Tap to connect") } icon: { Image(systemName: "arrow.clockwise") }
-                    .font(.subheadline)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .background(Color.onGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                let left: Int? =
+                    if case .rest(let until) = store.link, until > store.now() {
+                        max(1, Int(until.timeIntervalSince(store.now()).rounded(.up)))
+                    } else { nil }
+                Label {
+                    Text(left.map { "Tap to connect (in \($0) s)" } ?? "Tap to connect")
+                } icon: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.horizontal, 12)
+                .background(Color.onGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
             }
         }
         .buttonStyle(.plain)
@@ -292,15 +304,22 @@ struct ControlSection<Content: View>: View {
         VStack(spacing: 12) {
             // An unsupported unit has the page's alert card; the rest has the RestCard under the pill.
             if let reason, store.state.gate == .supported, !store.resting { LockCard(reason: reason) }
-            content(Run { cmd, prompts in
-                if prompts.isEmpty { send(cmd) } else { pending = (cmd, prompts) }
-            })
+            content(
+                Run { cmd, prompts in
+                    if prompts.isEmpty { send(cmd) } else { pending = (cmd, prompts) }
+                }
+            )
             .disabled(reason != nil || store.isSending)
             .environment(\.sectionLock, reason)
         }
-        .alert(Text(verbatim: pending?.prompts.map { $0.string(locale) }.joined(separator: "\n\n") ?? ""),
-               isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })) {
-            Button("Continue") { if let cmd = pending?.cmd { send(cmd) }; pending = nil }
+        .alert(
+            Text(verbatim: pending?.prompts.map { $0.string(locale) }.joined(separator: "\n\n") ?? ""),
+            isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })
+        ) {
+            Button("Continue") {
+                if let cmd = pending?.cmd { send(cmd) }
+                pending = nil
+            }
             Button("Cancel", role: .cancel) { pending = nil }
         }
     }
@@ -413,7 +432,9 @@ struct StackedRow<Control: View>: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+        let layout =
+            typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
             : AnyLayout(HStackLayout(spacing: 12))
         layout {
             label

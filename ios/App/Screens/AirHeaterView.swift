@@ -4,8 +4,9 @@ import SwiftUI
 /// The air heater (app.js FEATURES.airheater) — the only place in the app that controls it (no
 /// Siri, no cockpit toggle). The app's gates (`R_AIRHEATER_APP_GATES`): immediate heating is never
 /// greyed (the planner refuses ON under ErrorCode 5, with the reason); continuous heating can only be
-/// turned off here; the run time is locked during continuous heating. Only a start asks first (fuel burner, not live-verified), with the run time and the level; a run
-/// time change while it heats asks as the app does. The departure timer is not in this app yet.
+/// turned off here; the run time is locked during continuous heating. Only a start asks first (fuel
+/// burner, not live-verified), with the run time and the level; a run time change while it heats
+/// asks as the app does. The departure timer is not in this app yet.
 ///
 /// - Requirement: R_IOS_FUNCTIONS, R_IOS_SIRI_NO_HEATER, R_AIRHEATER_APP_GATES, R_IOS_I18N
 struct AirHeaterView: View {
@@ -49,6 +50,9 @@ struct AirHeaterView: View {
 
     private func flag(_ key: String) -> Bool { store.value("airheater", key)?.bool == true }
     private func num(_ key: String) -> Int? { store.value("airheater", key)?.number.map(Int.init) }
+    private var runTimeText: String {
+        num("running_time").flatMap { Self.runtimes.contains($0) ? "\($0)\(nbsp)min" : nil } ?? "—"
+    }
 
     /// The heater's own status line (app.js `summary`, without the timer).
     private var status: LocalizedStringResource {
@@ -69,21 +73,46 @@ struct AirHeaterView: View {
             }
             Card {
                 ControlRow {
-                    SwitchRow(label: Text("Immediate heating"), isOn: Binding(get: { flag("normal") }, set: { on in
-                        // Only a start asks; turning it off is the safe direction.
-                        run(Self.power(on), confirm: on ? [
-                            permanent ? "Turn off continuous heating? You can only turn continuous heating on again using the controls in your California." : nil,
-                            startPrompt] : [])
-                    }))
+                    SwitchRow(
+                        label: Text("Immediate heating"),
+                        isOn: Binding(
+                            get: { flag("normal") },
+                            set: { on in
+                                // Only a start asks; turning it off is the safe direction.
+                                run(
+                                    Self.power(on),
+                                    confirm: on
+                                        ? [
+                                            permanent
+                                                // swiftlint:disable:next line_length - a localization key stays one literal
+                                                ? "Turn off continuous heating? You can only turn continuous heating on again using the controls in your California."
+                                                : nil,
+                                            startPrompt,
+                                        ] : [])
+                            }))
                 }
                 ControlRow(disabledBecause: permanent ? nil : "Can only be started from inside the vehicle") {
-                    SwitchRow(label: Text("Continuous heating"), isOn: Binding(get: { permanent }, set: { on in
-                        if !on { run(Self.permanentOff, confirm: ["Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?"]) }
-                    }))
+                    SwitchRow(
+                        label: Text("Continuous heating"),
+                        isOn: Binding(
+                            get: { permanent },
+                            set: { on in
+                                if !on {
+                                    run(
+                                        Self.permanentOff,
+                                        confirm: [
+                                            // swiftlint:disable:next line_length - a localization key stays one literal
+                                            "Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?"
+                                        ])
+                                }
+                            }))
                 }
                 ControlRow {
-                    MenuPicker(label: Text("Heating temperature"), value: Self.levelText(num("level")).map { Text($0) } ?? Text(verbatim: "—"),
-                               selection: Binding(get: { num("level") ?? 0 }, set: { run(Self.level($0)) })) {
+                    MenuPicker(
+                        label: Text("Heating temperature"),
+                        value: Self.levelText(num("level")).map { Text($0) } ?? Text(verbatim: "—"),
+                        selection: Binding(get: { num("level") ?? 0 }, set: { run(Self.level($0)) })
+                    ) {
                         if num("level").map({ !(1...10).contains($0) }) ?? true { Text(verbatim: "—").tag(num("level") ?? 0) }
                         ForEach(1...10, id: \.self) { n in
                             if n == 10 { Text(verbatim: "HI").tag(n) } else { Text("Level \(n)").tag(n) }
@@ -91,13 +120,25 @@ struct AirHeaterView: View {
                     }
                 }
                 ControlRow(disabledBecause: permanent ? "Not available during continuous heating" : nil) {
-                    MenuPicker(label: Text("Run time"),
-                               value: Text(verbatim: num("running_time").flatMap { Self.runtimes.contains($0) ? "\($0)\(nbsp)min" : nil } ?? "—"),
-                               selection: Binding(get: { num("running_time") ?? 0 }, set: { n in
-                        run(Self.runtime(n), confirm: [
-                            flag("running") ? "Apply new settings now? Resetting the duration. The heating will stay on for \(n) minutes." : nil])
-                    })) {
-                        if !Self.runtimes.contains(num("running_time") ?? -1) { Text(verbatim: "—").tag(num("running_time") ?? 0) }
+                    MenuPicker(
+                        label: Text("Run time"),
+                        value: Text(verbatim: runTimeText),
+                        selection: Binding(
+                            get: { num("running_time") ?? 0 },
+                            set: { n in
+                                run(
+                                    Self.runtime(n),
+                                    confirm: [
+                                        flag("running")
+                                            // swiftlint:disable:next line_length - a localization key stays one literal
+                                            ? "Apply new settings now? Resetting the duration. The heating will stay on for \(n) minutes."
+                                            : nil
+                                    ])
+                            })
+                    ) {
+                        if !Self.runtimes.contains(num("running_time") ?? -1) {
+                            Text(verbatim: "—").tag(num("running_time") ?? 0)
+                        }
                         ForEach(Array(Self.runtimes), id: \.self) { Text(verbatim: "\($0)\(nbsp)min").tag($0) }
                     }
                 }

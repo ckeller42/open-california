@@ -243,7 +243,9 @@ final class CamperStore {
     ///
     /// - Requirement: R_IOS_PAIRING
     func pairingCandidates() async -> Result<[PairingCandidate], PairingScanError> {
-        do { return .success(try await session.pairingCandidates()) } catch { return .failure(error as? PairingScanError ?? .busy) }
+        do { return .success(try await session.pairingCandidates()) } catch {
+            return .failure(error as? PairingScanError ?? .busy)
+        }
     }
 
     /// The user's pick: the session ends the current link and pairs with `id` (`firstPairing`).
@@ -368,9 +370,11 @@ enum Fixture: String, CaseIterable {
             hex["water"] = "130b1d010016"
         case .parked, .unreachable, .staleRestore: break
         }
-        return hex.mapValues { h in stride(from: 0, to: h.count, by: 2).map { i in
-            UInt8(h[h.index(h.startIndex, offsetBy: i)...].prefix(2), radix: 16)!
-        } }
+        return hex.mapValues { h in
+            stride(from: 0, to: h.count, by: 2).map { i in
+                UInt8(h[h.index(h.startIndex, offsetBy: i)...].prefix(2), radix: 16)!
+            }
+        }
     }
 
     /// The UI tests connect to the fake on launch only for these; the others keep their state.
@@ -378,11 +382,16 @@ enum Fixture: String, CaseIterable {
 
     /// The fake transport, which answers with this fixture's frames.
     func makeTransport() -> FakeCamperTransport {
-        let byChar = self == .unreachable ? [:] : Dictionary(uniqueKeysWithValues: frames.compactMap { fn, bytes in
-            CamperGATT.stateChars[fn].map { ($0, bytes) }
-        })
+        let byChar =
+            self == .unreachable
+            ? [:]
+            : Dictionary(
+                uniqueKeysWithValues: frames.compactMap { fn, bytes in
+                    CamperGATT.stateChars[fn].map { ($0, bytes) }
+                })
         // One unit in range for the pairing guide's scan (the UI tests pick it).
-        let unit = PairingCandidate(id: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!, name: CamperGATT.deviceName, rssi: -60)
+        let unit = PairingCandidate(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!, name: CamperGATT.deviceName, rssi: -60)
         return FakeCamperTransport(frames: byChar, candidates: [unit])
     }
 
@@ -403,11 +412,12 @@ enum Fixture: String, CaseIterable {
         st.interpreted = (try? applySwCorrections(st.interpreted)) ?? st.interpreted
         st.gate = ProtocolGate(general: st.fields["general"])
         if isLive { st.liveFunctions = Set(st.fields.keys) }  // a restored state has no live link
-        st.asOf = switch self {
-        case .staleRestore: now.addingTimeInterval(-5 * 3600)
-        case .unreachable: now.addingTimeInterval(-600)
-        case .parked, .campingOn, .unsupportedV3, .noCooler, .faults: now
-        }
+        st.asOf =
+            switch self {
+            case .staleRestore: now.addingTimeInterval(-5 * 3600)
+            case .unreachable: now.addingTimeInterval(-600)
+            case .parked, .campingOn, .unsupportedV3, .noCooler, .faults: now
+            }
         return st
     }
 }
@@ -415,12 +425,13 @@ enum Fixture: String, CaseIterable {
 extension CamperStore {
     /// - Parameter now: a fixed clock (snapshots); nil keeps the real one.
     static func preview(_ fixture: Fixture, now: Date? = nil) -> CamperStore {
-        let link: LinkState = switch fixture {
-        case .unreachable: .unreachable("The camper unit did not answer.")
-        case .staleRestore: .off
-        case .faults: .rest(until: (now ?? Date()).addingTimeInterval(60))  // the power-save rest
-        case .parked, .campingOn, .unsupportedV3, .noCooler: .up
-        }
+        let link: LinkState =
+            switch fixture {
+            case .unreachable: .unreachable("The camper unit did not answer.")
+            case .staleRestore: .off
+            case .faults: .rest(until: (now ?? Date()).addingTimeInterval(60))  // the power-save rest
+            case .parked, .campingOn, .unsupportedV3, .noCooler: .up
+            }
         let store = CamperStore(session: fixture.makeSession(), state: fixture.state(now: now ?? Date()), link: link)
         if let now { store.now = { now } }
         return store

@@ -1,6 +1,5 @@
 import Foundation
 
-
 /// What a transport reports to the session layer.
 public enum TransportEvent: Sendable {
     case connected, encrypted

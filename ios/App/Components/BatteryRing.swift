@@ -29,9 +29,11 @@ struct BatteryRing: View {
     private var age: TimeInterval? { stale ? asOf.map { (pageNow ?? Date()).timeIntervalSince($0) } : nil }
 
     private var spokenValue: String {
-        let parts = [percent.map { "\(Int($0))%" } ?? "—", watts.map { spoken($0, UnitPower.watts, locale) },
-                     volts.map { spoken($0, UnitElectricPotentialDifference.volts, locale) },
-                     age.map { LocalizedStringResource("as of \(spokenAge($0, locale))").string(locale) }]
+        let parts = [
+            percent.map { "\(Int($0))%" } ?? "—", watts.map { spoken($0, UnitPower.watts, locale) },
+            volts.map { spoken($0, UnitElectricPotentialDifference.volts, locale) },
+            age.map { LocalizedStringResource("as of \(spokenAge($0, locale))").string(locale) },
+        ]
         return parts.compactMap { $0 }.joined(separator: ", ")
     }
 
@@ -41,8 +43,10 @@ struct BatteryRing: View {
                 Circle().stroke(Color(uiColor: .tertiarySystemFill), lineWidth: 16)
                 Circle()
                     .trim(from: 0, to: (percent ?? 0) / 100)
-                    .stroke(stale ? Color(uiColor: .systemGray2) : Color.accentColor,
-                            style: StrokeStyle(lineWidth: 16, lineCap: .round))
+                    .stroke(
+                        stale ? Color(uiColor: .systemGray2) : Color.accentColor,
+                        style: StrokeStyle(lineWidth: 16, lineCap: .round)
+                    )
                     .rotationEffect(.degrees(-90))
                 VStack(spacing: 4) {
                     Image(systemName: "minus.plus.batteryblock")
@@ -58,10 +62,13 @@ struct BatteryRing: View {
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(stale ? Color.staleText : Color.primary)
             if let age {
-                Label { Text(verbatim: LocalizedStringResource("as of \(ageText(age).string(locale))").string(locale)) }
-                    icon: { Image(systemName: "clock") }
-                    .font(.footnote)
-                    .foregroundStyle(Color.staleText)
+                Label {
+                    Text(verbatim: LocalizedStringResource("as of \(ageText(age).string(locale))").string(locale))
+                } icon: {
+                    Image(systemName: "clock")
+                }
+                .font(.footnote)
+                .foregroundStyle(Color.staleText)
             }
         }
         .padding(.vertical, 8)

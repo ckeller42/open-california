@@ -22,7 +22,8 @@ final class CockpitUITests: XCTestCase {
     func testCockpitShowsBatteryAndWaterButNoSolarOrOutsideTemperature() throws {
         let app = launch("unreachable")
         XCTAssertTrue(app.otherElements["battery-ring"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Fresh water'")).firstMatch.exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Fresh water'")).firstMatch.exists)
         XCTAssertFalse(app.staticTexts["Solar power"].exists)
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS '°C'")).firstMatch.exists)
         for name in ["Camping mode", "Lighting", "Cooler", "Air heater"] {
@@ -92,8 +93,10 @@ final class ControlUITests: XCTestCase {
             app.launchArguments = ["-UITestFixture", "campingOn", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
             if dark { app.launchArguments += ["-UIUserInterfaceStyle", "dark"] }
             app.launch()
-            for (title, control) in [("Camping mode", "Rear USB ports"), ("Lighting", "All lights"),
-                                     ("Cooler", "Refrigerator box"), ("Air heater", "Immediate heating")] {
+            for (title, control) in [
+                ("Camping mode", "Rear USB ports"), ("Lighting", "All lights"),
+                ("Cooler", "Refrigerator box"), ("Air heater", "Immediate heating"),
+            ] {
                 let tile = app.buttons[title]
                 XCTAssertTrue(tile.waitForExistence(timeout: 10), title)
                 if !tile.isHittable { app.swipeUp() }
@@ -184,7 +187,9 @@ extension XCUIApplication {
         let clean = passes.reduce(into: Set<String>()) { $0.formUnion($1.clean) }
         // Measured on Lighting (the longest page): 8 such issues in one pass. More would hide real
         // text without an element.
-        for p in passes where p.cutGlyphs > 8 { XCTFail("\(p.cutGlyphs) element-less text issues in one scrolled pass", file: file, line: line) }
+        for p in passes where p.cutGlyphs > 8 {
+            XCTFail("\(p.cutGlyphs) element-less text issues in one scrolled pass", file: file, line: line)
+        }
         for key in passes.flatMap(\.exempt) where !clean.contains(key) {
             XCTFail("\(key): exempt, but never audited inside the clear screen", file: file, line: line)
         }
@@ -249,24 +254,33 @@ extension XCUIApplication {
         let rowCut = scrolled && all.values.contains { $0.minY < edge && $0.maxY > edge }
         try performAccessibilityAudit { issue in
             // The element's key: the element with that label nearest to the issue's frame.
-            let label = issue.element.map { el in
-                let frame = el.frame
-                return all.filter { $0.key.hasPrefix(el.label + "#") }
-                    .min { abs($0.value.midY - frame.midY) + abs($0.value.midX - frame.midX) < abs($1.value.midY - frame.midY) + abs($1.value.midX - frame.midX) }?
-                    .key ?? el.label + "#?"
-            } ?? "-"
+            let label =
+                issue.element.map { el in
+                    let frame = el.frame
+                    return all.filter { $0.key.hasPrefix(el.label + "#") }
+                        .min {
+                            abs($0.value.midY - frame.midY) + abs($0.value.midX - frame.midX) < abs($1.value.midY - frame.midY)
+                                + abs($1.value.midX - frame.midX)
+                        }?
+                        .key ?? el.label + "#?"
+                } ?? "-"
             pass.clean.remove(label)
             // After a scroll, a row cut at the hard edge under the navigation bar leaves glyph pieces
             // with no element ("potentially inaccessible text"); the same rows are elements in the
             // top pass.
             let cutGlyphs = rowCut && issue.element == nil && issue.auditType == .elementDetection
             if cutGlyphs { pass.cutGlyphs += 1 }
-            let outside = cutGlyphs || issue.element.map { !clear.contains($0.frame) } ?? false
-                && [.contrast, .dynamicType, .textClipped].contains(issue.auditType)
-            print("AUDIT \(outside ? "exempt (outside the clear screen) " : "")\(issue.compactDescription) | \(label) \(issue.element.map { "\($0.frame)" } ?? "") | \(issue.detailedDescription)")
+            let outside =
+                cutGlyphs
+                || issue.element.map { !clear.contains($0.frame) } ?? false
+                    && [.contrast, .dynamicType, .textClipped].contains(issue.auditType)
+            let frame = issue.element.map { "\($0.frame)" } ?? ""
+            let exempt = outside ? "exempt (outside the clear screen) " : ""
+            print("AUDIT \(exempt)\(issue.compactDescription) | \(label) \(frame) | \(issue.detailedDescription)")
             if outside {
                 if !cutGlyphs { pass.exempt.append(label) }
-                XCTContext.runActivity(named: "Audit exemption (outside the clear screen): \(issue.compactDescription)") { activity in
+                let name = "Audit exemption (outside the clear screen): \(issue.compactDescription)"
+                XCTContext.runActivity(named: name) { activity in
                     let attachment = XCTAttachment(string: "\(label)\n\(issue.detailedDescription)")
                     attachment.lifetime = .keepAlways
                     activity.add(attachment)

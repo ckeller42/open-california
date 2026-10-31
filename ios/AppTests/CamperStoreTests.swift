@@ -2,6 +2,7 @@ import CaliBLE
 import CaliCore
 import Foundation
 import Testing
+
 @testable import Camper
 
 @MainActor
@@ -193,7 +194,8 @@ struct CamperStoreTests {
     /// - Test: T_IOS_STRINGS_EN_DE
     /// - Verifies: R_IOS_I18N
     @Test func stringsHaveEnglishAndGermanLikeTheWebUI() throws {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
         let js = try String(contentsOf: root.appending(path: "calictl/webui/strings.de.js"), encoding: .utf8)
         // `"key": "value"` entries (also with the value on the next line); concatenated values are skipped.
         let entry = try Regex(#""((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)"(?=\s*[,}])"#)

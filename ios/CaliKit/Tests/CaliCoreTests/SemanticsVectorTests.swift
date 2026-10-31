@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import CaliCore
 
 private let python3Available = (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":")
@@ -33,10 +34,14 @@ struct SemanticsVectorTests {
     /// - Test: T_IOS_SEMANTICS_ERROR_THROWS
     /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
     @Test func jsExceptionThrowsWithItsMessage() {
-        let broken = Semantics(scripts: [("""
-            function interpret(f, d) { throw new Error("boom " + f); }
-            function applySwCorrections(s) { throw new Error("no fix"); }
-            """, nil)])
+        let broken = Semantics(scripts: [
+            (
+                """
+                function interpret(f, d) { throw new Error("boom " + f); }
+                function applySwCorrections(s) { throw new Error("no fix"); }
+                """, nil
+            )
+        ])
         #expect(throws: SemanticsError.self) { try broken.interpret(function: "energy", fields: [:]) }
         do { _ = try broken.interpret(function: "energy", fields: [:]) } catch {
             #expect((error as? SemanticsError)?.message.contains("boom energy") == true)

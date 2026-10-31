@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import CaliBLE
 @testable import CaliCore
 
@@ -45,9 +46,18 @@ private actor Counting: CamperTransport {
     /// drains a write in flight that way when the link ends).
     var holdNextBeat = false
     var heldBeat: CheckedContinuation<Void, Never>?
-    init(_ inner: FakeCamperTransport) { self.inner = inner; events = inner.events }
-    func connect() async { connects += 1; await inner.connect() }
-    func cancel() async { cancels += 1; await inner.cancel() }
+    init(_ inner: FakeCamperTransport) {
+        self.inner = inner
+        events = inner.events
+    }
+    func connect() async {
+        connects += 1
+        await inner.connect()
+    }
+    func cancel() async {
+        cancels += 1
+        await inner.cancel()
+    }
     func read(_ char: UInt16) async throws -> [UInt8] {
         if holdReads { await withCheckedContinuation { held.append($0) } }
         return try await inner.read(char)
@@ -62,16 +72,31 @@ private actor Counting: CamperTransport {
     }
     func set(holdNextBeat h: Bool) { holdNextBeat = h }
     var beatHeld: Bool { heldBeat != nil }
-    func releaseBeat() { heldBeat?.resume(); heldBeat = nil }
+    func releaseBeat() {
+        heldBeat?.resume()
+        heldBeat = nil
+    }
     func subscribe(_ chars: [UInt16]) async throws {
-        if failSubscribe { failSubscribe = false; throw TransportError.writeRejected }
+        if failSubscribe {
+            failSubscribe = false
+            throw TransportError.writeRejected
+        }
         try await inner.subscribe(chars)
     }
-    func pairingCandidates(window: Duration) async throws -> [PairingCandidate] { try await inner.pairingCandidates(window: window) }
-    func beginFirstPairing(with id: UUID) async { connects += 1; await inner.beginFirstPairing(with: id) }
+    func pairingCandidates(window: Duration) async throws -> [PairingCandidate] {
+        try await inner.pairingCandidates(window: window)
+    }
+    func beginFirstPairing(with id: UUID) async {
+        connects += 1
+        await inner.beginFirstPairing(with: id)
+    }
     func set(failSubscribe f: Bool) { failSubscribe = f }
     func set(holdReads h: Bool) { holdReads = h }
-    func releaseReads() { holdReads = false; held.forEach { $0.resume() }; held = [] }
+    func releaseReads() {
+        holdReads = false
+        for continuation in held { continuation.resume() }
+        held = []
+    }
 }
 
 /// Polls `cond` in real time (the session works on its own tasks) for up to 2 s.
@@ -132,7 +157,10 @@ struct SessionTests {
         try await until("rest") { if case .rest = await r.s.link { true } else { false } }
         #expect(await r.s.heartbeatBeating == false)
         try await until("no sleeper left") { r.clock.sleeperCount == 0 }  // no reconnect is waiting
-        for _ in 0..<60 { r.clock.advance(by: .seconds(1)); await Task.yield() }
+        for _ in 0..<60 {
+            r.clock.advance(by: .seconds(1))
+            await Task.yield()
+        }
         #expect(r.clock.sleeperCount == 0)
         #expect(await r.t.connects == 1)
         #expect(await r.s.pendingReconnect == nil)
@@ -270,7 +298,10 @@ struct SessionTests {
         #expect(await r.s.state.interpreted["campingmode"]?["master_on"] == .bool(true))
         var sawPush = false
         while let (st, _) = await updates.next() {
-            if st.fields["campingmode"]?["State"] == 1 { sawPush = true; break }
+            if st.fields["campingmode"]?["State"] == 1 {
+                sawPush = true
+                break
+            }
         }
         #expect(sawPush)
     }
@@ -308,7 +339,10 @@ struct SessionTests {
         try await until("beat stopped") { await !r.s.heartbeatBeating }
         #expect(await r.s.sinceFirstBeat == nil)
         try await until("heartbeat sleeper gone") { r.clock.sleeperCount == 0 }
-        for _ in 0..<5 { r.clock.advance(by: .milliseconds(600)); await Task.yield() }
+        for _ in 0..<5 {
+            r.clock.advance(by: .milliseconds(600))
+            await Task.yield()
+        }
         #expect(r.clock.sleeperCount == 0)
         #expect(await r.heartbeats().count == 2)
         #expect(await r.s.link == .off)
@@ -318,10 +352,14 @@ struct SessionTests {
     /// - Test: T_IOS_SESSION_SEMANTICS_ERROR
     /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
     @Test func semanticsErrorIsSurfacedNotEmpty() async throws {
-        let broken = Semantics(scripts: [("""
-            function interpret(f, d) { if (f === "general") throw new Error("boom"); return {installed: true}; }
-            function applySwCorrections(s) { return s; }
-            """, nil)])
+        let broken = Semantics(scripts: [
+            (
+                """
+                function interpret(f, d) { if (f === "general") throw new Error("boom"); return {installed: true}; }
+                function applySwCorrections(s) { return s; }
+                """, nil
+            )
+        ])
         let r = Rig(semantics: broken)
         try await r.s.ensureConnected(timeout: .seconds(10))
         let st = await r.s.state
@@ -531,8 +569,14 @@ struct SessionTests {
     @Test func concurrentCallersShareOneConnectAndWaitForTheRead() async throws {
         let r = Rig()
         await r.t.set(holdReads: true)
-        let a = Task { try await r.s.ensureConnected(timeout: .seconds(10)); return await r.s.state.fields["general"] }
-        let b = Task { try await r.s.ensureConnected(timeout: .seconds(10)); return await r.s.state.fields["general"] }
+        let a = Task {
+            try await r.s.ensureConnected(timeout: .seconds(10))
+            return await r.s.state.fields["general"]
+        }
+        let b = Task {
+            try await r.s.ensureConnected(timeout: .seconds(10))
+            return await r.s.state.fields["general"]
+        }
         try await until("a read waits") { await !r.t.held.isEmpty }
         #expect(await r.s.isReady == false)
         await r.t.releaseReads()

@@ -12,7 +12,8 @@ struct WaterView: View {
 
     static let freshAlert: [String: LocalizedStringResource] = [
         "pump_protection": "Pump protection is active. Please fill up fresh water.",
-        "sensor_error": "Fill level sensor in fresh water tank. Emergency water pump operation possible. Please visit a workshop.",
+        "sensor_error":
+            "Fill level sensor in fresh water tank. Emergency water pump operation possible. Please visit a workshop.",
         "error": "Unknown fresh water error.",
         "pump_error": "Fresh water pump. Please visit a workshop.",
         "empty": "Fresh water is empty. Please refill the fresh water tank.",
@@ -32,18 +33,23 @@ struct WaterView: View {
     private func tank(_ key: String) -> (text: String, spoken: String, percent: Double?) {
         let t = store.value("water", key)
         guard let p = t?["percent"]?.number else { return ("—", "—", nil) }
-        let l = t?["liters"]?.number, c = t?["capacity_l"]?.number
-        let ls = l.map { String(Int($0)) } ?? "—", cs = c.map { String(Int($0)) } ?? "—"
+        let l = t?["liters"]?.number
+        let c = t?["capacity_l"]?.number
+        let ls = l.map { String(Int($0)) } ?? "—"
+        let cs = c.map { String(Int($0)) } ?? "—"
         let capSpoken = c.map { spoken($0, UnitVolume.liters, locale) } ?? "—"
-        return ("\(Int(p))%\(nbsp) (\(ls)/\(cs)\(nbsp)L)",
-                "\(Int(p))%, " + LocalizedStringResource("\(ls) of \(capSpoken)").string(locale), p)
+        return (
+            "\(Int(p))%\(nbsp) (\(ls)/\(cs)\(nbsp)L)",
+            "\(Int(p))%, " + LocalizedStringResource("\(ls) of \(capSpoken)").string(locale), p
+        )
     }
 
     var body: some View {
         StatusPage(store: store) {
             if store.installed("water") {
                 VStack(spacing: 0) {
-                    let fresh = tank("fresh"), waste = tank("waste")
+                    let fresh = tank("fresh")
+                    let waste = tank("waste")
                     Row("Fresh water", Text(verbatim: fresh.text), spoken: fresh.spoken, bar: fresh.percent)
                     Row("Waste water", Text(verbatim: waste.text), spoken: waste.spoken, bar: waste.percent)
                     if store.state.waterHeld {
@@ -64,8 +70,10 @@ struct WaterView: View {
 
     /// The unit's fault dialogs, fresh first, then waste.
     static func alerts(_ store: CamperStore) -> [LocalizedStringResource] {
-        [store.value("water", "fresh_alert")?.string.flatMap { Self.freshAlert[$0] },
-         store.value("water", "waste_alert")?.string.flatMap { Self.wasteAlert[$0] }].compactMap { $0 }
+        [
+            store.value("water", "fresh_alert")?.string.flatMap { Self.freshAlert[$0] },
+            store.value("water", "waste_alert")?.string.flatMap { Self.wasteAlert[$0] },
+        ].compactMap { $0 }
     }
 }
 
@@ -88,7 +96,11 @@ struct HeldNote: View {
 
     var body: some View {
         let now = pageNow ?? Date()
-        Label { Text(verbatim: Self.text(since: since, now: now, locale: locale)) } icon: { Image(systemName: "clock") }
-            .accessibilityLabel(Text(verbatim: Self.text(since: since, now: now, locale: locale, spoken: true)))
+        Label {
+            Text(verbatim: Self.text(since: since, now: now, locale: locale))
+        } icon: {
+            Image(systemName: "clock")
+        }
+        .accessibilityLabel(Text(verbatim: Self.text(since: since, now: now, locale: locale, spoken: true)))
     }
 }

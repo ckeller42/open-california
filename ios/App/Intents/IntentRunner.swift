@@ -28,8 +28,10 @@ enum IntentRunner {
     /// between its arm delay and its frames). Siri then says "sent, but not confirmed in time" when a
     /// frame went out, else "did not answer in time"; `onResult` gets the real result when it comes.
     /// An air-heater command is refused before anything is sent (no air heater by voice).
-    static func perform(_ cmd: Command, session: CamperSession, budget: Duration = .seconds(9),
-                        onResult: (@MainActor (CommandResult) -> Void)? = nil) async -> IntentOutcome {
+    static func perform(
+        _ cmd: Command, session: CamperSession, budget: Duration = .seconds(9),
+        onResult: (@MainActor (CommandResult) -> Void)? = nil
+    ) async -> IntentOutcome {
         if cmd.function == "air" + "heater" {
             onResult?(.refused(.elsewhere))
             return outcome(.refused(.elsewhere), cmd)
@@ -41,13 +43,20 @@ enum IntentRunner {
             sink.yield(r)
             onResult?(r)
         }
-        let timer = Task { try? await Task.sleep(for: budget); sink.yield(nil) }
+        let timer = Task {
+            try? await Task.sleep(for: budget)
+            sink.yield(nil)
+        }
         var first: CommandResult?
-        for await r in results { first = r; break }
+        for await r in results {
+            first = r
+            break
+        }
         timer.cancel()
         sink.finish()
         if let first { return outcome(first, cmd) }
-        let dialog: LocalizedStringResource = await session.commandIssuedFrame
+        let dialog: LocalizedStringResource =
+            await session.commandIssuedFrame
             ? "\(ResultBanner.title(cmd.function)): sent, but the camper unit did not confirm in time"
             : ResultBanner.text(.timeout, function: cmd.function)
         return IntentOutcome(dialog: dialog, success: false, result: nil)
@@ -55,15 +64,16 @@ enum IntentRunner {
 
     /// The spoken answer to `r`.
     static func outcome(_ r: CommandResult, _ cmd: Command) -> IntentOutcome {
-        let dialog: LocalizedStringResource = switch r {
-        case .applied: applied(cmd)
-        // For lighting only the lamp itself is proof (the state char is a write-through echo).
-        case .sent where cmd.function == "lighting": "Lighting: sent, check the lamp"
-        case .sent, .unconfirmed: "\(ResultBanner.title(cmd.function)): sent, not confirmed"
-        // The app's cooldown text, with the unit spoken as a word.
-        case .failed(.resting(let s)): "The camper unit saves power — try again in \(s) seconds"
-        default: ResultBanner.text(r, function: cmd.function)
-        }
+        let dialog: LocalizedStringResource =
+            switch r {
+            case .applied: applied(cmd)
+            // For lighting only the lamp itself is proof (the state char is a write-through echo).
+            case .sent where cmd.function == "lighting": "Lighting: sent, check the lamp"
+            case .sent, .unconfirmed: "\(ResultBanner.title(cmd.function)): sent, not confirmed"
+            // The app's cooldown text, with the unit spoken as a word.
+            case .failed(.resting(let s)): "The camper unit saves power — try again in \(s) seconds"
+            default: ResultBanner.text(r, function: cmd.function)
+            }
         return IntentOutcome(dialog: dialog, success: r == .applied, result: r)
     }
 
@@ -86,7 +96,9 @@ enum IntentRunner {
         let store = CamperStore.shared
         store.show(.sending(function: cmd.function), clearAfter: nil)
         // The banner shows the real result when it comes, also after Siri answered.
-        let outcome = await perform(cmd, session: store.session) { store.show(.result($0, function: cmd.function), clearAfter: 8) }
+        let outcome = await perform(cmd, session: store.session) {
+            store.show(.result($0, function: cmd.function), clearAfter: 8)
+        }
         return .result(dialog: IntentDialog(outcome.dialog))
     }
 }

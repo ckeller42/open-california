@@ -1,7 +1,8 @@
+import CaliCore
 import CoreBluetooth
 import Testing
+
 @testable import CaliBLE
-import CaliCore
 
 /// The pure parts of the CoreBluetooth transport. The simulator and `swift test` have no radio:
 /// the link itself is checked with `docs/ios-app-radio-checklist.md`.
@@ -66,15 +67,20 @@ struct CBMappingTests {
     /// - Test: T_IOS_CB_PEER_SAVED_ONLY
     /// - Verifies: R_IOS_PAIRING, R_IOS_BLE_DIRECT
     @Test func connectsOnlyToTheAdoptedUnit() {
-        let unit = UUID(), other = UUID()
+        let unit = UUID()
+        let other = UUID()
         var p = PeerPolicy(saved: unit)
         #expect(p.route() == .saved(unit))
-        let r1 = p.authenticated(unit); #expect(r1 == .up)  // no pairing error needed
-        let r2 = p.authenticated(other); #expect(r2 == .reject)
-        let r3 = p.pairingError(); #expect(!r3)  // a stale bond of the saved unit ends the link
+        let r1 = p.authenticated(unit)
+        #expect(r1 == .up)  // no pairing error needed
+        let r2 = p.authenticated(other)
+        #expect(r2 == .reject)
+        let r3 = p.pairingError()
+        #expect(!r3)  // a stale bond of the saved unit ends the link
         #expect(PeerPolicy(saved: nil).route() == .refuse)
         var none = PeerPolicy(saved: nil)
-        let r4 = none.authenticated(other); #expect(r4 == .reject)  // no user action: never adopt
+        let r4 = none.authenticated(other)
+        #expect(r4 == .reject)  // no user action: never adopt
         #expect(none.saved == nil)
     }
 
@@ -83,15 +89,19 @@ struct CBMappingTests {
     /// - Test: T_IOS_CB_PEER_ADOPT
     /// - Verifies: R_IOS_PAIRING
     @Test func adoptsAfterASeenPairing() {
-        let old = UUID(), new = UUID()
+        let old = UUID()
+        let new = UUID()
         var p = PeerPolicy(saved: old)
         p.begin(new)
         #expect(p.route() == .chosen(new))
-        let e = p.pairingError(); #expect(e)  // iOS shows the passkey dialog; read again
-        let r1 = p.authenticated(new); #expect(r1 == .up)
+        let e = p.pairingError()
+        #expect(e)  // iOS shows the passkey dialog; read again
+        let r1 = p.authenticated(new)
+        #expect(r1 == .up)
         #expect(p.saved == new)
         #expect(p.route() == .saved(new))
-        let r2 = p.authenticated(old); #expect(r2 == .reject)  // the old unit is not taken back silently
+        let r2 = p.authenticated(old)
+        #expect(r2 == .reject)  // the old unit is not taken back silently
     }
 
     /// Lenient adoption, a shared bond: the iPhone is already paired with the unit (for example
@@ -100,10 +110,12 @@ struct CBMappingTests {
     /// - Test: T_IOS_CB_PEER_SHARED_BOND
     /// - Verifies: R_IOS_PAIRING
     @Test func existingBondIsAdoptedDuringAPick() {
-        let old = UUID(), new = UUID()
+        let old = UUID()
+        let new = UUID()
         var p = PeerPolicy(saved: old)
         p.begin(new)
-        let r = p.authenticated(new); #expect(r == .up)
+        let r = p.authenticated(new)
+        #expect(r == .up)
         #expect(p.saved == new)
         #expect(p.route() == .saved(new))  // one-shot: the pick is over
     }
@@ -114,13 +126,16 @@ struct CBMappingTests {
     /// - Test: T_IOS_CB_PEER_NO_BACKGROUND_ADOPT
     /// - Verifies: R_IOS_PAIRING
     @Test func noAdoptionOutsideAPick() {
-        let unit = UUID(), other = UUID()
+        let unit = UUID()
+        let other = UUID()
         var none = PeerPolicy(saved: nil)
-        let r1 = none.authenticated(unit); #expect(r1 == .reject)
+        let r1 = none.authenticated(unit)
+        #expect(r1 == .reject)
         #expect(none.saved == nil)
         #expect(none.route() == .refuse)
         var p = PeerPolicy(saved: unit)
-        let r2 = p.authenticated(other); #expect(r2 == .reject)
+        let r2 = p.authenticated(other)
+        #expect(r2 == .reject)
         #expect(p.saved == unit)
     }
 
@@ -132,36 +147,45 @@ struct CBMappingTests {
     /// - Test: T_IOS_CB_PEER_ONE_SHOT
     /// - Verifies: R_IOS_PAIRING
     @Test func firstPairingIsOneShot() {
-        let old = UUID(), new = UUID(), other = UUID()
+        let old = UUID()
+        let new = UUID()
+        let other = UUID()
         var p = PeerPolicy(saved: old)
         p.begin(new)
         _ = p.pairingError()
         p.linkEnded()
         #expect(p.route() == .saved(old))
-        let r0 = p.authenticated(new); #expect(r0 == .reject)  // the pick ended with the link
+        let r0 = p.authenticated(new)
+        #expect(r0 == .reject)  // the pick ended with the link
         #expect(p.saved == old)
 
         var q = PeerPolicy(saved: nil)
         q.begin(new)
         _ = q.pairingError()
-        let r1 = q.authenticated(other); #expect(r1 == .reject)  // not the picked unit
+        let r1 = q.authenticated(other)
+        #expect(r1 == .reject)  // not the picked unit
         #expect(q.route() == .refuse)
         #expect(q.saved == nil)
 
         var a = PeerPolicy(saved: nil)
         a.begin(new)
-        let r2 = a.authenticated(new); #expect(r2 == .up)
+        let r2 = a.authenticated(new)
+        #expect(r2 == .up)
         #expect(a.route() == .saved(new))
-        let r3 = a.authenticated(other); #expect(r3 == .reject)  // the pick is used up
+        let r3 = a.authenticated(other)
+        #expect(r3 == .reject)  // the pick is used up
         #expect(a.saved == new)
         a.begin(other)  // a second pick
-        let r4 = a.authenticated(other); #expect(r4 == .up)
+        let r4 = a.authenticated(other)
+        #expect(r4 == .up)
         #expect(a.saved == other)
 
         // Reconnect: the saved unit is up only on its authenticated read; a failed one ends the link.
         #expect(a.route() == .saved(other))
-        let stale = a.pairingError(); #expect(!stale)
-        let r5 = a.authenticated(other); #expect(r5 == .up)
+        let stale = a.pairingError()
+        #expect(!stale)
+        let r5 = a.authenticated(other)
+        #expect(r5 == .up)
     }
 
     /// A pick that ends without a successful pairing leaves nothing behind: a later connect (an
@@ -171,14 +195,18 @@ struct CBMappingTests {
     /// - Test: T_IOS_CB_PICK_EXPIRES
     /// - Verifies: R_IOS_PAIRING
     @Test func pickWithoutPairingDoesNotAdoptLater() {
-        let old = UUID(), new = UUID()
+        let old = UUID()
+        let new = UUID()
         var p = PeerPolicy(saved: old)
         p.begin(new)
-        let e = p.pairingError(); #expect(e)
+        let e = p.pairingError()
+        #expect(e)
         p.linkEnded()  // the dialog was cancelled, the link timed out or the budget ran out
         #expect(p.route() == .saved(old))
-        let r1 = p.authenticated(new); #expect(r1 == .reject)
-        let r2 = p.authenticated(old); #expect(r2 == .up)
+        let r1 = p.authenticated(new)
+        #expect(r1 == .reject)
+        let r2 = p.authenticated(old)
+        #expect(r2 == .up)
         #expect(p.saved == old)
 
         var c = PeerPolicy(saved: old)
@@ -196,16 +224,19 @@ struct CBMappingTests {
     /// - Test: T_IOS_CB_PICK_REPLACES_LINK
     /// - Verifies: R_IOS_PAIRING
     @Test func pickWhileSavedLinkIsUpWaitsForItsOwnLink() {
-        let old = UUID(), new = UUID()
+        let old = UUID()
+        let new = UUID()
         var p = PeerPolicy(saved: old)
         p.pick(new)
         #expect(p.route() == .saved(old))  // nothing dials for the pick before the old link ended
-        let late = p.authenticated(old); #expect(late == .reject)
+        let late = p.authenticated(old)
+        #expect(late == .reject)
         #expect(p.saved == old)
         p.linkEnded()  // the old link's end keeps the pick
         #expect(p.startPick() == new)
         #expect(p.route() == .chosen(new))
-        let r = p.authenticated(new); #expect(r == .up)
+        let r = p.authenticated(new)
+        #expect(r == .up)
         #expect(p.saved == new)
         #expect(p.route() == .saved(new))
     }
@@ -216,22 +247,28 @@ struct CBMappingTests {
     /// - Test: T_IOS_CB_PICK_DEADLINE
     /// - Verifies: R_IOS_PAIRING
     @Test func pickExpiresWithItsBudget() {
-        let old = UUID(), new = UUID()
+        let old = UUID()
+        let new = UUID()
         let t0 = ContinuousClock.now
         var p = PeerPolicy(saved: old)
         p.pick(new, now: t0)
-        let early = p.expire(now: t0.advanced(by: .seconds(30))); #expect(!early)
-        let late = p.startPick(now: t0.advanced(by: PeerPolicy.pairingBudget)); #expect(late == nil)  // too late for its connect
+        let early = p.expire(now: t0.advanced(by: .seconds(30)))
+        #expect(!early)
+        let late = p.startPick(now: t0.advanced(by: PeerPolicy.pairingBudget))
+        #expect(late == nil)  // too late for its connect
         #expect(!p.inPick)
         #expect(p.route() == .saved(old))
 
         var q = PeerPolicy(saved: old)
         q.pick(new, now: t0)
-        let started = q.startPick(now: t0.advanced(by: .seconds(1))); #expect(started == new)
-        let ended = q.expire(now: t0.advanced(by: PeerPolicy.pairingBudget)); #expect(ended)
+        let started = q.startPick(now: t0.advanced(by: .seconds(1)))
+        #expect(started == new)
+        let ended = q.expire(now: t0.advanced(by: PeerPolicy.pairingBudget))
+        #expect(ended)
         #expect(!q.inPick)
         #expect(q.route() == .saved(old))
-        let r = q.authenticated(new); #expect(r == .reject)
+        let r = q.authenticated(new)
+        #expect(r == .reject)
     }
 
     /// Bluetooth goes away while a pick waits for the old link to end: the transport cancels the
@@ -240,12 +277,14 @@ struct CBMappingTests {
     /// - Test: T_IOS_CB_PICK_POWER_LOSS
     /// - Verifies: R_IOS_PAIRING
     @Test func powerLossEndsAPendingPick() {
-        let old = UUID(), new = UUID()
+        let old = UUID()
+        let new = UUID()
         var p = PeerPolicy(saved: old)
         p.pick(new)
         p.linkEnded()  // tearDown of the old link
         p.cancelPick()  // the not-powered-on path
-        let none = p.startPick(); #expect(none == nil)
+        let none = p.startPick()
+        #expect(none == nil)
         #expect(p.route() == .saved(old))
     }
 
@@ -256,11 +295,16 @@ struct CBMappingTests {
     @Test func pairingReadsAreCapped() {
         var p = PeerPolicy(saved: nil)
         p.begin(UUID())
-        for _ in 0..<PeerPolicy.maxPairingReads { let ok = p.pairingError(); #expect(ok) }
-        let more = p.pairingError(); #expect(!more)
+        for _ in 0..<PeerPolicy.maxPairingReads {
+            let ok = p.pairingError()
+            #expect(ok)
+        }
+        let more = p.pairingError()
+        #expect(!more)
         p.linkEnded()
         p.begin(UUID())
-        let again = p.pairingError(); #expect(again)  // a new pick starts a new count
+        let again = p.pairingError()
+        #expect(again)  // a new pick starts a new count
     }
 
     /// Only the exact advertised name, one entry per unit, strongest first.
@@ -268,7 +312,8 @@ struct CBMappingTests {
     /// - Test: T_IOS_CB_CANDIDATES
     /// - Verifies: R_IOS_PAIRING
     @Test func pairingCandidates() {
-        let a = UUID(), b = UUID()
+        let a = UUID()
+        let b = UUID()
         var l = CandidateList()
         l.saw(id: a, name: "VWCAMPER", rssi: -80)
         l.saw(id: b, name: "VWCAMPER", rssi: -60)
@@ -302,9 +347,19 @@ struct CBMappingTests {
     /// - Verifies: R_IOS_HONEST, R_IOS_POWER_SAVE
     @Test func disconnectDrainsEveryContinuation() async throws {
         let ops = Box()
-        let write = Task { try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in ops.v.addWrite(0x1203, k); ops.issued.append(true) } }
+        let write = Task {
+            try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in
+                ops.v.addWrite(0x1203, k)
+                ops.issued.append(true)
+            }
+        }
         let read = Task { try await withCheckedThrowingContinuation { k in ops.issued.append(ops.v.addRead(0x1202, k)) } }
-        let sub = Task { try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in ops.v.addSubscribe([0x1202], k); ops.issued.append(true) } }
+        let sub = Task {
+            try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in
+                ops.v.addSubscribe([0x1202], k)
+                ops.issued.append(true)
+            }
+        }
         try await ops.until { $0.issued.count == 3 }
         ops.v.drain()
         await #expect(throws: TransportError.linkLost) { try await write.value }
@@ -317,16 +372,31 @@ struct CBMappingTests {
     /// - Verifies: R_IOS_BLE_DIRECT
     @Test func writesAnswerInOrderAndSubscribeWaitsForAll() async throws {
         let ops = Box()
-        let a = Task { try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in ops.v.addWrite(0x1003, k); ops.issued.append(true) } }
+        let a = Task {
+            try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in
+                ops.v.addWrite(0x1003, k)
+                ops.issued.append(true)
+            }
+        }
         try await ops.until { $0.issued.count == 1 }
-        let b = Task { try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in ops.v.addWrite(0x1003, k); ops.issued.append(true) } }
+        let b = Task {
+            try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in
+                ops.v.addWrite(0x1003, k)
+                ops.issued.append(true)
+            }
+        }
         try await ops.until { $0.issued.count == 2 }
         ops.v.finishWrite(0x1003, .success(()))
         ops.v.finishWrite(0x1003, .failure(TransportError.writeRejected))
         try await a.value
         await #expect(throws: TransportError.writeRejected) { try await b.value }
 
-        let sub = Task { try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in ops.v.addSubscribe([0x1202, 0x1502], k); ops.issued.append(true) } }
+        let sub = Task {
+            try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in
+                ops.v.addSubscribe([0x1202, 0x1502], k)
+                ops.issued.append(true)
+            }
+        }
         try await ops.until { $0.issued.count == 3 }
         ops.v.finishSubscribe(0x1202, nil)
         ops.v.finishSubscribe(0x1502, nil)
@@ -343,11 +413,19 @@ private final class Box: @unchecked Sendable {
     private var _issued: [Bool] = []
     var v: PendingOps {
         get { lock.withLock { ops } }
-        _modify { lock.lock(); defer { lock.unlock() }; yield &ops }
+        _modify {
+            lock.lock()
+            defer { lock.unlock() }
+            yield &ops
+        }
     }
     var issued: [Bool] {
         get { lock.withLock { _issued } }
-        _modify { lock.lock(); defer { lock.unlock() }; yield &_issued }
+        _modify {
+            lock.lock()
+            defer { lock.unlock() }
+            yield &_issued
+        }
     }
 
     /// Waits until the tasks registered their continuations.

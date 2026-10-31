@@ -1,5 +1,5 @@
-@preconcurrency import CoreBluetooth
 import CaliCore
+@preconcurrency import CoreBluetooth
 import Foundation
 
 /// The link to the camper unit over CoreBluetooth.
@@ -62,7 +62,8 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     static let generalService = CBUUID(string: CamperGATT.uuid(CamperGATT.auth & 0xFF00))
     /// One service per function: char `0xXXYY` lives in service `0xXX00`.
     static let services: [CBUUID] = {
-        let all = Array(CamperGATT.stateChars.values) + Array(CamperGATT.controlChars.values) + [CamperGATT.heartbeat, CamperGATT.auth]
+        let all =
+            Array(CamperGATT.stateChars.values) + Array(CamperGATT.controlChars.values) + [CamperGATT.heartbeat, CamperGATT.auth]
         return Set(all.map { $0 & 0xFF00 }).sorted().map { CBUUID(string: CamperGATT.uuid($0)) }
     }()
 
@@ -71,7 +72,7 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         super.init()
         var options: [String: Any] = [:]
         #if os(iOS)
-        options[CBCentralManagerOptionRestoreIdentifierKey] = restoreIdentifier
+            options[CBCentralManagerOptionRestoreIdentifierKey] = restoreIdentifier
         #endif
         // On the queue: no delegate callback can run before `central` is set.
         queue.sync { central = CBCentralManager(delegate: self, queue: queue, options: options) }
@@ -114,7 +115,8 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     static func short(_ uuid: CBUUID) -> UInt16? {
         let s = uuid.uuidString.lowercased()
         guard s.count == 36, s.hasPrefix("0000"),
-              s.hasSuffix(CamperGATT.uuid(0).dropFirst(8)) else { return nil }
+            s.hasSuffix(CamperGATT.uuid(0).dropFirst(8))
+        else { return nil }
         return UInt16(s.dropFirst(4).prefix(4), radix: 16)
     }
 
@@ -213,7 +215,9 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         try await withCheckedThrowingContinuation { (k: CheckedContinuation<Void, any Error>) in
             queue.async {
                 guard self.phase == .up, let p = self.peripheral else { return k.resume(throwing: TransportError.notConnected) }
-                let notifying = list.compactMap { self.chars[$0] }.filter { !$0.properties.isDisjoint(with: [.notify, .indicate]) }
+                let notifying = list.compactMap { self.chars[$0] }.filter {
+                    !$0.properties.isDisjoint(with: [.notify, .indicate])
+                }
                 self.ops.addSubscribe(Set(notifying.compactMap { Self.short($0.uuid) }), k)
                 for c in notifying { p.setNotifyValue(true, for: c) }
             }
@@ -224,11 +228,22 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
 
     private func startConnect() {
         // The up link is never the answer for a pick (it ends first; see `beginFirstPairing`).
-        if phase == .up, !policy.inPick { sink.yield(.encrypted); return }
+        if phase == .up, !policy.inPick {
+            sink.yield(.encrypted)
+            return
+        }
         guard phase == .idle else { return }
-        if let a = Self.availability(central.state) { policy.linkEnded(); sink.yield(.bluetoothUnavailable(a)); return }
+        if let a = Self.availability(central.state) {
+            policy.linkEnded()
+            sink.yield(.bluetoothUnavailable(a))
+            return
+        }
         // A pick never waits for Bluetooth: only the saved unit's connect does.
-        guard central.state == .poweredOn else { policy.linkEnded(); phase = .waitingForPower; return }
+        guard central.state == .poweredOn else {
+            policy.linkEnded()
+            phase = .waitingForPower
+            return
+        }
         switch policy.route() {
         case .chosen(let id), .saved(let id):
             // iOS resolves the unit's rotating address with the bond. Never another peripheral.
@@ -294,8 +309,14 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
 extension CoreBluetoothTransport: CBCentralManagerDelegate {
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         if central.state == .poweredOn {
-            if phase == .waitingForPower { phase = .idle; startConnect() }
-            if restoredConnected, let p = peripheral, p.state == .connected { restoredConnected = false; linkOpened(p) }
+            if phase == .waitingForPower {
+                phase = .idle
+                startConnect()
+            }
+            if restoredConnected, let p = peripheral, p.state == .connected {
+                restoredConnected = false
+                linkOpened(p)
+            }
             return
         }
         // Not powered on: CoreBluetooth sends no disconnect for the links it dropped.
@@ -314,8 +335,10 @@ extension CoreBluetoothTransport: CBCentralManagerDelegate {
         if picking { sink.yield(.disconnected(reason: .failedToConnect)) }
     }
 
-    public func centralManager(_ central: CBCentralManager, didDiscover p: CBPeripheral,
-                               advertisementData: [String: Any], rssi: NSNumber) {
+    public func centralManager(
+        _ central: CBCentralManager, didDiscover p: CBPeripheral,
+        advertisementData: [String: Any], rssi: NSNumber
+    ) {
         // A cheap first screen only: the user's pick and the passkey are the check.
         let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? p.name ?? ""
         candidates?.list.saw(id: p.identifier, name: name, rssi: rssi.intValue)
@@ -341,20 +364,22 @@ extension CoreBluetoothTransport: CBCentralManagerDelegate {
     }
 
     #if os(iOS)
-    /// iOS relaunched the app for the held link (it was terminated by the system, not swiped away).
-    /// Called before `centralManagerDidUpdateState`; the bring-up resumes once Bluetooth is on.
-    public func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
-        let restored = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
-        for other in restored where other.identifier != policy.saved { central.cancelPeripheralConnection(other) }
-        guard let p = restored.first(where: { $0.identifier == policy.saved }) else { return }
-        peripheral = p
-        p.delegate = self
-        switch p.state {
-        case .connected: phase = .connecting; restoredConnected = true
-        case .connecting: phase = .connecting  // the pending connect lives on; didConnect follows
-        default: peripheral = nil
+        /// iOS relaunched the app for the held link (it was terminated by the system, not swiped away).
+        /// Called before `centralManagerDidUpdateState`; the bring-up resumes once Bluetooth is on.
+        public func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+            let restored = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
+            for other in restored where other.identifier != policy.saved { central.cancelPeripheralConnection(other) }
+            guard let p = restored.first(where: { $0.identifier == policy.saved }) else { return }
+            peripheral = p
+            p.delegate = self
+            switch p.state {
+            case .connected:
+                phase = .connecting
+                restoredConnected = true
+            case .connecting: phase = .connecting  // the pending connect lives on; didConnect follows
+            default: peripheral = nil
+            }
         }
-    }
     #endif
 }
 
@@ -404,10 +429,11 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
             return fail(p, error)
         }
         let bytes = [UInt8](c.value ?? Data())
-        let result: Result<[UInt8], any Error> = error.map { e in
-            if Self.needsPairing(e) { sink.yield(.pairingRequired) }
-            return .failure(TransportError.noSuchChar(s))
-        } ?? .success(bytes)
+        let result: Result<[UInt8], any Error> =
+            error.map { e in
+                if Self.needsPairing(e) { sink.yield(.pairingRequired) }
+                return .failure(TransportError.noSuchChar(s))
+            } ?? .success(bytes)
         // CoreBluetooth reports a read answer and a notification alike: while a read of this char is
         // pending, the value goes to that read and is never reported as a push (a push confirms a
         // command; a read can be the unit's write-through echo).
@@ -470,7 +496,11 @@ struct PeerPolicy {
 
     init(saved: UUID?) { self.saved = saved }
 
-    enum Route: Equatable { case chosen(UUID), saved(UUID), refuse }
+    enum Route: Equatable {
+        case chosen(UUID)
+        case saved(UUID)
+        case refuse
+    }
     enum Verdict: Equatable {
         /// The link is verified: report it encrypted (a saved unit, or a unit adopted just now).
         case up
@@ -626,9 +656,15 @@ struct PendingOps {
     mutating func finishSubscribe(_ c: UInt16, _ error: (any Error)?) {
         subscribes = subscribes.compactMap { s in
             guard s.left.contains(c) else { return s }
-            if let error { s.k.resume(throwing: error); return nil }
+            if let error {
+                s.k.resume(throwing: error)
+                return nil
+            }
             let left = s.left.subtracting([c])
-            if left.isEmpty { s.k.resume(); return nil }
+            if left.isEmpty {
+                s.k.resume()
+                return nil
+            }
             return (left, s.k)
         }
     }
@@ -637,7 +673,9 @@ struct PendingOps {
     /// subscribe has no effect on the unit (`.notConnected`).
     mutating func drain() {
         let (r, w, s) = (reads.values.joined(), writes.values.joined(), subscribes.map(\.k))
-        reads = [:]; writes = [:]; subscribes = []
+        reads = [:]
+        writes = [:]
+        subscribes = []
         for k in r { k.resume(throwing: TransportError.notConnected) }
         for k in w { k.resume(throwing: TransportError.linkLost) }
         for k in s { k.resume(throwing: TransportError.notConnected) }

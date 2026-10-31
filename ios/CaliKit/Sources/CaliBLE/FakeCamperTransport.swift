@@ -34,8 +34,10 @@ public actor FakeCamperTransport: CamperTransport {
     /// Every write attempt, in order, including a rejected one.
     public private(set) var writes: [Write] = []
 
-    public init(clock: any Clock<Duration> = ContinuousClock(), frames: [UInt16: [UInt8]] = [:],
-                candidates: [PairingCandidate] = []) {
+    public init(
+        clock: any Clock<Duration> = ContinuousClock(), frames: [UInt16: [UInt8]] = [:],
+        candidates: [PairingCandidate] = []
+    ) {
         (events, sink) = AsyncStream.makeStream()
         self.clock = clock
         self.frames = frames
@@ -119,10 +121,25 @@ public actor FakeCamperTransport: CamperTransport {
 
     public func connect() {
         connects += 1
-        if let unavailable { sink.yield(.bluetoothUnavailable(unavailable)); return }
-        if connectWillFail { connectWillFail = false; sink.yield(.disconnected(reason: .failedToConnect)); return }
-        if pairingRequiredOnConnect { pairingRequiredOnConnect = false; sink.yield(.pairingRequired); return }
-        if notPairedOnConnect { notPairedOnConnect = false; sink.yield(.notPaired); return }
+        if let unavailable {
+            sink.yield(.bluetoothUnavailable(unavailable))
+            return
+        }
+        if connectWillFail {
+            connectWillFail = false
+            sink.yield(.disconnected(reason: .failedToConnect))
+            return
+        }
+        if pairingRequiredOnConnect {
+            pairingRequiredOnConnect = false
+            sink.yield(.pairingRequired)
+            return
+        }
+        if notPairedOnConnect {
+            notPairedOnConnect = false
+            sink.yield(.notPaired)
+            return
+        }
         if pairOnConnect {
             pairOnConnect = false
             pairingOpen = true
@@ -175,7 +192,11 @@ public actor FakeCamperTransport: CamperTransport {
     /// Like the real transport: the current link ends (`.localCancel`), then one connect at once.
     public func beginFirstPairing(with id: UUID) {
         picks.append(id)
-        if holdPick { holdPick = false; pickWaiting = true; return }
+        if holdPick {
+            holdPick = false
+            pickWaiting = true
+            return
+        }
         end(.localCancel)
         connect()
     }
@@ -199,65 +220,72 @@ public actor FakeCamperTransport: CamperTransport {
 }
 
 #if DEBUG
-/// A manual clock for tests: `sleep` suspends until `advance(by:)` passes its deadline.
-public final class TestClock: Clock, @unchecked Sendable {
-    public struct Instant: InstantProtocol {
-        public var offset: Duration
-        public func advanced(by d: Duration) -> Instant { Instant(offset: offset + d) }
-        public func duration(to other: Instant) -> Duration { other.offset - offset }
-        public static func < (a: Instant, b: Instant) -> Bool { a.offset < b.offset }
-    }
+    /// A manual clock for tests: `sleep` suspends until `advance(by:)` passes its deadline.
+    public final class TestClock: Clock, @unchecked Sendable {
+        public struct Instant: InstantProtocol {
+            public var offset: Duration
+            public func advanced(by d: Duration) -> Instant { Instant(offset: offset + d) }
+            public func duration(to other: Instant) -> Duration { other.offset - offset }
+            public static func < (a: Instant, b: Instant) -> Bool { a.offset < b.offset }
+        }
 
-    private struct Sleeper { let deadline: Instant; let cont: CheckedContinuation<Void, any Error>; let id: Int }
-    private let lock = NSLock()
-    private var current = Instant(offset: .zero)
-    private var sleepers: [Sleeper] = []
-    private var nextID = 0
+        private struct Sleeper {
+            let deadline: Instant
+            let cont: CheckedContinuation<Void, any Error>
+            let id: Int
+        }
+        private let lock = NSLock()
+        private var current = Instant(offset: .zero)
+        private var sleepers: [Sleeper] = []
+        private var nextID = 0
 
-    public init() {}
-    public var minimumResolution: Duration { .zero }
-    public var now: Instant { lock.withLock { current } }
-    /// Sleepers waiting now; tests poll it before `advance` so the sleep is registered first.
-    public var sleeperCount: Int { lock.withLock { sleepers.count } }
-    /// The deadlines (time since the clock's start) of the sleepers waiting now: a test can wait
-    /// for one particular sleep to be registered.
-    public var deadlines: [Duration] { lock.withLock { sleepers.map(\.deadline.offset) } }
+        public init() {}
+        public var minimumResolution: Duration { .zero }
+        public var now: Instant { lock.withLock { current } }
+        /// Sleepers waiting now; tests poll it before `advance` so the sleep is registered first.
+        public var sleeperCount: Int { lock.withLock { sleepers.count } }
+        /// The deadlines (time since the clock's start) of the sleepers waiting now: a test can wait
+        /// for one particular sleep to be registered.
+        public var deadlines: [Duration] { lock.withLock { sleepers.map(\.deadline.offset) } }
 
-    public func sleep(until deadline: Instant, tolerance: Duration?) async throws {
-        let id = lock.withLock { defer { nextID += 1 }; return nextID }
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { cont in
-                // A task cancelled before this point already ran onCancel (it found nothing):
-                // checking under the lock keeps a dead sleeper out of `sleepers`.
-                let ready = lock.withLock { () -> Bool? in
-                    if Task.isCancelled { return nil }
-                    if deadline <= current { return true }
-                    sleepers.append(Sleeper(deadline: deadline, cont: cont, id: id))
-                    return false
-                }
-                switch ready {
-                case nil: cont.resume(throwing: CancellationError())
-                case true?: cont.resume()
-                case false?: break
-                }
+        public func sleep(until deadline: Instant, tolerance: Duration?) async throws {
+            let id = lock.withLock {
+                defer { nextID += 1 }
+                return nextID
             }
-        } onCancel: {
-            let s = lock.withLock { () -> Sleeper? in
-                guard let i = sleepers.firstIndex(where: { $0.id == id }) else { return nil }
-                return sleepers.remove(at: i)
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { cont in
+                    // A task cancelled before this point already ran onCancel (it found nothing):
+                    // checking under the lock keeps a dead sleeper out of `sleepers`.
+                    let ready = lock.withLock { () -> Bool? in
+                        if Task.isCancelled { return nil }
+                        if deadline <= current { return true }
+                        sleepers.append(Sleeper(deadline: deadline, cont: cont, id: id))
+                        return false
+                    }
+                    switch ready {
+                    case nil: cont.resume(throwing: CancellationError())
+                    case true?: cont.resume()
+                    case false?: break
+                    }
+                }
+            } onCancel: {
+                let s = lock.withLock { () -> Sleeper? in
+                    guard let i = sleepers.firstIndex(where: { $0.id == id }) else { return nil }
+                    return sleepers.remove(at: i)
+                }
+                s?.cont.resume(throwing: CancellationError())
             }
-            s?.cont.resume(throwing: CancellationError())
+        }
+
+        public func advance(by d: Duration) {
+            let due = lock.withLock { () -> [Sleeper] in
+                current = current.advanced(by: d)
+                let due = sleepers.filter { $0.deadline <= current }
+                sleepers.removeAll { $0.deadline <= current }
+                return due
+            }
+            for s in due { s.cont.resume() }
         }
     }
-
-    public func advance(by d: Duration) {
-        let due = lock.withLock { () -> [Sleeper] in
-            current = current.advanced(by: d)
-            let due = sleepers.filter { $0.deadline <= current }
-            sleepers.removeAll { $0.deadline <= current }
-            return due
-        }
-        for s in due { s.cont.resume() }
-    }
-}
 #endif

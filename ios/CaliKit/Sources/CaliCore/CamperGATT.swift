@@ -12,10 +12,14 @@ public enum CamperGATT {
     }
 
     /// function name -> state char short id.
-    public static let stateChars: [String: UInt16] = table(CODEC_CHARS, Int(CODEC_NCHARS)) { (e: codec_char) in (e.function, e.state_short) }
+    public static let stateChars: [String: UInt16] = table(CODEC_CHARS, Int(CODEC_NCHARS)) { (e: codec_char) in
+        (e.function, e.state_short)
+    }
 
     /// function name -> control char short id (the five writable functions).
-    public static let controlChars: [String: UInt16] = table(CALI_CTL_CHARS, Int(CALI_CTL_NCHARS)) { (e: cali_ctl_char) in (e.function, e.control_short) }
+    public static let controlChars: [String: UInt16] = table(CALI_CTL_CHARS, Int(CALI_CTL_NCHARS)) { (e: cali_ctl_char) in
+        (e.function, e.control_short)
+    }
 
     public static let heartbeat = UInt16(CODEC_CHAR_HEARTBEAT)
     /// The authenticated read (`vehicle`): it succeeds only over an encrypted, bonded link.
@@ -36,7 +40,8 @@ public enum CamperGATT {
     private static func table<E>(_ tuple: Any, _ n: Int, _ pick: (E) -> (UnsafePointer<CChar>?, UInt16)) -> [String: UInt16] {
         var out: [String: UInt16] = [:]
         for child in Mirror(reflecting: tuple).children.prefix(n) {
-            let (name, id) = pick(child.value as! E)
+            guard let entry = child.value as? E else { preconditionFailure("C table entry of the wrong type") }
+            let (name, id) = pick(entry)
             out[String(cString: name!)] = id
         }
         return out

@@ -2,6 +2,7 @@ import CaliBLE
 import CaliCore
 import Foundation
 import Testing
+
 @testable import Camper
 
 /// Each control sends exactly the `function/what/value` that the web UI sends (`calictl/webui/app.js`
@@ -29,7 +30,8 @@ struct CommandMappingTests {
     @Test func favouriteThreeSendsProfile6() {
         #expect(LightsView.favourites.map(\.label) == ["A", "B", "C", "D"])
         #expect(LightsView.favourites.map(\.profile) == [1, 5, 6, 7])
-        #expect(LightsView.favourite(LightsView.favourites[2].profile) == Command(function: "lighting", what: "profile", value: "6"))
+        #expect(
+            LightsView.favourite(LightsView.favourites[2].profile) == Command(function: "lighting", what: "profile", value: "6"))
     }
 
     /// "All lights" is the web UI's master switch `lighting power on|off` (the app's LIGHTS_ON/OFF
@@ -41,9 +43,11 @@ struct CommandMappingTests {
         #expect(LightsView.allLights(true) == Command(function: "lighting", what: "power", value: "on"))
         #expect(LightsView.allLights(false) == Command(function: "lighting", what: "power", value: "off"))
         #expect(LightsView.lamp("kitchen-ambient", 7) == Command(function: "lighting", what: "kitchen-ambient", value: "7"))
-        #expect(LightsView.groups.flatMap(\.lamps).map(\.what) == [
-            "reading-1", "reading-2", "reading-3", "kitchen-ambient", "kitchen-cabinet", "kitchen",
-            "roof-ambient", "roof-reading", "outside-rear", "entrance"])
+        #expect(
+            LightsView.groups.flatMap(\.lamps).map(\.what) == [
+                "reading-1", "reading-2", "reading-3", "kitchen-ambient", "kitchen-cabinet", "kitchen",
+                "roof-ambient", "roof-reading", "outside-rear", "entrance",
+            ])
     }
 
     /// The cooler and the energy mode (app.js FEATURES.cooler / FEATURES.energy).
@@ -84,7 +88,9 @@ struct CommandMappingTests {
         var builders: [String] = []
         for case let url as URL in files where url.pathExtension == "swift" {
             let src = try String(contentsOf: url, encoding: .utf8)
-            if src.contains("function: \"airheater\"") || src.contains("onOff(\"airheater\"") { builders.append(url.lastPathComponent) }
+            if src.contains("function: \"airheater\"") || src.contains("onOff(\"airheater\"") {
+                builders.append(url.lastPathComponent)
+            }
         }
         #expect(builders == ["AirHeaterView.swift"])
     }
@@ -147,7 +153,8 @@ struct CommandMappingTests {
     }
 
     /// Every result the runner can give, with each refusal and failure case.
-    static let allResults: [CommandResult] = [.applied, .sent, .unconfirmed, .notSupported, .busy, .notReady, .timeout]
+    static let allResults: [CommandResult] =
+        [.applied, .sent, .unconfirmed, .notSupported, .busy, .notReady, .timeout]
         + Refusal.allCases.map { .refused($0) }
         + [Failure.resting(retryAfter: 5), .bluetoothOff, .unreachable, .linkEnded, .notTaken].map { .failed($0) }
 
@@ -158,18 +165,24 @@ struct CommandMappingTests {
     /// - Verifies: R_IOS_I18N
     @Test func everyReasonHasGerman() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appending(path: "App/Localizable.xcstrings"))) as? [String: Any]
+        let json =
+            try JSONSerialization.jsonObject(with: Data(contentsOf: root.appending(path: "App/Localizable.xcstrings")))
+            as? [String: Any]
         let strings = try #require(json?["strings"] as? [String: Any])
         func de(_ key: String) -> String? {
-            ((((strings[key] as? [String: Any])?["localizations"] as? [String: Any])?["de"] as? [String: Any])?["stringUnit"] as? [String: Any])?["value"] as? String
+            ((((strings[key] as? [String: Any])?["localizations"] as? [String: Any])?["de"] as? [String: Any])?["stringUnit"]
+                as? [String: Any])?["value"] as? String
         }
         var keys: Set<String> = ["Connecting in %lld s…", "Tap to connect", "Tap to connect (in %lld s)"]
         for r in Self.allResults { for fn in ["lighting", "cooler"] { keys.insert(ResultBanner.text(r, function: fn).key) } }
         keys.insert("Unknown fault of the energy system")
         for k in keys { #expect(de(k)?.isEmpty == false, "no German for \(k)") }
-        #expect(ResultBanner.text(.refused(.quietNeedsFridgeOn), function: "cooler").string(Locale(identifier: "de_DE")) == "Zuerst die Kühlbox einschalten")
-        #expect(ResultBanner.text(.failed(.resting(retryAfter: 5)), function: "cooler").string(Locale(identifier: "de_DE"))
-            == "Die Camper-Einheit spart Energie — in 5 s erneut versuchen")
+        #expect(
+            ResultBanner.text(.refused(.quietNeedsFridgeOn), function: "cooler").string(Locale(identifier: "de_DE"))
+                == "Zuerst die Kühlbox einschalten")
+        #expect(
+            ResultBanner.text(.failed(.resting(retryAfter: 5)), function: "cooler").string(Locale(identifier: "de_DE"))
+                == "Die Camper-Einheit spart Energie — in 5 s erneut versuchen")
     }
 
     /// A command shows "Sending…" and then its result where the user looks (pinned under the pill).
@@ -185,17 +198,26 @@ struct CommandMappingTests {
         #expect(store.feedback == .result(.notSupported, function: "campingmode"))
 
         func resting() -> (CamperStore, FakeCamperTransport) {
-            let fake = FakeCamperTransport(frames: Dictionary(uniqueKeysWithValues: Fixture.parked.frames.compactMap { fn, b in
-                CamperGATT.stateChars[fn].map { ($0, b) } }))
-            let s = CamperStore(session: CamperSession(transport: fake, clock: ContinuousClock()),
-                                state: Fixture.parked.state(now: Date()), link: .rest(until: Date().addingTimeInterval(0.6)))
+            let fake = FakeCamperTransport(
+                frames: Dictionary(
+                    uniqueKeysWithValues: Fixture.parked.frames.compactMap { fn, b in
+                        CamperGATT.stateChars[fn].map { ($0, b) }
+                    }))
+            let s = CamperStore(
+                session: CamperSession(transport: fake, clock: ContinuousClock()),
+                state: Fixture.parked.state(now: Date()), link: .rest(until: Date().addingTimeInterval(0.6)))
             return (s, fake)
         }
         let (store2, fake) = resting()
         let tap = Task { await store2.tapToConnect() }
         try await Task.sleep(for: .milliseconds(100))
-        guard case .connecting(let until?) = store2.feedback else { Issue.record("no countdown: \(String(describing: store2.feedback))"); return }
-        #expect(FeedbackBanner.text(.connecting(until: until), now: until.addingTimeInterval(-3))?.string(Self.en) == "Connecting in 3 s…")
+        guard case .connecting(let until?) = store2.feedback else {
+            Issue.record("no countdown: \(String(describing: store2.feedback))")
+            return
+        }
+        #expect(
+            FeedbackBanner.text(.connecting(until: until), now: until.addingTimeInterval(-3))?.string(Self.en)
+                == "Connecting in 3 s…")
         #expect(await fake.connects == 0)  // the cooldown runs
         await tap.value
         #expect(await fake.connects == 1)

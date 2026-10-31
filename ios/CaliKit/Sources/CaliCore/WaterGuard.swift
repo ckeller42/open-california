@@ -36,9 +36,10 @@ public struct WaterGuard: Sendable {
     /// True: adopt `new` as the baseline (show it). False: hold the baseline (show it, or nothing).
     public mutating func settle(_ new: WaterLevels, nowMs: UInt64) -> Bool {
         func i(_ v: UInt32?) -> Int32 { Int32(truncatingIfNeeded: v ?? 0) }
-        let adopt = freshness_settle(
-            i(new.fresh), i(baseline?.fresh), i(new.waste), i(baseline?.waste),
-            Self.have(new, baseline), nowMs, FRESH_SETTLE_MS, &pending) == 1
+        let adopt =
+            freshness_settle(
+                i(new.fresh), i(baseline?.fresh), i(new.waste), i(baseline?.waste),
+                Self.have(new, baseline), nowMs, FRESH_SETTLE_MS, &pending) == 1
         if adopt { baseline = new }
         return adopt
     }

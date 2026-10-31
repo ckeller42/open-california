@@ -1,9 +1,10 @@
+import CaliBLE
+import CaliCore
 import SnapshotTesting
 import SwiftUI
 import Testing
 import UIKit
-import CaliBLE
-import CaliCore
+
 @testable import Camper
 
 /// Visual regression of the status screens: every fixture in light and dark, plus German, the largest
@@ -21,17 +22,20 @@ struct ScreenSnapshotTests {
     private static let english = Locale(identifier: "en_US")
 
     /// One snapshot. Scale 1 keeps the references small; the text size is pinned to the default.
-    private func snap(_ view: some View, _ name: String, style: UIUserInterfaceStyle = .light,
-                      locale: Locale = english, size: UIContentSizeCategory = .large,
-                      layout: SwiftUISnapshotLayout = .device(config: .iPhone13),
-                      file: StaticString = #filePath, line: UInt = #line) {
+    private func snap(
+        _ view: some View, _ name: String, style: UIUserInterfaceStyle = .light,
+        locale: Locale = english, size: UIContentSizeCategory = .large,
+        layout: SwiftUISnapshotLayout = .device(config: .iPhone13),
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
         let traits = UITraitCollection {
             $0.userInterfaceStyle = style
             $0.displayScale = 1
             $0.preferredContentSizeCategory = size
         }
-        assertSnapshot(of: view.environment(\.locale, locale), as: .image(perceptualPrecision: 0.98, layout: layout, traits: traits),
-                       named: name, fileID: #fileID, file: file, testName: "screens", line: line)
+        assertSnapshot(
+            of: view.environment(\.locale, locale), as: .image(perceptualPrecision: 0.98, layout: layout, traits: traits),
+            named: name, fileID: #fileID, file: file, testName: "screens", line: line)
     }
 
     private func check(_ view: some View, _ name: String, file: StaticString = #filePath, line: UInt = #line) {
@@ -99,10 +103,19 @@ struct ScreenSnapshotTests {
     @Test func rendersTheTabs() {
         for (name, locale) in [("root", Self.english), ("root-de", Locale(identifier: "de_DE"))] {
             // As a view controller in a window: the floating tab bar and the navigation bar draw only there.
-            let host = UIHostingController(rootView: RootView(store: CamperStore.preview(.parked, now: Self.now))
-                .environment(\.locale, locale))
-            let traits = UITraitCollection { $0.userInterfaceStyle = .light; $0.displayScale = 1; $0.preferredContentSizeCategory = .large }
-            assertSnapshot(of: host, as: .image(drawHierarchyInKeyWindow: true, perceptualPrecision: 0.98, size: CGSize(width: 390, height: 844), traits: traits), named: name, testName: "screens")
+            let host = UIHostingController(
+                rootView: RootView(store: CamperStore.preview(.parked, now: Self.now))
+                    .environment(\.locale, locale))
+            let traits = UITraitCollection {
+                $0.userInterfaceStyle = .light
+                $0.displayScale = 1
+                $0.preferredContentSizeCategory = .large
+            }
+            assertSnapshot(
+                of: host,
+                as: .image(
+                    drawHierarchyInKeyWindow: true, perceptualPrecision: 0.98, size: CGSize(width: 390, height: 844),
+                    traits: traits), named: name, testName: "screens")
         }
     }
 
@@ -135,7 +148,9 @@ struct ScreenSnapshotTests {
     /// - Test: T_IOS_SNAPSHOT_CONTROL_STATES
     /// - Verifies: R_IOS_LOOK, R_IOS_HONEST, R_IOS_POWER_SAVE
     @Test func controlScreenStates() {
-        let states: [(String, LinkState)] = [("rest", .rest(until: Self.now.addingTimeInterval(60))), ("connecting", .connecting), ("offline", .off)]
+        let states: [(String, LinkState)] = [
+            ("rest", .rest(until: Self.now.addingTimeInterval(60))), ("connecting", .connecting), ("offline", .off),
+        ]
         for (name, link) in states {
             let store = CamperStore.preview(.parked, now: Self.now)
             store.link = link
@@ -147,7 +162,9 @@ struct ScreenSnapshotTests {
         check(NavigationStack { CoolerView(store: sending) }, "control-cooler-sending")
 
         // Lighting, the long page: the feedback stays in sight over the content.
-        for (name, feedback) in [("sending", Feedback.sending(function: "lighting")), ("result", .result(.sent, function: "lighting"))] {
+        for (name, feedback) in [
+            ("sending", Feedback.sending(function: "lighting")), ("result", .result(.sent, function: "lighting")),
+        ] {
             let store = CamperStore.preview(.campingOn, now: Self.now)
             store.feedback = feedback
             snap(NavigationStack { LightsView(store: store) }, "control-lighting-\(name)-light")
@@ -160,8 +177,13 @@ struct ScreenSnapshotTests {
 
         let heater: [(String, [String: JSONValue])] = [
             ("error", ["error": .string("low_fuel"), "error_code": .number(2)]),
-            ("running", ["running": .bool(true), "normal": .bool(true), "level": .number(5), "running_time": .number(60),
-                         "running_time_remaining": .number(45)]),
+            (
+                "running",
+                [
+                    "running": .bool(true), "normal": .bool(true), "level": .number(5), "running_time": .number(60),
+                    "running_time_remaining": .number(45),
+                ]
+            ),
             ("permanent", ["running": .bool(true), "permanent": .bool(true), "level": .number(10), "running_time": .number(60)]),
         ]
         for (name, values) in heater {
@@ -223,9 +245,12 @@ struct ScreenSnapshotTests {
     /// - Test: T_IOS_SNAPSHOT_BANNERS
     /// - Verifies: R_IOS_HONEST, R_IOS_I18N
     @Test func feedbackBanners() {
-        let all: [Feedback] = [.sending(function: "cooler"), .connecting(until: nil), .connecting(until: Self.now.addingTimeInterval(5)),
-                               .connect(.resting(until: Self.now.addingTimeInterval(5))),
-                               .connect(.failed(.unreachable)), .result(.sent, function: "lighting")]
+        let all: [Feedback] =
+            [
+                .sending(function: "cooler"), .connecting(until: nil), .connecting(until: Self.now.addingTimeInterval(5)),
+                .connect(.resting(until: Self.now.addingTimeInterval(5))),
+                .connect(.failed(.unreachable)), .result(.sent, function: "lighting"),
+            ]
             + CommandMappingTests.allResults.map { .result($0, function: "cooler") }
         let gallery = VStack(spacing: 8) {
             ForEach(all.indices, id: \.self) { FeedbackBanner(feedback: all[$0], clock: { Self.now }) }
@@ -244,7 +269,14 @@ struct ScreenSnapshotTests {
     /// - Test: T_IOS_PILL_TICK
     /// - Verifies: R_IOS_HONEST
     @Test func pageRedrawsWhenTheDataTurnsStale() async throws {
-        final class Count { var n = 0 }
+        final class Count {
+            var n = 0
+            /// Counts one render; the view builder takes its result as the page's content.
+            func tick() -> EmptyView {
+                n += 1
+                return EmptyView()
+            }
+        }
         let count = Count()
         var clock = Self.now.addingTimeInterval(88)
         let store = CamperStore.preview(.parked, now: Self.now)
@@ -252,10 +284,10 @@ struct ScreenSnapshotTests {
         // A window in the host app's scene: a TimelineView ticks only on screen.
         let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)
-        window.rootViewController = UIHostingController(rootView: StatusPage(store: store) {
-            let _ = count.n += 1
-            EmptyView()
-        }.environment(\.locale, Self.english))
+        window.rootViewController = UIHostingController(
+            rootView: StatusPage(store: store) {
+                count.tick()
+            }.environment(\.locale, Self.english))
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
         func render() -> Data {
@@ -265,7 +297,8 @@ struct ScreenSnapshotTests {
         }
         try await Task.sleep(for: .milliseconds(300))
         #expect(!store.isStale)
-        let fresh = render(), drawn = count.n
+        let fresh = render()
+        let drawn = count.n
         clock = Self.now.addingTimeInterval(120)
         try await Task.sleep(for: .milliseconds(1500))  // at least one 1 s tick
         #expect(store.isStale)

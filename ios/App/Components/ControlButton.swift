@@ -3,10 +3,16 @@ import UIKit
 
 extension Color {
     /// Amber marks light, green marks "on"; each defined for light and dark mode.
-    static let lightAmber = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark
-        ? UIColor(red: 1.00, green: 0.78, blue: 0.35, alpha: 1) : UIColor(red: 0.60, green: 0.36, blue: 0.00, alpha: 1) })
-    static let onGreen = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark
-        ? UIColor(red: 0.45, green: 0.92, blue: 0.55, alpha: 1) : UIColor(red: 0.00, green: 0.42, blue: 0.15, alpha: 1) })
+    static let lightAmber = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 1.00, green: 0.78, blue: 0.35, alpha: 1) : UIColor(red: 0.60, green: 0.36, blue: 0.00, alpha: 1)
+        })
+    static let onGreen = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 0.45, green: 0.92, blue: 0.55, alpha: 1) : UIColor(red: 0.00, green: 0.42, blue: 0.15, alpha: 1)
+        })
 }
 
 /// A large cockpit button: an SF Symbol, the function's name and its state (On / Off), tinted when on.
@@ -43,8 +49,9 @@ struct ControlButton: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(isOn ? tint.opacity(0.12) : Color(uiColor: .secondarySystemBackground),
-                        in: RoundedRectangle(cornerRadius: 16))
+            .background(
+                isOn ? tint.opacity(0.12) : Color(uiColor: .secondarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(Undimmed())
         .accessibilityLabel(Text(title))

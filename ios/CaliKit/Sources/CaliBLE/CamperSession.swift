@@ -116,7 +116,8 @@ public actor CamperSession {
     /// Brings the link up, subscribes and reads every state function; returns at once when the link
     /// is already ready. `timeout` is the total budget of the whole call. After a lost link it waits
     /// until the unit's 7 s cooldown has passed; when the rest of the cooldown plus `minConnect`
-    /// does not fit the budget it throws `inRest(retryAfter:)` at once (no dial). It ends the power-save rest and replaces a scheduled reconnect.
+    /// does not fit the budget it throws `inRest(retryAfter:)` at once (no dial). It ends the
+    /// power-save rest and replaces a scheduled reconnect.
     /// Concurrent callers share one bring-up.
     public func ensureConnected(timeout: Duration) async throws {
         let remaining = clock.countdown(timeout)
@@ -382,7 +383,7 @@ public actor CamperSession {
     /// both known, and no command in flight. A missing frame or field means "reconnect as usual".
     private var restConditions: Bool {
         guard commands == 0, state.fields["campingmode"]?["State"] == 0,
-              case .string(let shore)? = state.interpreted["energy"]?["shore_state"]
+            case .string(let shore)? = state.interpreted["energy"]?["shore_state"]
         else { return false }
         return shore != "active" && shore != "standby"
     }
@@ -573,7 +574,10 @@ private final class Once: @unchecked Sendable {  // @unchecked: all state behind
 
     func finish(_ r: Result<Void, any Error>) {
         let (c, t) = lock.withLock { () -> (CheckedContinuation<Void, any Error>?, Task<Void, Never>?) in
-            defer { cont = nil; timer = nil }
+            defer {
+                cont = nil
+                timer = nil
+            }
             return (cont, timer)
         }
         t?.cancel()
@@ -583,18 +587,24 @@ private final class Once: @unchecked Sendable {  // @unchecked: all state behind
 
 /// Runs `op`, but returns by `budget` on `clock` whether or not `op` honours cancellation
 /// (a BLE read can hang). On the deadline `op` is cancelled and `SessionError.unreachable` thrown.
-func race(_ clock: any Clock<Duration>, _ budget: Duration,
-                  _ op: @escaping @Sendable () async throws -> Void) async throws {
+func race(
+    _ clock: any Clock<Duration>, _ budget: Duration,
+    _ op: @escaping @Sendable () async throws -> Void
+) async throws {
     guard budget > .zero else { throw SessionError.unreachable }
     try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, any Error>) in
         let once = Once(cont)
         let work = Task {
-            do { try await op(); once.finish(.success(())) } catch { once.finish(.failure(error)) }
+            do {
+                try await op()
+                once.finish(.success(()))
+            } catch { once.finish(.failure(error)) }
         }
-        once.setTimer(Task {
-            do { try await clock.sleep(for: budget) } catch { return }
-            work.cancel()
-            once.finish(.failure(SessionError.unreachable))
-        })
+        once.setTimer(
+            Task {
+                do { try await clock.sleep(for: budget) } catch { return }
+                work.cancel()
+                once.finish(.failure(SessionError.unreachable))
+            })
     }
 }

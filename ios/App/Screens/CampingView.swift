@@ -25,10 +25,13 @@ struct CampingView: View {
                     SwitchRow(label: Text("Camping mode"), isOn: Binding(get: { master }, set: { run(Self.master($0)) }))
                 }
                 ControlRow(disabledBecause: master ? nil : "Turn camping mode on first") {
-                    SwitchRow(label: Text("Exterior and interior lighting"), isOn: Binding(get: { on("lights_on") }, set: { run(Self.lights($0)) }))
+                    SwitchRow(
+                        label: Text("Exterior and interior lighting"),
+                        isOn: Binding(get: { on("lights_on") }, set: { run(Self.lights($0)) }))
                 }
                 ControlRow(disabledBecause: master ? nil : "Turn camping mode on first") {
-                    SwitchRow(label: Text("Rear USB ports"), isOn: Binding(get: { on("usb_powered") }, set: { run(Self.usb($0)) }))
+                    SwitchRow(
+                        label: Text("Rear USB ports"), isOn: Binding(get: { on("usb_powered") }, set: { run(Self.usb($0)) }))
                 }
             }
             Card {

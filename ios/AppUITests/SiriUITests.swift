@@ -34,8 +34,9 @@ final class SiriUITests: XCTestCase {
                 }
                 if let s = try? XCUIApplication(bundleIdentifier: "com.apple.springboard").snapshot() { walk(s) }
                 let siri = labels.prefix(10).joined(separator: " | ")
-                throw XCTSkip("Siri in this simulator did not run the intent for \"\(phrase)\" within 20 s; "
-                              + "Siri showed: [\(siri)]. Checked on the iPhone instead: docs/ios-app-siri-checklist.md")
+                throw XCTSkip(
+                    "Siri in this simulator did not run the intent for \"\(phrase)\" within 20 s; "
+                        + "Siri showed: [\(siri)]. Checked on the iPhone instead: docs/ios-app-siri-checklist.md")
             }
             app.activate()
             try app.auditScreen()

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import CaliCore
 
 /// Every refusal text of the C planner (`control_consts.h`) is a typed case, so the app can show it
@@ -16,7 +17,8 @@ struct RefusalTests {
         var seen = 0
         for m in header.matches(of: define) {
             guard let text = Self.unescape(String(m.output[2].substring!)) else {
-                Issue.record("\(m.output[1].substring!): an escape this test does not know"); continue
+                Issue.record("\(m.output[1].substring!): an escape this test does not know")
+                continue
             }
             #expect(Refusal(planner: text) != .unknown, "\(m.output[1].substring!) has no Refusal case")
             seen += 1
@@ -33,19 +35,24 @@ struct RefusalTests {
         var bytes: [UInt8] = []
         var it = Array(s.utf8)[...]
         while let b = it.popFirst() {
-            guard b == UInt8(ascii: "\\") else { bytes.append(b); continue }
+            guard b == UInt8(ascii: "\\") else {
+                bytes.append(b)
+                continue
+            }
             guard let e = it.popFirst() else { return nil }
             switch e {
             case UInt8(ascii: "0")...UInt8(ascii: "7"):
                 var digits = [e]
-                while digits.count < 3, let d = it.first, (UInt8(ascii: "0")...UInt8(ascii: "7")).contains(d) { digits.append(it.removeFirst()) }
-                guard let v = UInt8(String(decoding: digits, as: UTF8.self), radix: 8) else { return nil }
+                while digits.count < 3, let d = it.first, (UInt8(ascii: "0")...UInt8(ascii: "7")).contains(d) {
+                    digits.append(it.removeFirst())
+                }
+                guard let octal = String(bytes: digits, encoding: .ascii), let v = UInt8(octal, radix: 8) else { return nil }
                 bytes.append(v)
             case UInt8(ascii: "?"), UInt8(ascii: "\""), UInt8(ascii: "\\"), UInt8(ascii: "'"): bytes.append(e)
             case UInt8(ascii: "n"): bytes.append(10)
             default: return nil
             }
         }
-        return String(decoding: bytes, as: UTF8.self)
+        return String(bytes: bytes, encoding: .utf8)
     }
 }

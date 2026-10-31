@@ -10,11 +10,11 @@ struct ModuleSurfaceTests {
     /// - Test: T_IOS_MODULE_SURFACE
     /// - Verifies: R_IOS_TESTED, R_IOS_FUNCTIONS
     @Test func linkedApiIsVisible() {
-        _ = codec_func_by_name("water")          // codec.h
-        _ = CODEC_ARM_DELAY_MS                   // codec_chars.h
-        _ = CALI_CTL_CHARS                       // control_consts.h
-        _ = freshness_settle                     // ports.h
-        _ = cali_ctl_plan                        // cali_control.h
-        _ = CALI_CTL_DEADLINE_MS                 // cali_control.h
+        _ = codec_func_by_name("water")  // codec.h
+        _ = CODEC_ARM_DELAY_MS  // codec_chars.h
+        _ = CALI_CTL_CHARS  // control_consts.h
+        _ = freshness_settle  // ports.h
+        _ = cali_ctl_plan  // cali_control.h
+        _ = CALI_CTL_DEADLINE_MS  // cali_control.h
     }
 }

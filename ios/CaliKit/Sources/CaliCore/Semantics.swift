@@ -12,12 +12,19 @@ public enum JSONValue: Equatable, Sendable, Codable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
-        if c.decodeNil() { self = .null }
-        else if let v = try? c.decode(Bool.self) { self = .bool(v) }
-        else if let v = try? c.decode(Double.self) { self = .number(v) }
-        else if let v = try? c.decode(String.self) { self = .string(v) }
-        else if let v = try? c.decode([JSONValue].self) { self = .array(v) }
-        else { self = .object(try c.decode([String: JSONValue].self)) }
+        if c.decodeNil() {
+            self = .null
+        } else if let v = try? c.decode(Bool.self) {
+            self = .bool(v)
+        } else if let v = try? c.decode(Double.self) {
+            self = .number(v)
+        } else if let v = try? c.decode(String.self) {
+            self = .string(v)
+        } else if let v = try? c.decode([JSONValue].self) {
+            self = .array(v)
+        } else {
+            self = .object(try c.decode([String: JSONValue].self))
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -57,8 +64,11 @@ public final class Semantics: @unchecked Sendable {  // @unchecked: `ctx` and `e
         var scripts: [(String, URL?)] = []
         for name in ["semantics_tables", "semantics"] {
             guard let url = Bundle.module.url(forResource: name, withExtension: "js"),
-                  let src = try? String(contentsOf: url, encoding: .utf8)
-            else { self.init(scripts: [], loadError: "missing resource \(name).js"); return }
+                let src = try? String(contentsOf: url, encoding: .utf8)
+            else {
+                self.init(scripts: [], loadError: "missing resource \(name).js")
+                return
+            }
             scripts.append((src, url))
         }
         self.init(scripts: scripts)
@@ -70,7 +80,8 @@ public final class Semantics: @unchecked Sendable {  // @unchecked: `ctx` and `e
         ctx.exceptionHandler = { [unowned self] _, e in error = e?.toString() ?? "unknown JS exception" }
         for (src, url) in scripts { ctx.evaluateScript(src, withSourceURL: url) }
         if self.loadError == nil, let e = error { self.loadError = e }
-        ctx.evaluateScript("""
+        ctx.evaluateScript(
+            """
             function __call(fn, json) { return JSON.stringify(globalThis[fn](JSON.parse(json))); }
             function __interpret(f, json) { return JSON.stringify(interpret(f, JSON.parse(json))); }
             """)
@@ -84,7 +95,7 @@ public final class Semantics: @unchecked Sendable {  // @unchecked: `ctx` and `e
             let out = ctx.objectForKeyedSubscript(fn)?.call(withArguments: args)
             if let error { throw SemanticsError(message: error) }
             guard let out, out.isString, let s = out.toString(),
-                  let v = try? JSONDecoder().decode(T.self, from: Data(s.utf8))
+                let v = try? JSONDecoder().decode(T.self, from: Data(s.utf8))
             else { throw SemanticsError(message: "\(fn) returned no JSON") }
             return v
         }
@@ -92,14 +103,14 @@ public final class Semantics: @unchecked Sendable {  // @unchecked: `ctx` and `e
 
     /// `interpret(fn, d)` of semantics.js. An unknown function gives the generic view, like the web UI.
     public func interpret(function: String, fields: [String: UInt32]) throws -> [String: JSONValue] {
-        let json = String(decoding: (try? JSONSerialization.data(withJSONObject: fields)) ?? Data("{}".utf8), as: UTF8.self)
+        let json = (try? JSONSerialization.data(withJSONObject: fields)).flatMap { String(bytes: $0, encoding: .utf8) } ?? "{}"
         return try run("__interpret", [function, json])
     }
 
     /// `applySwCorrections(states)` of semantics.js (DC-DC current +2 on certain unit software).
     /// It adds to the input: pass uncorrected interpretations, never an already corrected map.
     public func applySwCorrections(_ states: [String: [String: JSONValue]]) throws -> [String: [String: JSONValue]] {
-        let json = String(decoding: (try? JSONEncoder().encode(states)) ?? Data("{}".utf8), as: UTF8.self)
+        let json = (try? JSONEncoder().encode(states)).flatMap { String(bytes: $0, encoding: .utf8) } ?? "{}"
         return try run("__call", ["applySwCorrections", json])
     }
 }

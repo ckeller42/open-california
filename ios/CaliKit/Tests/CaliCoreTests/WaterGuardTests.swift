@@ -1,11 +1,13 @@
 import Foundation
 import Testing
+
 @testable import CaliCore
 
 struct WaterGuardTests {
     static func levels(_ d: [String: Any]) -> WaterLevels {
-        WaterLevels(fresh: (d["fresh"] as? NSNumber)?.uint32Value, waste: (d["waste"] as? NSNumber)?.uint32Value,
-                    empty: d["empty"] as? Bool ?? false)
+        WaterLevels(
+            fresh: (d["fresh"] as? NSNumber)?.uint32Value, waste: (d["waste"] as? NSNumber)?.uint32Value,
+            empty: d["empty"] as? Bool ?? false)
     }
 
     /// - Test: T_IOS_WATER_CASES
@@ -15,7 +17,8 @@ struct WaterGuardTests {
         #expect(cases.count > 20)
         for c in cases {
             let id = c["id"] as! String
-            let got = WaterGuard.implausibleDrop(Self.levels(c["new"] as! [String: Any]), prev: Self.levels(c["prev"] as! [String: Any]))
+            let got = WaterGuard.implausibleDrop(
+                Self.levels(c["new"] as! [String: Any]), prev: Self.levels(c["prev"] as! [String: Any]))
             #expect(got == (c["expect"] as! Bool), "\(id)")
         }
     }

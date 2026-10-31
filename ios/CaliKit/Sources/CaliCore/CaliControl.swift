@@ -87,12 +87,14 @@ public enum CaliControl {
         defer { current = [:] }
 
         var plan = cali_ctl_plan_t()
-        cali_ctl_plan(function, what, value ?? "", localNow ?? -1, { fn, field, out in
-            guard let fn, let field, let v = CaliControl.current[String(cString: fn)]?[String(cString: field)]
-            else { return 0 }
-            out?.pointee = v
-            return 1
-        }, &plan)
+        cali_ctl_plan(
+            function, what, value ?? "", localNow ?? -1,
+            { fn, field, out in
+                guard let fn, let field, let v = CaliControl.current[String(cString: fn)]?[String(cString: field)]
+                else { return 0 }
+                out?.pointee = v
+                return 1
+            }, &plan)
 
         let reason = plan.reason.map { String(cString: $0) }
         switch Int32(plan.rc) {
@@ -154,12 +156,13 @@ public enum CaliControl {
         current = ["lighting": frame.merging(previous) { $1 }]
         defer { current = [:] }
         var cfg = cali_light_cfg_t()
-        cali_light_cfg({ fn, field, out in
-            guard let fn, let field, let v = CaliControl.current[String(cString: fn)]?[String(cString: field)]
-            else { return 0 }
-            out?.pointee = v
-            return 1
-        }, &cfg)
+        cali_light_cfg(
+            { fn, field, out in
+                guard let fn, let field, let v = CaliControl.current[String(cString: fn)]?[String(cString: field)]
+                else { return 0 }
+                out?.pointee = v
+                return 1
+            }, &cfg)
         var out: [String: UInt32] = [:]
         let values = withUnsafeBytes(of: cfg.v) { Array($0.bindMemory(to: UInt32.self)) }
         for (k, key) in lightConfigKeys.enumerated() where cfg.have >> k & 1 == 1 { out[key] = values[k] }

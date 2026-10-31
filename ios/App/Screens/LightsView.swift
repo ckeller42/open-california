@@ -12,16 +12,41 @@ struct LightsView: View {
     /// The web UI's `FAV_TILES`: the app's favourite slots A/B/C/D are the unit's profiles 1/5/6/7.
     static let favourites: [(label: String, profile: Int)] = [("A", 1), ("B", 5), ("C", 6), ("D", 7)]
 
-    struct Lamp { let label: LocalizedStringResource; let what: String; let zone: Int }
+    struct Lamp {
+        let label: LocalizedStringResource
+        let what: String
+        let zone: Int
+    }
     /// The web UI's `LIGHT_LAMPS`: `what` is the control zone key, `zone` the interpreted brightness_zone_<N>.
     static let groups: [(title: LocalizedStringResource, lamps: [Lamp])] = [
-        ("Reading lights", [Lamp(label: "Left", what: "reading-1", zone: 2), Lamp(label: "Right", what: "reading-2", zone: 1),
-                            Lamp(label: "Front passenger", what: "reading-3", zone: 4)]),
-        ("Kitchen", [Lamp(label: "Background lighting", what: "kitchen-ambient", zone: 5),
-                     Lamp(label: "Cabinet", what: "kitchen-cabinet", zone: 6), Lamp(label: "Cooking", what: "kitchen", zone: 7)]),
-        ("Pop-up roof", [Lamp(label: "Background lighting", what: "roof-ambient", zone: 8),
-                         Lamp(label: "Reading light", what: "roof-reading", zone: 9)]),
-        ("Exterior light", [Lamp(label: "Rear surroundings", what: "outside-rear", zone: 3), Lamp(label: "Entrance", what: "entrance", zone: 12)]),
+        (
+            "Reading lights",
+            [
+                Lamp(label: "Left", what: "reading-1", zone: 2), Lamp(label: "Right", what: "reading-2", zone: 1),
+                Lamp(label: "Front passenger", what: "reading-3", zone: 4),
+            ]
+        ),
+        (
+            "Kitchen",
+            [
+                Lamp(label: "Background lighting", what: "kitchen-ambient", zone: 5),
+                Lamp(label: "Cabinet", what: "kitchen-cabinet", zone: 6), Lamp(label: "Cooking", what: "kitchen", zone: 7),
+            ]
+        ),
+        (
+            "Pop-up roof",
+            [
+                Lamp(label: "Background lighting", what: "roof-ambient", zone: 8),
+                Lamp(label: "Reading light", what: "roof-reading", zone: 9),
+            ]
+        ),
+        (
+            "Exterior light",
+            [
+                Lamp(label: "Rear surroundings", what: "outside-rear", zone: 3),
+                Lamp(label: "Entrance", what: "entrance", zone: 12),
+            ]
+        ),
     ]
 
     static func allLights(_ on: Bool) -> Command { .onOff("lighting", "power", on) }
@@ -41,8 +66,11 @@ struct LightsView: View {
             }
             Card {
                 ControlRow {
-                    SwitchRow(label: Text("All lights"), isOn: Binding(get: { store.value("lighting", "any_on")?.bool == true },
-                                                       set: { run(Self.allLights($0)) }))
+                    SwitchRow(
+                        label: Text("All lights"),
+                        isOn: Binding(
+                            get: { store.value("lighting", "any_on")?.bool == true },
+                            set: { run(Self.allLights($0)) }))
                 }
                 let active = store.value("lighting", "profile")?.number.map(Int.init)
                 HStack(spacing: 12) {
@@ -50,14 +78,19 @@ struct LightsView: View {
                         // A slot the unit reports empty cannot be recalled (saving is not in this app).
                         let empty = stored.map { !$0.contains(fav.profile) } ?? false
                         let isActive = active == fav.profile
-                        Button { run(Self.favourite(fav.profile)) } label: {
+                        Button {
+                            run(Self.favourite(fav.profile))
+                        } label: {
                             VStack(spacing: 0) {
                                 Text(verbatim: fav.label).font(.title3.weight(.semibold))
                                 if empty { Text("empty").font(.caption2) }
                             }
                             .foregroundStyle(empty ? Color.staleText : Color.primary)
                             .frame(maxWidth: .infinity, minHeight: 52)
-                            .background(Color.lightAmber.opacity(isActive ? 0.4 : empty ? 0.04 : 0.15), in: RoundedRectangle(cornerRadius: 12))
+                            .background(
+                                Color.lightAmber.opacity(isActive ? 0.4 : empty ? 0.04 : 0.15),
+                                in: RoundedRectangle(cornerRadius: 12)
+                            )
                             .overlay { if isActive { RoundedRectangle(cornerRadius: 12).stroke(Color.lightAmber, lineWidth: 2) } }
                         }
                         .buttonStyle(.plain)
@@ -75,8 +108,10 @@ struct LightsView: View {
                     Text(group.title).font(.headline).padding([.horizontal, .top])
                     ForEach(group.lamps, id: \.what) { lamp in
                         let blocked = lamp.what == "roof-reading" && roofDown
-                        ControlRow(disabledBecause: blocked ? "only when the pop-up roof is open" : nil,
-                                   hint: lamp.what == "roof-reading" && !blocked ? "only when the pop-up roof is open" : nil) {
+                        ControlRow(
+                            disabledBecause: blocked ? "only when the pop-up roof is open" : nil,
+                            hint: lamp.what == "roof-reading" && !blocked ? "only when the pop-up roof is open" : nil
+                        ) {
                             brightness(lamp, group: group.title, run)
                         }
                     }
@@ -91,9 +126,11 @@ struct LightsView: View {
         let real = store.value("lighting", "brightness_zone_\(lamp.zone)")?.number.map(Int.init)
         let current = real.flatMap { $0 <= 11 ? $0 : nil }
         // Two lamps share a name ("Background lighting"): VoiceOver hears the group too.
-        return MenuPicker(label: Text(lamp.label), spoken: Text(group) + Text(verbatim: ", ") + Text(lamp.label),
-                          value: current == 0 ? Text("Off") : current == 11 ? Text("Default") : Text(verbatim: current.map(String.init) ?? "—"),
-                          selection: Binding(get: { current ?? -1 }, set: { if (0...10).contains($0) { run(Self.lamp(lamp.what, $0)) } })) {
+        return MenuPicker(
+            label: Text(lamp.label), spoken: Text(group) + Text(verbatim: ", ") + Text(lamp.label),
+            value: current == 0 ? Text("Off") : current == 11 ? Text("Default") : Text(verbatim: current.map(String.init) ?? "—"),
+            selection: Binding(get: { current ?? -1 }, set: { if (0...10).contains($0) { run(Self.lamp(lamp.what, $0)) } })
+        ) {
             if current == nil { Text(verbatim: "—").tag(-1) }
             Text("Off").tag(0)
             ForEach(1...10, id: \.self) { Text(verbatim: "\($0)").tag($0) }

@@ -1,6 +1,7 @@
-import Testing
-@testable import CaliBLE
 import CaliCore
+import Testing
+
+@testable import CaliBLE
 
 struct FakeTransportTests {
     static let general: UInt16 = CamperGATT.stateChars["general"]!
@@ -51,8 +52,14 @@ struct FakeTransportTests {
         clock.advance(by: .seconds(1))
         var it = t.events.makeAsyncIterator()
         var last: TransportEvent?
-        while let e = await it.next() { last = e; if case .disconnected = e { break } }
-        guard case .disconnected(let r) = last else { Issue.record("no disconnect"); return }
+        while let e = await it.next() {
+            last = e
+            if case .disconnected = e { break }
+        }
+        guard case .disconnected(let r) = last else {
+            Issue.record("no disconnect")
+            return
+        }
         #expect(r == .remoteHangUp)
         await #expect(throws: TransportError.notConnected) { try await t.write(0x1202, [1]) }
     }
@@ -65,7 +72,12 @@ struct FakeTransportTests {
         await t.pushForeign(char: Self.general, bytes: [7])
         var it = t.events.makeAsyncIterator()
         var got: [UInt8]?
-        while let e = await it.next() { if case .notified(Self.general, let b) = e { got = b; break } }
+        while let e = await it.next() {
+            if case .notified(Self.general, let b) = e {
+                got = b
+                break
+            }
+        }
         #expect(got == [7])
         #expect(try await t.read(Self.general) == [7])
     }
@@ -77,11 +89,17 @@ struct FakeTransportTests {
         var it = t.events.makeAsyncIterator()
         await t.setBluetooth(unavailable: .poweredOff)
         await t.connect()
-        guard case .bluetoothUnavailable(.poweredOff)? = await it.next() else { Issue.record("expected poweredOff"); return }
+        guard case .bluetoothUnavailable(.poweredOff)? = await it.next() else {
+            Issue.record("expected poweredOff")
+            return
+        }
         await t.setBluetooth(unavailable: nil)
         await t.failNextConnect()
         await t.connect()
-        guard case .disconnected(.failedToConnect)? = await it.next() else { Issue.record("expected failedToConnect"); return }
+        guard case .disconnected(.failedToConnect)? = await it.next() else {
+            Issue.record("expected failedToConnect")
+            return
+        }
     }
 
     /// - Test: T_IOS_FAKE_SUBSCRIBE_SILENT
@@ -93,7 +111,10 @@ struct FakeTransportTests {
         await t.pushForeign(char: 0x9998, bytes: [1])  // unsubscribed: stored, not pushed
         var it = t.events.makeAsyncIterator()
         while let e = await it.next() {
-            if case .notified = e { Issue.record("unexpected push"); return }
+            if case .notified = e {
+                Issue.record("unexpected push")
+                return
+            }
             if case .written = e { break }
         }
         #expect(try await t.read(Self.general) == [0xC0, 0x01])

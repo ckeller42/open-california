@@ -171,16 +171,20 @@ struct PairingGuideView: View {
     ]
 
     /// Step 2's instruction, shown from the connect on: the iOS dialog covers the card later.
-    static let passcodeHint: LocalizedStringResource = "When iOS asks for a code, type the passcode that the camper screen shows now."
+    static let passcodeHint: LocalizedStringResource =
+        "When iOS asks for a code, type the passcode that the camper screen shows now."
     /// The safety line: the real unit always asks for a passcode (it refuses Just Works).
-    static let noPasscodeNotCamper: LocalizedStringResource = "A pairing request without a passcode is not the camper unit: cancel it."
+    static let noPasscodeNotCamper: LocalizedStringResource =
+        "A pairing request without a passcode is not the camper unit: cancel it."
     static let closeGeraetVerbinden: LocalizedStringResource = "You can close “Gerät verbinden” on the camper unit."
 
     /// The step's headline.
     static func headline(_ step: PairingGuide.Step) -> LocalizedStringResource {
         switch step {
         case .collapsed: "This iPhone is paired with the camper unit."
-        case .openPanel: "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden (in English: Settings → Bluetooth → Connect device). It shows “Passcode: ---” until this iPhone connects."
+        case .openPanel:
+            // swiftlint:disable:next line_length - a localization key stays one literal
+            "On the camper unit open Einstellungen → Bluetooth → Gerät verbinden (in English: Settings → Bluetooth → Connect device). It shows “Passcode: ---” until this iPhone connects."
         case .searching: "Searching…"
         case .pick: "Pick your camper unit"
         case .connecting: "Connecting to the unit…"
@@ -213,7 +217,9 @@ struct PairingGuideView: View {
         VStack(alignment: .leading, spacing: 12) {
             if guide.step != .collapsed {
                 // At accessibility sizes the step goes under the title, so no word breaks.
-                let header = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                let header =
+                    typeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
                     : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
                 header {
                     Text("Pair the camper unit").font(.headline)
@@ -241,7 +247,11 @@ struct PairingGuideView: View {
         let step = guide.step
         switch step {
         case .collapsed:
-            Label { Text(Self.headline(step)) } icon: { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.onGreen) }
+            Label {
+                Text(Self.headline(step))
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.onGreen)
+            }
             action("Pair again…", prominent: false) { guide.expand() }
         case .openPanel:
             Text(Self.headline(step))
@@ -250,10 +260,18 @@ struct PairingGuideView: View {
                 .font(.subheadline)
             action("I'm on that screen", prominent: true) { search() }
         case .searching:
-            Label { Text(Self.headline(step)) } icon: { ProgressView() }
+            Label {
+                Text(Self.headline(step))
+            } icon: {
+                ProgressView()
+            }
             cancelButton
         case .connecting:
-            Label { Text(Self.headline(step)) } icon: { ProgressView() }
+            Label {
+                Text(Self.headline(step))
+            } icon: {
+                ProgressView()
+            }
             Text(Self.passcodeHint).font(.headline)
             Text(Self.noPasscodeNotCamper).font(.subheadline)
             cancelButton
@@ -262,7 +280,9 @@ struct PairingGuideView: View {
             Text("The strongest signal is first: the camper unit is the one you are standing next to.")
                 .font(.subheadline)
             ForEach(Array(units.enumerated()), id: \.element) { i, unit in
-                Button { pick(unit) } label: {
+                Button {
+                    pick(unit)
+                } label: {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(verbatim: unit.name).font(.body.weight(.semibold))
@@ -281,14 +301,25 @@ struct PairingGuideView: View {
             }
             cancelButton
         case .typeCode:
-            Label { Text(Self.headline(step)).font(.headline) } icon: { Image(systemName: "number") }
+            Label {
+                Text(Self.headline(step)).font(.headline)
+            } icon: {
+                Image(systemName: "number")
+            }
             Text("Type it within about 30 seconds. Each attempt shows a new passcode.").font(.subheadline)
             Text(Self.noPasscodeNotCamper).font(.subheadline)
             cancelButton
         case .done(let outcome):
-            Label { Text(Self.headline(step)) } icon: { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.onGreen) }
+            Label {
+                Text(Self.headline(step))
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.onGreen)
+            }
             if outcome == .alreadyPaired {
-                Text("This iPhone already has a pairing with the camper unit (for example from the California On Tour app), so no code was needed.").font(.subheadline)
+                Text(
+                    // swiftlint:disable:next line_length - a localization key stays one literal
+                    "This iPhone already has a pairing with the camper unit (for example from the California On Tour app), so no code was needed."
+                ).font(.subheadline)
             }
             Text(Self.closeGeraetVerbinden).font(.subheadline)
             action("Close", prominent: false) { guide.cancel() }
@@ -297,8 +328,12 @@ struct PairingGuideView: View {
             switch why {
             case .notFound:
                 ForEach(Self.notFoundChecks.indices, id: \.self) { i in
-                    Label { Text(Self.notFoundChecks[i]) } icon: { Image(systemName: i == 0 ? "location" : "gearshape") }
-                        .font(.subheadline)
+                    Label {
+                        Text(Self.notFoundChecks[i])
+                    } icon: {
+                        Image(systemName: i == 0 ? "location" : "gearshape")
+                    }
+                    .font(.subheadline)
                 }
             case .bluetoothOff, .bluetoothDenied, .bluetoothUnknown:
                 if why != .bluetoothDenied {
@@ -316,8 +351,11 @@ struct PairingGuideView: View {
             retryButtons
         case .failed:
             AlertCard(text: Self.headline(step))
-            Text("Wrong passcode, or the time ran out. Reopen “Gerät verbinden” on the camper unit and try again: it shows a new passcode.")
-                .font(.subheadline)
+            Text(
+                // swiftlint:disable:next line_length - a localization key stays one literal
+                "Wrong passcode, or the time ran out. Reopen “Gerät verbinden” on the camper unit and try again: it shows a new passcode."
+            )
+            .font(.subheadline)
             retryButtons
         case .forgetDevice:
             AlertCard(text: Self.headline(step))
@@ -380,8 +418,11 @@ struct PairingGuideView: View {
 private struct ActionStyle: ButtonStyle {
     let prominent: Bool
     private static let fill = Color(uiColor: UIColor(red: 0, green: 0.35, blue: 0.78, alpha: 1))
-    private static let text = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark
-        ? UIColor(red: 0.55, green: 0.75, blue: 1, alpha: 1) : UIColor(red: 0, green: 0.35, blue: 0.78, alpha: 1) })
+    private static let text = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 0.55, green: 0.75, blue: 1, alpha: 1) : UIColor(red: 0, green: 0.35, blue: 0.78, alpha: 1)
+        })
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

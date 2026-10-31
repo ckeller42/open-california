@@ -2,12 +2,15 @@ import CaliBLE
 import CaliCore
 import Foundation
 import Testing
+
 @testable import Camper
 
 @MainActor
 struct PairingGuideTests {
-    static let units = [PairingCandidate(id: UUID(), name: "VWCAMPER", rssi: -58),
-                        PairingCandidate(id: UUID(), name: "VWCAMPER", rssi: -81)]
+    static let units = [
+        PairingCandidate(id: UUID(), name: "VWCAMPER", rssi: -58),
+        PairingCandidate(id: UUID(), name: "VWCAMPER", rssi: -81),
+    ]
 
     /// The guide runs in the order of R_IOS_PAIRING: (1) open "Gerät verbinden" on the camper panel,
     /// search, pick the unit; (2) the iOS dialog: compare the code with the camper screen and type
@@ -19,11 +22,16 @@ struct PairingGuideTests {
     @Test func guideStepsInOrder() {
         var g = PairingGuide()
         var seen = [g.step]
-        g.search(); seen.append(g.step)
-        g.found(.success(Self.units)); seen.append(g.step)
-        g.picked(); seen.append(g.step)
-        g.link(.pairing); seen.append(g.step)
-        g.finished(.success(.paired)); seen.append(g.step)
+        g.search()
+        seen.append(g.step)
+        g.found(.success(Self.units))
+        seen.append(g.step)
+        g.picked()
+        seen.append(g.step)
+        g.link(.pairing)
+        seen.append(g.step)
+        g.finished(.success(.paired))
+        seen.append(g.step)
         #expect(seen == [.openPanel, .searching, .pick(Self.units), .connecting, .typeCode, .done(.paired)])
         #expect(seen.map(\.number) == [1, 1, 1, 2, 2, 3])
         #expect(seen.map(\.isWaiting) == [false, true, false, true, true, false])
@@ -72,10 +80,11 @@ struct PairingGuideTests {
         g.found(.success(Self.units))  // the scan of the cancelled search
         #expect(g.step == .openPanel)
         let de = Locale(identifier: "de_DE")
-        #expect(PairingGuideView.notFoundChecks.map { $0.string(de) } == [
-            "Stell dich neben das Fahrzeug: Die Camper-Einheit muss in Reichweite sein.",
-            "Prüfe, dass „Gerät verbinden“ an der Camper-Einheit geöffnet ist.",
-        ])
+        #expect(
+            PairingGuideView.notFoundChecks.map { $0.string(de) } == [
+                "Stell dich neben das Fahrzeug: Die Camper-Einheit muss in Reichweite sein.",
+                "Prüfe, dass „Gerät verbinden“ an der Camper-Einheit geöffnet ist.",
+            ])
     }
 
     /// A stale bond: the first "asks for pairing" after a pick says try again; a repeated one

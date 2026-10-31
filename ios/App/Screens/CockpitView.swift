@@ -53,28 +53,33 @@ struct CockpitView: View {
     var body: some View {
         StatusPage(store: store) {
             if store.installed("energy") {
-                BatteryRing(percent: store.value("energy", "soc2_pct")?.number,
-                            volts: store.value("energy", "batt2_v")?.number,
-                            amps: store.value("energy", "batt2_current")?.number,
-                            asOf: store.state.asOf)
+                BatteryRing(
+                    percent: store.value("energy", "soc2_pct")?.number,
+                    volts: store.value("energy", "batt2_v")?.number,
+                    amps: store.value("energy", "batt2_current")?.number,
+                    asOf: store.state.asOf)
             }
             // Active faults, in the same alert cards as on the Energy and Water tabs.
             let alerts = EnergyView.faults(store) + (store.installed("water") ? WaterView.alerts(store) : [])
             ForEach(alerts.indices, id: \.self) { AlertCard(text: alerts[$0]) }
             HStack(spacing: 12) {
                 if store.installed("water"), let liters = store.value("water", "fresh")?["liters"]?.number {
-                    MiniValue(title: "Fresh water", systemImage: "drop", value: "\(Int(liters))\(nbsp)L",
-                              spoken: spoken(liters, UnitVolume.liters, locale),
-                              heldSince: store.state.waterHeld ? .some(store.state.waterGoodAt) : nil)
+                    MiniValue(
+                        title: "Fresh water", systemImage: "drop", value: "\(Int(liters))\(nbsp)L",
+                        spoken: spoken(liters, UnitVolume.liters, locale),
+                        heldSince: store.state.waterHeld ? .some(store.state.waterGoodAt) : nil)
                 }
                 if store.value("energy", "solar_installed")?.bool == true,
-                   let watts = store.value("energy", "solar_power")?.number {
-                    MiniValue(title: "Solar power", systemImage: "sun.max", value: "\(Int(watts))\(nbsp)W",
-                              spoken: spoken(watts, UnitPower.watts, locale), heldSince: nil)
+                    let watts = store.value("energy", "solar_power")?.number
+                {
+                    MiniValue(
+                        title: "Solar power", systemImage: "sun.max", value: "\(Int(watts))\(nbsp)W",
+                        spoken: spoken(watts, UnitPower.watts, locale), heldSince: nil)
                 }
             }
             // Two per row; one per row at large type sizes, where a long word (Luftstandheizung) needs the width.
-            let tiles = buttons, perRow = typeSize >= .xxLarge ? 1 : 2
+            let tiles = buttons
+            let perRow = typeSize >= .xxLarge ? 1 : 2
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                 ForEach(Array(stride(from: 0, to: tiles.count, by: perRow)), id: \.self) { i in
                     GridRow {
@@ -98,8 +103,10 @@ struct CockpitView: View {
             (.airHeater, "Air heater", "heater.vertical", "running", .onGreen),
         ]
         return all.filter { store.installed($0.0.function) }.map { screen, title, symbol, key, tint in
-            ControlButton(title: title, systemImage: symbol, isOn: on(screen.function, key), tint: tint,
-                          lockedBecause: store.lockReason(screen.function)) {
+            ControlButton(
+                title: title, systemImage: symbol, isOn: on(screen.function, key), tint: tint,
+                lockedBecause: store.lockReason(screen.function)
+            ) {
                 switch Self.tap(screen, store: store) {
                 case .open(let s): open = s
                 case .connect: Task { await store.tapToConnect() }
@@ -159,8 +166,12 @@ struct MiniValue: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label { Text(title) } icon: { Image(systemName: systemImage) }
-                .font(.caption)
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: systemImage)
+            }
+            .font(.caption)
             Text(verbatim: value)
                 .font(.title2.weight(.semibold).monospacedDigit())
                 .foregroundStyle(stale ? Color.staleText : Color.primary)
@@ -174,8 +185,10 @@ struct MiniValue: View {
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(title))
-        .accessibilityValue(Text(verbatim: heldSince.map {
-            "\(spoken), " + HeldNote.text(since: $0, now: pageNow ?? Date(), locale: locale, spoken: true)
-        } ?? spoken) + Text(verbatim: staleSpoken.map { ", \($0)" } ?? ""))
+        .accessibilityValue(
+            Text(
+                verbatim: heldSince.map {
+                    "\(spoken), " + HeldNote.text(since: $0, now: pageNow ?? Date(), locale: locale, spoken: true)
+                } ?? spoken) + Text(verbatim: staleSpoken.map { ", \($0)" } ?? ""))
     }
 }

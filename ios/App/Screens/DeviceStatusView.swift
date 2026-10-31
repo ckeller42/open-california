@@ -55,7 +55,7 @@ private struct StatusRow: View {
                 if let symbol { Image(systemName: symbol).accessibilityHidden(true) }
             }
         }
-            .frame(minHeight: 32)
-            .accessibilityElement(children: .combine)
+        .frame(minHeight: 32)
+        .accessibilityElement(children: .combine)
     }
 }

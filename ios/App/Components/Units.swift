@@ -16,8 +16,11 @@ extension EnvironmentValues {
 
 extension Color {
     /// Text of stale values: muted, yet with enough contrast for the accessibility audit.
-    static let staleText = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark
-        ? UIColor(red: 0.64, green: 0.64, blue: 0.67, alpha: 1) : UIColor(red: 0.36, green: 0.36, blue: 0.39, alpha: 1) })
+    static let staleText = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 0.64, green: 0.64, blue: 0.67, alpha: 1) : UIColor(red: 0.36, green: 0.36, blue: 0.39, alpha: 1)
+        })
 }
 
 /// A number in `locale` ("14.1" / "14,1").
@@ -39,8 +42,11 @@ func spoken(_ value: Double, _ unit: Dimension, _ locale: Locale) -> String {
 func spokenAge(_ seconds: TimeInterval, _ locale: Locale) -> String {
     let sec = max(0, seconds)
     if sec < 90 { return LocalizedStringResource("just now").string(locale) }
-    let m = Int((sec / 60).rounded()), h = Int((Double(m) / 60).rounded())
-    let ago = m < 90 ? DateComponents(minute: -m) : h < 48 ? DateComponents(hour: -h) : DateComponents(day: -Int((Double(h) / 24).rounded()))
+    let m = Int((sec / 60).rounded())
+    let h = Int((Double(m) / 60).rounded())
+    let ago =
+        m < 90
+        ? DateComponents(minute: -m) : h < 48 ? DateComponents(hour: -h) : DateComponents(day: -Int((Double(h) / 24).rounded()))
     let f = RelativeDateTimeFormatter()
     f.unitsStyle = .full
     f.locale = locale

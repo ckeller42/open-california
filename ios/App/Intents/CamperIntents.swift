@@ -21,7 +21,10 @@ enum OnOff: String, AppEnum {
 ///
 /// - Requirement: R_IOS_SIRI
 enum LightFavourite: String, AppEnum, CaseIterable {
-    case a = "A", b = "B", c = "C", d = "D"
+    case a = "A"
+    case b = "B"
+    case c = "C"
+    case d = "D"
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Light favourite"
     static let caseDisplayRepresentations: [LightFavourite: DisplayRepresentation] = [
@@ -47,7 +50,10 @@ struct SetCampingModeIntent: AppIntent {
     @Parameter(title: "State") var state: OnOff
 
     init() {}
-    init(on: Bool) { self.init(); state = on ? .on : .off }
+    init(on: Bool) {
+        self.init()
+        state = on ? .on : .off
+    }
 
     @MainActor var command: Command { CampingView.master(state == .on) }
 
@@ -69,7 +75,10 @@ struct SetLightsIntent: AppIntent {
     @Parameter(title: "State") var state: OnOff
 
     init() {}
-    init(on: Bool) { self.init(); state = on ? .on : .off }
+    init(on: Bool) {
+        self.init()
+        state = on ? .on : .off
+    }
 
     @MainActor var command: Command { LightsView.allLights(state == .on) }
 
@@ -90,7 +99,10 @@ struct ActivateLightFavouriteIntent: AppIntent {
     @Parameter(title: "Light favourite") var favourite: LightFavourite
 
     init() {}
-    init(favourite: LightFavourite) { self.init(); self.favourite = favourite }
+    init(favourite: LightFavourite) {
+        self.init()
+        self.favourite = favourite
+    }
 
     @MainActor var command: Command { LightsView.favourite(favourite.profile) }
 
@@ -111,7 +123,10 @@ struct SetCoolerIntent: AppIntent {
     @Parameter(title: "State") var state: OnOff
 
     init() {}
-    init(on: Bool) { self.init(); state = on ? .on : .off }
+    init(on: Bool) {
+        self.init()
+        state = on ? .on : .off
+    }
 
     @MainActor var command: Command { CoolerView.power(state == .on) }
 

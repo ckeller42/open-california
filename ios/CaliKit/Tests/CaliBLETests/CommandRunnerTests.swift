@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import CaliBLE
 @testable import CaliCore
 
@@ -230,7 +231,9 @@ struct CommandRunnerTests {
         #expect(CaliControl.writeOK(Fx.coolerCtl, 6))
         #expect(!CaliControl.writeOK(Fx.coolerCtl, 5))
         for char in CamperGATT.forbiddenWrites.union([0x1401]) {
-            let frames = [ControlFrame(char: Fx.coolerCtl, delayMs: 0, data: [0xff]), ControlFrame(char: char, delayMs: 0, data: [0])]
+            let frames = [
+                ControlFrame(char: Fx.coolerCtl, delayMs: 0, data: [0xff]), ControlFrame(char: char, delayMs: 0, data: [0]),
+            ]
             #expect(await r.s.write(frames, until: { .seconds(4) }) == .refused(.forbiddenWrite), "wrote \(char)")
         }
         #expect(await r.commandWrites().isEmpty)
@@ -243,8 +246,10 @@ struct CommandRunnerTests {
         let r = Rig()
         try await r.warm()
         let cmd = Command(function: "lighting", what: "wakeup", value: "07:00")
-        #expect(CaliControl.plan(function: "lighting", what: "wakeup", value: "07:00", localNow: 0,
-                                 state: ["lighting": try CaliCodec.decode(function: "lighting", bytes: Fx.lightsSeed)]) == .needsLightConfig)
+        #expect(
+            CaliControl.plan(
+                function: "lighting", what: "wakeup", value: "07:00", localNow: 0,
+                state: ["lighting": try CaliCodec.decode(function: "lighting", bytes: Fx.lightsSeed)]) == .needsLightConfig)
         let t = r.start(cmd)
         try await until("pull frames") { await r.commandWrites().count == 1 }
         r.clock.advance(by: .milliseconds(300))
@@ -278,8 +283,12 @@ struct CommandRunnerTests {
         try await until("lamp frame") { await r.s.state.fields["lighting"]?["Mode"] == 4 }
         let st = await r.s.state
         #expect(st.lightConfig["WakeupLightValue"] == 0x0101)
-        #expect(CaliControl.plan(function: "lighting", what: "wakeup", value: "07:00", localNow: 0, state: st.planFields) != .needsLightConfig)
-        #expect(CaliControl.plan(function: "lighting", what: "wakeup", value: "07:00", localNow: 0, state: st.fields) == .needsLightConfig)
+        #expect(
+            CaliControl.plan(function: "lighting", what: "wakeup", value: "07:00", localNow: 0, state: st.planFields)
+                != .needsLightConfig)
+        #expect(
+            CaliControl.plan(function: "lighting", what: "wakeup", value: "07:00", localNow: 0, state: st.fields)
+                == .needsLightConfig)
 
         await r.fake.dropLink()
         try await until("link down") { await r.s.isReady == false }

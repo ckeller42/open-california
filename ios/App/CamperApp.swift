@@ -17,8 +17,9 @@ extension CamperStore {
         let transport = CoreBluetoothTransport(restoreIdentifier: "de.opencalifornia.camper.central")
         // The last state, with its age, until this link has read the unit (never under a fixture).
         let url = defaultSaveURL
-        return CamperStore(session: CamperSession(transport: transport, clock: ContinuousClock()),
-                           state: restore(from: url) ?? CamperState(), saveURL: url)
+        return CamperStore(
+            session: CamperSession(transport: transport, clock: ContinuousClock()),
+            state: restore(from: url) ?? CamperState(), saveURL: url)
     }()
 }
 

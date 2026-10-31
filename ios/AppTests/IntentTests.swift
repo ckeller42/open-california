@@ -3,6 +3,7 @@ import CaliBLE
 import CaliCore
 import Foundation
 import Testing
+
 @testable import Camper
 
 /// The Siri and Shortcuts actions over the fake transport: the command each one sends, and what
@@ -11,7 +12,8 @@ import Testing
 struct IntentTests {
     private static let en = Locale(identifier: "en_US")
     private static let de = Locale(identifier: "de_DE")
-    private static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    private static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent()
 
     /// The parked fixture's session and its fake transport.
     private func rig() -> (CamperSession, FakeCamperTransport) {
@@ -40,9 +42,13 @@ struct IntentTests {
         let char = try #require(CamperGATT.controlChars["campingmode"])
         let run = Task { await IntentRunner.perform(SetCampingModeIntent(on: true).command, session: session) }
         try await until("the camping frame") { await fake.writes.contains { $0.char == char } }
-        let planned = CaliControl.plan(function: "campingmode", what: "master", value: "on", localNow: nil,
-                                       state: Fixture.parked.state(now: Date()).planFields)
-        guard case .frames(let frames) = planned else { Issue.record("no plan: \(planned)"); return }
+        let planned = CaliControl.plan(
+            function: "campingmode", what: "master", value: "on", localNow: nil,
+            state: Fixture.parked.state(now: Date()).planFields)
+        guard case .frames(let frames) = planned else {
+            Issue.record("no plan: \(planned)")
+            return
+        }
         #expect(await fake.writes.filter { $0.char == char }.map(\.bytes) == frames.map(\.data))
         // The unit pushes the new state: master on.
         await fake.seed(try #require(CamperGATT.stateChars["campingmode"]), [0x21])
@@ -59,7 +65,8 @@ struct IntentTests {
     /// - Verifies: R_IOS_SIRI
     @Test func favouriteBIsProfile5() {
         #expect(ActivateLightFavouriteIntent(favourite: .b).command == Command(function: "lighting", what: "profile", value: "5"))
-        #expect(LightFavourite.allCases.map { ActivateLightFavouriteIntent(favourite: $0).command.value } == ["1", "5", "6", "7"])
+        #expect(
+            LightFavourite.allCases.map { ActivateLightFavouriteIntent(favourite: $0).command.value } == ["1", "5", "6", "7"])
         #expect(LightFavourite.allCases.map(\.rawValue) == LightsView.favourites.map(\.label))
         #expect(SetLightsIntent(on: true).command == LightsView.allLights(true))
         #expect(SetLightsIntent(on: false).command == Command(function: "lighting", what: "power", value: "off"))
@@ -101,7 +108,8 @@ struct IntentTests {
 
         // The choke point refuses the heater.
         let (session, fake) = rig()
-        let outcome = await IntentRunner.perform(Command(function: "air" + "heater", what: "power", value: "on"), session: session)
+        let outcome = await IntentRunner.perform(
+            Command(function: "air" + "heater", what: "power", value: "on"), session: session)
         #expect(!outcome.success)
         #expect(outcome.dialog.string(Self.en) == "Not available in this app")
         #expect(await fake.connects == 0)
@@ -119,7 +127,9 @@ struct IntentTests {
         ]
         let wanted = String(describing: IntentAuthenticationPolicy.requiresLocalDeviceAuthentication)
         #expect(String(describing: IntentAuthenticationPolicy.alwaysAllowed) != wanted)  // the comparison can fail
-        for p in policies { #expect(String(describing: p) == String(describing: IntentAuthenticationPolicy.requiresLocalDeviceAuthentication)) }
+        for p in policies {
+            #expect(String(describing: p) == String(describing: IntentAuthenticationPolicy.requiresLocalDeviceAuthentication))
+        }
     }
 
     /// Review Focus 2: Siri with Bluetooth off (or not allowed) names it, well within the budget.
@@ -164,10 +174,14 @@ struct IntentTests {
         try await session.ensureConnected(timeout: .seconds(5))
         try await until("the arm delay") { await (session.sinceFirstBeat ?? .zero) > CamperGATT.armDelay }
         var late: CommandResult?
-        let outcome = await IntentRunner.perform(CampingView.master(true), session: session, budget: .milliseconds(500)) { late = $0 }
+        let outcome = await IntentRunner.perform(CampingView.master(true), session: session, budget: .milliseconds(500)) {
+            late = $0
+        }
         #expect(!outcome.success)
         #expect(outcome.dialog.string(Self.en) == "Camping mode: sent, but the camper unit did not confirm in time")
-        #expect(outcome.dialog.string(Self.de) == "Campingmodus: gesendet, aber die Camper-Einheit hat es nicht rechtzeitig bestätigt")
+        #expect(
+            outcome.dialog.string(Self.de) == "Campingmodus: gesendet, aber die Camper-Einheit hat es nicht rechtzeitig bestätigt"
+        )
         #expect(late == nil)
         await fake.seed(try #require(CamperGATT.stateChars["campingmode"]), [0x21])
         try await until("the late result") { late != nil }
@@ -216,7 +230,9 @@ struct IntentTests {
     /// - Test: T_IOS_SIRI_DIALOGS
     /// - Verifies: R_IOS_SIRI_HONEST, R_IOS_HONEST, R_IOS_I18N
     @Test func dialogsSayOnlyWhatTheUnitConfirmed() {
-        func say(_ r: CommandResult, _ cmd: Command, _ l: Locale = Self.en) -> String { IntentRunner.outcome(r, cmd).dialog.string(l) }
+        func say(_ r: CommandResult, _ cmd: Command, _ l: Locale = Self.en) -> String {
+            IntentRunner.outcome(r, cmd).dialog.string(l)
+        }
         #expect(say(.applied, LightsView.allLights(false)) == "All lights are off")
         #expect(say(.applied, LightsView.favourite(6)) == "Favourite C is on")
         #expect(say(.applied, CoolerView.power(true), Self.de) == "Die Kühlbox ist an")
@@ -226,14 +242,18 @@ struct IntentTests {
         #expect(say(.sent, LightsView.allLights(true), Self.de) == "Beleuchtung: gesendet, prüfe die Lampe")
         #expect(say(.refused(.favouriteEmpty), LightsView.favourite(5)) == "This favourite is empty on the unit")
         #expect(say(.failed(.unreachable), CoolerView.power(true), Self.de) == "Die Camper-Einheit ist nicht erreichbar")
-        #expect(say(.failed(.resting(retryAfter: 5)), CoolerView.power(true)) == "The camper unit saves power — try again in 5 seconds")
+        #expect(
+            say(.failed(.resting(retryAfter: 5)), CoolerView.power(true))
+                == "The camper unit saves power — try again in 5 seconds")
         for r: CommandResult in [.sent, .unconfirmed, .busy, .notReady, .timeout, .notSupported, .failed(.linkEnded)] {
             for cmd in [CampingView.master(true), LightsView.allLights(true), CoolerView.power(false)] {
                 let o = IntentRunner.outcome(r, cmd)
                 #expect(!o.success)
                 for l in [Self.en, Self.de] {
                     let s = o.dialog.string(l).lowercased()
-                    #expect(!s.contains(" is on") && !s.contains(" are on") && !s.contains(" ist an") && !s.contains(" sind an"), "\(r) \(s)")
+                    #expect(
+                        !s.contains(" is on") && !s.contains(" are on") && !s.contains(" ist an") && !s.contains(" sind an"),
+                        "\(r) \(s)")
                 }
             }
         }
@@ -248,15 +268,18 @@ struct IntentTests {
         let src = try String(contentsOf: Self.root.appending(path: "ios/App/Intents/CamperShortcuts.swift"), encoding: .utf8)
         // `"…\(.applicationName)…"` literals → the catalog keys (`${applicationName}`, `${state}`).
         let literal = try Regex(#""([^"\n]*\\\(\.applicationName\)[^"\n]*)""#)
+        let parameter = try Regex(#"\\\(\\\.\$(\w+)\)"#)
+        let placeholder = try Regex(#"\$\{\w+\}"#)
         let phrases = src.matches(of: literal).map { m in
             String(m.output[1].substring!)
                 .replacingOccurrences(of: #"\(.applicationName)"#, with: "${applicationName}")
-                .replacing(try! Regex(#"\\\(\\\.\$(\w+)\)"#)) { "${\($0.output[1].substring!)}" }
+                .replacing(parameter) { "${\($0.output[1].substring!)}" }
         }
         #expect(phrases.count >= 8)
 
         let data = try Data(contentsOf: Self.root.appending(path: "ios/App/AppShortcuts.xcstrings"))
-        let strings = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])["strings"] as? [String: [String: Any]]
+        let strings =
+            try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])["strings"] as? [String: [String: Any]]
         for p in phrases {
             #expect(p.contains("${applicationName}"))
             let loc = strings?[p]?["localizations"] as? [String: [String: Any]]
@@ -264,8 +287,9 @@ struct IntentTests {
                 let unit = loc?[lang]?["stringUnit"] as? [String: Any]
                 let value = unit?["value"] as? String ?? ""
                 #expect(value.contains("${applicationName}"), "\(lang): \(p)")
-                #expect(Set(p.matches(of: try! Regex(#"\$\{\w+\}"#)).map { String(p[$0.range]) })
-                        == Set(value.matches(of: try! Regex(#"\$\{\w+\}"#)).map { String(value[$0.range]) }), "\(lang): \(p)")
+                #expect(
+                    Set(p.matches(of: placeholder).map { String(p[$0.range]) })
+                        == Set(value.matches(of: placeholder).map { String(value[$0.range]) }), "\(lang): \(p)")
             }
         }
     }

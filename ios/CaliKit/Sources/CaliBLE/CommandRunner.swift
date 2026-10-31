@@ -99,29 +99,14 @@ extension CamperSession {
         // The phone's wall clock read as UTC, taken at each plan (control_run.c adds the time waited).
         let plan: @Sendable (CamperState) -> PlanResult = { st in
             let localNow = Int64(Date().timeIntervalSince1970) + Int64(TimeZone.current.secondsFromGMT())
-            return CaliControl.plan(function: cmd.function, what: cmd.what, value: cmd.value, localNow: localNow, state: st.planFields)
+            return CaliControl.plan(
+                function: cmd.function, what: cmd.what, value: cmd.value, localNow: localNow, state: st.planFields)
         }
         var planned = plan(state)
         if planned == .needsLightConfig {
             // Pull the unit's lighting config, then plan once more over its reply (serve._pull_lighting_config).
-            let (id, pushes) = pushes()
-            defer { unsubscribePushes(id) }
-            if let r = await write(CaliControl.pullPlan(), until: clock.countdown(CaliControl.deadline)) {
-                // No command frame went out (control_run.c: `sent = !O.pull && …`).
-                return r == .unconfirmed ? .failed(.linkEnded) : r
-            }
-            try? await race(clock, CaliControl.configPull) {
-                for await p in pushes {
-                    switch p {
-                    case .linkDown: throw SessionError.unreachable
-                    case .frame(function: "lighting", state: let st) where plan(st) != .needsLightConfig: return
-                    case .frame: continue
-                    }
-                }
-            }
-            guard isReady else { return .failed(.linkEnded) }
-            planned = plan(state)
-            if planned == .needsLightConfig { return .refused(.wakeupUnknown) }
+            if let r = await pullLightConfig(plan) { return r }
+            planned = plan(state)  // still `needsLightConfig`: refused below (wakeupUnknown)
         }
 
         switch planned {
@@ -139,13 +124,35 @@ extension CamperSession {
         }
     }
 
+    /// Writes the lighting-config pull and waits until a lighting frame lets `plan` decide. A result
+    /// ends the command; nil means: plan again over the new state.
+    private func pullLightConfig(_ plan: @escaping @Sendable (CamperState) -> PlanResult) async -> CommandResult? {
+        let (id, pushes) = pushes()
+        defer { unsubscribePushes(id) }
+        if let r = await write(CaliControl.pullPlan(), until: clock.countdown(CaliControl.deadline)) {
+            // No command frame went out (control_run.c: `sent = !O.pull && …`).
+            return r == .unconfirmed ? .failed(.linkEnded) : r
+        }
+        try? await race(clock, CaliControl.configPull) {
+            for await p in pushes {
+                switch p {
+                case .linkDown: throw SessionError.unreachable
+                case .frame(function: "lighting", state: let st) where plan(st) != .needsLightConfig: return
+                case .frame: continue
+                }
+            }
+        }
+        return isReady ? nil : .failed(.linkEnded)
+    }
+
     /// Writes `frames` in order within the time `left` gives; nil when every frame was ACKed, else
     /// the result. A frame outside the write allow-list refuses the whole command before any write.
     /// - Parameter issuing: the frames are the command's own (not the config pull): mark
     ///   `commandIssuedFrame` as each one goes out.
     func write(_ frames: [ControlFrame], until left: @Sendable () -> Duration, issuing: Bool = false) async -> CommandResult? {
         // The satellite's allow-list (cali_ctl_write_ok); the V3 deny-list stays as an extra check.
-        if frames.contains(where: { !CaliControl.writeOK($0.char, $0.data.count) || CamperGATT.forbiddenWrites.contains($0.char) }) {
+        if frames.contains(where: { !CaliControl.writeOK($0.char, $0.data.count) || CamperGATT.forbiddenWrites.contains($0.char) }
+        ) {
             return .refused(.forbiddenWrite)
         }
         var acked = false

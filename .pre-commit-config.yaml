@@ -125,6 +125,20 @@ repos:
         pass_filenames: false
         files: ^(calictl/webui/(.*\.js|jsconfig\.json)|firmware/web/index\.html)$
 
+      # The iOS app's Swift linters on the staged Swift files (CI `ios` runs both over all of ios/).
+      # macOS only: without the tool (Linux, CI `pre-commit`) the hook prints a note and passes.
+      # SwiftLint runs from ios/ so the nested configs apply (`--config` would ignore them).
+      - id: swiftlint
+        name: SwiftLint (iOS app)
+        entry: sh -c 'command -v swiftlint >/dev/null || { echo "swiftlint not installed, skipped"; exit 0; }; n=$#; for f; do set -- "$@" "${f#ios/}"; done; shift "$n"; cd ios && swiftlint lint --strict --quiet "$@"' --
+        language: system
+        files: ^ios/.*\.swift$
+      - id: swift-format
+        name: swift format lint (iOS app)
+        entry: sh -c 'command -v swift >/dev/null && swift format --version >/dev/null 2>&1 || { echo "swift format not installed, skipped"; exit 0; }; swift format lint --strict "$@"' --
+        language: system
+        files: ^ios/.*\.swift$
+
       # mypy type check on the calictl/ package (blocking: all errors resolved)
       - id: mypy
         name: mypy type check
