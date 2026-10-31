@@ -40,6 +40,38 @@ struct CamperStoreTests {
         #expect(!store.isStale)
     }
 
+    /// Out of range at launch, the link is unreachable. In range again, the app connects when it
+    /// comes to the front (one attempt, a user action), and a tap on the "Tap to connect" card works
+    /// in every state without a link; no kill needed. In the power-save rest, with a reconnect
+    /// scheduled, or without a paired unit, the foreground does not dial.
+    ///
+    /// - Test: T_IOS_STORE_FOREGROUND_CONNECT
+    /// - Verifies: R_IOS_POWER_SAVE, R_IOS_BLE_DIRECT
+    @Test func foregroundConnectsAfterUnreachableLaunch() async throws {
+        let fake = Fixture.parked.makeTransport()
+        let store = CamperStore(session: CamperSession(transport: fake, clock: ContinuousClock()))
+        store.start()
+        await fake.failNextConnect()  // out of range
+        #expect(await store.connect() == .failed(.unreachable))
+        try await until("unreachable") { if case .unreachable = store.link { true } else { false } }
+        #expect(store.mayTapToConnect)
+        #expect(CockpitView.tap(.camping, store: store) == .connect)
+
+        await store.connectOnForeground()  // in range again, the user opens the app
+        try await until("live") { store.link == .up && store.state.asOf != nil }
+        #expect(await fake.connects == 2)
+        #expect(!store.mayTapToConnect)
+
+        // No dial in the rest, nor without a usable bond.
+        for (link, bond) in [(LinkState.rest(until: Date()), Bond.paired), (.off, .notPaired), (.unreachable("x"), .stale)] {
+            let idle = FakeCamperTransport()
+            let other = CamperStore(session: CamperSession(transport: idle, clock: ContinuousClock()), link: link)
+            other.bond = bond
+            await other.connectOnForeground()
+            #expect(await idle.connects == 0)
+        }
+    }
+
     /// Review Focus 5: a unit with CommunicationVersion 3 gives no controls, also after a fresh read.
     ///
     /// - Test: T_IOS_STORE_UNSUPPORTED

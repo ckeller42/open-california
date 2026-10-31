@@ -12,9 +12,10 @@ final class CockpitUITests: XCTestCase {
         return app
     }
 
-    /// The battery ring and the fresh-water value show (the `unreachable` fixture: a live read pass
-    /// stores no water on a cold start). This van reports no solar and the unit reports no outside
-    /// temperature, so neither small value exists.
+    /// The battery ring and the fresh-water value show (the `unreachable` fixture: it does not
+    /// connect at launch, so it keeps its state; a live read pass stores no water on a cold start).
+    /// This van reports no solar and the unit reports no outside temperature, so neither small value
+    /// exists.
     ///
     /// - Test: T_IOS_UI_COCKPIT_VALUES
     /// - Verifies: R_IOS_LOOK, R_IOS_INSTALLED
@@ -42,8 +43,7 @@ final class CockpitUITests: XCTestCase {
         try app.auditScreen()
     }
 
-    /// Review Focus 4: a state hours old shows its age. The button still opens its screen, as the
-    /// web UI's tiles do, and there the controls are locked with the reason.
+    /// Review Focus 4: a state hours old shows its age, and the card under the pill offers a connect.
     ///
     /// - Test: T_IOS_UI_STALE_AS_OF
     /// - Verifies: R_IOS_HONEST, R_IOS_BACKGROUND_LINK
@@ -52,11 +52,23 @@ final class CockpitUITests: XCTestCase {
         let app = launch("staleRestore")
         // The pill is one element for VoiceOver, with the age in full words.
         XCTAssertTrue(app.staticTexts["offline, as of 5 hours ago"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Tap to connect"].exists)
         try app.auditScreen()
-        app.buttons["Camping mode"].tap()
-        XCTAssertTrue(app.navigationBars["Camping mode"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Not available while the van is offline"].exists)
-        try app.auditScreen()
+    }
+
+    /// Out of range at launch (the `unreachable` fixture does not connect): the "Tap to connect" card
+    /// is the way back; once the unit is in range a tap connects, without a kill of the app.
+    ///
+    /// - Test: T_IOS_UI_TAP_TO_CONNECT
+    /// - Verifies: R_IOS_POWER_SAVE, R_IOS_HONEST
+    @MainActor
+    func testUnreachableLaunchConnectsOnTap() throws {
+        let app = launch("unreachable")
+        let card = app.buttons["Tap to connect"]
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        card.tap()
+        XCTAssertTrue(app.staticTexts["live"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["Tap to connect"].exists)
     }
 
     /// Every tab passes the accessibility audit, in light and dark.

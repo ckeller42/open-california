@@ -146,7 +146,7 @@ struct PairingGuideTests {
         let fake = FakeCamperTransport(frames: [CamperGATT.stateChars["general"]!: [0x30, 0x34, 0x31, 0x30, 0, 0, 0, 0, 2]])
         let store = CamperStore(session: CamperSession(transport: fake, clock: ContinuousClock()))
         await fake.notPairedOnNextConnect()
-        #expect(await store.connect() == .failed(.unreachable))
+        #expect(await store.connect() == .failed(.notPaired))
         #expect(store.bond == .notPaired)
         #expect(await store.pairingCandidates() == .failure(.noUnitFound))
         await fake.setCandidates(Self.units)

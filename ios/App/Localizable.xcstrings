@@ -58,7 +58,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "vor %lld T"
+            "value": "vor %lld Tg."
           }
         },
         "en": {
@@ -75,7 +75,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "vor %lld Std"
+            "value": "vor %lld Std."
           }
         },
         "en": {
@@ -1837,6 +1837,23 @@
         }
       }
     },
+    "No camper unit is paired yet — pair it under Setup": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Camper-Einheit gekoppelt — unter Einrichtung koppeln"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No camper unit is paired yet — pair it under Setup"
+          }
+        }
+      }
+    },
     "No vehicle found.": {
       "extractionState": "manual",
       "localizations": {
@@ -1969,6 +1986,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not paired"
+          }
+        }
+      }
+    },
+    "Not sent — this command is not possible now": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gesendet — dieser Befehl ist jetzt nicht möglich"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent — this command is not possible now"
           }
         }
       }
@@ -3108,23 +3142,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "The camper unit no longer knows this iPhone"
-          }
-        }
-      }
-    },
-    "The camper unit refused the command": {
-      "extractionState": "manual",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Die Camper-Einheit hat den Befehl abgelehnt"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The camper unit refused the command"
           }
         }
       }

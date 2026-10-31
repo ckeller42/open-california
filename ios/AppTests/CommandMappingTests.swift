@@ -11,6 +11,15 @@ import Testing
 struct CommandMappingTests {
     private static let en = Locale(identifier: "en_US")
 
+    /// Polls `cond` on the main actor for up to 5 s.
+    private func waitUntil(_ what: String, _ cond: () -> Bool) async throws {
+        for _ in 0..<200 {
+            if cond() { return }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        Issue.record("timed out waiting for \(what)")
+    }
+
     /// The camping screen's switches: `campingmode master|lights|usb on|off` (app.js FEATURES.campingmode).
     ///
     /// - Test: T_IOS_CMD_CAMPING
@@ -129,7 +138,8 @@ struct CommandMappingTests {
     }
 
     /// The lock reason follows the link: rest → tap to connect (the cockpit tile then connects),
-    /// connecting → "Connecting…", offline → "not available while the van is offline".
+    /// connecting → "Connecting…", offline → "not available while the van is offline" (the tile
+    /// connects without a link).
     ///
     /// - Test: T_IOS_LOCK_REASON
     /// - Verifies: R_IOS_HONEST, R_IOS_POWER_SAVE
@@ -145,10 +155,16 @@ struct CommandMappingTests {
         #expect(CockpitView.tap(.camping, store: store) == .open(.camping))
         store.link = .pairing
         #expect(store.lockReason("campingmode")?.string(Self.en) == "Not available while pairing")
+        #expect(CockpitView.tap(.camping, store: store) == .open(.camping))
+        // Without a link the tile connects again (the "Tap to connect" card says so), but not
+        // without a paired unit: then the pairing guide is the way.
         store.link = .unreachable("x")
         #expect(store.lockReason("campingmode")?.string(Self.en) == "Not available while the van is unreachable")
+        #expect(CockpitView.tap(.camping, store: store) == .connect)
         store.link = .off
         #expect(store.lockReason("campingmode")?.string(Self.en) == "Not available while the van is offline")
+        #expect(CockpitView.tap(.camping, store: store) == .connect)
+        store.bond = .notPaired
         #expect(CockpitView.tap(.camping, store: store) == .open(.camping))
     }
 
@@ -156,7 +172,8 @@ struct CommandMappingTests {
     static let allResults: [CommandResult] =
         [.applied, .sent, .unconfirmed, .notSupported, .busy, .notReady, .timeout]
         + Refusal.allCases.map { .refused($0) }
-        + [Failure.resting(retryAfter: 5), .bluetoothOff, .unreachable, .linkEnded, .notTaken].map { .failed($0) }
+        + [Failure.resting(retryAfter: 5), .bluetoothOff, .unreachable, .notPaired, .pairingRequired, .linkEnded, .notTaken]
+        .map { .failed($0) }
 
     /// Every result text (each planner refusal, each runner failure) has an English and a German
     /// catalog entry: a German user never sees the planner's English (Ruling 30).
@@ -208,9 +225,12 @@ struct CommandMappingTests {
                 state: Fixture.parked.state(now: Date()), link: .rest(until: Date().addingTimeInterval(0.6)))
             return (s, fake)
         }
+        // The cooldown's sleep ends when the test says so (no race with real time).
+        let (cooldownOver, endCooldown) = AsyncStream<Void>.makeStream()
         let (store2, fake) = resting()
+        store2.sleep = { _ in for await _ in cooldownOver { return } }
         let tap = Task { await store2.tapToConnect() }
-        try await Task.sleep(for: .milliseconds(100))
+        try await waitUntil("the countdown") { store2.feedback != nil }
         guard case .connecting(let until?) = store2.feedback else {
             Issue.record("no countdown: \(String(describing: store2.feedback))")
             return
@@ -219,14 +239,18 @@ struct CommandMappingTests {
             FeedbackBanner.text(.connecting(until: until), now: until.addingTimeInterval(-3))?.string(Self.en)
                 == "Connecting in 3 s…")
         #expect(await fake.connects == 0)  // the cooldown runs
+        endCooldown.yield()
         await tap.value
         #expect(await fake.connects == 1)
         #expect(store2.feedback == nil)  // connected: nothing to say
 
         let (store3, fake3) = resting()
+        let (cooldown3Over, endCooldown3) = AsyncStream<Void>.makeStream()
+        store3.sleep = { _ in for await _ in cooldown3Over { return } }
         let tap3 = Task { await store3.tapToConnect() }
-        try await Task.sleep(for: .milliseconds(100))
+        try await waitUntil("the countdown") { store3.feedback != nil }
         store3.inForeground = false
+        endCooldown3.yield()
         await tap3.value
         #expect(await fake3.connects == 0)
         #expect(store3.feedback == nil)

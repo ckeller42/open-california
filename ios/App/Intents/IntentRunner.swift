@@ -90,15 +90,28 @@ enum IntentRunner {
         }
     }
 
-    /// An intent's `perform`: the app's one session, the answer as Siri's dialog, and the result in
-    /// the app's banner (when the app is open, the user sees what Siri did).
+    /// An intent's `perform`: the app's one store, the answer as Siri's dialog.
     static func run(_ cmd: Command) async -> some IntentResult & ProvidesDialog {
-        let store = CamperStore.shared
-        store.show(.sending(function: cmd.function), clearAfter: nil)
-        // The banner shows the real result when it comes, also after Siri answered.
-        let outcome = await perform(cmd, session: store.session) {
-            store.show(.result($0, function: cmd.function), clearAfter: 8)
-        }
+        let outcome = await perform(cmd, store: .shared)
         return .result(dialog: IntentDialog(outcome.dialog))
+    }
+
+    /// `perform` over `store`'s session, with the result in the app's banner (when the app is open,
+    /// the user sees what Siri did). While a UI command runs, its "Sending…" stays (it keeps the
+    /// controls locked) and Siri's answer is only spoken. The real result shows when it comes, also
+    /// after Siri answered, but only over Siri's own "Sending…", never over a newer banner; Siri's
+    /// `.busy` never shows.
+    ///
+    /// - Requirement: R_IOS_HONEST, R_IOS_SIRI_HONEST
+    static func perform(_ cmd: Command, store: CamperStore, budget: Duration = .seconds(9)) async -> IntentOutcome {
+        let own = store.isSending ? nil : store.show(.sending(function: cmd.function), clearAfter: nil)
+        return await perform(cmd, session: store.session, budget: budget) { r in
+            guard let own, store.feedbackGen == own else { return }
+            if r == .busy {
+                store.show(nil, clearAfter: nil)
+            } else {
+                store.show(.result(r, function: cmd.function), clearAfter: 8)
+            }
+        }
     }
 }

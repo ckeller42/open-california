@@ -15,10 +15,10 @@ struct IntentTests {
     private static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent()
 
-    /// The parked fixture's session and its fake transport.
-    private func rig() -> (CamperSession, FakeCamperTransport) {
+    /// The parked fixture's session (on `clock`) and its fake transport.
+    private func rig(clock: any Clock<Duration> = ContinuousClock()) -> (CamperSession, FakeCamperTransport) {
         let fake = Fixture.parked.makeTransport()
-        return (CamperSession(transport: fake, clock: ContinuousClock()), fake)
+        return (CamperSession(transport: fake, clock: clock), fake)
     }
 
     private func until(_ what: String, _ cond: () async -> Bool) async throws {
@@ -215,15 +215,70 @@ struct IntentTests {
     /// - Test: T_IOS_SIRI_REST_LATE
     /// - Verifies: R_IOS_SIRI_HONEST, R_IOS_POWER_SAVE
     @Test func restLateInTheCooldownAnswersTryAgain() async throws {
-        let (session, fake) = rig()
+        let clock = TestClock()  // the session's: the cooldown left is exact
+        let (session, fake) = rig(clock: clock)
         try await session.ensureConnected(timeout: .seconds(5))
         await fake.hangUp(after: .zero)
         try await until("rest") { if case .rest = await session.link { true } else { false } }
-        try await Task.sleep(for: .milliseconds(3500))
+        clock.advance(by: .milliseconds(3500))
         let dials = await fake.connects
         let outcome = await IntentRunner.perform(CoolerView.power(true), session: session)
         #expect(await fake.connects == dials)
         #expect(outcome.dialog.string(Self.en) == "The camper unit saves power — try again in 4 seconds")
+    }
+
+    /// Without an adopted unit, or with a bond the unit dropped, Siri says so (not "not reachable").
+    ///
+    /// - Test: T_IOS_SIRI_BOND_REASON
+    /// - Verifies: R_IOS_SIRI_HONEST, R_IOS_I18N
+    @Test func missingOrStaleBondIsSaid() async throws {
+        let (session, fake) = rig()
+        await fake.notPairedOnNextConnect()
+        let notPaired = await IntentRunner.perform(CampingView.master(true), session: session)
+        #expect(notPaired.result == .failed(.notPaired))
+        #expect(notPaired.dialog.string(Self.en) == "No camper unit is paired yet — pair it under Setup")
+        #expect(notPaired.dialog.string(Self.de) == "Noch keine Camper-Einheit gekoppelt — unter Einrichtung koppeln")
+
+        let (session2, fake2) = rig()
+        await fake2.requirePairingOnNextConnect()
+        let stale = await IntentRunner.perform(CoolerView.power(true), session: session2)
+        #expect(stale.result == .failed(.pairingRequired))
+        #expect(stale.dialog.string(Self.en) == "The camper unit no longer knows this iPhone")
+        #expect(stale.dialog.string(Self.de) == "Die Camper-Einheit kennt dieses iPhone nicht mehr")
+    }
+
+    /// Siri's banner never covers a UI command: while one runs, Siri's `.busy` is only spoken and the
+    /// UI's "Sending…" (which locks the controls) stays. A result that comes after Siri answered
+    /// shows only while the banner is still Siri's own "Sending…".
+    ///
+    /// - Test: T_IOS_SIRI_BANNER
+    /// - Verifies: R_IOS_HONEST, R_IOS_SIRI_HONEST
+    @Test func siriLeavesTheUIsBannerAlone() async throws {
+        let busy = CamperStore.preview(.parked)
+        busy.show(.sending(function: "lighting"), clearAfter: nil)
+        await busy.session.beginCommand()
+        let o = await IntentRunner.perform(CoolerView.power(true), store: busy)
+        #expect(o.result == .busy)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(busy.feedback == .sending(function: "lighting"))
+        #expect(busy.isSending)
+        await busy.session.endCommand()
+
+        // Siri answers before the arm delay ends (the session's clock stands); a newer banner comes.
+        let clock = TestClock()
+        let fake = Fixture.parked.makeTransport()
+        let late = CamperStore(session: CamperSession(transport: fake, clock: clock), state: Fixture.parked.state(now: Date()))
+        let answer = await IntentRunner.perform(CampingView.master(true), store: late, budget: .milliseconds(300))
+        #expect(answer.result == nil)
+        #expect(late.feedback == .sending(function: "campingmode"))
+        late.show(.result(.sent, function: "lighting"), clearAfter: nil)
+        clock.advance(by: CamperGATT.armDelay)
+        try await until("the camping frame") { await late.session.commandIssuedFrame }
+        await fake.seed(try #require(CamperGATT.stateChars["campingmode"]), [0x21])
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(late.feedback == .result(.sent, function: "lighting"))
+        // The first command has ended (its result was held back, not lost): a second is not busy.
+        #expect(await IntentRunner.perform(CampingView.master(false), store: late, budget: .milliseconds(300)).result != .busy)
     }
 
     /// Only `.applied` says "is on/off"; a sent command says it was not confirmed, lighting says

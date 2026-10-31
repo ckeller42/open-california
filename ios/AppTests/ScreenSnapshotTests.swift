@@ -62,7 +62,7 @@ struct ScreenSnapshotTests {
         store.state.waterHeld = true
         store.state.waterGoodAt = Self.now.addingTimeInterval(-2 * 3600)
         #expect(WaterView.measured(store, locale: Self.english) == "measured 2\u{00A0}h ago")
-        #expect(WaterView.measured(store, locale: Locale(identifier: "de_DE")) == "vor 2\u{00A0}Std gemessen")
+        #expect(WaterView.measured(store, locale: Locale(identifier: "de_DE")) == "vor 2\u{00A0}Std. gemessen")
         check(NavigationStack { WaterView(store: store) }, "water-held")
         check(NavigationStack { CockpitView(store: store) }, "cockpit-water-held")
     }
@@ -300,9 +300,10 @@ struct ScreenSnapshotTests {
         let fresh = render()
         let drawn = count.n
         clock = Self.now.addingTimeInterval(120)
-        try await Task.sleep(for: .milliseconds(1500))  // at least one 1 s tick
         #expect(store.isStale)
-        #expect(render() != fresh)
+        // At least one 1 s tick: poll (up to 10 s) rather than one fixed sleep on a loaded runner.
+        for _ in 0..<100 where count.n <= drawn { try await Task.sleep(for: .milliseconds(100)) }
         #expect(count.n > drawn)
+        #expect(render() != fresh)
     }
 }

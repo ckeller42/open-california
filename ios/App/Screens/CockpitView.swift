@@ -42,12 +42,12 @@ struct CockpitView: View {
     @Environment(\.locale) private var locale
 
     /// What a tap on a function button does: like the web UI's tiles (`goto(fn)`) it opens the
-    /// function's screen in every state (a locked screen says why) and never sends a command; only
-    /// in the power-save rest it connects again.
+    /// function's screen (a locked screen says why) and never sends a command; without a link that a
+    /// tap may bring back (the power-save rest, off, unreachable) it connects again.
     ///
     /// - Requirement: R_IOS_SIRI_NO_HEATER, R_IOS_POWER_SAVE
     static func tap(_ screen: ControlScreen, store: CamperStore) -> CockpitTap {
-        store.resting && store.lockReason(screen.function) != nil ? .connect : .open(screen)
+        store.mayTapToConnect && store.lockReason(screen.function) != nil ? .connect : .open(screen)
     }
 
     var body: some View {

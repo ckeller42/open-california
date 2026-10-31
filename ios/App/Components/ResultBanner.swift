@@ -60,7 +60,7 @@ struct ResultBanner: View {
         case .elsewhere: "Not available in this app"
         case .noRoof: "This app does not move the roof"
         case .forbiddenWrite: "Not sent: this app does not write this setting"
-        case .unknown: "The camper unit refused the command"
+        case .unknown: "Not sent — this command is not possible now"  // the planner refused it
         }
     }
 
@@ -69,6 +69,8 @@ struct ResultBanner: View {
         case .resting(let s): "The camper unit saves power — try again in \(s) s"
         case .bluetoothOff: "Bluetooth is off or not allowed for this app"
         case .unreachable: "The camper unit is not reachable"
+        case .notPaired: "No camper unit is paired yet — pair it under Setup"
+        case .pairingRequired: "The camper unit no longer knows this iPhone"
         case .linkEnded: "The camper unit ended the link — nothing was sent"
         case .notTaken: "The camper unit did not take the command"
         }
@@ -228,7 +230,8 @@ private struct CloseButton: View {
     }
 }
 
-/// The power-save rest under the pill: a button that connects again ("tap to connect").
+/// Under the pill without a link (the power-save rest, off, unreachable): a button that connects
+/// again ("tap to connect"); in the rest it counts the unit's cooldown down.
 ///
 /// - Requirement: R_IOS_POWER_SAVE
 struct RestCard: View {
@@ -261,7 +264,7 @@ struct RestCard: View {
     }
 }
 
-/// Why the controls are locked (the rest has its `RestCard` under the pill).
+/// Why the controls are locked (without a link the `RestCard` under the pill says what a tap does).
 ///
 /// - Requirement: R_IOS_HONEST
 struct LockCard: View {
@@ -302,8 +305,8 @@ struct ControlSection<Content: View>: View {
     var body: some View {
         let reason = store.lockReason(function)
         VStack(spacing: 12) {
-            // An unsupported unit has the page's alert card; the rest has the RestCard under the pill.
-            if let reason, store.state.gate == .supported, !store.resting { LockCard(reason: reason) }
+            // An unsupported unit has the page's alert card; without a link the RestCard is under the pill.
+            if let reason, store.state.gate == .supported, !store.mayTapToConnect { LockCard(reason: reason) }
             content(
                 Run { cmd, prompts in
                     if prompts.isEmpty { send(cmd) } else { pending = (cmd, prompts) }

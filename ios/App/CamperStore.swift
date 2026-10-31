@@ -105,7 +105,8 @@ final class CamperStore {
 
     /// What the user sees of the last action, pinned under the pill: a command or a tap-to-connect.
     var feedback: Feedback?
-    @ObservationIgnored private var feedbackGen = 0
+    /// +1 per `show`: a late writer can see whether the banner is still its own.
+    @ObservationIgnored private(set) var feedbackGen = 0
 
     /// A command is on its way (the controls wait for it).
     var isSending: Bool { if case .sending = feedback { true } else { false } }
@@ -123,6 +124,8 @@ final class CamperStore {
 
     /// The app is in the foreground (`RootView` follows the scene phase).
     var inForeground = true
+    /// Waits out the unit's cooldown in `tapToConnect` (a test ends it when it wants).
+    @ObservationIgnored var sleep: (Duration) async -> Void = { try? await Task.sleep(for: $0) }
 
     /// The user's tap in the power-save rest: "Connecting in N s…" while the unit's reconnect cooldown
     /// runs, then one dial ("Connecting…") and its outcome; nothing once connected. A tap that the app
@@ -135,8 +138,11 @@ final class CamperStore {
         if case .rest(let u) = link, u > now() { until = u }
         show(.connecting(until: until), clearAfter: nil)
         if let until {
-            try? await Task.sleep(for: .seconds(until.timeIntervalSince(now())))
-            guard inForeground else { return show(nil, clearAfter: nil) }
+            await sleep(.seconds(until.timeIntervalSince(now())))
+            guard inForeground else {
+                show(nil, clearAfter: nil)
+                return
+            }
         }
         let outcome = await connect()
         switch outcome {
@@ -146,19 +152,47 @@ final class CamperStore {
         }
     }
 
-    func show(_ f: Feedback?, clearAfter seconds: TimeInterval?) {
+    /// Shows `f` (nil: nothing), cleared after `seconds` unless replaced; returns its `feedbackGen`.
+    @discardableResult
+    func show(_ f: Feedback?, clearAfter seconds: TimeInterval?) -> Int {
         feedbackGen += 1
         let gen = feedbackGen
         feedback = f
-        guard let seconds else { return }
+        guard let seconds else { return gen }
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             if let self, self.feedbackGen == gen { self.feedback = nil }
         }
+        return gen
     }
 
-    /// The link rests to save the unit's energy; a user action may connect again.
-    var resting: Bool { if case .rest = link { true } else { false } }
+    /// A tap connects ("Tap to connect"): in the power-save rest, and without a link (off,
+    /// unreachable) to a unit with a usable bond, so the user is never stuck without a way back.
+    /// Without a bond, or with a stale one, the pairing guide is the way.
+    ///
+    /// - Requirement: R_IOS_POWER_SAVE
+    var mayTapToConnect: Bool {
+        switch link {
+        case .rest: true
+        case .off, .unreachable: bond == .paired || bond == .unknown
+        case .up, .connecting, .pairing: false
+        }
+    }
+
+    /// The app came to the front (a user action): one connect when there is no link (off,
+    /// unreachable) and none is on its way. Not in the power-save rest, not while a reconnect is
+    /// scheduled, not without a usable bond (`R_IOS_POWER_SAVE`: one attempt per trigger, no loop).
+    ///
+    /// - Requirement: R_IOS_POWER_SAVE, R_IOS_BLE_DIRECT
+    func connectOnForeground() async {
+        guard bond == .paired || bond == .unknown else { return }
+        switch link {
+        case .off, .unreachable: break
+        case .up, .connecting, .pairing, .rest: return
+        }
+        guard await session.pendingReconnect == nil else { return }
+        await connect()
+    }
 
     var linkLabel: LocalizedStringResource { linkLabel(at: now()) }
 
@@ -206,11 +240,12 @@ final class CamperStore {
     }
 
     /// One connect attempt and its outcome; it waits out the unit's reconnect cooldown first. No
-    /// redial loop (`R_IOS_POWER_SAVE`).
+    /// redial loop (`R_IOS_POWER_SAVE`). The store follows the session from here on.
     ///
     /// - Requirement: R_IOS_BLE_DIRECT, R_IOS_POWER_SAVE
     @discardableResult
     func connect() async -> ConnectOutcome {
+        start()
         do {
             try await session.ensureConnected(timeout: .seconds(20))
             bond = .paired
@@ -382,13 +417,11 @@ enum Fixture: String, CaseIterable {
 
     /// The fake transport, which answers with this fixture's frames.
     func makeTransport() -> FakeCamperTransport {
-        let byChar =
-            self == .unreachable
-            ? [:]
-            : Dictionary(
-                uniqueKeysWithValues: frames.compactMap { fn, bytes in
-                    CamperGATT.stateChars[fn].map { ($0, bytes) }
-                })
+        // `unreachable` too: its unit is back in range once the UI test taps "Tap to connect".
+        let byChar = Dictionary(
+            uniqueKeysWithValues: frames.compactMap { fn, bytes in
+                CamperGATT.stateChars[fn].map { ($0, bytes) }
+            })
         // One unit in range for the pairing guide's scan (the UI tests pick it).
         let unit = PairingCandidate(
             id: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!, name: CamperGATT.deviceName, rssi: -60)

@@ -14,7 +14,7 @@ struct WaterGuardTests {
     /// - Verifies: R_IOS_TESTED, R_IOS_HONEST, R_IOS_FUNCTIONS
     @Test func stateLatchCasesMatchTheSharedVectors() throws {
         let cases = try #require(try loadVectors("freshness.json")["cases"] as? [[String: Any]])
-        #expect(cases.count > 20)
+        #expect(cases.count == 22)
         for c in cases {
             let id = c["id"] as! String
             let got = WaterGuard.implausibleDrop(

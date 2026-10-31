@@ -13,8 +13,8 @@ extension CamperStore {
     /// intent without a scene). Under a fixture it runs over the fake transport.
     static let shared: CamperStore = {
         if let fixture { return .preview(fixture) }
-        // The restore identifier lets iOS relaunch the app for the held link (camping on).
-        let transport = CoreBluetoothTransport(restoreIdentifier: "de.opencalifornia.camper.central")
+        // The transport's default restore identifier lets iOS relaunch the app for the held link (camping on).
+        let transport = CoreBluetoothTransport()
         // The last state, with its age, until this link has read the unit (never under a fixture).
         let url = defaultSaveURL
         return CamperStore(
@@ -30,6 +30,7 @@ extension CamperStore {
 @main
 struct CamperApp: App {
     @State private var store = CamperStore.shared
+    @Environment(\.scenePhase) private var scenePhase
     private let live = CamperStore.fixture?.isLive ?? true
 
     var body: some Scene {
@@ -39,6 +40,11 @@ struct CamperApp: App {
                     guard live else { return }
                     store.start()
                     await store.connect()
+                }
+                // Back in front without a link: one connect (R_IOS_POWER_SAVE: a user action, no loop).
+                .onChange(of: scenePhase) { old, phase in
+                    guard live, phase == .active, old != .active else { return }
+                    Task { await store.connectOnForeground() }
                 }
         }
     }

@@ -129,9 +129,23 @@ shows the passkey dialog. The adoption works in both cases.
 1. Switch camping mode on and connect with the app.
 2. Put the app in the background and lock the screen.
 3. Wait 5 minutes.
-4. Run a Siri or Shortcuts action (for example lights on). Check that it reaches the unit in well
-   under one second.
-5. Walk out of range for 2 minutes and come back. Check that iOS reconnects by itself.
+4. Run a Siri or Shortcuts action (for example camping mode on). Check that it reaches the unit in
+   well under one second, and that Siri says "… is on" (the unit confirmed it), not "sent, not
+   confirmed". The heartbeat stopped while the app was suspended: the command waits the arm delay
+   from the heartbeat's restart, and the unit must act on it.
+5. Walk out of range for 2 minutes with the screen still locked, and come back. Check that iOS
+   reconnects by itself and that the Console shows no cancel of the pending connect: while camping
+   is on, the app's reconnect after the cooldown has no deadline.
+
+### Back in range, and Bluetooth on again
+
+1. Switch camping mode off. Open the app out of range of the unit (at home, or in a car park).
+2. Check that the pill says "unreachable" and that the card "Tap to connect" shows under it.
+3. Walk to the van with the app in the background, then open it. Check that it connects by itself
+   once, without a kill of the app.
+4. Out of range again, tap "Tap to connect" at the van. Check that it connects.
+5. Turn Bluetooth off in Control Center, open the app (it says that Bluetooth is off), and turn
+   Bluetooth on again. Check that the app connects without a further tap.
 
 ### State restoration after the app is killed
 

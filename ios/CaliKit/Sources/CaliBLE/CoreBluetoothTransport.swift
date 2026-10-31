@@ -232,8 +232,11 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
             sink.yield(.encrypted)
             return
         }
-        guard phase == .idle else { return }
+        // A connect that waits for Bluetooth answers again (the session's caller waits for an event).
+        guard phase == .idle || phase == .waitingForPower else { return }
         if let a = Self.availability(central.state) {
+            // The saved unit's connect stays wanted: it dials once Bluetooth is on (a pick does not wait).
+            if !policy.inPick { phase = .waitingForPower }
             policy.linkEnded()
             sink.yield(.bluetoothUnavailable(a))
             return
@@ -326,7 +329,7 @@ extension CoreBluetoothTransport: CBCentralManagerDelegate {
         policy.cancelPick()  // a pick never waits for Bluetooth (tearDown may have promoted one)
         if was >= .discovering { sink.yield(.disconnected(reason: .linkLost)) }
         if let a = Self.availability(central.state) {
-            if was == .waitingForPower { tearDown() }
+            // A connect that waited for Bluetooth keeps waiting: it dials once Bluetooth is on.
             sink.yield(.bluetoothUnavailable(a))
         } else if was > .idle {
             phase = .waitingForPower  // resetting: connect again once it is back
@@ -477,7 +480,7 @@ extension CoreBluetoothTransport: CBPeripheralDelegate {
 /// the connect that starts next. Any end of that link, `cancelPick()` or the read cap ends it: a later
 /// connect (an automatic redial) can never use an old pick.
 ///
-/// - Requirement: R_IOS_PAIRING, R_IOS_BLE_DIRECT
+/// - Requirement: R_IOS_PAIRING, R_IOS_BLE_DIRECT, AD_IOS_SHARED_BOND
 struct PeerPolicy {
     private(set) var saved: UUID?
     /// The unit the user picked; its connect waits until the current link has ended.

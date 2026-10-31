@@ -19,7 +19,8 @@ public enum CommandResult: Sendable, Equatable {
     case notReady
     /// Nothing reached the unit.
     case failed(Failure)
-    /// The frames did not go out before the deadline.
+    /// The deadline passed before every frame was ACKed: time ran out between frames, or a write hung
+    /// (that frame may have reached the unit; "did not answer in time" says no more).
     case timeout
     /// A frame went out and the unit may have acted on it, but no answer can come: the link dropped
     /// after a frame was issued, or a later frame was rejected after an earlier one was ACKed.
@@ -34,6 +35,10 @@ public enum Failure: Sendable, Equatable {
     case resting(retryAfter: Int)
     case bluetoothOff
     case unreachable
+    /// No unit is adopted yet: the pairing guide comes first.
+    case notPaired
+    /// The unit no longer knows this iPhone (a stale bond): Forget This Device, then pair again.
+    case pairingRequired
     /// The unit ended the link before a frame went out.
     case linkEnded
     /// The unit did not take the frame (the write was refused or not issued).
@@ -44,6 +49,8 @@ public enum Failure: Sendable, Equatable {
         switch error {
         case SessionError.inRest(let after): self = .resting(retryAfter: Int(after.components.seconds) + 1)
         case SessionError.bluetooth: self = .bluetoothOff
+        case SessionError.notPaired: self = .notPaired
+        case SessionError.pairingRequired: self = .pairingRequired
         default: self = .unreachable
         }
     }

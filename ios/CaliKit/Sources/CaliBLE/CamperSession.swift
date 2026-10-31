@@ -362,13 +362,15 @@ public actor CamperSession {
         if !waiters.isEmpty, !wasUp {  // a connect in progress failed: its caller decides what follows
             if link == .connecting || link == .pairing { setLink(.unreachable("The camper unit did not answer.")) }
             resumeWaiters(.failure(.unreachable))
+        }
+        guard wasUp else {
+            // The held redial (or a caller's attempt during it) failed: the hold goes on, its next dial waits its turn.
+            if heldDial {
+                heldDial = false
+                scheduleReconnect()
+            }
             return
         }
-        if !wasUp, heldDial {  // the held redial failed (CoreBluetooth reports an error): the next one waits its turn
-            heldDial = false
-            return scheduleReconnect()
-        }
-        guard wasUp else { return }
         for c in pushSubscribers.values { c.yield(.linkDown) }
         sinceLost = clock.stopwatch()
         if held { backoffStep = 0 }

@@ -108,7 +108,7 @@ struct CBMappingTests {
     /// through the vendor app), so the first read succeeds at once. The picked unit is adopted.
     ///
     /// - Test: T_IOS_CB_PEER_SHARED_BOND
-    /// - Verifies: R_IOS_PAIRING
+    /// - Verifies: R_IOS_PAIRING, AD_IOS_SHARED_BOND
     @Test func existingBondIsAdoptedDuringAPick() {
         let old = UUID()
         let new = UUID()

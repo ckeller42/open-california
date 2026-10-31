@@ -97,7 +97,7 @@ struct StatusPage<Content: View>: View {
                 if case .unsupported = store.state.gate {
                     AlertCard(text: "This camper unit is not supported yet")
                 }
-                if store.resting, store.feedback == nil { RestCard(store: store) }
+                if store.mayTapToConnect, store.feedback == nil { RestCard(store: store) }
                 VStack(spacing: 12) { content() }
                     .environment(\.pageNow, now)
                     .environment(\.pageStale, store.isStale(at: now))
