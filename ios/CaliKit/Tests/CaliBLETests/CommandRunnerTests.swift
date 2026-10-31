@@ -257,6 +257,8 @@ struct CommandRunnerTests {
                 state: ["lighting": try CaliCodec.decode(function: "lighting", bytes: Fx.lightsSeed)]) == .needsLightConfig)
         let t = r.start(cmd)
         try await until("pull frames") { await r.commandWrites().count == 1 }
+        let due = r.clock.now.offset + .milliseconds(300)
+        try await until("the pull's 300 ms delay") { r.clock.deadlines.contains(due) }
         r.clock.advance(by: .milliseconds(300))
         try await until("pull commit") { await r.commandWrites().count == 2 }
         #expect(await r.commandWrites().map(\.bytes) == CaliControl.pullPlan().map(\.data))
@@ -265,6 +267,8 @@ struct CommandRunnerTests {
         // The unit answers the next pull with its wake-up frame (Mode 20): the edit goes out.
         let again = r.start(cmd)
         try await until("pull again") { await r.commandWrites().count == 3 }
+        let due2 = r.clock.now.offset + .milliseconds(300)
+        try await until("the second pull's 300 ms delay") { r.clock.deadlines.contains(due2) }
         r.clock.advance(by: .milliseconds(300))
         try await until("pull commit") { await r.commandWrites().count == 4 }
         await r.fake.pushForeign(char: Fx.lighting, bytes: Fx.wakeup)
