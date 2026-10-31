@@ -479,10 +479,15 @@ jobs:
       - name: Swift package tests
         run: swift test
       - name: Swift package tests under ASan + UBSan
+        timeout-minutes: 25   # each leg has its own 10 min watchdog that samples a hang
+        env:
+          SANITIZE_SAMPLES: ${{ runner.temp }}
         run: tools/ios_sanitize.sh
       - name: Generate the Xcode project
+        if: ${{ !cancelled() }}   # also after a sanitizer failure: the app tests are separate evidence
         run: xcodegen generate --spec ios/project.yml
       - name: App tests on the simulator (unit, snapshot, UI)
+        if: ${{ !cancelled() }}   # also after a sanitizer failure: the app tests are separate evidence
         timeout-minutes: 25   # xcodebuild can hang after the UI tests
         env:
           TEST_RUNNER_SNAPSHOT_ARTIFACTS: ${{ runner.temp }}/snapshot-diffs
@@ -507,4 +512,5 @@ jobs:
           path: |
             ${{ runner.temp }}/snapshot-diffs
             ${{ runner.temp }}/Camper.xcresult
+            ${{ runner.temp }}/sanitize-sample-*.txt
           if-no-files-found: ignore
