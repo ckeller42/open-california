@@ -433,8 +433,8 @@ jobs:
           if git diff --name-only HEAD^1 HEAD | grep -Eq "$paths"; then ios=true; else ios=false; fi
           echo "ios=$ios" | tee -a "$GITHUB_OUTPUT"
 
-  # The iPhone app (docs/ios-app.md): the Swift package tests (plain, ASan, UBSan), SwiftLint +
-  # swift-format, then the app's unit, snapshot and UI tests on the simulator. The snapshot
+  # The iPhone app (docs/ios-app.md): the Swift package tests (plain, ASan, UBSan), the app's unit,
+  # snapshot and UI tests on the simulator, then SwiftLint + swift-format. The snapshot
   # references are recorded on the iPhone 17 simulator with iOS 26.2; macos-26 is the image that
   # ships that runtime (the Xcode 27 image has only iOS 27), and Xcode 26.2 is the Xcode of that
   # SDK. The references use perceptualPrecision 0.98 for the rendering of a different host. Not a
@@ -443,7 +443,7 @@ jobs:
     needs: ios-changes
     if: needs.ios-changes.outputs.ios == 'true'
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     steps:
@@ -476,11 +476,6 @@ jobs:
           swiftlint version
           swift format --version
           xcbeautify --version
-      - name: SwiftLint
-        working-directory: ios
-        run: swiftlint --strict
-      - name: swift-format
-        run: swift format lint --strict --recursive ios/
       - name: Swift package tests
         run: swift test
       - name: Swift package tests under ASan + UBSan
@@ -496,6 +491,15 @@ jobs:
           xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
             -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' \
             -resultBundlePath "$RUNNER_TEMP/Camper.xcresult" | xcbeautify
+      # The linters after the tests (also when a test failed): a finding of the older swift-format of
+      # this Xcode must not hide the test result.
+      - name: SwiftLint
+        if: always()
+        working-directory: ios
+        run: swiftlint --strict
+      - name: swift-format
+        if: always()
+        run: swift format lint --strict --recursive ios/
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
