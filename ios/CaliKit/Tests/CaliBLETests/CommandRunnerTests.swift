@@ -199,7 +199,7 @@ struct CommandRunnerTests {
         await r.fake.hangUp(after: .zero)
         try await until("link lost") { await r.s.isReady == false }
         r.clock.advance(by: CamperGATT.armDelay)
-        guard case .failed = await t.value else { Issue.record("not failed"); return }
+        #expect(await t.value == .failed(.linkEnded))
         #expect(await r.commandWrites().isEmpty)
         #expect(await r.s.commands == 0)
     }
@@ -208,9 +208,7 @@ struct CommandRunnerTests {
     /// - Verifies: R_IOS_TESTED, R_IOS_NO_ROOF
     @Test func roofIsRefused() async throws {
         let r = Rig()
-        guard case .refused = await r.s.run(Command(function: "roof", what: "open", value: nil)) else {
-            Issue.record("roof not refused"); return
-        }
+        #expect(await r.s.run(Command(function: "roof", what: "open", value: nil)) == .refused(.noRoof))
         #expect(await r.fake.writes.isEmpty)  // not even connected
     }
 
@@ -233,7 +231,7 @@ struct CommandRunnerTests {
         #expect(!CaliControl.writeOK(Fx.coolerCtl, 5))
         for char in CamperGATT.forbiddenWrites.union([0x1401]) {
             let frames = [ControlFrame(char: Fx.coolerCtl, delayMs: 0, data: [0xff]), ControlFrame(char: char, delayMs: 0, data: [0])]
-            guard case .refused = await r.s.write(frames, until: { .seconds(4) }) else { Issue.record("wrote \(char)"); continue }
+            #expect(await r.s.write(frames, until: { .seconds(4) }) == .refused(.forbiddenWrite), "wrote \(char)")
         }
         #expect(await r.commandWrites().isEmpty)
     }
@@ -252,7 +250,7 @@ struct CommandRunnerTests {
         r.clock.advance(by: .milliseconds(300))
         try await until("pull commit") { await r.commandWrites().count == 2 }
         #expect(await r.commandWrites().map(\.bytes) == CaliControl.pullPlan().map(\.data))
-        #expect(try await r.finish(t) == .refused(CaliControl.wakeupUnknown))
+        #expect(try await r.finish(t) == .refused(.wakeupUnknown))
 
         // The unit answers the next pull with its wake-up frame (Mode 20): the edit goes out.
         let again = r.start(cmd)
@@ -321,7 +319,7 @@ struct CommandRunnerTests {
         #expect(await r.s.pushSubscriberCount == 0)
 
         await r.fake.rejectNextWrite()
-        guard case .failed = await r.s.run(Fx.coolerOnCmd) else { Issue.record("not failed"); return }
+        #expect(await r.s.run(Fx.coolerOnCmd) == .failed(.notTaken))
         #expect(await r.s.pushSubscriberCount == 0)
 
         await r.fake.dropLinkDuringNextWrite(to: Fx.coolerCtl)

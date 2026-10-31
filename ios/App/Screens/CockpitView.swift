@@ -6,6 +6,7 @@ import SwiftUI
 /// - Requirement: R_IOS_LOOK, R_IOS_I18N
 struct RootView: View {
     let store: CamperStore
+    @Environment(\.locale) private var locale
 
     var body: some View {
         TabView {
@@ -17,6 +18,12 @@ struct RootView: View {
                 .tabItem { Label("Water", systemImage: "drop") }
             NavigationStack { StatusView(store: store).navigationTitle("Setup").navigationBarTitleDisplayMode(.inline) }
                 .tabItem { Label("Setup", systemImage: "gearshape") }
+        }
+        // VoiceOver hears the sending state, the result and the connect outcome where it is.
+        .onChange(of: store.feedback) { _, f in
+            if let f, let text = FeedbackBanner.text(f, now: store.now()) {
+                AccessibilityNotification.Announcement(text.string(locale)).post()
+            }
         }
     }
 }
@@ -33,14 +40,12 @@ struct CockpitView: View {
     @Environment(\.locale) private var locale
 
     /// What a tap on a function button does: like the web UI's tiles (`goto(fn)`) it opens the
-    /// function's screen and never sends a command; in the power-save rest it connects again; else
-    /// (offline, connecting, an unsupported unit) the button is disabled.
+    /// function's screen in every state (a locked screen says why) and never sends a command; only
+    /// in the power-save rest it connects again.
     ///
     /// - Requirement: R_IOS_SIRI_NO_HEATER, R_IOS_POWER_SAVE
-    static func tap(_ screen: ControlScreen, store: CamperStore) -> CockpitTap? {
-        if store.lockReason(screen.function) == nil { return .open(screen) }
-        if case .unsupported = store.state.gate { return nil }
-        return store.resting ? .connect : nil
+    static func tap(_ screen: ControlScreen, store: CamperStore) -> CockpitTap {
+        store.resting && store.lockReason(screen.function) != nil ? .connect : .open(screen)
     }
 
     var body: some View {
@@ -92,12 +97,10 @@ struct CockpitView: View {
         ]
         return all.filter { store.installed($0.0.function) }.map { screen, title, symbol, key, tint in
             ControlButton(title: title, systemImage: symbol, isOn: on(screen.function, key), tint: tint,
-                          lockedBecause: store.lockReason(screen.function),
-                          tappable: Self.tap(screen, store: store) != nil) {
+                          lockedBecause: store.lockReason(screen.function)) {
                 switch Self.tap(screen, store: store) {
                 case .open(let s): open = s
-                case .connect: Task { await store.connect() }
-                case nil: break
+                case .connect: Task { await store.tapToConnect() }
                 }
             }
         }

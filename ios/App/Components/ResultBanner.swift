@@ -1,15 +1,15 @@
 import CaliBLE
+import CaliCore
 import SwiftUI
 
 /// What became of the last command, in the web UI's words (`processQueue` toasts). "Applied" only
 /// when the unit's truthful feedback confirmed it; a sent command says what the user can check.
+/// Every reason is a catalog text (EN + DE), never the planner's or the runner's English.
 ///
-/// - Requirement: R_IOS_HONEST, R_IOS_V2_ONLY
+/// - Requirement: R_IOS_HONEST, R_IOS_V2_ONLY, R_IOS_I18N
 struct ResultBanner: View {
     let result: CommandResult
     let function: String
-
-    static func isSuccess(_ r: CommandResult) -> Bool { r == .applied }
 
     static func text(_ r: CommandResult, function: String) -> LocalizedStringResource {
         switch r {
@@ -17,30 +17,116 @@ struct ResultBanner: View {
         // For lighting the state char is a write-through echo: only the lamp itself is proof.
         case .sent: function == "lighting" ? "Sent — check the lamp" : "Sent — the unit didn't confirm it"
         case .unconfirmed: "Sent — the unit didn't confirm it"
-        // The planner's refusal reasons (calictl's words); a catalog entry translates one.
-        case .refused(let why), .elsewhere(let why): LocalizedStringResource(String.LocalizationValue(why))
+        case .refused(let why): text(why)
         case .notSupported: "This camper unit is not supported yet"
         case .busy: "The previous command is still running — try again in a moment"
         case .notReady: "Waiting for the camper unit's data"
-        case .failed(let why): "Command failed: \(why)"
+        case .failed(let why): text(why)
         case .timeout: "The camper unit did not answer in time"
+        }
+    }
+
+    /// The planner's and the runner's refusals in the web UI's (the unit's) words.
+    static func text(_ r: Refusal) -> LocalizedStringResource {
+        switch r {
+        case .airheaterNotPossible: "Heater deactivated — not while the engine or the auxiliary water heater is running"
+        case .airheaterRuntimePermanent: "Not available during continuous heating"
+        case .airheaterTimerArmed: "Stop the timer first"
+        case .campingNeedsMaster: "Turn camping mode on first"
+        case .coolerStateUnknown: "The refrigerator box's settings are not known yet — try again in a moment"
+        case .coolerTimerNeedsFridgeOff: "Switch the refrigerator box off first"
+        case .energyEcoNeedsSolar: "ECO needs a solar panel"
+        case .energyLocked: "The unit currently does not allow changing the energy mode"
+        case .favouriteEmpty: "This favourite is empty on the unit"
+        case .notOnOff, .badValue: "This value is not valid"
+        case .quietNeedsFridgeOn: "Switch the refrigerator box on first"
+        case .roofReading: "only when the pop-up roof is open"
+        case .wakeupNoArea: "The wake-up light needs at least one area"
+        case .wakeupClock: "The wake-up light needs the time — set it again"
+        case .wakeupUnknown: "The unit has not reported its wake-up light settings yet"
+        case .elsewhere: "Not available in this app"
+        case .noRoof: "This app does not move the roof"
+        case .forbiddenWrite: "Not sent: this app does not write this setting"
+        case .unknown: "The camper unit refused the command"
+        }
+    }
+
+    static func text(_ f: Failure) -> LocalizedStringResource {
+        switch f {
+        case .resting(let s): "The camper unit saves power — try again in \(s) s"
+        case .bluetoothOff: "Bluetooth is off or not allowed for this app"
+        case .unreachable: "The camper unit is not reachable"
+        case .linkEnded: "The camper unit ended the link — nothing was sent"
+        case .notTaken: "The camper unit did not take the command"
         }
     }
 
     var body: some View {
         let text = Self.text(result, function: function)
         switch result {
-        case .applied, .sent, .unconfirmed:
-            Label { Text(text) } icon: {
-                Image(systemName: result == .applied ? "checkmark.circle.fill" : "paperplane")
-                    .foregroundStyle(result == .applied ? Color.onGreen : Color.primary)
+        case .applied: Note(text: text, symbol: "checkmark.circle.fill", tint: .onGreen)
+        case .sent where function == "lighting": Note(text: text, symbol: "paperplane", tint: .primary)
+        // Sent but not confirmed: a warning, as in the web UI, never like "Applied".
+        case .sent, .unconfirmed: Note(text: text, symbol: "exclamationmark.circle", tint: .orange)
+        case .busy, .notReady: Note(text: text, symbol: "info.circle", tint: .primary)
+        default: AlertCard(text: text)
+        }
+    }
+}
+
+/// A neutral card with one symbol and a text.
+struct Note: View {
+    let text: LocalizedStringResource
+    let symbol: String
+    let tint: Color
+    var busy = false
+
+    var body: some View {
+        Label {
+            Text(text)
+        } icon: {
+            if busy { ProgressView() } else { Image(systemName: symbol).foregroundStyle(tint) }
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .padding(.horizontal, 12)
+        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The feedback pinned under the pill: "Sending…", the result, "Connecting…" or the connect outcome
+/// (the cooldown counts down).
+///
+/// - Requirement: R_IOS_HONEST, R_IOS_POWER_SAVE
+struct FeedbackBanner: View {
+    let feedback: Feedback
+    /// The clock of the countdown (the store's, so a snapshot can fix it).
+    var clock: () -> Date = Date.init
+
+    /// The text at `now` (VoiceOver announces it); nil when there is nothing to say.
+    static func text(_ f: Feedback, now: Date) -> LocalizedStringResource? {
+        switch f {
+        case .sending: "Sending…"
+        case .result(let r, let fn): ResultBanner.text(r, function: fn)
+        case .connecting: "Connecting…"
+        case .connect(.connected): nil
+        case .connect(.resting(let until)):
+            ResultBanner.text(Failure.resting(retryAfter: max(1, Int(until.timeIntervalSince(now).rounded(.up)))))
+        case .connect(.failed(let f)): ResultBanner.text(f)
+        }
+    }
+
+    var body: some View {
+        switch feedback {
+        case .sending, .connecting:
+            Note(text: Self.text(feedback, now: clock()) ?? "", symbol: "", tint: .primary, busy: true)
+        case .result(let r, let fn): ResultBanner(result: r, function: fn)
+        case .connect(.resting):
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                if let t = Self.text(feedback, now: clock()) { Note(text: t, symbol: "timer", tint: .orange) }
             }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(.horizontal, 12)
-            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-            .accessibilityElement(children: .combine)
-        default:
-            AlertCard(text: text)
+        case .connect(.failed(let f)): AlertCard(text: ResultBanner.text(f))
+        case .connect(.connected): EmptyView()
         }
     }
 }
@@ -67,71 +153,72 @@ struct AlertCard: View {
     }
 }
 
-/// Why the controls are locked. In the power-save rest the card is a button that connects again.
+/// The power-save rest under the pill: a button that connects again ("tap to connect").
 ///
-/// - Requirement: R_IOS_HONEST, R_IOS_POWER_SAVE
-struct LockCard: View {
+/// - Requirement: R_IOS_POWER_SAVE
+struct RestCard: View {
     let store: CamperStore
+
+    var body: some View {
+        Button { Task { await store.tapToConnect() } } label: {
+            Label { Text("Disconnected to save energy — tap to connect") } icon: { Image(systemName: "arrow.clockwise") }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.horizontal, 12)
+                .background(Color.onGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .disabled(store.feedback == .connecting)
+    }
+}
+
+/// Why the controls are locked (the rest has its `RestCard` under the pill).
+///
+/// - Requirement: R_IOS_HONEST
+struct LockCard: View {
     let reason: LocalizedStringResource
 
     var body: some View {
-        let label = Label { Text(reason) } icon: { Image(systemName: "lock") }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(.horizontal, 12)
-            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-        if store.resting {
-            Button { Task { await store.connect() } } label: { label }
-                .buttonStyle(.plain)
-        } else {
-            label.accessibilityElement(children: .combine)
-        }
+        Note(text: reason, symbol: "lock", tint: .primary)
     }
 }
 
 /// Sends one command of a control screen: after the prompts (the web UI's confirm dialogs, all in
-/// one alert), with the result under the controls.
+/// one alert).
 struct Run {
     fileprivate let send: (Command, [LocalizedStringResource]) -> Void
 
     func callAsFunction(_ cmd: Command, confirm: [LocalizedStringResource?] = []) { send(cmd, confirm.compactMap { $0 }) }
 }
 
+extension EnvironmentValues {
+    /// Why the whole section is locked (the rows give it as their VoiceOver hint); nil = unlocked.
+    @Entry var sectionLock: LocalizedStringResource?
+}
+
 /// The controls of one function: the lock card when they cannot be used (the controls are then
-/// disabled), the controls, and the last command's result.
+/// disabled, and each row's hint gives the reason), and the controls. The sending state and the
+/// result show pinned under the pill (`StatusPage`).
 ///
 /// - Requirement: R_IOS_HONEST, R_IOS_FUNCTIONS
 struct ControlSection<Content: View>: View {
     let store: CamperStore
     let function: String
     @ViewBuilder var content: (Run) -> Content
-    @State private var result: CommandResult?
-    @State private var sending = false
     @State private var pending: (cmd: Command, prompts: [LocalizedStringResource])?
     @Environment(\.locale) private var locale
 
-    private func send(_ cmd: Command) {
-        sending = true
-        Task {
-            result = await store.send(cmd)
-            sending = false
-        }
-    }
+    private func send(_ cmd: Command) { Task { await store.run(cmd) } }
 
     var body: some View {
         let reason = store.lockReason(function)
         VStack(spacing: 12) {
-            // An unsupported unit: the page's alert card already says so.
-            if let reason, store.state.gate == .supported { LockCard(store: store, reason: reason) }
+            // An unsupported unit has the page's alert card; the rest has the RestCard under the pill.
+            if let reason, store.state.gate == .supported, !store.resting { LockCard(reason: reason) }
             content(Run { cmd, prompts in
                 if prompts.isEmpty { send(cmd) } else { pending = (cmd, prompts) }
             })
-            .disabled(reason != nil || sending)
-            if sending {
-                ProgressView { Text("Sending…") }
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            } else if let result {
-                ResultBanner(result: result, function: function)
-            }
+            .disabled(reason != nil || store.isSending)
+            .environment(\.sectionLock, reason)
         }
         .alert(Text(verbatim: pending?.prompts.map { $0.string(locale) }.joined(separator: "\n\n") ?? ""),
                isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })) {
@@ -141,7 +228,7 @@ struct ControlSection<Content: View>: View {
     }
 }
 
-/// A control screen: the status page (pill, V3 card, stale state) with one function's controls.
+/// A control screen: the status page (pill, V3 card, stale state, feedback) with one function's controls.
 ///
 /// - Requirement: R_IOS_HONEST, R_IOS_V2_ONLY
 struct ControlPage<Content: View>: View {
@@ -155,6 +242,7 @@ struct ControlPage<Content: View>: View {
     var body: some View {
         StatusPage(store: store) {
             ControlSection(store: store, function: function, content: content)
+                .padding(.bottom, 44)  // the last row clears the tab bar's blur band at the end of the scroll
         }
         .tint(tint)
         .navigationTitle(Text(title))
@@ -172,20 +260,23 @@ struct Card<Content: View>: View {
     }
 }
 
-/// A control row: the control, and under it why it is disabled (also the VoiceOver hint).
+/// A control row: the control, and under it why it is disabled (or a note). VoiceOver hears the
+/// reason once, as the hint: the row's own, else the section's lock reason.
 struct ControlRow<Control: View>: View {
     var disabledBecause: LocalizedStringResource?
     var hint: LocalizedStringResource?
     @ViewBuilder var control: () -> Control
+    @Environment(\.sectionLock) private var sectionLock
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             control()
                 .frame(minHeight: 44)
                 .disabled(disabledBecause != nil)
-                .accessibilityHint((disabledBecause ?? hint).map { Text($0) } ?? Text(verbatim: ""))
-            if let note = disabledBecause ?? hint {
-                Text(note).font(.footnote)
+                .accessibilityHint((disabledBecause ?? sectionLock ?? hint).map { Text($0) } ?? Text(verbatim: ""))
+            // A locked section has its reason in the lock card; a row note would contradict it.
+            if sectionLock == nil, let note = disabledBecause ?? hint {
+                Text(note).font(.footnote).accessibilityHidden(true)
             }
         }
         .padding(.horizontal)
@@ -194,36 +285,50 @@ struct ControlRow<Control: View>: View {
 }
 
 /// A label with a menu picker at the trailing edge (a menu picker outside a form shows no label).
+/// Disabled, it shows the current value as text in the muted colour that keeps its contrast.
 struct MenuPicker<Value: Hashable, Options: View>: View {
     let label: Text
     /// What VoiceOver calls the picker, when the visible label is not unique.
     var spoken: Text?
+    /// The current value as shown, for the disabled state.
+    let value: Text
     let selection: Binding<Value>
     @ViewBuilder var options: () -> Options
+    @Environment(\.isEnabled) private var enabled
 
     var body: some View {
-        // At accessibility text sizes the control goes under its label, so no word breaks.
-        StackedRow(label: label) {
-            Picker(selection: selection, content: options) { spoken ?? label }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .fixedSize()  // a menu picker alone takes all the height it is offered
+        if enabled {
+            StackedRow(label: label) {
+                Picker(selection: selection, content: options) { spoken ?? label }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()  // a menu picker alone takes all the height it is offered
+            }
+        } else {
+            StackedRow(label: label) { value.foregroundStyle(Color.staleText) }
+                .accessibilityElement(children: .combine)
         }
     }
 }
 
-/// A switch with its label; the label stays whole at accessibility text sizes.
+/// A switch with its label; the label stays whole at accessibility text sizes. Disabled, it shows
+/// "On" / "Off" as text, so it does not look like an enabled switch that is off.
 struct SwitchRow: View {
     let label: Text
     let isOn: Binding<Bool>
+    @Environment(\.isEnabled) private var enabled
 
     var body: some View {
-        StackedRow(label: label) { Toggle(isOn: isOn) { label }.labelsHidden() }
+        if enabled {
+            StackedRow(label: label) { Toggle(isOn: isOn) { label }.labelsHidden() }
+        } else {
+            StackedRow(label: label) { Text(isOn.wrappedValue ? "On" : "Off").foregroundStyle(Color.staleText) }
+                .accessibilityElement(children: .combine)
+        }
     }
 }
 
 /// A label and a control side by side; at accessibility text sizes the control goes under the label.
-/// VoiceOver reads the control (it carries the label).
 struct StackedRow<Control: View>: View {
     let label: Text
     @ViewBuilder var control: () -> Control

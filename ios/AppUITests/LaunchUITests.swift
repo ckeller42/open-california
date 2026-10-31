@@ -10,7 +10,7 @@ final class LaunchUITests: XCTestCase {
         app.launchArguments = ["-UITestFixture", "parked", "-AppleLanguages", "(en)"]
         app.launch()
         XCTAssertTrue(app.staticTexts["live"].waitForExistence(timeout: 10))
-        try app.audit()
+        try app.auditScreen()
     }
 
     /// - Test: T_IOS_UI_LAUNCH_GERMAN
@@ -21,6 +21,6 @@ final class LaunchUITests: XCTestCase {
         app.launchArguments = ["-UITestFixture", "unsupportedV3", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]
         app.launch()
         XCTAssertTrue(app.staticTexts["Diese Camper-Einheit wird noch nicht unterstützt"].waitForExistence(timeout: 10))
-        try app.audit()
+        try app.auditScreen()
     }
 }

@@ -1,4 +1,5 @@
 import CaliBLE
+import CaliCore
 import Foundation
 import Testing
 @testable import Camper
@@ -67,8 +68,8 @@ struct CommandMappingTests {
     @Test func heaterOnlyFromHeaterScreen() throws {
         for fixture in Fixture.allCases {
             let store = CamperStore.preview(fixture)
-            // Open the screen, connect (rest) or nothing (locked); there is no command case.
-            #expect([nil, .open(.airHeater), .connect].contains(CockpitView.tap(.airHeater, store: store)), "\(fixture)")
+            // Open the screen, or connect again in the power-save rest; there is no command case.
+            #expect([.open(.airHeater), .connect].contains(CockpitView.tap(.airHeater, store: store)), "\(fixture)")
         }
         #expect(CockpitView.tap(.airHeater, store: .preview(.campingOn)) == .open(.airHeater))
 
@@ -98,15 +99,11 @@ struct CommandMappingTests {
         #expect(text(.sent, "lighting") == "Sent — check the lamp")
         #expect(text(.sent, "cooler") == "Sent — the unit didn't confirm it")
         #expect(text(.unconfirmed, "campingmode") == "Sent — the unit didn't confirm it")
-        let others: [CommandResult] = [.sent, .unconfirmed, .refused("x"), .elsewhere("x"), .notSupported, .busy,
-                                       .notReady, .failed("x"), .timeout]
-        for r in others {
+        for r in Self.allResults where r != .applied {
             for fn in ["lighting", "cooler", "campingmode", "airheater", "energy"] {
                 #expect(!text(r, fn).localizedCaseInsensitiveContains("applied"), "\(r) \(fn)")
-                #expect(!ResultBanner.isSuccess(r))
             }
         }
-        #expect(ResultBanner.isSuccess(.applied))
         #expect(ResultBanner.text(.applied, function: "cooler").string(Locale(identifier: "de_DE")) == "Übernommen")
     }
 
@@ -121,7 +118,8 @@ struct CommandMappingTests {
             #expect(store.lockReason(fn)?.string(Self.en) == "This camper unit is not supported yet", "\(fn)")
         }
         #expect(ResultBanner.text(.notSupported, function: "cooler").string(Self.en) == "This camper unit is not supported yet")
-        #expect(CockpitView.tap(.camping, store: store) == nil)
+        // The screen opens anyway (as the web UI's tiles do); it shows the reason.
+        #expect(CockpitView.tap(.camping, store: store) == .open(.camping))
     }
 
     /// The lock reason follows the link: rest → tap to connect (the cockpit tile then connects),
@@ -138,8 +136,58 @@ struct CommandMappingTests {
         #expect(CockpitView.tap(.camping, store: store) == .connect)
         store.link = .connecting
         #expect(store.lockReason("campingmode")?.string(Self.en) == "Connecting…")
-        #expect(CockpitView.tap(.camping, store: store) == nil)
+        #expect(CockpitView.tap(.camping, store: store) == .open(.camping))
+        store.link = .pairing
+        #expect(store.lockReason("campingmode")?.string(Self.en) == "Not available while pairing")
+        store.link = .unreachable("x")
+        #expect(store.lockReason("campingmode")?.string(Self.en) == "Not available while the van is unreachable")
         store.link = .off
         #expect(store.lockReason("campingmode")?.string(Self.en) == "Not available while the van is offline")
+        #expect(CockpitView.tap(.camping, store: store) == .open(.camping))
+    }
+
+    /// Every result the runner can give, with each refusal and failure case.
+    static let allResults: [CommandResult] = [.applied, .sent, .unconfirmed, .notSupported, .busy, .notReady, .timeout]
+        + Refusal.allCases.map { .refused($0) }
+        + [Failure.resting(retryAfter: 5), .bluetoothOff, .unreachable, .linkEnded, .notTaken].map { .failed($0) }
+
+    /// Every result text (each planner refusal, each runner failure) has an English and a German
+    /// catalog entry: a German user never sees the planner's English (Ruling 30).
+    ///
+    /// - Test: T_IOS_REASONS_EN_DE
+    /// - Verifies: R_IOS_I18N
+    @Test func everyReasonHasGerman() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appending(path: "App/Localizable.xcstrings"))) as? [String: Any]
+        let strings = try #require(json?["strings"] as? [String: Any])
+        func de(_ key: String) -> String? {
+            ((((strings[key] as? [String: Any])?["localizations"] as? [String: Any])?["de"] as? [String: Any])?["stringUnit"] as? [String: Any])?["value"] as? String
+        }
+        var keys = Set<String>()
+        for r in Self.allResults { for fn in ["lighting", "cooler"] { keys.insert(ResultBanner.text(r, function: fn).key) } }
+        keys.insert("Unknown fault of the energy system")
+        for k in keys { #expect(de(k)?.isEmpty == false, "no German for \(k)") }
+        #expect(ResultBanner.text(.refused(.quietNeedsFridgeOn), function: "cooler").string(Locale(identifier: "de_DE")) == "Zuerst die Kühlbox einschalten")
+        #expect(ResultBanner.text(.failed(.resting(retryAfter: 5)), function: "cooler").string(Locale(identifier: "de_DE"))
+            == "Die Camper-Einheit spart Energie — in 5 s erneut versuchen")
+    }
+
+    /// A command shows "Sending…" and then its result where the user looks (pinned under the pill);
+    /// a tap in the power-save rest shows the cooldown instead of dialling.
+    ///
+    /// - Test: T_IOS_FEEDBACK
+    /// - Verifies: R_IOS_HONEST, R_IOS_POWER_SAVE
+    @Test func feedbackShowsSendingResultAndCooldown() async {
+        let store = CamperStore.preview(.unsupportedV3)
+        let r = await store.run(CampingView.master(true))
+        #expect(r == .notSupported)
+        #expect(store.feedback == .result(.notSupported, function: "campingmode"))
+
+        let until = Date().addingTimeInterval(5)
+        store.link = .rest(until: until)
+        await store.tapToConnect()
+        #expect(store.feedback == .connect(.resting(until: until)))
+        #expect(FeedbackBanner.text(store.feedback!, now: until.addingTimeInterval(-3))?.string(Self.en)
+            == "The camper unit saves power — try again in 3 s")
     }
 }

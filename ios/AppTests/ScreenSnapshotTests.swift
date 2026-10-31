@@ -2,6 +2,8 @@ import SnapshotTesting
 import SwiftUI
 import Testing
 import UIKit
+import CaliBLE
+import CaliCore
 @testable import Camper
 
 /// Visual regression of the status screens: every fixture in light and dark, plus German, the largest
@@ -123,6 +125,58 @@ struct ScreenSnapshotTests {
                 snap(view, "\(name)-se", layout: .fixed(width: 375, height: 1400))
             }
         }
+    }
+
+    /// A control screen locked in the rest (the tap-to-connect card), while connecting and offline;
+    /// the cooler while a command is on its way; the cockpit in the cooldown after a tap; the air
+    /// heater with an error, running and in continuous heating.
+    ///
+    /// - Test: T_IOS_SNAPSHOT_CONTROL_STATES
+    /// - Verifies: R_IOS_LOOK, R_IOS_HONEST, R_IOS_POWER_SAVE
+    @Test func controlScreenStates() {
+        let states: [(String, LinkState)] = [("rest", .rest(until: Self.now.addingTimeInterval(60))), ("connecting", .connecting), ("offline", .off)]
+        for (name, link) in states {
+            let store = CamperStore.preview(.parked, now: Self.now)
+            store.link = link
+            if name == "offline" { store.state.asOf = Self.now.addingTimeInterval(-600) }
+            check(NavigationStack { CampingView(store: store) }, "control-camping-\(name)")
+        }
+        let sending = CamperStore.preview(.campingOn, now: Self.now)
+        sending.feedback = .sending(function: "cooler")
+        check(NavigationStack { CoolerView(store: sending) }, "control-cooler-sending")
+
+        let cooldown = CamperStore.preview(.faults, now: Self.now)
+        cooldown.feedback = .connect(.resting(until: Self.now.addingTimeInterval(5)))
+        check(NavigationStack { CockpitView(store: cooldown) }, "cockpit-rest-cooldown")
+
+        let heater: [(String, [String: JSONValue])] = [
+            ("error", ["error": .string("low_fuel"), "error_code": .number(2)]),
+            ("running", ["running": .bool(true), "normal": .bool(true), "level": .number(5), "running_time": .number(60),
+                         "running_time_remaining": .number(45)]),
+            ("permanent", ["running": .bool(true), "permanent": .bool(true), "level": .number(10), "running_time": .number(60)]),
+        ]
+        for (name, values) in heater {
+            let store = CamperStore.preview(.campingOn, now: Self.now)
+            store.state.interpreted["airheater", default: [:]].merge(values) { _, new in new }
+            check(NavigationStack { AirHeaterView(store: store) }, "control-airHeater-\(name)")
+        }
+    }
+
+    /// Every feedback the user can see: each command result (each refusal and failure), sending,
+    /// connecting and the cooldown, in English and German.
+    ///
+    /// - Test: T_IOS_SNAPSHOT_BANNERS
+    /// - Verifies: R_IOS_HONEST, R_IOS_I18N
+    @Test func feedbackBanners() {
+        let all: [Feedback] = [.sending(function: "cooler"), .connecting, .connect(.resting(until: Self.now.addingTimeInterval(5))),
+                               .connect(.failed(.unreachable)), .result(.sent, function: "lighting")]
+            + CommandMappingTests.allResults.map { .result($0, function: "cooler") }
+        let gallery = VStack(spacing: 8) {
+            ForEach(all.indices, id: \.self) { FeedbackBanner(feedback: all[$0], clock: { Self.now }) }
+        }.padding()
+        snap(gallery, "banners", layout: .fixed(width: 390, height: 2800))
+        snap(gallery, "banners-de", locale: Locale(identifier: "de_DE"), layout: .fixed(width: 390, height: 3000))
+        snap(gallery, "banners-dark", style: .dark, layout: .fixed(width: 390, height: 2800))
     }
 
     /// The page redraws by itself when the data turns stale, without a new frame: with the store's

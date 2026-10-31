@@ -10,8 +10,8 @@ extension Color {
 }
 
 /// A large cockpit button: an SF Symbol, the function's name and its state (On / Off), tinted when on.
-/// Disabled while the controls are not usable (`CamperStore.controlEnabled`); then a lock shows, and
-/// VoiceOver gives the reason as the hint.
+/// While the controls are not usable (`CamperStore.lockReason`) a lock shows and VoiceOver gives the
+/// reason as the hint; the button still opens the screen (or connects in the power-save rest).
 ///
 /// - Requirement: R_IOS_LOOK, R_IOS_HONEST
 struct ControlButton: View {
@@ -19,10 +19,8 @@ struct ControlButton: View {
     let systemImage: String
     let isOn: Bool
     let tint: Color
-    /// Why the controls are locked; nil = unlocked.
+    /// Why the controls are locked; nil = unlocked. The button still opens the screen.
     let lockedBecause: LocalizedStringResource?
-    /// Locked, yet a tap does something (connect again after the power-save rest).
-    var tappable = false
     let action: () -> Void
 
     var body: some View {
@@ -49,13 +47,12 @@ struct ControlButton: View {
                         in: RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(Undimmed())
-        .disabled(lockedBecause != nil && !tappable)
         .accessibilityLabel(Text(title))
         .accessibilityValue(Text(isOn ? "On" : "Off"))
         .accessibilityHint(lockedBecause.map { Text($0) } ?? Text(verbatim: ""))
     }
 
-    /// A disabled button keeps full contrast (dimmed text fails the contrast audit); the lock marks it.
+    /// No dimming on press-free states: full contrast, the lock marks a locked function.
     private struct Undimmed: ButtonStyle {
         func makeBody(configuration: Configuration) -> some View {
             configuration.label.opacity(configuration.isPressed ? 0.7 : 1)

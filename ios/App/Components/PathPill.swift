@@ -92,6 +92,7 @@ struct StatusPage<Content: View>: View {
                 if case .unsupported = store.state.gate {
                     AlertCard(text: "This camper unit is not supported yet")
                 }
+                if store.resting, store.feedback == nil { RestCard(store: store) }
                 VStack(spacing: 12) { content() }
                     .environment(\.pageNow, now)
                     .environment(\.pageStale, store.isStale(at: now))
@@ -101,5 +102,23 @@ struct StatusPage<Content: View>: View {
             }
             .padding()
         }
+        .hardTopEdge()
+        // The sending state and the result stay in sight wherever the user tapped.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let feedback = store.feedback {
+                FeedbackBanner(feedback: feedback, clock: store.now)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(Color(uiColor: .systemBackground))
+            }
+        }
+    }
+}
+
+extension View {
+    /// iOS 26: content scrolled under the navigation bar is cut off at a hard edge, not blurred, so no
+    /// half-readable text shows behind the bar.
+    @ViewBuilder func hardTopEdge() -> some View {
+        if #available(iOS 26, *) { scrollEdgeEffectStyle(.hard, for: .top) } else { self }
     }
 }

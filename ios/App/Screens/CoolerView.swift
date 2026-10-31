@@ -37,13 +37,13 @@ struct CoolerView: View {
                     SwitchRow(label: Text("Refrigerator box"), isOn: Binding(get: { on }, set: { run(Self.power($0)) }))
                 }
                 ControlRow {
-                    MenuPicker(label: Text("Cooling level"), selection: Binding(get: { num("level") ?? 0 }, set: { run(Self.level($0)) })) {
+                    MenuPicker(label: Text("Cooling level"), value: Text(verbatim: num("level").map(String.init) ?? "—"), selection: Binding(get: { num("level") ?? 0 }, set: { run(Self.level($0)) })) {
                         if num("level").map({ !(1...5).contains($0) }) ?? true { Text(verbatim: "—").tag(num("level") ?? 0) }
                         ForEach(1...5, id: \.self) { Text(verbatim: "\($0)").tag($0) }
                     }
                 }
                 ControlRow(disabledBecause: on ? nil : "Switch the refrigerator box on first") {
-                    MenuPicker(label: Text("Quiet mode"), selection: Binding(get: { Self.modes.first { $0.value == num("mode") }?.key ?? "normal" },
+                    MenuPicker(label: Text("Quiet mode"), value: Text(Self.modes.first { $0.value == num("mode") }?.label ?? "Off"), selection: Binding(get: { Self.modes.first { $0.value == num("mode") }?.key ?? "normal" },
                                               set: { run(Self.mode($0), confirm: ["Set the refrigerator box's quiet mode? Not yet verified on the van. Continue?"]) })) {
                         ForEach(Self.modes, id: \.key) { Text($0.label).tag($0.key) }
                     }

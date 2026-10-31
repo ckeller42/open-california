@@ -20,17 +20,20 @@ struct EnergyModeView: View {
         ControlSection(store: store, function: "energy") { run in
             let solar = store.value("energy", "solar_installed")?.bool == true
             let current = store.value("energy", "energy_mode")?.number.map(Int.init)
+            let locked = store.value("energy", "energy_mode_locked")?.bool == true
             Card {
-                ControlRow {
-                    MenuPicker(label: Text("Energy mode"), selection: Binding(get: { Self.modes.first { $0.value == current }?.key ?? "" }, set: {
+                ControlRow(disabledBecause: locked ? "The unit currently does not allow changing the energy mode" : nil) {
+                    MenuPicker(label: Text("Energy mode"),
+                               value: Self.modes.first { $0.value == current }.map { Text($0.label) } ?? Text(verbatim: "—"),
+                               selection: Binding(get: { Self.modes.first { $0.value == current }?.key ?? "" }, set: {
                         run(Self.mode($0), confirm: ["Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?"])
                     })) {
                         if !Self.modes.contains(where: { $0.value == current }) { Text(verbatim: "—").tag("") }
                         ForEach(Self.modes.filter { $0.key != "eco" || solar }, id: \.key) { Text($0.label).tag($0.key) }
                     }
-                    .disabled(store.value("energy", "energy_mode_locked")?.bool == true)
                 }
             }
         }
+        .tint(.onGreen)
     }
 }

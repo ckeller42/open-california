@@ -97,7 +97,7 @@ struct EnergyView: View {
 
     static func faults(_ store: CamperStore) -> [LocalizedStringResource] {
         guard case .array(let flags)? = store.value("energy", "faults") else { return [] }
-        return flags.compactMap(\.string).map { Self.faultText[$0] ?? LocalizedStringResource(String.LocalizationValue($0)) }
+        return flags.compactMap(\.string).map { Self.faultText[$0] ?? "Unknown fault of the energy system" }
     }
 
     /// The unit reports an age only for the starter battery; 255 = the starter subsystem sleeps.

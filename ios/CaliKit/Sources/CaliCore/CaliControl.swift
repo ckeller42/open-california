@@ -27,6 +27,44 @@ public enum PlanResult: Equatable, Sendable {
     case badValue
 }
 
+/// Why a command was not sent, as a case: the C planner's reason texts (`control_consts.h`, which
+/// are calictl's English) and the runner's own refusals. The app shows each in the user's language.
+///
+/// - Requirement: R_IOS_I18N, R_IOS_HONEST
+public enum Refusal: Sendable, Equatable, CaseIterable {
+    case airheaterNotPossible, airheaterRuntimePermanent, airheaterTimerArmed, campingNeedsMaster
+    case coolerStateUnknown, coolerTimerNeedsFridgeOff, energyEcoNeedsSolar, energyLocked, favouriteEmpty
+    case notOnOff, quietNeedsFridgeOn, roofReading, wakeupNoArea, wakeupClock, wakeupUnknown
+    /// Not a command of this app (`CALI_REASON_ELSEWHERE`).
+    case elsewhere
+    /// The runner's own: the roof, a value the planner cannot build, a char outside the allow-list.
+    case noRoof, badValue, forbiddenWrite
+    /// A planner text this build does not know.
+    case unknown
+
+    private static let planner: [String: Refusal] = [
+        CALI_REASON_AIRHEATER_NOT_POSSIBLE: .airheaterNotPossible,
+        CALI_REASON_AIRHEATER_RUNTIME_PERMANENT: .airheaterRuntimePermanent,
+        CALI_REASON_AIRHEATER_TIMER_ARMED: .airheaterTimerArmed,
+        CALI_REASON_CAMPING_NEEDS_MASTER: .campingNeedsMaster,
+        CALI_REASON_COOLER_STATE_UNKNOWN: .coolerStateUnknown,
+        CALI_REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF: .coolerTimerNeedsFridgeOff,
+        CALI_REASON_ENERGY_ECO_NEEDS_SOLAR: .energyEcoNeedsSolar,
+        CALI_REASON_ENERGY_LOCKED: .energyLocked,
+        CALI_REASON_FAVOURITE_EMPTY: .favouriteEmpty,
+        CALI_REASON_NOT_ONOFF: .notOnOff,
+        CALI_REASON_QUIET_NEEDS_FRIDGE_ON: .quietNeedsFridgeOn,
+        CALI_REASON_ROOF_READING: .roofReading,
+        CALI_REASON_WAKEUP_NO_AREA: .wakeupNoArea,
+        CALI_REASON_WAKEUP_CLOCK: .wakeupClock,
+        CALI_WAKEUP_UNKNOWN: .wakeupUnknown,
+        CALI_REASON_ELSEWHERE: .elsewhere,
+    ]
+
+    /// The case of a planner reason text; `.unknown` for a text this build does not know.
+    public init(planner text: String) { self = Self.planner[text] ?? .unknown }
+}
+
 /// The control planner of the satellite (`firmware/components/cali_core/control.c`), linked as it is.
 ///
 /// - Requirement: R_IOS_FUNCTIONS

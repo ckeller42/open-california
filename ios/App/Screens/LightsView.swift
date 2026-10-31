@@ -44,18 +44,26 @@ struct LightsView: View {
                     SwitchRow(label: Text("All lights"), isOn: Binding(get: { store.value("lighting", "any_on")?.bool == true },
                                                        set: { run(Self.allLights($0)) }))
                 }
+                let active = store.value("lighting", "profile")?.number.map(Int.init)
                 HStack(spacing: 12) {
                     ForEach(Self.favourites, id: \.profile) { fav in
+                        // A slot the unit reports empty cannot be recalled (saving is not in this app).
                         let empty = stored.map { !$0.contains(fav.profile) } ?? false
+                        let isActive = active == fav.profile
                         Button { run(Self.favourite(fav.profile)) } label: {
-                            Text(verbatim: empty ? "+" : fav.label)
-                                .font(.title3.weight(.semibold))
-                                .frame(maxWidth: .infinity, minHeight: 52)
-                                .background(Color.lightAmber.opacity(empty ? 0.04 : 0.15), in: RoundedRectangle(cornerRadius: 12))
+                            VStack(spacing: 0) {
+                                Text(verbatim: fav.label).font(.title3.weight(.semibold))
+                                if empty { Text("empty").font(.caption2) }
+                            }
+                            .foregroundStyle(empty ? Color.staleText : Color.primary)
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .background(Color.lightAmber.opacity(isActive ? 0.4 : empty ? 0.04 : 0.15), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay { if isActive { RoundedRectangle(cornerRadius: 12).stroke(Color.lightAmber, lineWidth: 2) } }
                         }
                         .buttonStyle(.plain)
                         .disabled(empty)
                         .accessibilityLabel(Text("Favourite \(fav.label)"))
+                        .accessibilityValue(isActive ? Text("active") : empty ? Text("empty") : Text(verbatim: ""))
                         .accessibilityHint(empty ? Text("This favourite is empty on the unit") : Text(verbatim: ""))
                     }
                 }
@@ -83,7 +91,9 @@ struct LightsView: View {
         let real = store.value("lighting", "brightness_zone_\(lamp.zone)")?.number.map(Int.init)
         let current = real.flatMap { $0 <= 11 ? $0 : nil }
         // Two lamps share a name ("Background lighting"): VoiceOver hears the group too.
-        return MenuPicker(label: Text(lamp.label), spoken: Text(group) + Text(verbatim: ", ") + Text(lamp.label), selection: Binding(get: { current ?? -1 }, set: { if (0...10).contains($0) { run(Self.lamp(lamp.what, $0)) } })) {
+        return MenuPicker(label: Text(lamp.label), spoken: Text(group) + Text(verbatim: ", ") + Text(lamp.label),
+                          value: current == 0 ? Text("Off") : current == 11 ? Text("Default") : Text(verbatim: current.map(String.init) ?? "—"),
+                          selection: Binding(get: { current ?? -1 }, set: { if (0...10).contains($0) { run(Self.lamp(lamp.what, $0)) } })) {
             if current == nil { Text(verbatim: "—").tag(-1) }
             Text("Off").tag(0)
             ForEach(1...10, id: \.self) { Text(verbatim: "\($0)").tag($0) }

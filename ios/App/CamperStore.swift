@@ -92,11 +92,57 @@ final class CamperStore {
     func lockReason(_ function: String) -> LocalizedStringResource? {
         if controlEnabled(function) { return nil }
         if case .unsupported = state.gate { return "This camper unit is not supported yet" }
+        // The pill's words for the link state.
         switch link {
         case .rest: return "Disconnected to save energy — tap to connect"
-        case .connecting, .pairing: return "Connecting…"
+        case .connecting: return "Connecting…"
+        case .pairing: return "Not available while pairing"
+        case .unreachable: return "Not available while the van is unreachable"
         case .up where !isStale: return "Waiting for the camper unit's data"
-        case .up, .off, .unreachable: return "Not available while the van is offline"
+        case .up, .off: return "Not available while the van is offline"
+        }
+    }
+
+    /// What the user sees of the last action, pinned under the pill: a command or a tap-to-connect.
+    var feedback: Feedback?
+    @ObservationIgnored private var feedbackGen = 0
+
+    /// A command is on its way (the controls wait for it).
+    var isSending: Bool { if case .sending = feedback { true } else { false } }
+
+    /// Sends `cmd` with the feedback: "Sending…", then the result, which clears after 8 s.
+    ///
+    /// - Requirement: R_IOS_HONEST
+    @discardableResult
+    func run(_ cmd: Command) async -> CommandResult {
+        show(.sending(function: cmd.function), clearAfter: nil)
+        let r = await send(cmd)
+        show(.result(r, function: cmd.function), clearAfter: 8)
+        return r
+    }
+
+    /// The user's tap in the power-save rest: "Connecting…" until `connect()` returns, then its
+    /// outcome (the cooldown's countdown, or why it failed); nothing once connected.
+    ///
+    /// - Requirement: R_IOS_POWER_SAVE, R_IOS_HONEST
+    func tapToConnect() async {
+        show(.connecting, clearAfter: nil)
+        let outcome = await connect()
+        switch outcome {
+        case .connected: show(nil, clearAfter: nil)
+        case .resting(let until): show(.connect(outcome), clearAfter: max(1, until.timeIntervalSince(now())))
+        case .failed: show(.connect(outcome), clearAfter: 8)
+        }
+    }
+
+    private func show(_ f: Feedback?, clearAfter seconds: TimeInterval?) {
+        feedbackGen += 1
+        let gen = feedbackGen
+        feedback = f
+        guard let seconds else { return }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            if let self, self.feedbackGen == gen { self.feedback = nil }
         }
     }
 
@@ -147,16 +193,41 @@ final class CamperStore {
         save()
     }
 
-    /// One connect attempt; a failure shows in `link`. No redial loop (`R_IOS_POWER_SAVE`).
+    /// One connect attempt and its outcome. No redial loop (`R_IOS_POWER_SAVE`); inside the power-save
+    /// rest it does not dial and says when a dial can work.
     ///
     /// - Requirement: R_IOS_BLE_DIRECT, R_IOS_POWER_SAVE
-    func connect() async {
-        try? await session.ensureConnected(timeout: .seconds(20))
+    @discardableResult
+    func connect() async -> ConnectOutcome {
+        if case .rest(let until) = link, until > now() { return .resting(until: until) }
+        do {
+            try await session.ensureConnected(timeout: .seconds(20))
+            return .connected
+        } catch {
+            if case .resting(let s) = Failure(error) { return .resting(until: now().addingTimeInterval(TimeInterval(s))) }
+            return .failed(Failure(error))
+        }
     }
 
     func send(_ cmd: Command) async -> CommandResult {
         await session.run(cmd)
     }
+}
+
+/// What the user sees of their last action.
+enum Feedback: Equatable {
+    case sending(function: String)
+    case result(CommandResult, function: String)
+    case connecting
+    case connect(ConnectOutcome)
+}
+
+/// The outcome of a connect attempt.
+enum ConnectOutcome: Equatable {
+    case connected
+    /// The unit's reconnect cooldown runs until this time.
+    case resting(until: Date)
+    case failed(Failure)
 }
 
 /// An age like the web UI's `agoText`: "just now" under 90 s, then minutes, hours (under 48 h), days.

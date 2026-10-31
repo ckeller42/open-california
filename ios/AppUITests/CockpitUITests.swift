@@ -28,7 +28,7 @@ final class CockpitUITests: XCTestCase {
         for name in ["Camping mode", "Lighting", "Cooler", "Air heater"] {
             XCTAssertTrue(app.buttons[name].exists, name)
         }
-        try app.audit()
+        try app.auditScreen()
     }
 
     /// - Test: T_IOS_UI_NOT_INSTALLED
@@ -38,10 +38,11 @@ final class CockpitUITests: XCTestCase {
         let app = launch("noCooler")
         XCTAssertTrue(app.buttons["Camping mode"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Cooler"].exists)
-        try app.audit()
+        try app.auditScreen()
     }
 
-    /// Review Focus 4: a state hours old shows its age, and the controls are disabled.
+    /// Review Focus 4: a state hours old shows its age. The button still opens its screen, as the
+    /// web UI's tiles do, and there the controls are locked with the reason.
     ///
     /// - Test: T_IOS_UI_STALE_AS_OF
     /// - Verifies: R_IOS_HONEST, R_IOS_BACKGROUND_LINK
@@ -50,8 +51,11 @@ final class CockpitUITests: XCTestCase {
         let app = launch("staleRestore")
         // The pill is one element for VoiceOver, with the age in full words.
         XCTAssertTrue(app.staticTexts["offline, as of 5 hours ago"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["Camping mode"].isEnabled)
-        try app.audit()
+        try app.auditScreen()
+        app.buttons["Camping mode"].tap()
+        XCTAssertTrue(app.navigationBars["Camping mode"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Not available while the van is offline"].exists)
+        try app.auditScreen()
     }
 
     /// Every tab passes the accessibility audit, in light and dark.
@@ -63,13 +67,11 @@ final class CockpitUITests: XCTestCase {
         for dark in [false, true] {
             let app = launch("campingOn", dark: dark)
             XCTAssertTrue(app.otherElements["battery-ring"].waitForExistence(timeout: 10))
-            try app.audit()
-            app.swipeUp()  // the tiles near the tab bar, scrolled into view
-            try app.audit()
+            try app.auditScreen()
             for tab in ["Energy", "Water"] {
                 app.tabBars.buttons[tab].tap()
                 XCTAssertTrue(app.navigationBars[tab].waitForExistence(timeout: 5))
-                try app.audit()
+                try app.auditScreen()
             }
             app.terminate()
         }
@@ -79,7 +81,7 @@ final class CockpitUITests: XCTestCase {
 /// The control screens, opened from the cockpit buttons, each with the accessibility audit.
 final class ControlUITests: XCTestCase {
     /// Each cockpit button opens its control screen (none is a no-op); every control screen and the
-    /// energy mode pass the audit, in light and dark, also scrolled to the end.
+    /// energy mode pass the audit, in light and dark, over their whole scroll height.
     ///
     /// - Test: T_IOS_UI_CONTROLS_AUDIT
     /// - Verifies: R_IOS_LOOK, R_IOS_FUNCTIONS, R_IOS_TESTED
@@ -90,63 +92,132 @@ final class ControlUITests: XCTestCase {
             app.launchArguments = ["-UITestFixture", "campingOn", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
             if dark { app.launchArguments += ["-UIUserInterfaceStyle", "dark"] }
             app.launch()
-            for (button, title, control) in [("Camping mode", "Camping mode", "Rear USB ports"), ("Lighting", "Lighting", "All lights"),
-                                             ("Cooler", "Cooler", "Refrigerator box"), ("Air heater", "Air heater", "Immediate heating")] {
-                let tile = app.buttons[button]
-                XCTAssertTrue(tile.waitForExistence(timeout: 10), button)
+            for (title, control) in [("Camping mode", "Rear USB ports"), ("Lighting", "All lights"),
+                                     ("Cooler", "Refrigerator box"), ("Air heater", "Immediate heating")] {
+                let tile = app.buttons[title]
+                XCTAssertTrue(tile.waitForExistence(timeout: 10), title)
                 if !tile.isHittable { app.swipeUp() }
                 tile.tap()
                 XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), title)
                 XCTAssertTrue(app.descendants(matching: .any)[control].exists, control)
                 Thread.sleep(forTimeInterval: 1)  // the push animation ends
-                print("AUDIT screen \(title)")
-                try app.audit()
-                // A drag with a hold: the content rests where the finger stops (no momentum, no bounce).
-                let scroll = app.scrollViews.firstMatch
-                scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)).press(
-                    forDuration: 0.2, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)),
-                    withVelocity: .default, thenHoldForDuration: 0.5)
-                Thread.sleep(forTimeInterval: 1)
-                print("AUDIT screen \(title), scrolled")
-                try app.audit()
+                try app.auditScreen()
                 app.navigationBars[title].buttons.element(boundBy: 0).tap()
-                XCTAssertTrue(app.navigationBars["Cockpit"].waitForExistence(timeout: 5), app.debugDescription)
+                XCTAssertTrue(app.navigationBars["Cockpit"].waitForExistence(timeout: 5))
             }
             app.tabBars.buttons["Energy"].tap()
             XCTAssertTrue(app.descendants(matching: .any)["Energy mode"].waitForExistence(timeout: 5))
-            try app.audit()
+            try app.auditScreen()
             app.terminate()
         }
     }
 }
 
 extension XCUIApplication {
+    /// One audit pass: the labels it exempted, and the labels that were inside the clear part of the
+    /// screen and had no issue.
+    struct AuditPass {
+        var exempt: [String] = []
+        var clean: Set<String> = []
+        /// Element-less text issues of a scrolled pass (glyphs cut at the edge under a bar).
+        var cutGlyphs = 0
+    }
+
+    /// Audits the open screen over its whole height: at the top, then after each scroll until the
+    /// content stops moving. An element exempt in one pass (see `audit(scrolled:)`) must be audited
+    /// cleanly inside the clear part of the screen in another pass; on a screen that does not scroll
+    /// nothing is exempt.
+    @MainActor
+    func auditScreen(file: StaticString = #filePath, line: UInt = #line) throws {
+        Thread.sleep(forTimeInterval: 1)  // a launch read or a push has settled
+        _ = stableFrames()
+        var passes = [try audit(scrolled: false)]
+        for _ in 0..<4 {
+            let before = stableFrames()
+            // A drag with a hold: the content rests where the finger stops (no momentum, no bounce).
+            let area = windows.firstMatch
+            // In the left margin, outside every card: a press opens or highlights nothing.
+            area.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.75)).press(
+                forDuration: 0.2, thenDragTo: area.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.35)),
+                withVelocity: .default, thenHoldForDuration: 0.5)
+            // Wait until the content rests (a page that fits bounces back), then see whether it moved.
+            if stableFrames() == before { break }
+            passes.append(try audit(scrolled: true))
+        }
+        let clean = passes.reduce(into: Set<String>()) { $0.formUnion($1.clean) }
+        // A cut row leaves at most a few pieces; more would hide real text without an element.
+        for p in passes where p.cutGlyphs > 12 { XCTFail("\(p.cutGlyphs) element-less text issues in one scrolled pass", file: file, line: line) }
+        for label in passes.flatMap(\.exempt) where !clean.contains(label) {
+            XCTFail("\(label): exempt, but never audited inside the clear screen", file: file, line: line)
+        }
+        // Back to the top for the caller.
+        for _ in 0..<passes.count { swipeDown() }
+    }
+
+    /// `frames()` once two reads 0.3 s apart agree (at most 3 s).
+    @MainActor
+    private func stableFrames() -> [String: CGRect] {
+        var last = frames()
+        for _ in 0..<10 {
+            Thread.sleep(forTimeInterval: 0.3)
+            let now = frames()
+            if now == last { return now }
+            last = now
+        }
+        return last
+    }
+
+    /// The frames of the labelled elements (one snapshot: a cheap check whether the content moved).
+    @MainActor
+    private func frames() -> [String: CGRect] {
+        var out: [String: CGRect] = [:]
+        func walk(_ e: XCUIElementSnapshot) {
+            if !e.label.isEmpty { out[e.label] = e.frame }
+            e.children.forEach(walk)
+        }
+        if let s = try? snapshot() { walk(s) }
+        return out
+    }
+
     /// The accessibility audit; each issue is logged with its element.
     ///
     /// Exemption (the only one): a contrast, Dynamic Type or clipping issue of an element that is
-    /// not fully inside the clear part of the screen — under the navigation bar or the floating tab
-    /// bar, in the 44 pt band next to either where the system blurs scrolled content (the scroll edge
-    /// effect), or scrolled off the screen. There the element is measured against
-    /// the blur or against nothing, not its own background; the tests audit each screen again
-    /// after a scroll, where the same element is audited like any other. The tab bar band also
-    /// covers the system tab bar items themselves. Each exemption is recorded as an activity with an
-    /// attachment, so it shows in the `.xcresult`.
+    /// not fully inside the clear part of the screen — under the floating tab bar or in the 44 pt
+    /// band above it, below the screen, and (only after a scroll, `scrolled`) under the navigation
+    /// bar or in the 44 pt band under it. There the system blurs scrolled content (the scroll edge
+    /// effect) or there is nothing to measure. `auditScreen` checks that each exempt element was
+    /// audited cleanly in another pass. Also exempt after a scroll only: an "inaccessible text"
+    /// issue with no element, from glyphs cut at the edge under a bar (at most 12 per pass). Each
+    /// exemption is attached to the result (kept on success).
     @MainActor
-    func audit() throws {
+    func audit(scrolled: Bool) throws -> AuditPass {
+        print("AUDIT pass on \(navigationBars.firstMatch.identifier) scrolled=\(scrolled)")
         let screen = windows.firstMatch.frame
-        let top = navigationBars.firstMatch.exists ? navigationBars.firstMatch.frame.maxY + 44 : screen.minY
+        let top = scrolled && navigationBars.firstMatch.exists ? navigationBars.firstMatch.frame.maxY + 44 : screen.minY
         let bottom = tabBars.firstMatch.exists ? tabBars.firstMatch.frame.minY - 44 : screen.maxY
         let clear = CGRect(x: screen.minX, y: top, width: screen.width, height: max(0, bottom - top))
+        var pass = AuditPass()
+        pass.clean = Set(frames().filter { clear.contains($0.value) }.keys)
         try performAccessibilityAudit { issue in
-            let outside = issue.element.map { !clear.contains($0.frame) } ?? false
+            let label = issue.element?.label ?? "-"
+            pass.clean.remove(label)
+            // After a scroll, the rows cut at the hard edge under the bars leave glyph pieces with no
+            // element ("potentially inaccessible text"); the same rows are elements in the top pass.
+            let cutGlyphs = scrolled && issue.element == nil && issue.auditType == .elementDetection
+            if cutGlyphs { pass.cutGlyphs += 1 }
+            let outside = cutGlyphs || issue.element.map { !clear.contains($0.frame) } ?? false
                 && [.contrast, .dynamicType, .textClipped].contains(issue.auditType)
-            print("AUDIT \(outside ? "exempt (outside the clear screen) " : "")\(issue.compactDescription) | \(issue.element?.label ?? "-") \(issue.element.map { "\($0.frame)" } ?? "") | \(issue.detailedDescription)")
+            print("AUDIT \(outside ? "exempt (outside the clear screen) " : "")\(issue.compactDescription) | \(label) \(issue.element.map { "\($0.frame)" } ?? "") | \(issue.detailedDescription)")
             if outside {
+                if !cutGlyphs { pass.exempt.append(label) }
                 XCTContext.runActivity(named: "Audit exemption (outside the clear screen): \(issue.compactDescription)") { activity in
-                    activity.add(XCTAttachment(string: "\(issue.element?.label ?? "-")\n\(issue.detailedDescription)"))
+                    let attachment = XCTAttachment(string: "\(label)\n\(issue.detailedDescription)")
+                    attachment.lifetime = .keepAlways
+                    activity.add(attachment)
                 }
             }
             return outside
         }
+        return pass
     }
 }

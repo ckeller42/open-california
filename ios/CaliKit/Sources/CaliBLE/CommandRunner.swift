@@ -9,8 +9,8 @@ public enum CommandResult: Sendable, Equatable {
     case applied
     /// Every frame was ACKed, but no confirmation arrived before the deadline.
     case sent
-    case refused(String)
-    case elsewhere(String)
+    /// Not sent: a gate of the planner or of the runner (`Refusal.elsewhere`: not a command of this app).
+    case refused(Refusal)
     /// The unit does not speak CommunicationVersion 2, or this link has no `general` frame yet.
     case notSupported
     /// Another command is still running (control_run.c `CALI_CTL_BUSY`); nothing was written.
@@ -18,12 +18,35 @@ public enum CommandResult: Sendable, Equatable {
     /// This link has no frame of the command's function yet (control_run.c `CALI_CTL_NOT_READY`).
     case notReady
     /// Nothing reached the unit.
-    case failed(String)
+    case failed(Failure)
     /// The frames did not go out before the deadline.
     case timeout
     /// A frame went out and the unit may have acted on it, but no answer can come: the link dropped
     /// after a frame was issued, or a later frame was rejected after an earlier one was ACKed.
     case unconfirmed
+}
+
+/// Why nothing reached the unit.
+///
+/// - Requirement: R_IOS_HONEST, R_IOS_I18N, R_IOS_POWER_SAVE
+public enum Failure: Sendable, Equatable {
+    /// The unit's reconnect cooldown after the power-save hang-up: try again in this many seconds.
+    case resting(retryAfter: Int)
+    case bluetoothOff
+    case unreachable
+    /// The unit ended the link before a frame went out.
+    case linkEnded
+    /// The unit did not take the frame (the write was refused or not issued).
+    case notTaken
+
+    /// The failure of an `ensureConnected` error.
+    public init(_ error: Error) {
+        switch error {
+        case SessionError.inRest(let after): self = .resting(retryAfter: Int(after.components.seconds) + 1)
+        case SessionError.bluetooth: self = .bluetoothOff
+        default: self = .unreachable
+        }
+    }
 }
 
 /// One control command in calictl's grammar: `set <function> <what> <value>`.
@@ -52,7 +75,7 @@ extension CamperSession {
     /// - Parameter connectTimeout: the budget of `ensureConnected` when the link is not ready.
     /// - Requirement: R_IOS_HONEST, R_IOS_NO_ROOF, R_IOS_V2_ONLY, R_IOS_FUNCTIONS, R_IOS_POWER_SAVE
     public func run(_ cmd: Command, connectTimeout: Duration = .seconds(10)) async -> CommandResult {
-        if cmd.function == "roof" { return .refused("This app does not move the roof.") }
+        if cmd.function == "roof" { return .refused(.noRoof) }
         // Single flight (control_run.c CALI_CTL_BUSY). It also keeps a hang-up during the command
         // from starting the power-save rest (session.c `!cali_ctl_busy()`).
         guard commands == 0 else { return .busy }
@@ -60,12 +83,8 @@ extension CamperSession {
         defer { endCommand() }
         do {
             try await ensureConnected(timeout: connectTimeout)
-        } catch SessionError.inRest(let after) {
-            return .failed("The camper unit saves power. Try again in \(after.components.seconds + 1) s.")
-        } catch SessionError.bluetooth {
-            return .failed("Bluetooth is not available.")
         } catch {
-            return .failed("The camper unit is not reachable.")
+            return .failed(Failure(error))
         }
         // Only frames of this link count (control_run.c cali_session_frame_live): the gate needs this
         // link's `general`, the command its own function's frame.
@@ -74,7 +93,7 @@ extension CamperSession {
 
         let since = sinceFirstBeat ?? .zero
         if since < CamperGATT.armDelay { try? await clock.sleep(for: CamperGATT.armDelay - since) }
-        guard isReady else { return .failed("The camper unit ended the link.") }
+        guard isReady else { return .failed(.linkEnded) }
 
         // The phone's wall clock read as UTC, taken at each plan (control_run.c adds the time waited).
         let plan: @Sendable (CamperState) -> PlanResult = { st in
@@ -88,7 +107,7 @@ extension CamperSession {
             defer { unsubscribePushes(id) }
             if let r = await write(CaliControl.pullPlan(), until: clock.countdown(CaliControl.deadline)) {
                 // No command frame went out (control_run.c: `sent = !O.pull && …`).
-                return r == .unconfirmed ? .failed("The camper unit ended the link.") : r
+                return r == .unconfirmed ? .failed(.linkEnded) : r
             }
             try? await race(clock, CaliControl.configPull) {
                 for await p in pushes {
@@ -99,9 +118,9 @@ extension CamperSession {
                     }
                 }
             }
-            guard isReady else { return .failed("The camper unit ended the link.") }
+            guard isReady else { return .failed(.linkEnded) }
             planned = plan(state)
-            if planned == .needsLightConfig { return .refused(CaliControl.wakeupUnknown) }
+            if planned == .needsLightConfig { return .refused(.wakeupUnknown) }
         }
 
         switch planned {
@@ -112,10 +131,10 @@ extension CamperSession {
             let left = clock.countdown(CaliControl.deadline)
             if let r = await write(frames, until: left) { return r }
             return await confirm(cmd, pushes: pushes, within: left())
-        case .refused(let why): return .refused(why)
-        case .elsewhere(let why): return .elsewhere(why)
-        case .badValue: return .refused("This value is not valid for the command.")
-        case .needsLightConfig: return .refused(CaliControl.wakeupUnknown)
+        case .refused(let why): return .refused(Refusal(planner: why))
+        case .elsewhere(let why): return .refused(Refusal(planner: why))
+        case .badValue: return .refused(.badValue)
+        case .needsLightConfig: return .refused(.wakeupUnknown)
         }
     }
 
@@ -123,8 +142,8 @@ extension CamperSession {
     /// the result. A frame outside the write allow-list refuses the whole command before any write.
     func write(_ frames: [ControlFrame], until left: @Sendable () -> Duration) async -> CommandResult? {
         // The satellite's allow-list (cali_ctl_write_ok); the V3 deny-list stays as an extra check.
-        if let bad = frames.first(where: { !CaliControl.writeOK($0.char, $0.data.count) || CamperGATT.forbiddenWrites.contains($0.char) }) {
-            return .refused(String(format: "This app never writes char %04x.", bad.char))
+        if frames.contains(where: { !CaliControl.writeOK($0.char, $0.data.count) || CamperGATT.forbiddenWrites.contains($0.char) }) {
+            return .refused(.forbiddenWrite)
         }
         var acked = false
         for f in frames {
@@ -142,7 +161,7 @@ extension CamperSession {
                 // Not issued (notConnected) or refused by the unit (writeRejected): nothing more goes out.
                 // After an ACKed frame the unit may have acted on it, so that is unconfirmed; C says
                 // FAILED for a refusal at any frame (control_run.c:226). This stays the more honest result.
-                return acked ? .unconfirmed : .failed("The camper unit did not take the command.")
+                return acked ? .unconfirmed : .failed(.notTaken)
             }
         }
         return nil

@@ -358,6 +358,23 @@
         }
       }
     },
+    "Bluetooth is off or not allowed for this app": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth ist aus oder für diese App nicht erlaubt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth is off or not allowed for this app"
+          }
+        }
+      }
+    },
     "Cabinet": {
       "extractionState": "manual",
       "localizations": {
@@ -490,23 +507,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cockpit"
-          }
-        }
-      }
-    },
-    "Command failed: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Befehl fehlgeschlagen: %@"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Command failed: %@"
           }
         }
       }
@@ -694,6 +694,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "ECO"
+          }
+        }
+      }
+    },
+    "ECO needs a solar panel": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ECO braucht ein Solarmodul"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ECO needs a solar panel"
           }
         }
       }
@@ -987,6 +1004,23 @@
         }
       }
     },
+    "HI": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HI"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HI"
+          }
+        }
+      }
+    },
     "Heater deactivated — not while the engine or the auxiliary water heater is running": {
       "extractionState": "manual",
       "localizations": {
@@ -1276,6 +1310,40 @@
         }
       }
     },
+    "Not available in this app": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In dieser App nicht verfügbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not available in this app"
+          }
+        }
+      }
+    },
+    "Not available while pairing": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Während der Kopplung nicht verfügbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not available while pairing"
+          }
+        }
+      }
+    },
     "Not available while the van is offline": {
       "extractionState": "manual",
       "localizations": {
@@ -1289,6 +1357,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not available while the van is offline"
+          }
+        }
+      }
+    },
+    "Not available while the van is unreachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht verfügbar, solange das Fahrzeug nicht erreichbar ist"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not available while the van is unreachable"
+          }
+        }
+      }
+    },
+    "Not sent: this app does not write this setting": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gesendet: Diese App schreibt diese Einstellung nicht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent: this app does not write this setting"
           }
         }
       }
@@ -1837,19 +1939,36 @@
         }
       }
     },
-    "Start the fuel-burning auxiliary air heater (%@)? It is not live-verified. Continue?": {
+    "Start the fuel-burning air heater now for %lld min at %@? It is not live-verified.": {
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kraftstoffbetriebene Luftstandheizung starten (%@)? Nicht live-verifiziert. Fortfahren?"
+            "value": "Kraftstoffbetriebene Luftstandheizung jetzt für %lld min auf %@ starten? Nicht live-verifiziert."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start the fuel-burning auxiliary air heater (%@)? It is not live-verified. Continue?"
+            "value": "Start the fuel-burning air heater now for %lld min at %@? It is not live-verified."
+          }
+        }
+      }
+    },
+    "Start the fuel-burning air heater now? It is not live-verified.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kraftstoffbetriebene Luftstandheizung jetzt starten? Nicht live-verifiziert."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start the fuel-burning air heater now? It is not live-verified."
           }
         }
       }
@@ -1905,6 +2024,40 @@
         }
       }
     },
+    "Stop the timer first": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuerst den Timer stoppen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop the timer first"
+          }
+        }
+      }
+    },
+    "Switch the refrigerator box off first": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuerst die Kühlbox ausschalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch the refrigerator box off first"
+          }
+        }
+      }
+    },
     "Switch the refrigerator box on first": {
       "extractionState": "manual",
       "localizations": {
@@ -1935,6 +2088,91 @@
           "stringUnit": {
             "state": "translated",
             "value": "The camper unit did not answer in time"
+          }
+        }
+      }
+    },
+    "The camper unit did not take the command": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Camper-Einheit hat den Befehl nicht angenommen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camper unit did not take the command"
+          }
+        }
+      }
+    },
+    "The camper unit ended the link — nothing was sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Camper-Einheit hat die Verbindung beendet — nichts wurde gesendet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camper unit ended the link — nothing was sent"
+          }
+        }
+      }
+    },
+    "The camper unit is not reachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Camper-Einheit ist nicht erreichbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camper unit is not reachable"
+          }
+        }
+      }
+    },
+    "The camper unit refused the command": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Camper-Einheit hat den Befehl abgelehnt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camper unit refused the command"
+          }
+        }
+      }
+    },
+    "The camper unit saves power — try again in %lld s": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Camper-Einheit spart Energie — in %lld s erneut versuchen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camper unit saves power — try again in %lld s"
           }
         }
       }
@@ -1973,6 +2211,108 @@
         }
       }
     },
+    "The refrigerator box's settings are not known yet — try again in a moment": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Einstellungen der Kühlbox sind noch nicht bekannt — bitte gleich noch einmal versuchen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The refrigerator box's settings are not known yet — try again in a moment"
+          }
+        }
+      }
+    },
+    "The unit currently does not allow changing the energy mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Einheit lässt den Energiemodus gerade nicht ändern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The unit currently does not allow changing the energy mode"
+          }
+        }
+      }
+    },
+    "The unit has not reported its wake-up light settings yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Einheit hat ihre Wecklicht-Einstellungen noch nicht gemeldet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The unit has not reported its wake-up light settings yet"
+          }
+        }
+      }
+    },
+    "The wake-up light needs at least one area": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Wecklicht braucht mindestens einen Bereich"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The wake-up light needs at least one area"
+          }
+        }
+      }
+    },
+    "The wake-up light needs the time — set it again": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Wecklicht braucht die Uhrzeit — bitte erneut einstellen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The wake-up light needs the time — set it again"
+          }
+        }
+      }
+    },
+    "This app does not move the roof": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese App bewegt das Aufstelldach nicht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This app does not move the roof"
+          }
+        }
+      }
+    },
     "This camper unit is not supported yet": {
       "extractionState": "manual",
       "localizations": {
@@ -2003,6 +2343,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "This favourite is empty on the unit"
+          }
+        }
+      }
+    },
+    "This value is not valid": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Wert ist nicht gültig"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This value is not valid"
           }
         }
       }
@@ -2071,6 +2428,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn off continuous heating? You can only turn continuous heating on again using the controls in your California."
+          }
+        }
+      }
+    },
+    "Unknown fault of the energy system": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannter Fehler im Energiesystem"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown fault of the energy system"
           }
         }
       }
@@ -2207,6 +2581,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "connecting…"
+          }
+        }
+      }
+    },
+    "empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "leer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "empty"
           }
         }
       }
