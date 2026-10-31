@@ -80,10 +80,11 @@ struct IntentTests {
         for s in shortcuts {
             #expect(!String(reflecting: s).localizedCaseInsensitiveContains("heater"), "\(s)")
         }
-        // Every `: AppIntent` conformer in ios/App/**.
+        // Every conformer to `AppIntent` or one of its sub-protocols (`SetValueIntent`, `OpenIntent`, …),
+        // also through an extension, in ios/App/**.
         let app = Self.root.appending(path: "ios/App")
         let files = try #require(FileManager.default.enumerator(at: app, includingPropertiesForKeys: nil)?.allObjects as? [URL])
-        let conformer = try Regex(#"(?:struct|class|enum)\s+(\w+)\s*:[^{]*\bAppIntent\b"#)
+        let conformer = try Regex(#"(?:struct|class|enum|extension)\s+(\w+)\s*:[^{]*\b\w*Intent\b"#)
         var intents: Set<String> = []
         for url in files where url.pathExtension == "swift" {
             let src = try String(contentsOf: url, encoding: .utf8)
