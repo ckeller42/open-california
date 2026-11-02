@@ -53,6 +53,7 @@ cross-language-codec
 api
 simulation-and-testing
 mock-unit-guide
+howto-app-lab
 howto-android-phone-lab
 UI-DESIGN-RATIONALE
 building-the-docs

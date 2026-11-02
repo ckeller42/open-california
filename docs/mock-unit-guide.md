@@ -85,8 +85,8 @@ recipes below.
 ### The Bumble peripheral
 
 Needs [Bumble](https://google.github.io/bumble/) (`bumble` is pinned in `requirements-dev.txt`;
-`bumble[android]` for the {term}`app lab`, which also needs the Android SDK and emulator). How you bridge
-its HCI is what changes per use:
+the {term}`app lab` has its own Bumble venv with `grpcio` and `protobuf` for the netsim transport,
+and also needs the Android SDK and emulator). How you bridge its HCI is what changes per use:
 
 - **Virtual radio (CI, no dongle).** calictl's pairing tests link the peripheral to a Bumble
   {term}`central` over a `LocalLink` — no BlueZ, no kernel, no radio. This runs on every PR
@@ -96,8 +96,8 @@ its HCI is what changes per use:
 
 ### The Android app lab
 
-The full emulator setup (SDK, AVD, the `bumble[android]` venv, netsim) and the one-command
-`labctl.sh up`/`down`/`status` wrapper are in
+Set it up with {doc}`howto-app-lab`. The full emulator setup (SDK, AVD, the Bumble venv, netsim)
+and the one-command `labctl.sh up`/`down`/`status` wrapper are in
 [`tools/applab/README.md`](https://github.com/ckeller42/open-california/blob/main/tools/applab/README.md).
 It is local-only tooling — nothing from the APK or the emulator is committed.
 
@@ -146,8 +146,9 @@ The fake's log (`${TMPDIR:-/tmp}/applab/fake_unit.log`) carries `READ <fn>` and
 
 ### Run the app lab
 
-See [`tools/applab/README.md`](https://github.com/ckeller42/open-california/blob/main/tools/applab/README.md).
-In short: `FAKE_UNIT_VIN=<vin> tools/applab/labctl.sh up` starts the emulator, the fake and the app;
+See {doc}`howto-app-lab` and
+[`tools/applab/README.md`](https://github.com/ckeller42/open-california/blob/main/tools/applab/README.md).
+In short: `. ~/android-lab/env.sh && tools/applab/labctl.sh up` starts the emulator, the fake and the app;
 `tools/applab/pair_wizard.py` walks the pairing sheets and types the passkey; `tools/applab/adbui.py`
 drives the UI and captures screenshots.
 

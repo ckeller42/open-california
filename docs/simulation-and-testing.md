@@ -263,7 +263,7 @@ they can be diffed against `control.build()`.
 
 The lab is how the mock learned the app's leave-unchanged defaults and the roof {term}`SafetyCounter`
 stream. It is also how the fake's pairing behaviour is checked against the app.
-It is local-only tooling: nothing from the APK or the emulator is committed. Setup and usage are in
+It is local-only tooling: nothing from the APK or the emulator is committed. Setup: {doc}`howto-app-lab`; every detail is in
 [`tools/applab/README.md`](https://github.com/ckeller42/open-california/blob/main/tools/applab/README.md).
 
 App **captures** from the real van are a separate path. `tools/capture_diff.py` diffs an HCI
@@ -280,7 +280,7 @@ unit saw, in calictl's trace schema, merged with the runner's `step` events. `10
 `<vin-hash>`; passkeys are never stored.
 
 ```sh
-~/esp-venv/bin/python tools/applab/walk.py cooler            # on thinky, lab up (tools/applab/README.md)
+python3 tools/applab/walk.py cooler                         # on the lab host, lab up
 python3 -m tools.capture_diff tests/vectors/app/cooler.jsonl --recording
 python3 -m tools.app_parity tests/vectors/app/session.jsonl  # app / calictl / ESP lifecycle report
 ```
@@ -293,7 +293,7 @@ subscribe order, heartbeat start and period, reads, disconnects) next to calictl
 satellite's. It is a report, not a test: nothing asserts.
 
 **Recorded, not generated.** There is no `--check`: a new APK version means re-recording by hand
-on thinky and committing the new files, with the evidence-ledger rows that name them. The header's
+on the lab host ({doc}`howto-app-lab`) and committing the new files, with the evidence-ledger rows that name them. The header's
 `recorded_by` is the only version signal.
 
 `tests/vectors/app/` holds 12 recordings (app 5.0.8), each named by the evidence-ledger rows

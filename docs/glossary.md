@@ -260,7 +260,7 @@ Fake unit
 
 App lab
   The real vendor app in an Android emulator against the fake unit (`tools/applab/`): screens
-  in any state, and the app's frames diffed against calictl's.
+  in any state, and the app's frames diffed against calictl's. See {doc}`howto-app-lab`.
 
 Phone app lab
   The real app on the owner's phone against the real unit, driven over wireless adb; its HCI

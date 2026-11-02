@@ -29,6 +29,7 @@ CHECKED_PAGES = [
     "docs/firmware.md",
     "docs/hardware.md",
     "docs/howto-android-phone-lab.md",
+    "docs/howto-app-lab.md",
     "docs/howto-esp-first-flash.md",
     "docs/howto-esp-standalone.md",
     "docs/howto-esp-wifi-setup.md",
