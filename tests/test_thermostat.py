@@ -258,6 +258,17 @@ def test_web_level_change_ends_auto():
     _, st = _auto(RUN)
     out, _ = _step(st, now_ms=1000, heater={**RUN, "HeatingLevel": 0})
     assert out["mode"] == "AUTO"
+    # the slider moved during the verify window of our own level command
+    _, st = _auto(RUN)
+    cold = {"alias": "cabin", "value": 1000, "age_ms": 0}
+    t = CFG["min_dwell_ms"]
+    out, st = _step(st, now_ms=t, heater=RUN, ref=cold)
+    assert out["cmds"] == [("level", 10)]
+    out, _ = _step(st, now_ms=t + 1000, heater={**RUN, "HeatingLevel": 7}, ref=cold)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "FOREIGN_CHANGE", [])
+    # ... or switched continuous heating on meanwhile
+    out, _ = _step(st, now_ms=t + 1000, heater={**CONT, "HeatingLevel": 5}, ref=cold)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "FOREIGN_CHANGE", [])
 
 
 def test_power_on_retried_once_only_when_readback_off():
@@ -348,6 +359,9 @@ def test_fault_codes_end_auto(code):
     _, st = _auto(RUN)
     bad = {**RUN, "ErrorCode": code}
     out, st = _step(st, now_ms=1000, heater=bad)
+    if code == 1:  # low battery: a normal stop (spec §4.4, §9.3)
+        assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "BATTERY_LOW", [("power", "off")])
+        return
     want = "LOCKED" if code == 4 else "FAULT_%d" % code
     assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", want, [])
     out, st = _step(st, now_ms=P, heater=bad)
@@ -374,6 +388,42 @@ def test_battery_low_after_hold():
     _, st = _step(st, now_ms=2 * P, heater=RUN, batt2_dv=125)
     out, _ = _step(st, now_ms=P + CFG["batt_hold_ms"], heater=RUN, batt2_dv=118)
     assert out["mode"] == "AUTO"
+    # ErrorCode 1 stops at once; continuous heating with permanent off
+    _, st = _auto(CONT)
+    out, _ = _step(st, now_ms=1000, heater={**CONT, "ErrorCode": 1})
+    assert (out["cmds"], out["mode"], out["reason"]) == ([("permanent", "off")], "OFF", "BATTERY_LOW")
+
+
+def test_start_retry_not_after_long_link_gap():
+    _, st = _auto(OFF_H)
+    out, st = _step(
+        st, now_ms=100, heater=None, link_ready=False, cmd={"what": "power", "result": "UNCONFIRMED"}
+    )
+    for t in (V, 3600_000, 3 * 3600_000):
+        out, st = _step(st, now_ms=t, heater=None, link_ready=False)
+        assert out["cmds"] == []
+    out, _ = _step(st, now_ms=3 * 3600_000 + 1, heater=OFF_H)
+    assert (out["cmds"], out["mode"], out["reason"]) == ([], "OFF", "START_NOT_CONFIRMED")
+    # ignition went on in the verify window: no retry either
+    _, st = _auto(OFF_H)
+    out, _ = _step(
+        st, now_ms=V + 1000, heater=OFF_H, ignition_on=True, cmd={"what": "power", "result": "FAILED"}
+    )
+    assert (out["cmds"], out["mode"], out["reason"]) == ([], "OFF", "START_NOT_CONFIRMED")
+
+
+def test_refused_stop_reports_not_applied():
+    _, st = _auto(RUN)
+    _, st = _step(st, now_ms=1000, request="OFF")
+    out, _ = _step(st, now_ms=2000, heater=RUN, cmd={"what": "power", "result": "REFUSED"})
+    assert (out["cmds"], out["mode"], out["reason"]) == ([], "OFF", "NOT_APPLIED")
+    assert out["status"]["heater"] == "RUNNING"
+    # acknowledged, but the readback still runs: one retry, then NOT_APPLIED
+    out, st = _step(st, now_ms=1000 + V, heater=RUN, cmd={"what": "power", "result": "OK"})
+    assert out["cmds"] == [("power", "off")]
+    out, _ = _step(st, now_ms=1000 + 2 * V, heater=RUN)
+    assert (out["cmds"], out["mode"], out["reason"]) == ([], "OFF", "NOT_APPLIED")
+    assert out["status"]["heater"] == "RUNNING"
 
 
 def test_run_ended_by_unit():

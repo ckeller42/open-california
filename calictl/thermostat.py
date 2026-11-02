@@ -275,8 +275,20 @@ def _resend(p: dict, st: dict, inp: dict, full: bool) -> list:
     return [(p["what"], p["value"])]
 
 
-def _pend(what: str, value, now: int) -> dict:
-    return {"what": what, "value": value, "since_ms": now, "tries": 1}
+def _pend(what: str, value, now: int, before: int | None = None) -> dict:
+    """A pending command; ``first_ms`` = first send, ``before`` = the heater's level before it."""
+    return {"what": what, "value": value, "since_ms": now, "tries": 1, "first_ms": now, "before": before}
+
+
+def _start_retry_ok(p: dict, inp: dict, cfg: dict) -> bool:
+    """§9.1: re-send ``power on`` only soon after the first send and while entry still holds."""
+    return (
+        inp["now_ms"] - p["first_ms"] <= cfg["heater_stale_ms"]
+        and inp["enabled"]
+        and (inp["camping_on"] or inp["shore_on"])
+        and inp["ignition_on"] is False
+        and _valid(inp["ref"], cfg)
+    )
 
 
 def _stop(st: dict, can_send: bool, now: int) -> list:
@@ -333,10 +345,13 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        ignition off and a valid reference reading; otherwise it shall refuse with
        ``AUTO_REFUSED_<WHY>`` and send nothing. From OFF it shall send ``runtime``, ``level`` and
        one ``power on`` in that order; a running or continuous heater it shall adopt without a
-       command. It shall end AUTO without a command on a heater fault, a change it did not make,
-       the end of the run, and a command not applied after one retry. A ``power on`` is retried
-       at most once and only when a fresh readback shows the heater off; an unconfirmed command
-       is never re-sent blind. An owner stop, low second battery, overheat or a target exceeded
+       command. It shall end AUTO without a command on a heater fault (ErrorCode 1 excepted: a
+       normal stop, ``BATTERY_LOW``), a change it did not make (also during its own pending level
+       command), the end of the run, and a command not applied after one retry. A ``power on``
+       is retried at most once, only when a fresh readback shows the heater off, within
+       ``heater_stale_ms`` of the first send and while the entry conditions still hold; an
+       unconfirmed command is never re-sent blind. A refused or unapplied stop reports
+       ``NOT_APPLIED``. An owner stop, low second battery, overheat or a target exceeded
        at the minimum level stop the heater (``power off`` or ``permanent off``); with the link
        down the stop waits in ``STOPPING`` and is dropped when the heater changed meanwhile.
        A lost reference switches to a valid backup, else the level goes to ``min_level``.
@@ -387,6 +402,21 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         start = p["what"] == "power" and p["value"] == "on"
         post = snap is not None and now - inp["heater_age_ms"] >= p["since_ms"]  # read after the send
         fail = "START_NOT_CONFIRMED" if start else "NOT_APPLIED"
+        e = st["expect"]
+        moved = (  # someone else moved the heater during our level command
+            p["what"] == "level"
+            and snap is not None
+            and post
+            and hs not in _FAULTS
+            and (
+                (level is not None and level not in (p["value"], p["before"]))
+                or snap["normal"] != e["normal"]
+                or snap["permanent"] != e["permanent"]
+            )
+        )
+        if moved:
+            _end(st)
+            return out("FOREIGN_CHANGE")
         if snap is not None and post and _applied(p, snap):
             st["pending"], st["expect"] = None, snap
         elif hs in _FAULTS:
@@ -395,15 +425,18 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             st["pending"] = None
             if p["value"] != "off":
                 _end(st)
-                return out(fail)
+            return out(fail)  # a refused stop: the heater still runs (status.heater)
         elif res in ("BUSY", "NOT_READY") and link:
+            if start and not _start_retry_ok(p, inp, cfg):
+                _end(st)
+                return out(fail)
             cmds = _resend(p, st, inp, full=inp["cmd"]["what"] != "power")
             p["since_ms"] = now
         elif snap is not None and post and link and now - p["since_ms"] >= cfg["verify_ms"]:
             if p["value"] == "off" and not _same(snap, st["expect"]):
                 st["pending"] = None
                 return out("STOP_DROPPED")
-            if p["tries"] >= 2:
+            if p["tries"] >= 2 or (start and not _start_retry_ok(p, inp, cfg)):
                 if p["value"] != "off":
                     _end(st)
                 st["pending"] = None
@@ -465,7 +498,10 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
     if not on:
         return out(reason)
 
-    # (3) faults: AUTO ends, nothing is sent, never retried
+    # (3) faults: AUTO ends, never retried; only ErrorCode 1 (low battery) stops the heater
+    if hs in _FAULTS and code == 1:
+        cmds = _stop(st, link, now)
+        return out("BATTERY_LOW")
     if hs in _FAULTS:
         cmds = _end(st)
         return out("LOCKED" if code == 4 else "FAULT_%d" % code if 1 <= code <= 15 else "HEATER_UNKNOWN")
@@ -508,7 +544,7 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         st["mode"] = "DEGRADED"
         if level != cfg["min_level"] and st["pending"] is None and link:
             cmds = [("level", cfg["min_level"])]
-            st["pending"] = _pend("level", cfg["min_level"], now)
+            st["pending"] = _pend("level", cfg["min_level"], now, level)
             st["expect"]["level"] = cfg["min_level"]
             st["ctl"]["last_change_ms"] = now
         return out("REFERENCE_LOST")
@@ -530,7 +566,7 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         return out(why)
     if lvl is not None and lvl != level and link:
         cmds = [("level", lvl)]
-        st["pending"] = _pend("level", lvl, now)
+        st["pending"] = _pend("level", lvl, now, level)
         st["expect"]["level"] = lvl
         ctl["last_change_ms"] = now
         return out(why)
