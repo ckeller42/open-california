@@ -49,14 +49,15 @@ how an iPhone is prepared for development builds.
   ```
 
 - The app's tests run in the simulator. The snapshot references are recorded on the iPhone 17
-  simulator with iOS 26.2, so the snapshot tests compare only on that simulator. Install the
+  simulator with iOS 27.0 (the newest iPhone 17 runtime of CI's `xcode-27` image), so the snapshot
+  tests compare only on that simulator. Install the
   runtime in Xcode (*Settings → Components*) if `xcrun simctl list devices available` does not
   show it:
 
   ```sh
   set -o pipefail  # else the pipe returns xcbeautify's exit code, and a failed run looks green
   xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
-    -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' | xcbeautify
+    -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' | xcbeautify
   ```
 
   `xcodebuild test` can hang after the UI tests; wrap it in a timeout (`gtimeout 1500 …`) in a

@@ -423,29 +423,27 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 2   # a PR checks out its merge commit: HEAD^1 is the base, the diff is the whole PR
+          fetch-depth: 2   # a PR checks out its merge commit and main gets squash merges: HEAD^1 is the base
       - id: filter
         env:
           EVENT: ${{ github.event_name }}
         run: |
-          if [ "$EVENT" != pull_request ]; then echo "ios=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           paths='^(ios/|Package\.(swift|resolved)$|csrc/(codec\.c|ports\.c|[^/]*\.h|swiftpm/)|firmware/components/cali_core/(control\.c$|include/|swiftpm/)|tests/vectors/|calictl/webui/semantics[^/]*\.js$|tools/(swift_needs\.py|ios_sanitize\.sh)$|\.github/workflows/ci\.yml$)'
           if git diff --name-only HEAD^1 HEAD | grep -Eq "$paths"; then ios=true; else ios=false; fi
           echo "ios=$ios" | tee -a "$GITHUB_OUTPUT"
 
   # The iPhone app (docs/ios-app.md): the Swift package tests (plain, ASan, UBSan), the app's unit,
-  # snapshot and UI tests on the simulator, then SwiftLint + swift-format. The snapshot
-  # references are recorded on the iPhone 17 simulator with iOS 26.2; macos-26 is the image that
-  # ships that runtime (the Xcode 27 image has only iOS 27), and Xcode 26.2 is the Xcode of that
-  # SDK. The references use perceptualPrecision 0.98 for the rendering of a different host. Not a
-  # required check.
+  # snapshot and UI tests on the simulator, then SwiftLint + swift-format. The xcode-27 image has
+  # Xcode 27.2 but no iOS 27.2 simulator; the snapshot references are recorded on the iPhone 17
+  # simulator with iOS 27.0, its only iPhone 17 runtime. The references use perceptualPrecision 0.98
+  # for the rendering of a different host. Not a required check.
   ios:
     needs: ios-changes
     if: needs.ios-changes.outputs.ios == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -494,10 +492,10 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
-            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' \
             -resultBundlePath "$RUNNER_TEMP/Camper.xcresult" | xcbeautify
-      # The linters after the tests (also when a test failed): a finding of the older swift-format of
-      # this Xcode must not hide the test result.
+      # The linters after the tests (also when a test failed): a lint finding must not hide the test
+      # result.
       - name: SwiftLint
         if: always()
         working-directory: ios

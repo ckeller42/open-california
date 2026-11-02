@@ -106,7 +106,7 @@ python3 -m tools.gen_control_vectors --check && python3 -m tools.gen_c_dict --ch
 tools/ci.sh linux                                    # the C tests in CI's gcc (Linux amd64 + -m32, Docker): catches what Apple clang lets through
 tools/ci.sh docs                                     # doxygen + `sphinx -W` site build in Docker (the Mac has no sphinx); skill `document-c-api`
 swift test                                           # the iOS Swift package (CaliKit) on the Mac; tools/ios_sanitize.sh = ASan + UBSan
-set -o pipefail; xcodegen generate --spec ios/project.yml && gtimeout 1500 xcodebuild test -project ios/Camper.xcodeproj -scheme Camper -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' | xcbeautify   # the iOS app tests (snapshots need exactly this simulator)
+set -o pipefail; xcodegen generate --spec ios/project.yml && gtimeout 1500 xcodebuild test -project ios/Camper.xcodeproj -scheme Camper -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' | xcbeautify   # the iOS app tests (snapshots need exactly this simulator)
 make -C firmware/host cali-host && python -m pytest tests/firmware -v   # firmware host+NimBLE tier (Linux only; tools/ci.sh firmware)
 docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build'   # firmware QEMU tier build
 python -m tools.ux_gallery --esp --out docs/screenshots   # ESP page shots for the docs (stub + fixtures, no firmware)
