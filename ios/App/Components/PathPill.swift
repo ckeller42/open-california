@@ -93,7 +93,6 @@ struct StatusPage<Content: View>: View {
                     PathPill(store: store, now: tick)
                         .onChange(of: visible(at: tick), initial: true) { changedAt = tick }
                 }
-                .anchorPreference(key: PillBounds.self, value: .bounds) { $0 }
                 if case .unsupported = store.state.gate {
                     AlertCard(text: "This camper unit is not supported yet")
                 }
@@ -111,32 +110,24 @@ struct StatusPage<Content: View>: View {
             .padding()
         }
         .hardTopEdge()
-        // The sending state and the result stay in sight wherever the user tapped, under the pill
-        // (its stale or offline state stays readable) and at the top once the pill scrolled away. An
-        // overlay: the content does not move under the finger when the banner comes or goes. A result
+        // The sending state and the result show above the tab bar, like a toast: they hide no control
+        // (the first row under the pill is often the page's main switch) and the content does not
+        // move under the finger. The inset lets the lowest rows scroll above the banner. A result
         // hides by itself (8 s), with its close button, or with a tap.
-        .overlayPreferenceValue(PillBounds.self) { pill in
+        .safeAreaInset(edge: .bottom) {
             if let feedback = store.feedback {
-                // The pill's anchor resolves in the overlay's own space (safe area and scroll included).
-                GeometryReader { g in
-                    // A result hides by itself after a few seconds; its close button hides it at once.
-                    FeedbackBanner(feedback: feedback, clock: store.now)
-                        .environment(\.bannerDismiss, feedback.dismissible ? DismissAction { store.dismissFeedback() } : nil)
-                        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 16))
-                        .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
-                        .onTapGesture { store.dismissFeedback() }
-                        .padding(.horizontal)
-                        .padding(.top, max(4, (pill.map { g[$0].maxY } ?? 0) + 6))
-                }
+                FeedbackBanner(feedback: feedback, clock: store.now)
+                    .environment(\.bannerDismiss, feedback.dismissible ? DismissAction { store.dismissFeedback() } : nil)
+                    // Lighter than the cards in dark, where a shadow does not show; white in light.
+                    .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color(uiColor: .separator)))
+                    .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+                    .onTapGesture { store.dismissFeedback() }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
             }
         }
     }
-}
-
-/// The pill's bounds, for the feedback banner under it.
-private struct PillBounds: PreferenceKey {
-    static let defaultValue: Anchor<CGRect>? = nil
-    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) { value = value ?? nextValue() }
 }
 
 extension View {

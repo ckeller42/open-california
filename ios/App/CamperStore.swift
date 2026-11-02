@@ -103,7 +103,7 @@ final class CamperStore {
         }
     }
 
-    /// What the user sees of the last action, pinned under the pill: a command or a tap-to-connect.
+    /// What the user sees of the last action, shown above the tab bar: a command or a tap-to-connect.
     var feedback: Feedback?
     /// +1 per `show`: a late writer can see whether the banner is still its own.
     @ObservationIgnored private(set) var feedbackGen = 0

@@ -202,7 +202,7 @@ struct CommandMappingTests {
                 == "Die Camper-Einheit spart Energie — in 5 s erneut versuchen")
     }
 
-    /// A command shows "Sending…" and then its result where the user looks (pinned under the pill).
+    /// A command shows "Sending…" and then its result where the user looks (above the tab bar).
     /// A tap in the power-save rest shows "Connecting in N s…" during the unit's cooldown, then dials
     /// once; a tap that the app left for the background before the cooldown ended does not dial.
     ///

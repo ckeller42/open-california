@@ -122,7 +122,7 @@ struct Note: View {
     }
 }
 
-/// The feedback pinned under the pill: "Sending…", the result, "Connecting…" or the connect outcome
+/// The feedback above the tab bar: "Sending…", the result, "Connecting…" or the connect outcome
 /// (the cooldown counts down).
 ///
 /// - Requirement: R_IOS_HONEST, R_IOS_POWER_SAVE
@@ -290,7 +290,7 @@ extension EnvironmentValues {
 
 /// The controls of one function: the lock card when they cannot be used (the controls are then
 /// disabled, and each row's hint gives the reason), and the controls. The sending state and the
-/// result show pinned under the pill (`StatusPage`).
+/// result show above the tab bar (`StatusPage`).
 ///
 /// - Requirement: R_IOS_HONEST, R_IOS_FUNCTIONS
 struct ControlSection<Content: View>: View {

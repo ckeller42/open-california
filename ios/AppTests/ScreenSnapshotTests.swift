@@ -226,17 +226,17 @@ struct ScreenSnapshotTests {
         check(NavigationStack { SetupView(store: CamperStore.preview(.staleRestore, now: Self.now)) }, "setup-stale")
     }
 
-    /// The feedback banner sits under the pill, so the pill's offline or stale state stays readable;
-    /// at the largest accessibility text size too.
+    /// The feedback banner sits above the tab bar: it hides no control and not the pill's offline or
+    /// stale state; at the largest accessibility text size too.
     ///
-    /// - Test: T_IOS_SNAPSHOT_BANNER_UNDER_PILL
+    /// - Test: T_IOS_SNAPSHOT_BANNER_AT_BOTTOM
     /// - Verifies: R_IOS_HONEST, R_IOS_LOOK
-    @Test func bannerSitsUnderThePill() {
+    @Test func bannerSitsAboveTheTabBar() {
         let store = CamperStore.preview(.unreachable, now: Self.now)
         store.feedback = .result(.failed(.unreachable), function: "campingmode")
         let view = NavigationStack { CampingView(store: store) }
-        snap(view, "banner-under-pill-light")
-        snap(view, "banner-under-pill-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: 2400))
+        snap(view, "banner-at-bottom-light")
+        snap(view, "banner-at-bottom-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: 2400))
     }
 
     /// Every feedback the user can see: each command result (each refusal and failure), sending,

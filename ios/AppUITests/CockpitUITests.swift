@@ -94,37 +94,49 @@ final class CockpitUITests: XCTestCase {
 /// The control screens, opened from the cockpit buttons, each with the accessibility audit.
 final class ControlUITests: XCTestCase {
     /// Each cockpit button opens its control screen (none is a no-op); every control screen and the
-    /// energy mode pass the audit, in light and dark, over their whole scroll height.
+    /// energy mode pass the audit, in light, over their whole scroll height.
     ///
     /// - Test: T_IOS_UI_CONTROLS_AUDIT
     /// - Verifies: R_IOS_LOOK, R_IOS_FUNCTIONS, R_IOS_TESTED
     @MainActor
     func testControlScreensPassAccessibilityAudit() throws {
-        for dark in [false, true] {
-            let app = XCUIApplication()
-            app.launchArguments = ["-UITestFixture", "campingOn", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-            if dark { app.launchArguments += ["-UIUserInterfaceStyle", "dark"] }
-            app.launch()
-            for (title, control) in [
-                ("Camping mode", "Rear USB ports"), ("Lighting", "All lights"),
-                ("Cooler", "Refrigerator box"), ("Air heater", "Immediate heating"),
-            ] {
-                let tile = app.buttons[title]
-                XCTAssertTrue(tile.waitForExistence(timeout: 10), title)
-                if !tile.isHittable { app.swipeUp() }
-                tile.tap()
-                XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), title)
-                XCTAssertTrue(app.descendants(matching: .any)[control].exists, control)
-                Thread.sleep(forTimeInterval: 1)  // the push animation ends
-                try app.auditScreen()
-                app.navigationBars[title].buttons.element(boundBy: 0).tap()
-                XCTAssertTrue(app.navigationBars["Cockpit"].waitForExistence(timeout: 5))
-            }
-            app.tabBars.buttons["Energy"].tap()
-            XCTAssertTrue(app.descendants(matching: .any)["Energy mode"].waitForExistence(timeout: 5))
+        try auditControlScreens(dark: false)
+    }
+
+    /// The same in dark; a test of its own, so each stays under the per-test time limit on CI.
+    ///
+    /// - Test: T_IOS_UI_CONTROLS_AUDIT_DARK
+    /// - Verifies: R_IOS_LOOK, R_IOS_TESTED
+    @MainActor
+    func testControlScreensPassAccessibilityAuditInDark() throws {
+        try auditControlScreens(dark: true)
+    }
+
+    @MainActor
+    private func auditControlScreens(dark: Bool) throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestFixture", "campingOn", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        if dark { app.launchArguments += ["-UIUserInterfaceStyle", "dark"] }
+        app.launch()
+        for (title, control) in [
+            ("Camping mode", "Rear USB ports"), ("Lighting", "All lights"),
+            ("Cooler", "Refrigerator box"), ("Air heater", "Immediate heating"),
+        ] {
+            let tile = app.buttons[title]
+            XCTAssertTrue(tile.waitForExistence(timeout: 10), title)
+            if !tile.isHittable { app.swipeUp() }
+            tile.tap()
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), title)
+            XCTAssertTrue(app.descendants(matching: .any)[control].exists, control)
+            Thread.sleep(forTimeInterval: 1)  // the push animation ends
             try app.auditScreen()
-            app.terminate()
+            app.navigationBars[title].buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.navigationBars["Cockpit"].waitForExistence(timeout: 5))
         }
+        app.tabBars.buttons["Energy"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["Energy mode"].waitForExistence(timeout: 5))
+        try app.auditScreen()
+        app.terminate()
     }
 }
 
