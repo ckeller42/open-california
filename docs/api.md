@@ -89,6 +89,11 @@ traceability is generated from the source, not maintained separately.
 ## Automation
 
 ```{eval-rst}
+.. automodule:: calictl.thermostat
+  :no-members:
+.. autofunction:: calictl.thermostat.heater_state
+.. autofunction:: calictl.thermostat._rdiv
+.. autofunction:: tests.test_thermostat.test_heater_state_table
 .. autofunction:: calictl.automation.auto_camper_restore_decide
 .. autoclass:: calictl.automation.AutoCamper
   :members: step, set_enabled, snapshot, to_state_dict, load
