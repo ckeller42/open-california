@@ -164,6 +164,11 @@ next to the iPhone drives it with a UI test.
      -destination id=<CoreDevice id> -only-testing:AppUITests/LabPairingUITests -resultBundlePath lab.xcresult
    ```
 
+`tools/ioslab/ioslab.sh` wraps these steps (`install`, `build`, `run <action>…`, `tour`, `pair`); its
+header lists the actions and the environment (the iPhone's device id comes from `IOSLAB_UDID`, never
+from the repository). `run` reads the iPhone's Auto-Lock first, sets it to Never and restores it at
+the end.
+
 The test opens the pairing guide, picks `VWCAMPER`, types the passkey into the iOS pairing alert
 and waits for a live link. Each step attaches a screenshot to `lab.xcresult`. Without
 `LAB_PASSKEY` the test skips, so CI and the simulator never run it.
