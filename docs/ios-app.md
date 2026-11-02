@@ -241,6 +241,9 @@ job. The two manual tiers have their own checklists: {doc}`ios-app-radio-checkli
 iPhone against the fake unit peripheral and the van) and {doc}`ios-app-siri-checklist` (Siri in
 English and German).
 
+The app can record its Bluetooth traffic in the format of `calictl`'s BLE trace, so
+`python3 -m tools.trace_compare` replays an iPhone session like a trace from buspi.
+
 ## Architecture decisions
 
 ```{decision} Bluetooth first, satellite as the upgrade

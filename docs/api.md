@@ -245,6 +245,7 @@ traceability is generated from the source, not maintained separately.
   :members:
 .. automodule:: tests.test_trace
 .. automodule:: tests.test_trace_compare
+.. automodule:: tests.test_ios_trace
 .. automodule:: tests.test_mock_fidelity
 .. automodule:: tools.capture_diff
 .. automodule:: tests.test_app_recordings
