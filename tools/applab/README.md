@@ -117,8 +117,8 @@ by hand once buspi is back (`scp pi@buspi:~/apks/*.apk ~/android-lab/apks/`), th
 The phone's APKs land in `buspi:~/apks/<version>/` (`base.apk`, `split_config.{arm64_v8a,de,en,mdpi,xxhdpi}.apk`,
 `version.txt`). Copy the version directory to the lab host (buspi cannot ssh to the lab hosts; relay
 through a machine that reaches both:
-`scp -3 'buspi:~/apks/5.4.0.3036/*.apk' odelly:android-lab/apks/5.4.0.3036/`; a fresh `setup_linux.sh`
-does this itself), then install it as an **update**, so the app keeps its data (onboarding, the VIN):
+`ssh odelly mkdir -p android-lab/apks/5.4.0.3036 && scp -3 'buspi:~/apks/5.4.0.3036/*.apk' odelly:android-lab/apks/5.4.0.3036/`;
+`APK_VERSION=<version> tools/applab/setup_linux.sh` does this itself when the lab host reaches buspi), then install it as an **update**, so the app keeps its data (onboarding, the VIN):
 
 ```sh
 tools/applab/labctl.sh install        # newest version dir; APK_VERSION=<version> picks another

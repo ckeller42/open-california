@@ -55,6 +55,7 @@ need Xvfb xvfb       # labctl's default GPU mode renders on a private Xvfb displ
 need rsync rsync
 
 mkdir -p "$LAB_DIR"/sdk "$LAB_DIR"/avd "$LAB_DIR"/apks "$LAB_DIR"/.android
+chmod 700 "$LAB_DIR"   # the VIN and the fake unit's bond keys live here (Bumble rewrites the keystore)
 SDK="$LAB_DIR/sdk"
 if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
   tmp="$(mktemp -d)"
@@ -86,7 +87,8 @@ if ! { [ -x "$BUMBLE_PY" ] && "$BUMBLE_PY" -c 'import bumble, grpc, google.proto
 fi
 
 # AVD: copy an onboarded one from LAB_FROM (keeps the app's setup + VIN), else create a fresh one.
-if [ -n "$LAB_FROM" ] && [ ! -d "$LAB_DIR/avd/$AVD.avd" ]; then
+# rsync resumes, and the marker is written only after every copy succeeded, so a failed move re-runs.
+if [ -n "$LAB_FROM" ] && [ ! -f "$LAB_DIR/.moved_from_$LAB_FROM" ]; then
   echo "setup_linux: copying the AVD, vin and APKs from $LAB_FROM (stop its emulator first)"
   rsync -a "$LAB_FROM:android-lab/avd/$AVD.avd" "$LAB_DIR/avd/"
   rsync -a "$LAB_FROM:android-lab/avd/$AVD.ini" "$LAB_DIR/avd/"
@@ -95,14 +97,20 @@ if [ -n "$LAB_FROM" ] && [ ! -d "$LAB_DIR/avd/$AVD.avd" ]; then
   rsync -a "$LAB_FROM:android-lab/fake_unit_keys.json" "$LAB_DIR/" 2>/dev/null || \
     echo "setup_linux: $LAB_FROM has no android-lab/fake_unit_keys.json: copy the keystore that paired with its AVD (a checkout's tools/applab/.fake_unit_keys.json) to $LAB_DIR/fake_unit_keys.json, or pair again" >&2
   rsync -a "$LAB_FROM:android-lab/apks/" "$LAB_DIR/apks/"
+  touch "$LAB_DIR/.moved_from_$LAB_FROM"
 fi
 avdmanager list avd -c | grep -qx "$AVD" || echo no | avdmanager create avd -n "$AVD" -k "$IMAGE" -d pixel_6 >/dev/null
 
 # APKs: the phone's split APKs per version (buspi:~/apks/<version>/); labctl.sh install installs them.
+# Copied into a temporary directory first, so an interrupted copy never looks complete.
 if [ ! -f "$LAB_DIR/apks/$APK_VERSION/base.apk" ]; then
-  mkdir -p "$LAB_DIR/apks/$APK_VERSION"
-  scp -q -o BatchMode=yes -o ConnectTimeout=10 "${APK_SRC}${APK_VERSION}/*.apk" "$LAB_DIR/apks/$APK_VERSION/" || \
-    echo "setup_linux: no APKs for $APK_VERSION (scp from $APK_SRC failed — buspi offline?). Later: scp '${APK_SRC}${APK_VERSION}/*.apk' $LAB_DIR/apks/$APK_VERSION/" >&2
+  tmp="$LAB_DIR/apks/.$APK_VERSION.part"; rm -rf "$tmp"; mkdir -p "$tmp"
+  if scp -q -o BatchMode=yes -o ConnectTimeout=10 "${APK_SRC}${APK_VERSION}/*.apk" "$tmp/"; then
+    rm -rf "$LAB_DIR/apks/$APK_VERSION"; mv "$tmp" "$LAB_DIR/apks/$APK_VERSION"
+  else
+    rm -rf "$tmp"
+    echo "setup_linux: no APKs for $APK_VERSION (scp from $APK_SRC failed — buspi offline?); re-run setup later" >&2
+  fi
 fi
 echo "app lab ready: LAB_DIR=$LAB_DIR AVD=$AVD BUMBLE_PY=$BUMBLE_PY"
 echo "next: . $LAB_DIR/env.sh && FAKE_UNIT_VIN=\$(cat $LAB_DIR/vin) tools/applab/labctl.sh up"

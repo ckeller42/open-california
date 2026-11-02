@@ -82,7 +82,8 @@ The phone's APKs are pulled to `buspi:~/apks/<version>/` (`base.apk` + `split_co
 `version.txt`). Install them as an **update** so app data (onboarding, the VIN) survives:
 
 ```bash
-scp -3 'buspi:~/apks/5.4.0.3036/*.apk' odelly:android-lab/apks/5.4.0.3036/   # via your Mac: buspi has no key for odelly
+ssh odelly mkdir -p android-lab/apks/5.4.0.3036   # via your Mac: buspi has no key for odelly
+scp -3 'buspi:~/apks/5.4.0.3036/*.apk' odelly:android-lab/apks/5.4.0.3036/
 tools/applab/labctl.sh install    # on odelly: install-multiple -r, location grants, prints versionName + primaryCpuAbi
 ```
 

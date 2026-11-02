@@ -88,7 +88,10 @@ start_fake() {
 
 install_app() {   # the phone's split APKs, as an update (keeps the app's data: onboarding, VIN)
   local d
-  d="$LAB_DIR/apks/${APK_VERSION:-$(basename "$(printf '%s\n' "$LAB_DIR"/apks/[0-9]*/ | sort -V | tail -1)")}"
+  if [ -n "${APK_VERSION:-}" ]; then d="$LAB_DIR/apks/$APK_VERSION"
+  else   # the newest version directory that holds a complete copy (base.apk)
+    d="$(printf '%s\n' "$LAB_DIR"/apks/[0-9]*/base.apk | sort -V | tail -1)"; d="${d%/base.apk}"
+  fi
   [ -f "$d/base.apk" ] || { echo "no $d/base.apk (setup_linux.sh copies it from buspi)" >&2; exit 1; }
   adb install-multiple -r "$d"/*.apk
   adb shell pm grant "$APP_ID" android.permission.ACCESS_FINE_LOCATION 2>/dev/null || true
