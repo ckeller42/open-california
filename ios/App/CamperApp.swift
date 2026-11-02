@@ -14,13 +14,26 @@ extension CamperStore {
     static let shared: CamperStore = {
         if let fixture { return .preview(fixture) }
         // The transport's default restore identifier lets iOS relaunch the app for the held link (camping on).
-        let transport = CoreBluetoothTransport()
+        let transport = traced(CoreBluetoothTransport())
         // The last state, with its age, until this link has read the unit (never under a fixture).
         let url = defaultSaveURL
         return CamperStore(
             session: CamperSession(transport: transport, clock: ContinuousClock()),
             state: restore(from: url) ?? CamperState(), saveURL: url)
     }()
+
+    /// The Bluetooth trace (Setup: "Record Bluetooth trace"), beside the last state.
+    static let traceFile = TraceFile(url: URL.applicationSupportDirectory.appending(path: "ble-trace.jsonl"))
+    /// The defaults key of the trace switch (`@AppStorage`); off when unset.
+    nonisolated static let traceKey = "bleTrace"
+
+    /// `transport` with the trace: it records into `file` while the switch in `defaults` is on.
+    static func traced(
+        _ transport: CamperTransport, file: TraceFile = traceFile, defaults: UserDefaults = .standard
+    ) -> CamperTransport {
+        nonisolated(unsafe) let defaults = defaults  // UserDefaults is thread-safe (Apple's documentation)
+        return TracingTransport(transport, file: file, isOn: { defaults.bool(forKey: traceKey) })
+    }
 }
 
 /// The app: the real Bluetooth transport, or under `-UITestFixture <name>` the fake transport with

@@ -664,6 +664,23 @@
         }
       }
     },
+    "Bluetooth trace": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth-Mitschnitt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth trace"
+          }
+        }
+      }
+    },
     "C": {
       "extractionState": "manual",
       "localizations": {
@@ -1140,6 +1157,23 @@
         }
       }
     },
+    "Delete trace": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitschnitt löschen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete trace"
+          }
+        }
+      }
+    },
     "Disconnected to save energy": {
       "extractionState": "manual",
       "localizations": {
@@ -1293,6 +1327,23 @@
         }
       }
     },
+    "Export trace": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitschnitt teilen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export trace"
+          }
+        }
+      }
+    },
     "Exterior and interior lighting": {
       "extractionState": "manual",
       "localizations": {
@@ -1425,6 +1476,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fill level sensor in waste water tank. Please visit a workshop."
+          }
+        }
+      }
+    },
+    "For a bug report: what the app and the camper unit exchanged. No location, no names.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für eine Fehlermeldung: was App und Camper-Einheit ausgetauscht haben. Kein Ort, keine Namen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For a bug report: what the app and the camper unit exchanged. No location, no names."
           }
         }
       }
@@ -2496,6 +2564,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recall light favourite ${favourite}"
+          }
+        }
+      }
+    },
+    "Record Bluetooth trace": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth-Mitschnitt aufzeichnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record Bluetooth trace"
           }
         }
       }
