@@ -11,12 +11,13 @@ struct DeviceStatusView: View {
     let store: CamperStore
     @Environment(\.pageNow) private var pageNow
 
-    /// "amb 0410 · comm 2" (`?` for a part the unit did not report); nil without a `general` frame.
+    /// "04.10 (protocol 2)" (`?` for a part the unit did not report); nil without a `general` frame.
     static func firmware(_ store: CamperStore) -> LocalizedStringResource? {
         let amb = store.value("general", "amb_sw_version")?.string
         let comm = store.value("general", "comm_version")?.number.map { String(Int($0)) }
         guard amb != nil || comm != nil else { return nil }
-        return "amb \(amb ?? "?") · comm \(comm ?? "?")"
+        let software = amb.map { $0.count == 4 ? "\($0.prefix(2)).\($0.suffix(2))" : $0 }
+        return "\(software ?? "?") (protocol \(comm ?? "?"))"
     }
 
     var body: some View {
@@ -50,7 +51,7 @@ private struct StatusRow: View {
         StackedRow(label: Text(label)) {
             HStack(spacing: 4) {
                 Text(value).fontWeight(.medium)
-                    // "amb 0410 · comm 2" stays one line; at accessibility sizes it wraps (never cut).
+                    // "04.10 (protocol 2)" stays one line; at accessibility sizes it wraps (never cut).
                     .lineLimit(typeSize.isAccessibilitySize ? nil : 1).minimumScaleFactor(0.8)
                 if let symbol { Image(systemName: symbol).accessibilityHidden(true) }
             }

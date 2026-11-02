@@ -39,16 +39,20 @@ struct PillLabel: View, Equatable {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        // At accessibility sizes the symbol goes above the text, so a long word keeps the width.
-        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 8))
-        layout {
+        // At accessibility sizes the symbol stays beside the text and the age goes under the label.
+        let texts =
+            typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2)) : AnyLayout(HStackLayout(spacing: 8))
+        HStack(spacing: 8) {
             Image(systemName: "dot.radiowaves.left.and.right")
                 .foregroundStyle(live ? Color.onGreen : Color.secondary)
-            Text(verbatim: label)
-                .font(.subheadline.weight(.semibold))
-            if let asOf {
-                Text(verbatim: asOf)
-                    .font(.subheadline)
+            texts {
+                Text(verbatim: label)
+                    .font(.subheadline.weight(.semibold))
+                if let asOf {
+                    Text(verbatim: asOf)
+                        .font(.subheadline)
+                }
             }
         }
         .padding(.horizontal, 14)

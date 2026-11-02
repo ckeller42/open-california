@@ -247,7 +247,8 @@ struct CamperStoreTests {
                 let de = s.localizations?["de"]?.stringUnit.value
                 #expect(en?.isEmpty == false, "\(name): \(key) has no English value")
                 #expect(de?.isEmpty == false, "\(name): \(key) has no German value")
-                if let en, let web = webDE[en] {
+                // The iPhone app uses the VW app's longer pill text; the web UI keeps its short one.
+                if let en, let web = webDE[en], !["Connecting…", "connecting…"].contains(en) {
                     #expect(de == web, "\(name): \(key) DE is \(de ?? "nil"), strings.de.js says \(web)")
                     checked += 1
                 }

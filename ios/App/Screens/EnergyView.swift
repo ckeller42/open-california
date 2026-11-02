@@ -56,6 +56,7 @@ struct EnergyView: View {
         let word = st.map { Self.sourceState[$0].map { $0.string(locale) } ?? $0 } ?? "—"
         let w = num("\(prefix)_power")
         let a = num("\(prefix)_current")
+        if st == "inactive", w == 0, a == 0 { return (word, word) }
         return (
             "\(word) (\(w.map { String(Int($0)) } ?? "—")\(nbsp)W\(nbsp)· \(a.map(fmt) ?? "—")\(nbsp)A)",
             [
@@ -80,9 +81,11 @@ struct EnergyView: View {
                         "Time remaining", Text(verbatim: num("batt2_remaining_h").map { "\(Int($0))\(nbsp)h" } ?? "—"),
                         spoken: num("batt2_remaining_h").map { spoken($0, UnitDuration.hours, locale) })
                     Row("Starter battery", Text(verbatim: pct("soc1_pct")), bar: num("soc1_pct"), dimmed: starterStale)
-                    Row(
-                        "Data age", starterAge(starterStale), spoken: starterAgeSpoken(starterStale), dimmed: starterStale,
-                        clock: starterStale)
+                    if let age = starterAge(starterStale) {
+                        Row(
+                            "Last value", age, spoken: starterAgeSpoken(starterStale), dimmed: starterStale,
+                            clock: starterStale)
+                    }
                     Row("Starter power", Text(verbatim: batt1.0), spoken: batt1.1, dimmed: starterStale)
                     if store.value("energy", "dcdc_installed")?.bool == true {
                         let r = source("dcdc")
@@ -113,14 +116,21 @@ struct EnergyView: View {
     }
 
     /// The unit reports an age only for the starter battery; 255 = the starter subsystem sleeps.
-    private func starterAge(_ stale: Bool) -> Text {
+    /// "Last value": "5 min ago", "just now" for 0 min; nil (the row is hidden) without an age.
+    private func starterAge(_ stale: Bool) -> Text? {
         if stale { return Text("stale (starter asleep)") }
-        return Text(verbatim: num("age_min").map { "\(Int($0))\(nbsp)min" } ?? "—")
+        guard let m = num("age_min") else { return nil }
+        if Int(m) == 0 { return Text(verbatim: LocalizedStringResource("just now").string(locale)) }
+        let minutes = "\(Int(m))\(nbsp)min"
+        return Text(verbatim: LocalizedStringResource("\(minutes) ago").string(locale))
     }
 
     private func starterAgeSpoken(_ stale: Bool) -> String? {
         if stale { return LocalizedStringResource("stale (starter asleep)").string(locale) }
-        return num("age_min").map { spoken($0, UnitDuration.minutes, locale) }
+        guard let m = num("age_min") else { return nil }
+        return Int(m) == 0
+            ? LocalizedStringResource("just now").string(locale)
+            : LocalizedStringResource("\(spoken(m, UnitDuration.minutes, locale)) ago").string(locale)
     }
 }
 

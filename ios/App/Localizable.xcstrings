@@ -1,6 +1,40 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ (protocol %@)": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (Protokoll %2$@)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (protocol %2$@)"
+          }
+        }
+      }
+    },
+    "%@ ago": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vor %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ago"
+          }
+        }
+      }
+    },
     "%@ of %@": {
       "extractionState": "manual",
       "localizations": {
@@ -500,7 +534,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Störung der Standheizung — bitte Werkstatt kontaktieren"
+            "value": "Störung der Luftstandheizung — bitte Werkstatt kontaktieren"
           }
         },
         "en": {
@@ -568,7 +602,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Batterie lädt nicht. Bitte Stromverbrauch reduzieren."
+            "value": "Batterie wird nicht geladen. Bitte Stromverbrauch reduzieren."
           }
         },
         "en": {
@@ -772,7 +806,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ladestrom ist begrenzt. Umgebungstemperatur zu hoch."
+            "value": "Ladestrom ist begrenzt. Umgebungstemperatur ist zu hoch."
           }
         },
         "en": {
@@ -942,7 +976,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verbinde …"
+            "value": "Verbindung wird aufgebaut…"
           }
         },
         "en": {
@@ -1085,23 +1119,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "D"
-          }
-        }
-      }
-    },
-    "Data age": {
-      "extractionState": "manual",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Datenalter"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Data age"
           }
         }
       }
@@ -1316,7 +1333,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gerät für externe Stromversorgung funktioniert nicht. Bitte Werkstatt aufsuchen."
+            "value": "Landstromgerät ohne Funktion. Bitte Werkstatt aufsuchen."
           }
         },
         "en": {
@@ -1333,7 +1350,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Externe Stromquelle derzeit nicht verfügbar."
+            "value": "Landstrom ist gerade nicht verfügbar."
           }
         },
         "en": {
@@ -1401,7 +1418,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Füllstandsensor im Abwassertank. Bitte Werkstatt aufsuchen."
+            "value": "Fehler: Füllstandsensor im Abwassertank. Bitte Werkstatt aufsuchen."
           }
         },
         "en": {
@@ -1486,7 +1503,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allgemeiner Grauwasserfehler. Bitte Werkstatt aufsuchen."
+            "value": "Allgemeiner Grauwasser-Fehler. Bitte Werkstatt aufsuchen."
           }
         },
         "en": {
@@ -1537,7 +1554,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Standheizung deaktiviert — nicht bei laufendem Motor oder aktiver Wasser-Zusatzheizung"
+            "value": "Luftstandheizung deaktiviert — nicht bei laufendem Motor oder aktiver Wasser-Zusatzheizung"
           }
         },
         "en": {
@@ -1697,6 +1714,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last update"
+          }
+        }
+      }
+    },
+    "Last value": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzter Wert"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last value"
           }
         }
       }
@@ -2710,7 +2744,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Solar-Wechselrichter funktioniert nicht. Bitte Werkstatt aufsuchen."
+            "value": "Solarwandler ohne Funktion. Bitte Werkstatt aufsuchen."
           }
         },
         "en": {
@@ -2744,7 +2778,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Problem mit der Zweitbatterie. Bitte Werkstatt aufsuchen."
+            "value": "Zweitbatterie. Bitte Werkstatt aufsuchen."
           }
         },
         "en": {
@@ -3798,7 +3832,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unbekannter Frischwasserfehler."
+            "value": "Unbekannter Frischwasser-Fehler."
           }
         },
         "en": {
@@ -3945,23 +3979,6 @@
         }
       }
     },
-    "amb %@ · comm %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "amb %1$@ · comm %2$@"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "amb %1$@ · comm %2$@"
-          }
-        }
-      }
-    },
     "as of %@": {
       "extractionState": "manual",
       "localizations": {
@@ -3985,7 +4002,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "verbinde…"
+            "value": "Verbindung wird aufgebaut…"
           }
         },
         "en": {
