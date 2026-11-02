@@ -167,6 +167,31 @@ struct CamperStoreTests {
         #expect(CamperStore.restore(from: url.appending(path: "missing")) == nil)
     }
 
+    /// "Forget this camper unit": the shown values, the saved last state and the bond are gone, a new
+    /// store starts empty, and a frame published before the forget is not shown or saved again.
+    ///
+    /// - Test: T_IOS_STORE_FORGET
+    /// - Verifies: R_IOS_PAIRING, R_IOS_HONEST
+    @Test func forgettingTheUnitClearsTheSavedState() async throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "camper-\(UUID().uuidString)/last_state.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let live = CamperStore.preview(.parked).state
+        let store = CamperStore(session: Fixture.parked.makeSession(), saveURL: url)
+        store.apply(live, .up)
+        store.bond = .paired
+        #expect(CamperStore.restore(from: url) != nil)
+
+        await store.forgetUnit()
+        #expect(store.state.asOf == nil && store.state.fields.isEmpty)
+        #expect(store.bond == .notPaired)
+        #expect(CamperStore.restore(from: url) == nil)
+        #expect(store.linkLabel == "not paired")
+
+        store.apply(live, .up)  // a late update of the old link
+        #expect(store.state.asOf == nil)
+        #expect(CamperStore.restore(from: url) == nil)
+    }
+
     /// The water guard stores no `water` frame on a cold start; the restored reading stays, marked
     /// as held with its age, never as live.
     ///

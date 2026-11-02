@@ -175,6 +175,38 @@ final class SetupUITests: XCTestCase {
             app.terminate()
         }
     }
+
+    /// "Forget this camper unit…" asks first; Cancel changes nothing; Forget shows the three forget
+    /// steps and "not paired". Not run here (it needs an iOS 27 simulator).
+    ///
+    /// - Test: T_IOS_UI_FORGET_UNIT
+    /// - Verifies: R_IOS_PAIRING, R_IOS_HONEST
+    @MainActor
+    func testForgetAsksAndShowsTheBluetoothSteps() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestFixture", "parked", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        app.tabBars.buttons["Setup"].tap()
+        let forget = app.buttons["Forget this camper unit…"]
+        XCTAssertTrue(forget.waitForExistence(timeout: 10))
+
+        forget.tap()
+        let alert = app.alerts["Forget this camper unit?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts.element(matching: NSPredicate(format: "label CONTAINS 'use Settings'")).exists)
+        alert.buttons["Cancel"].tap()
+        XCTAssertTrue(forget.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["This iPhone is paired with the camper unit."].exists)
+
+        forget.tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Forget"].tap()
+        XCTAssertTrue(app.staticTexts["The app has forgotten the camper unit"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["1. Open Settings → Bluetooth on this iPhone."].exists)
+        XCTAssertTrue(app.staticTexts["3. Come back here and pair again."].exists)
+        XCTAssertTrue(app.staticTexts["not paired"].waitForExistence(timeout: 5))
+        app.terminate()
+    }
 }
 
 extension XCUIApplication {

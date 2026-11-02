@@ -49,6 +49,7 @@ paired with the camper (for example through the vendor app) needs no new pairing
 the bond. The real camper always asks for a passkey when it pairs; a pairing prompt without a code
 is not the camper and is cancelled.
 (iOS runs the pairing and owns the bond; an app cannot delete a bond itself.)
+*Forget this camper unit…* on the Setup tab clears only the app's own data (the unit, its last values and the link) and shows the same Settings steps, because iOS removes the bond only in *Settings → Bluetooth*; pairing again with the same unit then ends as already paired.
 ```
 
 ```{req} Protocol version 2 only

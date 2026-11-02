@@ -27,6 +27,8 @@ struct PairingGuide: Equatable {
         case failed
         /// The unit no longer knows this iPhone: Settings → Bluetooth → Forget This Device.
         case forgetDevice
+        /// The app forgot the unit; the iOS bond is still there until the user removes it in Settings.
+        case forgotten
 
         /// The guide's step, 1 to 3; nil for an outcome that is not a step.
         var number: Int? {
@@ -34,7 +36,7 @@ struct PairingGuide: Equatable {
             case .openPanel, .searching, .pick: 1
             case .connecting, .typeCode: 2
             case .done: 3
-            case .collapsed, .noUnit, .failed, .forgetDevice: nil
+            case .collapsed, .noUnit, .failed, .forgetDevice, .forgotten: nil
             }
         }
 
@@ -94,6 +96,12 @@ struct PairingGuide: Equatable {
         }
     }
 
+    /// The app forgot the unit ("Forget this camper unit…"): the help shows how to remove the bond too.
+    mutating func forget() {
+        paired = false
+        step = .forgotten
+    }
+
     /// "Pair again…" on the collapsed line.
     mutating func expand() { step = .openPanel }
 
@@ -148,6 +156,7 @@ struct PairingGuideView: View {
     @State private var guide: PairingGuide
     /// +1 per action: the answer of a cancelled search or pick changes nothing.
     @State private var gen = 0
+    @State private var confirmingForget = false
     @Environment(\.locale) private var locale
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.openURL) private var openURL
@@ -169,6 +178,13 @@ struct PairingGuideView: View {
         "Tap the info button next to VWCAMPER, then Forget This Device.",
         "Come back here and pair again.",
     ]
+
+    /// The destructive button's red: dark enough on the card for the contrast audit, in light and dark.
+    private static let forgetRed = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 1, green: 0.55, blue: 0.5, alpha: 1) : UIColor(red: 0.75, green: 0, blue: 0.1, alpha: 1)
+        })
 
     /// Step 2's instruction, shown from the connect on: the iOS dialog covers the card later.
     static let passcodeHint: LocalizedStringResource =
@@ -198,6 +214,7 @@ struct PairingGuideView: View {
         case .noUnit(.busy): "A search is already running — wait a moment, then try again."
         case .failed: "Could not connect to the camper unit."
         case .forgetDevice: "The camper unit no longer knows this iPhone"
+        case .forgotten: "The app has forgotten the camper unit"
         }
     }
 
@@ -238,6 +255,13 @@ struct PairingGuideView: View {
         .environment(\.pageStale, false)  // the guide's cards are not data: never muted
         .onChange(of: store.link) { _, l in guide.link(l) }
         .onChange(of: store.bond) { _, b in guide.bond(b) }
+        .alert("Forget this camper unit?", isPresented: $confirmingForget) {
+            Button("Forget", role: .destructive) { forget() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "The app forgets the unit and its last values. To remove the Bluetooth pairing too, use Settings → Bluetooth.")
+        }
         .onChange(of: guide.step) { _, step in
             AccessibilityNotification.Announcement(Self.spoken(step, locale)).post()
         }
@@ -253,6 +277,9 @@ struct PairingGuideView: View {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.onGreen)
             }
             action("Pair again…", prominent: false) { guide.expand() }
+            Button("Forget this camper unit…", role: .destructive) { confirmingForget = true }
+                .foregroundStyle(Self.forgetRed)
+                .frame(maxWidth: .infinity, minHeight: 44)
         case .openPanel:
             Text(Self.headline(step))
             Text("The passcode is valid for about 30 seconds; each attempt shows a new one.").font(.subheadline)
@@ -366,6 +393,18 @@ struct PairingGuideView: View {
             Text("A new pairing also serves the California On Tour app on this iPhone.").font(.subheadline)
             action("Try again", prominent: true) { guide.expand() }
             action("Cancel", prominent: false) { guide.cancel() }
+        case .forgotten:
+            Label {
+                Text(Self.headline(step))
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.onGreen)
+            }
+            Text("To remove the Bluetooth pairing too, follow these steps:").font(.subheadline)
+            ForEach(Self.forgetSteps.indices, id: \.self) { i in
+                Text(verbatim: "\(i + 1). ") + Text(Self.forgetSteps[i])
+            }
+            .font(.subheadline)
+            action("Pair again…", prominent: true) { guide.expand() }
         }
     }
 
@@ -402,6 +441,14 @@ struct PairingGuideView: View {
         Task {
             let r = await store.firstPairing(with: unit.id)
             if gen == g { guide.finished(r) }
+        }
+    }
+
+    private func forget() {
+        gen += 1
+        Task {
+            await store.forgetUnit()
+            guide.forget()
         }
     }
 

@@ -45,6 +45,10 @@ public protocol CamperTransport: Sendable {
     /// The user picked `id`: end the current link, then connect to `id` once, at once (a first
     /// pairing). The session waits for the result.
     func beginFirstPairing(with id: UUID) async
+    /// The user forgets the camper unit: the link and any pick end (`.localCancel`), the saved unit
+    /// is gone, and a later `connect()` reports `.notPaired`. The iOS bond stays (iOS has no API to
+    /// remove it): a new first pairing with the same unit ends as already paired.
+    func forgetUnit() async
 }
 
 public enum TransportError: Error, Equatable, Sendable {

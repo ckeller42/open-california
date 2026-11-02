@@ -171,6 +171,32 @@ public actor CamperSession {
         return sawPairing ? .paired : .alreadyPaired
     }
 
+    /// The user forgets the camper unit (the app's own data; the iOS bond stays): redials, the
+    /// heartbeat and the link end, the values are cleared, and the link says "not paired" until a
+    /// new first pairing. A running command writes nothing after this.
+    ///
+    /// - Requirement: R_IOS_PAIRING
+    public func forgetUnit() async {
+        cancelReconnect()
+        heldDial = false
+        backoffStep = 0
+        sinceLost = nil
+        dropReason = nil
+        ready = false
+        stopHeartbeat()
+        linkGen += 1
+        state = CamperState()
+        uncorrected = [:]
+        waterGuard = WaterGuard()
+        // The link is "not paired" before the transport ends the old one: its `.disconnected` then
+        // finds no link that was up, and starts no redial.
+        setLink(.unreachable(Self.notPaired))
+        publish()
+        resumeWaiters(.failure(.notPaired))
+        await transport.forgetUnit()
+        if let old = flight { _ = try? await old.value }
+    }
+
     /// The user cancelled the first pairing: its link ends, and with it the pick.
     public func cancelPairing() async { await transport.cancel() }
 

@@ -29,6 +29,7 @@ public actor FakeCamperTransport: CamperTransport {
     private var pairingOpen = false
     private var pairingRequiredOnConnect = false
     private var notPairedOnConnect = false
+    private var forgotten = false
     private var candidates: [PairingCandidate] = []
 
     /// Every write attempt, in order, including a rejected one.
@@ -142,6 +143,10 @@ public actor FakeCamperTransport: CamperTransport {
             sink.yield(.bluetoothUnavailable(unavailable))
             return
         }
+        if forgotten {
+            sink.yield(.notPaired)
+            return
+        }
         if connectWillFail {
             connectWillFail = false
             sink.yield(.disconnected(reason: .failedToConnect))
@@ -218,6 +223,7 @@ public actor FakeCamperTransport: CamperTransport {
     /// Like the real transport: the current link ends (`.localCancel`), then one connect at once.
     public func beginFirstPairing(with id: UUID) {
         picks.append(id)
+        forgotten = false
         if holdPick {
             holdPick = false
             pickWaiting = true
@@ -225,6 +231,18 @@ public actor FakeCamperTransport: CamperTransport {
         }
         end(.localCancel)
         connect()
+    }
+
+    /// Counts every forget.
+    public private(set) var forgets = 0
+    /// Like the real transport: the link ends (`.localCancel`), and a later `connect()` finds no
+    /// adopted unit (`.notPaired`) until a pick adopts one.
+    public func forgetUnit() {
+        forgets += 1
+        forgotten = true
+        holdPick = false
+        pickWaiting = false
+        cancel()
     }
 
     /// Like the real unit, sends nothing on subscribe: the caller must `read` each char.

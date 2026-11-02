@@ -12,6 +12,25 @@ struct PairingGuideTests {
         PairingCandidate(id: UUID(), name: "VWCAMPER", rssi: -81),
     ]
 
+    /// "Forget this camper unit" shows the forget steps; "Pair again…" then starts at step 1, as on a
+    /// fresh install, and a cancel does not return to the collapsed (paired) line.
+    ///
+    /// - Test: T_IOS_GUIDE_FORGOTTEN
+    /// - Verifies: R_IOS_PAIRING
+    @Test func forgettingShowsTheStepsAndPairingAgainStartsOver() {
+        var g = PairingGuide(bond: .paired)
+        #expect(g.step == .collapsed)
+        g.forget()
+        #expect(g.step == .forgotten && g.step.number == nil)
+        g.bond(.notPaired)  // the store's answer after the forget: the help stays
+        #expect(g.step == .forgotten)
+        g.expand()
+        #expect(g.step == .openPanel)
+        g.search()
+        g.cancel()
+        #expect(g.step == .openPanel)
+    }
+
     /// The guide runs in the order of R_IOS_PAIRING: (1) open "Gerät verbinden" on the camper panel,
     /// search, pick the unit; (2) the iOS dialog: compare the code with the camper screen and type
     /// it in; (3) done. An iPhone that is already paired skips step 2. Every waiting step can be

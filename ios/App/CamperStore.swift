@@ -22,6 +22,8 @@ final class CamperStore {
     @ObservationIgnored private var follow: Task<Void, Never>?
     /// Where each new state is saved for a relaunch (nil: not saved, as for fixtures).
     @ObservationIgnored let saveURL: URL?
+    /// When the user forgot the unit: older frames are never shown or saved again.
+    @ObservationIgnored private var forgottenAt: Date?
 
     init(session: CamperSession, state: CamperState = CamperState(), link: LinkState = .off, saveURL: URL? = nil) {
         self.session = session
@@ -226,7 +228,9 @@ final class CamperStore {
     /// - Requirement: R_IOS_HONEST
     func apply(_ state: CamperState, _ link: LinkState) {
         self.link = link
-        guard state.asOf != nil else { return }
+        guard let asOf = state.asOf else { return }
+        // A frame that the session published before the forget can still be on its way here.
+        if let forgottenAt, asOf <= forgottenAt { return }
         var state = state
         // The water guard stores nothing on a cold start: the reading shown so far stays, as held.
         if state.fields["water"] == nil, let water = self.state.fields["water"] {
@@ -295,6 +299,18 @@ final class CamperStore {
             note(error)
             return .failure(error as? SessionError ?? .unreachable)
         }
+    }
+
+    /// "Forget this camper unit": the session ends its link and its unit, and the shown and saved values
+    /// go. The iOS bond stays (iOS has no API to remove it), so pairing again ends as already paired.
+    ///
+    /// - Requirement: R_IOS_PAIRING, R_IOS_HONEST
+    func forgetUnit() async {
+        forgottenAt = Date()
+        await session.forgetUnit()
+        state = CamperState()
+        bond = .notPaired
+        if let saveURL { try? FileManager.default.removeItem(at: saveURL) }
     }
 
     /// The user cancelled a waiting step of the guide: the pick's link ends.

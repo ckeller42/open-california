@@ -1429,6 +1429,57 @@
         }
       }
     },
+    "Forget": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vergessen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget"
+          }
+        }
+      }
+    },
+    "Forget this camper unit?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Camper-Einheit vergessen?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget this camper unit?"
+          }
+        }
+      }
+    },
+    "Forget this camper unit…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Camper-Einheit vergessen…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget this camper unit…"
+          }
+        }
+      }
+    },
     "Fresh water": {
       "extractionState": "manual",
       "localizations": {
@@ -3095,6 +3146,40 @@
         }
       }
     },
+    "The app forgets the unit and its last values. To remove the Bluetooth pairing too, use Settings → Bluetooth.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die App vergisst die Einheit und ihre letzten Werte. Um auch die Bluetooth-Kopplung zu entfernen, nutze Einstellungen → Bluetooth."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app forgets the unit and its last values. To remove the Bluetooth pairing too, use Settings → Bluetooth."
+          }
+        }
+      }
+    },
+    "The app has forgotten the camper unit": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die App hat die Camper-Einheit vergessen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app has forgotten the camper unit"
+          }
+        }
+      }
+    },
     "The camper unit did not answer in time": {
       "extractionState": "manual",
       "localizations": {
@@ -3567,6 +3652,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Time remaining"
+          }
+        }
+      }
+    },
+    "To remove the Bluetooth pairing too, follow these steps:": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um auch die Bluetooth-Kopplung zu entfernen, geh so vor:"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To remove the Bluetooth pairing too, follow these steps:"
           }
         }
       }

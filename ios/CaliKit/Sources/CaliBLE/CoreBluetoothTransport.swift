@@ -188,6 +188,15 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
         }
     }
 
+    /// Forgets the saved unit (and its `UserDefaults` key), ends any pick, and ends the link.
+    public func forgetUnit() async {
+        queue.async {
+            self.policy.forget()
+            UserDefaults.standard.removeObject(forKey: Self.peripheralKey)
+            self.stop()
+        }
+    }
+
     public func read(_ char: UInt16) async throws -> [UInt8] {
         try await withCheckedThrowingContinuation { k in
             queue.async {
@@ -542,6 +551,12 @@ struct PeerPolicy {
         guard inPick, let deadline, now >= deadline else { return false }
         cancelPick()
         return true
+    }
+
+    /// The user forgot the unit: nothing is saved and no pick is left.
+    mutating func forget() {
+        saved = nil
+        cancelPick()
     }
 
     /// The caller cancelled or gave up: no pick is left.

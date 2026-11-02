@@ -83,9 +83,8 @@ private actor Counting: CamperTransport {
         }
         try await inner.subscribe(chars)
     }
-    func pairingCandidates(window: Duration) async throws -> [PairingCandidate] {
-        try await inner.pairingCandidates(window: window)
-    }
+    func pairingCandidates(window w: Duration) async throws -> [PairingCandidate] { try await inner.pairingCandidates(window: w) }
+    func forgetUnit() async { await inner.forgetUnit() }
     func beginFirstPairing(with id: UUID) async {
         connects += 1
         await inner.beginFirstPairing(with: id)
