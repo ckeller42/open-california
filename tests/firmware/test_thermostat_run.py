@@ -102,11 +102,15 @@ def test_hold_stays_while_a_stop_is_pending(cli, tmp_path):
             ["tick", "now 31000", "sensor cabin 2700", "tick", "now 91000", "sensor cabin 1800"],
             True,
         ),  # vs 1700
+        # two adverts 100 ms apart in one scan window (the step runs later, at the period)
+        (["tick", "now 1100", "sensor cabin 1710", "now 2000"], True),  # a new 0.1 C measurement
+        (["tick", "now 1100", "sensor cabin 2700", "now 2000"], False),  # 10 C
     ],
 )
 def test_implausible_reading_is_invalid(cli, tmp_path, script, valid):
     """A reading outside -40..60 C, or more than 3 C per minute from the last accepted one of the
-    same alias, reaches the step as invalid (t_ref null); a slow change stays valid.
+    same alias, reaches the step as invalid (t_ref null); a slow change stays valid. The time
+    difference is floored at a minute, so two adverts 100 ms apart may differ by up to 3 C.
 
     .. test:: Thermostat runner: implausible thermometer readings are invalid
        :id: T_FW_THERMOSTAT_RUN_PLAUSIBLE

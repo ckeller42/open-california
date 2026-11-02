@@ -70,13 +70,16 @@ static int32_t field(const codec_kv_t *kv, int n, const char *name) {
 }
 
 /* 1 when v (read at `at`) is in range and, against slot k's last accepted reading of this alias, changes
- * at most T_RATE_PER_MIN per minute; an accepted reading becomes the baseline. The first has no rate check. */
+ * at most T_RATE_PER_MIN per minute, the time difference floored at one minute; an accepted reading becomes
+ * the baseline. The first has no rate check. */
 static int plausible(int k, const char *alias, int32_t v, uint64_t at) {
     if (v < T_MIN || v > T_MAX) return 0;
     if (strcmp(s_last[k].alias, alias) == 0 && at >= s_last[k].at) {
         int64_t dv = (int64_t)v - s_last[k].v;
         if (dv < 0) dv = -dv;
-        if (dv * 60000 > (int64_t)T_RATE_PER_MIN * (int64_t)(at - s_last[k].at)) return 0;
+        int64_t dt = (int64_t)(at - s_last[k].at);
+        if (dt < 60000) dt = 60000;   /* floored at a minute: two adverts 100 ms apart in one scan window */
+        if (dv * 60000 > (int64_t)T_RATE_PER_MIN * dt) return 0;
     }
     snprintf(s_last[k].alias, sizeof s_last[k].alias, "%s", alias);
     s_last[k].v = v;
