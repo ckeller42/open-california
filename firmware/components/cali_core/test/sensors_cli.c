@@ -12,6 +12,8 @@
  *   state <now_ms>                           "EXT " + the ext object
  *   api <now_ms>                             "API " + the /api/sensors object
  *   maxbody                                  "MAXBODY <len>"
+ *   value <alias> <field>                    "VALUE <rc> [<centi> <at_ms>]" (cali_sensors_value)
+ *   centi <float>                            "CENTI <rc> [<centi>]" (cali_sensors_centi; strtof: nan, inf ok)
  * Every ext record reaches the diag sink, which prints "REC <body>". The AES hook is a stub whose
  * keystream block is the key itself (a Victron vector's "ciphertext" = plaintext XOR key). */
 #include <stdio.h>
@@ -107,6 +109,15 @@ int main(int argc, char **argv) {
             print_json("EXT ", cali_sensors_state_json, strtoull(a[0], NULL, 10));
         } else if (!strcmp(cmd, "api") && n == 2) {
             print_json("API ", cali_sensors_api_json, strtoull(a[0], NULL, 10));
+        } else if (!strcmp(cmd, "value") && n == 3) {
+            int32_t c;
+            uint64_t at;
+            if (cali_sensors_value(a[0], atoi(a[1]), &c, &at) == 0) printf("VALUE 0 %ld %llu\n", (long)c, (unsigned long long)at);
+            else printf("VALUE -1\n");
+        } else if (!strcmp(cmd, "centi") && n == 2) {
+            int32_t c;
+            if (cali_sensors_centi(strtof(a[0], NULL), &c) == 0) printf("CENTI 0 %ld\n", (long)c);
+            else printf("CENTI -1\n");
         } else if (!strcmp(cmd, "maxbody")) {
             printf("MAXBODY %d\n", cali_sensors_max_body_len());
         } else {

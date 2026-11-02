@@ -32,7 +32,11 @@ TILES = ("Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", 
 # + the wizard endpoint (R_FW_PAIRING_WIZARD) + the home-screen manifest/icons a browser may fetch
 # + the usage beacons (R_UX_TELEMETRY)
 ALLOWED = {"/", "/api/state", "/api/pairing", "/api/ux"} | {p for p, _, _ in gen_c_dict.pwa_assets()}
-ALLOWED_LIVE = ALLOWED | {"/api/command", "/api/ble"}  # /api/ble: the input report (R_FW_BLE_VIEWER_KEEP)
+ALLOWED_LIVE = ALLOWED | {
+    "/api/command",
+    "/api/ble",
+    "/api/thermostat",
+}  # /api/ble: the input report (R_FW_BLE_VIEWER_KEEP)
 ELSEWHERE = "Only via buspi or the app"
 LIVE = "() => !!(STATE._meta && STATE._meta.satellite && STATE._meta.read_only === false)"
 ENABLED_CONTROLS = (

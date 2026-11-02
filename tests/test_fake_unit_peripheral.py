@@ -218,6 +218,33 @@ def test_console_pair_command_toggles_pairing_mode():
     assert on is True
 
 
+def test_console_set_cabin_changes_the_model_and_rejects_an_unknown_key(capsys):
+    async def run():
+        _, unit, _ = await _unit_and_central()
+        unit._console_line("set cabin t_out=-500 tau_s=120")
+        ok = dict(unit.unit.cabin)
+        unit._console_line("set cabin bogus=1")  # reported, nothing changed, no airheater-style state made
+        return ok, dict(unit.unit.cabin), "cabin" in unit.unit.state
+
+    ok, after, junk = asyncio.run(run())
+    assert (ok["t_out"], ok["tau_s"]) == (-500, 120)
+    assert after == ok and not junk
+    assert "error: 'bogus'" in capsys.readouterr().out
+
+
+def test_console_set_cabin_rejects_bad_values_without_changing_the_model(capsys):
+    async def run():
+        _, unit, _ = await _unit_and_central()
+        before = dict(unit.unit.cabin)
+        for bad in ("t_out=-500 tau_s=0", "tau_s=-5", "t_out=-500 tau_s=abc", "t_out=-500 bogus=1"):
+            unit._console_line("set cabin " + bad)
+        return before, dict(unit.unit.cabin)
+
+    before, after = asyncio.run(run())
+    assert after == before  # no partial update, no ZeroDivisionError later in tick()
+    assert capsys.readouterr().out.count("error") == 4
+
+
 def test_console_forget_command_clears_bonds():
     async def run():
         _, unit, central = await _unit_and_central()

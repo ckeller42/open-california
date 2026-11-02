@@ -33,6 +33,9 @@
  *     clock <epoch_ms>     SNTP synced at this fixed wall clock (time.c): "ble exp" then runs
  *     ign <-1|0|1>         what cali_ac_ignition() answers (stubbed; ble_exp_run.c's quiet wake, the rest)
  *     acowe 0|1            what cali_ac_owed() answers (a camping restore owed; the rest stays away)
+ *     hold 0|1             cali_session_hold (the thermostat outside OFF)
+ *     heaterms <ms>        cali_session_set_heater_ms
+ *     frameat <hex char>   print "FRAMEAT <cali_session_frame_ms()>"
  *     diaghook             from now on, print "DIAG {<body>}" per diagnostics record (cali_diag_sink)
  *     variant <fn> <car_variant>  print "HAS <fn> <car_variant> <cali_variant_has()>"
  *     restpoll <min>       cali_ble_rest_set (the stored rest poll, R_FW_BLE_REST)
@@ -76,6 +79,7 @@
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
+#include "codec_chars.h"
 #include "cali_wifi_run.h"
 #include "codec.h"
 
@@ -472,7 +476,13 @@ int main(void) {
         else if (strcmp(word, "ident") == 0) snprintf(s_ident, sizeof s_ident, "%s", a1);
         else if (strcmp(word, "restpoll") == 0) printf("RESTPOLL %d\n", cali_ble_rest_set((unsigned)n1));
         else if (strcmp(word, "connect") == 0) printf("CONNECT %d\n", cali_session_connect());
-        else if (strcmp(word, "rest") == 0)
+        else if (strcmp(word, "hold") == 0) cali_session_hold(n1);
+        else if (strcmp(word, "heaterms") == 0) cali_session_set_heater_ms((uint32_t)n1);
+        else if (strcmp(word, "frameat") == 0) {
+            unsigned c = (unsigned)strtoul(a1, NULL, 16);
+            for (size_t i = 0; i < CODEC_NCHARS; i++)
+                if (CODEC_CHARS[i].state_short == c) printf("FRAMEAT %llu\n", (unsigned long long)cali_session_frame_ms(i));
+        } else if (strcmp(word, "rest") == 0)
             printf("REST %d %lld\n", cali_session_rest(), (long long)cali_session_rest_next_ms());
         else if (strcmp(word, "viewer") == 0) cali_session_viewer(strtoull(a1, NULL, 10));
         else if (strcmp(word, "input") == 0) cali_session_input(strtoull(a1, NULL, 10));

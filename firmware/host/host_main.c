@@ -13,6 +13,7 @@
  *   --fake-wifi  the fake WiFi's script (cali_net_host.h); missing = no networks (ruling R2)
  * Besides the console's lines, stdin takes two test-only lines: "twrite" (see twrite() below) and
  * "acstep <ms>" (the auto-camper step period, CALI_AC_STEP_MS = 30 s otherwise; test_auto_camper_e2e.py).
+ * And "thermo ..." (the cabin thermostat, test_thermostat_e2e.py; see thermo() below).
  *
  * Threads: main runs nimble_port_run() — the NimBLE host task; EVERY cali_core and transport call
  * happens there (the --http setup in main() runs before it, on the same thread). The HCI socket RX
@@ -33,6 +34,7 @@
 #include "nimble/nimble_port.h"
 
 #include "cali_auto_camper.h"
+#include "cali_thermostat.h"
 #include "cali_ble_nimble.h"
 #include "cali_captive.h"
 #include "cali_console.h"
@@ -80,6 +82,40 @@ static void twrite(const char *args) {
     cali_log("twrite: %04x/%u rc=%d", chr, (unsigned)n, rc);
 }
 
+/* Test-only "thermo" lines (cali-host): "thermo" prints "THERMO {"thermostat":<cali_thermo_state_json>}"; "thermo on|off"
+ * (the feature switch), "thermo auto|stop" (a request), "thermo ref|backup|out <alias|->", "thermo target
+ * <centi>", "thermo set <setting> <value>" (cali_thermo_cfg_t member), "thermo heaterms <ms>" (the held
+ * session's 1702 re-read period). Task 6's /api/thermostat replaces all but the last two. */
+static void thermo(const char *args) {
+    char op[16] = "", a[24] = "";
+    long v = 0;
+    int n = sscanf(args, "%15s %23s %ld", op, a, &v);
+    cali_thermo_run_cfg_t *c = cali_thermo_run_cfg();
+    char *alias = !strcmp(op, "ref") ? c->ref : !strcmp(op, "backup") ? c->backup : !strcmp(op, "out") ? c->out : NULL;
+    if (n < 1) {
+        char buf[512];
+        cali_json_t j;
+        cali_json_begin(&j, buf, sizeof buf);
+        cali_json_key(&j, "thermostat");
+        cali_thermo_state_json(&j);
+        printf("THERMO %s\n", cali_json_end(&j) < 0 ? "OVERFLOW" : buf);
+    } else if (!strcmp(op, "on") || !strcmp(op, "off")) {
+        (void)cali_thermo_set_enabled(!strcmp(op, "on"));
+    } else if (!strcmp(op, "auto") || !strcmp(op, "stop")) {
+        (void)cali_thermo_request(!strcmp(op, "auto") ? "AUTO" : "OFF");
+    } else if (alias && n >= 2) {
+        snprintf(alias, CALI_THERMO_ALIAS_LEN, "%.16s", strcmp(a, "-") ? a : "");
+    } else if (!strcmp(op, "target") && n >= 2) {
+        c->target = (int32_t)strtol(a, NULL, 10);
+    } else if (!strcmp(op, "set") && n == 3) {
+        if (cali_thermo_cfg_set(a, (int32_t)v) != 0) cali_log("thermo: unknown setting %s", a);
+    } else if (!strcmp(op, "heaterms") && n >= 2) {
+        cali_session_set_heater_ms((uint32_t)strtoul(a, NULL, 10));
+    } else {
+        cali_log("thermo: usage: thermo [on|off|auto|stop|ref|backup|out <alias|->|target <centi>|set <k> <v>|heaterms <ms>]");
+    }
+}
+
 /* Host task: feed every queued line to the console (only once the stack is synced). */
 static void drain(void) {
     for (;;) {
@@ -96,6 +132,7 @@ static void drain(void) {
         pthread_mutex_unlock(&s_mu);
         if (strncmp(line, "twrite ", 7) == 0) twrite(line + 7);
         else if (strncmp(line, "acstep ", 7) == 0) cali_ac_set_step_ms((uint32_t)strtoul(line + 7, NULL, 10));
+        else if (strncmp(line, "thermo", 6) == 0 && (line[6] == ' ' || line[6] == 0)) thermo(line + 6);
         else cali_console_line(line);
         memset(line, 0, sizeof line);   /* a "wifi set" line holds a passphrase */
     }
@@ -113,6 +150,7 @@ static void tick_cb(struct ble_npl_event *ev) {
     cali_session_tick(now);             /* heartbeat decision (same order as app_main.c) */
     cali_sensors_tick(now, cali_ble_nimble_transport(), cali_exp_sensors(), cali_runner_in_flow());
     cali_ac_tick(now);
+    cali_thermo_run_tick(now);
     cali_pw_tick(now);
     cali_ble_exp_tick(now);
     if (s_http) {
@@ -215,6 +253,7 @@ int main(int argc, char **argv) {
     cali_ble_exp_init();   /* the unit's advert -> the BLE experiment (R_FW_BLE_EXP) */
     cali_log("exp: sensors %s", cali_exp_sensors() ? "on" : "off");   /* R_FW_EXPERIMENTAL */
     cali_sensors_init();
+    cali_thermo_run_init();
     cali_diag_sink = rec_line;
 
     nimble_port_init();           /* also connects the TCP HCI socket (ble_transport_ll_init) */

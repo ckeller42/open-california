@@ -296,3 +296,15 @@ dialog.help a { display: block; margin: .2rem 0 .9rem; color: var(--accent); }
 .sat [hidden] { display: none !important; }   /* .btnrow/.row set display: hidden must still win */
 .sat .srow > .lbl { flex: 1 1 14em; }        /* narrow: the buttons wrap under the sensor's line */
 .sat .srow > .acts { flex: 1 1 12em; justify-content: flex-end; }
+
+/* cabin thermostat card (Air heater, satellite) */
+.thermo-h { margin: 0; padding: .8rem 0 .2rem; font-size: 1rem; }
+.thermo .big { font-size: 1.6rem; font-weight: 650; }
+.thermo-step { min-width: 44px; min-height: 44px; font-size: 1.3rem; }
+.thermo-line { padding: .2rem 0 .6rem; }
+.thermo-open { width: 100%; min-height: 44px; font: inherit; color: var(--accent-text); background: none; border: 0;
+  border-top: 1px solid var(--border); text-align: left; cursor: pointer; }
+.thermo-sheet { border-top: 1px solid var(--border); padding-top: .4rem; }
+.thermo-opt { min-height: 44px; padding: .3rem 0; }
+.thermo-opt.stale, .thermo-opt.stale .sval { color: var(--warn-text); }
+.thermo-opt input:disabled ~ .lbl { opacity: .8; }

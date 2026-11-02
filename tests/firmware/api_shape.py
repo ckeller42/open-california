@@ -39,6 +39,27 @@ DEVICE_KEYS = frozenset(
         "water_held",
     }
 )  # /api/state device
+# device.thermostat (R_FW_THERMOSTAT_API): present only while a reference thermometer is selected
+THERMOSTAT_STATE_KEYS = frozenset({"mode", "target", "t_ref", "level", "reason"})
+# GET/POST /api/thermostat (R_FW_THERMOSTAT_API) and its "status" member (cali_thermo_state_json)
+THERMOSTAT_API_KEYS = frozenset(
+    {"rev", "mode", "target", "runtime_min", "ref", "backup", "out", "outside_on", "cfg", "status"}
+)
+THERMOSTAT_STATUS_KEYS = frozenset(
+    {
+        "enabled",
+        "mode",
+        "reason",
+        "heater",
+        "t_ref",
+        "t_out",
+        "target",
+        "level",
+        "active",
+        "outside_active",
+        "end",
+    }
+)
 OTA_KEYS = frozenset(
     {"state", "available_sha", "progress_pct", "error", "channel"}
 )  # /api/state device.ota (R_FW_OTA)
