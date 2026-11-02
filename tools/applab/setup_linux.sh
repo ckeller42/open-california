@@ -36,7 +36,7 @@ need() {
   command -v "$1" >/dev/null && return
   if sudo -n true 2>/dev/null; then
     echo "setup_linux: installing $2"
-    sudo -n apt-get install -y -q "$2" >/dev/null
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$2" >/dev/null
   else
     die "no $1: sudo apt-get install -y $2"
   fi
