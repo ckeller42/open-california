@@ -146,3 +146,24 @@ List the connected iPhones and install a built app:
 xcrun devicectl list devices
 xcrun devicectl device install app --device <CoreDevice id> <path>.app
 ```
+
+## The bench lab: the iPhone against the fake unit
+
+The simulator has no Bluetooth, so a BLE test of the app needs a real iPhone. The bench puts the
+iPhone next to a Linux host that runs the fake camper unit on a USB Bluetooth adapter, and a Mac
+next to the iPhone drives it with a UI test.
+
+1. Start the fake unit with a fixed passkey on the Linux host (as root, for the HCI socket):
+   `FAKE_UNIT_PASSKEY=<6 digits> python tools/applab/fake_unit_ble.py hci-socket:<N>`. Pick `N` by
+   the adapter's USB id, not by its number.
+2. Open its pairing window: write `pair on` into its console FIFO (the start line names the path).
+3. On the Mac, in the desktop session (see above), run the lab test against the iPhone:
+
+   ```sh
+   TEST_RUNNER_LAB_PASSKEY=<6 digits> xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
+     -destination id=<CoreDevice id> -only-testing:AppUITests/LabPairingUITests -resultBundlePath lab.xcresult
+   ```
+
+The test opens the pairing guide, picks `VWCAMPER`, types the passkey into the iOS pairing alert
+and waits for a live link. Each step attaches a screenshot to `lab.xcresult`. Without
+`LAB_PASSKEY` the test skips, so CI and the simulator never run it.
