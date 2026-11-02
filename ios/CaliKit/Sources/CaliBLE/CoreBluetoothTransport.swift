@@ -192,8 +192,17 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     public func forgetUnit() async {
         queue.async {
             self.policy.forget()
-            UserDefaults.standard.removeObject(forKey: Self.peripheralKey)
-            self.stop()
+            // The link ends now, not at `didDisconnectPeripheral`: every later call fails with
+            // `.notConnected` and the old peripheral's callbacks are dropped (`p === peripheral`).
+            if let p = self.peripheral { self.central.cancelPeripheralConnection(p) }
+            let was = self.phase
+            self.peripheral = nil
+            if was == .idle {
+                self.policy.linkEnded()
+            } else {
+                self.tearDown()
+                self.sink.yield(.disconnected(reason: .localCancel))
+            }
         }
     }
 
@@ -554,9 +563,10 @@ struct PeerPolicy {
     }
 
     /// The user forgot the unit: nothing is saved and no pick is left.
-    mutating func forget() {
+    mutating func forget(defaults: UserDefaults = .standard) {
         saved = nil
         cancelPick()
+        defaults.removeObject(forKey: CoreBluetoothTransport.peripheralKey)
     }
 
     /// The caller cancelled or gave up: no pick is left.

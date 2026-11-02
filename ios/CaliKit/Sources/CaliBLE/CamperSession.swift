@@ -39,7 +39,7 @@ public actor CamperSession {
     private var waiters: [Int: CheckedContinuation<Void, any Error>] = [:]
     private var nextID = 0
     /// +1 per encrypted link: a task of an earlier link can never mark the current one.
-    private var linkGen = 0
+    private(set) var linkGen = 0
     /// Subscribe and the read pass finished on the current link.
     private var ready = false
     /// The one bring-up (cooldown, connect, subscribe, read) in progress; every caller awaits it.
@@ -193,7 +193,9 @@ public actor CamperSession {
         setLink(.unreachable(Self.notPaired))
         publish()
         resumeWaiters(.failure(.notPaired))
+        for c in pushSubscribers.values { c.yield(.linkDown) }  // a running command ends at once
         await transport.forgetUnit()
+        // A bring-up in its cooldown wait (up to 7 s) is waited for; its dial is refused (no saved unit).
         if let old = flight { _ = try? await old.value }
     }
 
@@ -205,9 +207,12 @@ public actor CamperSession {
     /// unit) is skipped. `skip` leaves out chars this link has just read.
     public func readAll(skip: Set<UInt16> = []) async throws {
         guard link == .up else { throw SessionError.unreachable }
+        let gen = linkGen
         for (_, char) in CamperGATT.stateChars(forVariant: carVariant) where !skip.contains(char) {
             do {
-                store(char, try await transport.read(char))
+                let bytes = try await transport.read(char)
+                guard gen == linkGen else { throw SessionError.unreachable }  // the link of this pass is gone
+                store(char, bytes)
             } catch TransportError.notConnected {
                 throw SessionError.unreachable
             } catch is CancellationError {
@@ -359,6 +364,7 @@ public actor CamperSession {
             if flight == nil { startFlight(budget: Self.redialTimeout) }
             resumeWaiters(.success(()))
         case .notified(let char, let bytes):
+            guard link == .up else { return }
             store(char, bytes)
             if let fn = charToFunction[char] {
                 for c in pushSubscribers.values { c.yield(.frame(function: fn, state: state)) }
@@ -533,6 +539,8 @@ public actor CamperSession {
     // MARK: state
 
     private func store(_ char: UInt16, _ bytes: [UInt8]) {
+        // Every valid frame comes after `.encrypted`: nothing of an ended link (a forgotten unit's) is kept.
+        guard link == .up else { return }
         guard let fn = charToFunction[char], let fields = try? CaliCodec.decode(function: fn, bytes: bytes) else { return }
         if fn == "water" {
             // The stale-latch guard (ports.c): hold the last plausible reading, or store nothing on a cold start.

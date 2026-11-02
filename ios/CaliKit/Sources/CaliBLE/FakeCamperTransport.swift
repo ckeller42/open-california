@@ -76,7 +76,18 @@ public actor FakeCamperTransport: CamperTransport {
     /// The unit's write-through echo: a later read returns `bytes`, and nothing is pushed.
     public func echo(_ char: UInt16, _ bytes: [UInt8]) { frames[char] = bytes }
 
+    /// Delivers `event` as the unit's side would (for example a notification that arrives late).
+    public func inject(_ event: TransportEvent) { sink.yield(event) }
     public func rejectNextWrite() { rejectNext = true }
+    private var holdWriteTo: UInt16?
+    private var heldWrite: CheckedContinuation<Void, Never>?
+    /// The next write to `char` is issued (recorded) and then waits, like one in flight, until the link
+    /// ends (it then fails with `.linkLost`) or `releaseHeldWrite()` ACKs it.
+    public func holdNextWrite(to char: UInt16) { holdWriteTo = char }
+    public func releaseHeldWrite() {
+        heldWrite?.resume()
+        heldWrite = nil
+    }
     /// The next write to `char` is issued (recorded), then the link drops before its ACK.
     public func dropLinkDuringNextWrite(to char: UInt16) { dropOnWriteTo = char }
     /// A later read of `char` fails (the unit does not offer it).
@@ -197,13 +208,18 @@ public actor FakeCamperTransport: CamperTransport {
         return f
     }
 
-    public func write(_ char: UInt16, _ bytes: [UInt8]) throws {
+    public func write(_ char: UInt16, _ bytes: [UInt8]) async throws {
         guard connected else { throw TransportError.notConnected }
         writes.append(Write(char: char, bytes: bytes))
         if dropOnWriteTo == char {
             dropOnWriteTo = nil
             end(.linkLost)
             throw TransportError.linkLost
+        }
+        if holdWriteTo == char {
+            holdWriteTo = nil
+            await withCheckedContinuation { heldWrite = $0 }
+            guard connected else { throw TransportError.linkLost }
         }
         if rejectNext {
             rejectNext = false
@@ -242,7 +258,7 @@ public actor FakeCamperTransport: CamperTransport {
         forgotten = true
         holdPick = false
         pickWaiting = false
-        cancel()
+        cancel()  // at once: `connected` is false, so nothing of the old link is read, written or pushed
     }
 
     /// Like the real unit, sends nothing on subscribe: the caller must `read` each char.
@@ -257,6 +273,7 @@ public actor FakeCamperTransport: CamperTransport {
     private func end(_ reason: DisconnectReason) {
         hangUpTask?.cancel()
         hangUpTask = nil
+        releaseHeldWrite()
         guard connected else { return }
         connected = false
         subscribed = []

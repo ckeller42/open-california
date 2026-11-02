@@ -163,8 +163,11 @@ extension CamperSession {
             return .refused(.forbiddenWrite)
         }
         var acked = false
+        let gen = linkGen
         for f in frames {
             if f.delayMs > 0 { try? await clock.sleep(for: .milliseconds(Int(f.delayMs))) }
+            // The link of the first frame must still be the ready one (a lost link, or a forgotten unit).
+            guard linkGen == gen, isReady else { return acked ? .unconfirmed : .failed(.linkEnded) }
             let budget = left()
             if budget <= .zero { return .timeout }
             if issuing { commandIssuedFrame = true }

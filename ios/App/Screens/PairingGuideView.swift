@@ -446,9 +446,10 @@ struct PairingGuideView: View {
 
     private func forget() {
         gen += 1
+        let g = gen
         Task {
             await store.forgetUnit()
-            guide.forget()
+            if gen == g { guide.forget() }
         }
     }
 

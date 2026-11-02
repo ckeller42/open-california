@@ -84,6 +84,22 @@ struct CBMappingTests {
         #expect(none.saved == nil)
     }
 
+    /// A forget drops the saved unit, its pick and its `UserDefaults` key: nothing connects any more.
+    ///
+    /// - Test: T_IOS_CB_PEER_FORGET
+    /// - Verifies: R_IOS_PAIRING
+    @Test func forgetDropsTheSavedUnitAndItsKey() throws {
+        let defaults = try #require(UserDefaults(suiteName: "forget-\(UUID().uuidString)"))
+        let unit = UUID()
+        defaults.set(unit.uuidString, forKey: CoreBluetoothTransport.peripheralKey)
+        var p = PeerPolicy(saved: unit)
+        p.pick(UUID())
+        p.forget(defaults: defaults)
+        #expect(p.saved == nil && p.route() == .refuse && !p.inPick)
+        #expect(p.authenticated(unit) == .reject)
+        #expect(defaults.string(forKey: CoreBluetoothTransport.peripheralKey) == nil)
+    }
+
     /// Lenient adoption, a seen pairing: an authentication error, then a success.
     ///
     /// - Test: T_IOS_CB_PEER_ADOPT
