@@ -786,7 +786,7 @@ void cali_session_tick(uint64_t now_ms) {
             return;
         }
     }
-    if (s_link == LINK_UP && s_warming && !s_rereading && now_ms >= s_warm_until) start_reads();
+    if (s_link == LINK_UP && s_warming && !s_rereading && !s_heater_reading && now_ms >= s_warm_until) start_reads();
     /* the planned redial ends once the link takes commands again (quiet/off: once read) */
     if (s_redial && s_link == LINK_UP && s_snapped && (s_mode != CALI_BLE_HOLD || cali_session_ready())) s_redial = 0;
     /* Re-read water on calictl's poll cadence: a latch served at connect is corrected on the link. */

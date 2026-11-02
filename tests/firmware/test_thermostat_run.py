@@ -1,0 +1,133 @@
+"""thermostat_run.c against scripted stubs (session, control sequencer, sensors): the session hold
+while a stop is pending, the reading plausibility, and a batch dropped after a switch-off or OFF.
+``test/thermostat_run_cli.c``; macOS OK. End to end over NimBLE: ``test_thermostat_e2e.py``."""
+
+import json
+import pathlib
+import subprocess
+
+import pytest
+
+from calictl import overrides, protocol
+from tools.mock_unit import MockCamperUnit
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+CORE = ROOT / "firmware" / "components" / "cali_core"
+OK, BUSY = 0, 6  # enum cali_ctl_rc_e
+
+
+@pytest.fixture(scope="module")
+def cli(tmp_path_factory):
+    out = tmp_path_factory.mktemp("b") / "thermostat_run_cli"
+    subprocess.run(
+        ["cc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-I", str(CORE / "include"),
+         "-I", str(ROOT / "firmware/components/platform/include"), "-I", str(ROOT / "csrc"),
+         str(CORE / "thermostat_run.c"), str(CORE / "thermostat.c"), str(CORE / "json.c"), str(CORE / "diag.c"),
+         str(ROOT / "csrc/codec.c"), str(ROOT / "firmware/components/platform/host/platform_host.c"),
+         str(CORE / "test/thermostat_run_cli.c"), "-o", str(out)],
+        check=True,
+    )  # fmt: skip
+    return out
+
+
+def run(cli, tmp_path, lines):
+    p = subprocess.run(
+        [str(cli), str(tmp_path)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True
+    )
+    return p.stdout.splitlines()
+
+
+_FUNCS = protocol.load()
+overrides.apply(_FUNCS)
+
+
+def frame(fn, **vals):
+    m = MockCamperUnit()
+    m.state[fn].update(vals)
+    return "frame %s %s" % (fn, m.read(_FUNCS[fn].state_char).hex())
+
+
+OFF_HEATER = frame("airheater", Installed=1, NormalOperation=0, PermanentOperation=0, HeatingLevel=5)
+RUNNING = frame("airheater", Installed=1, NormalOperation=1, PermanentOperation=0, HeatingLevel=6)
+SETUP = ["init", "on 1", "ref cabin", "target 2100", "set period_ms 1000", "ready 1", "ign 0", "now 1000",
+         frame("campingmode", State=1), frame("energy", UTwoBattBemAfs=136), OFF_HEATER, "sensor cabin 1700"]  # fmt: skip
+STARTED = [*SETUP, "auto", "tick", f"done {OK}", f"done {OK}", f"done {OK}", "now 1500", RUNNING, "tick"]
+
+
+def submits(out):
+    return [line[7:] for line in out if line.startswith("SUBMIT ")]
+
+
+def state(out):
+    return json.loads([line for line in out if line.startswith("THERMO ")][-1][7:])["thermostat"]
+
+
+def test_start_batch_goes_out_one_by_one(cli, tmp_path):
+    out = run(cli, tmp_path, [*STARTED, "state"])
+    assert submits(out) == ["runtime 120", "level 6", "power on"]
+    assert state(out)["mode"] == "AUTO" and "HOLD 1" in out
+
+
+def test_hold_stays_while_a_stop_is_pending(cli, tmp_path):
+    """A BUSY stop leaves mode OFF with the stop pending: the hold stays (a hang-up reconnects,
+    test_session_fake's hold test), the next period sends power off again, and the steps of a
+    disabled stop are logged; the hold drops once the readback shows the heater off.
+
+    .. test:: Thermostat runner: the session hold covers a pending stop
+       :id: T_FW_THERMOSTAT_RUN_PENDING_STOP
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    mark = len(run(cli, tmp_path, STARTED))
+    out = run(cli, tmp_path, [*STARTED, "on 0", f"rc {BUSY}", "now 2000", "tick", "now 3000", "tick",
+                              f"done {OK}", "now 3500", OFF_HEATER, "tick", "state"])  # fmt: skip
+    tail = out[mark:]
+    assert submits(tail) == ["power off", "power off"]
+    assert tail.index("HOLD 0") > max(i for i, s in enumerate(tail) if s == "SUBMIT power off")
+    recs = [json.loads("{" + s[4:] + "}") for s in tail if s.startswith('REC "ev":"thermo"')]
+    assert len(recs) == 2 and all(
+        r["m"] == "OFF" for r in recs
+    )  # the pending DISABLED stop's steps are logged
+    assert state(out)["mode"] == "OFF"
+
+
+@pytest.mark.parametrize(
+    "script, valid",
+    [
+        (["sensor cabin -"], False),  # no reading (NaN/inf: cali_sensors_value says -1, test_sensors.py)
+        (["sensor cabin 6100"], False),  # out of range (60.0 C max)
+        (["sensor cabin -4100"], False),  # out of range (-40.0 C min)
+        (["tick", "now 31000", "sensor cabin 2700"], False),  # 10 C in 30 s
+        (["tick", "now 61000", "sensor cabin 1950"], True),  # 2.5 C in a minute
+        (
+            ["tick", "now 31000", "sensor cabin 2700", "tick", "now 91000", "sensor cabin 1800"],
+            True,
+        ),  # vs 1700
+    ],
+)
+def test_implausible_reading_is_invalid(cli, tmp_path, script, valid):
+    """A reading outside -40..60 C, or more than 3 C per minute from the last accepted one of the
+    same alias, reaches the step as invalid (t_ref null); a slow change stays valid.
+
+    .. test:: Thermostat runner: implausible thermometer readings are invalid
+       :id: T_FW_THERMOSTAT_RUN_PLAUSIBLE
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(cli, tmp_path, [*SETUP, "on 0", *script, "tick", "state"])
+    st = state(out)
+    assert (st["t_ref"] is not None) == valid, st
+
+
+@pytest.mark.parametrize("cut", ["on 0", "stop"])
+def test_batch_rest_dropped_after_switch_off_or_off_request(cli, tmp_path, cut):
+    """The feature switched off, or an OFF request, while the START batch goes out: the rest of the
+    batch stays home (no level, no power on).
+
+    .. test:: Thermostat runner: a switch-off or OFF drops the rest of a batch
+       :id: T_FW_THERMOSTAT_RUN_BATCH_DROP
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(
+        cli, tmp_path, [*SETUP, "auto", "tick", cut, f"done {OK}", "now 1200", "tick", "now 2200", "tick"]
+    )
+    s = submits(out)
+    assert s[0] == "runtime 120" and "level 6" not in s and "power on" not in s, s

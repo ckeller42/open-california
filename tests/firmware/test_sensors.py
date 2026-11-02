@@ -333,3 +333,16 @@ def test_sensors_value_getter(cli, tmp_path):
         "VALUE -1",  # unknown alias
         "VALUE -1",  # removed
     ]
+
+
+def test_sensors_centi_rejects_non_finite_and_clamps(cli, tmp_path):
+    """NaN and infinity are no value; a huge float clamps before the int32 conversion (no UB).
+
+    .. test:: Sensor value conversion is finite and bounded
+       :id: T_FW_SENSORS_CENTI
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(cli, tmp_path, ["centi nan", "centi inf", "centi -inf", "centi 1e12", "centi -1e12", "centi 23.96",
+                              "centi -0.125"])  # fmt: skip
+    assert out == ["CENTI -1", "CENTI -1", "CENTI -1", "CENTI 0 2000000000", "CENTI 0 -2000000000",
+                   "CENTI 0 2396", "CENTI 0 -13"]  # fmt: skip

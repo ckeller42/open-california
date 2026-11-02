@@ -22,6 +22,11 @@
 #include "codec_chars.h"
 
 #define SENSOR_TEMP 0   /* cali_sensors_value field: a govee's temp_c */
+/* Plausibility of a thermometer reading (controller ruling): the range, and the most change per minute
+ * against the last accepted reading of the same alias; anything else reaches the step as invalid. */
+#define T_MIN (-4000)
+#define T_MAX 6000
+#define T_RATE_PER_MIN 300
 
 static cali_thermo_run_cfg_t C = {.s = CALI_THERMO_DEFAULTS, .target = CALI_THERMO_TARGET_DEFAULT};
 static cali_thermo_state_t S;
@@ -32,6 +37,13 @@ static uint64_t s_next;
 /* the batch going out: s_cmds[s_i] is in flight while s_wait */
 static cali_thermo_cmd_t s_cmds[CALI_THERMO_MAX_CMDS];
 static int s_n, s_i, s_wait;
+static int s_batch_on;              /* the feature switch when the batch started */
+/* the last accepted reading per alias (ref, backup, out): the rate check's baseline */
+static struct {
+    char alias[CALI_THERMO_ALIAS_LEN];
+    int32_t v;
+    uint64_t at;
+} s_last[3];
 /* the batch's last attempted command and its result: the next step's cmd input (once) */
 static const char *s_cmd_what, *s_cmd_res;
 
@@ -57,13 +69,28 @@ static int32_t field(const codec_kv_t *kv, int n, const char *name) {
     return CALI_THERMO_NONE;
 }
 
-static void sensor(cali_thermo_sensor_t *s, const char *alias, uint64_t now) {
+/* 1 when v (read at `at`) is in range and, against slot k's last accepted reading of this alias, changes
+ * at most T_RATE_PER_MIN per minute; an accepted reading becomes the baseline. The first has no rate check. */
+static int plausible(int k, const char *alias, int32_t v, uint64_t at) {
+    if (v < T_MIN || v > T_MAX) return 0;
+    if (strcmp(s_last[k].alias, alias) == 0 && at >= s_last[k].at) {
+        int64_t dv = (int64_t)v - s_last[k].v;
+        if (dv < 0) dv = -dv;
+        if (dv * 60000 > (int64_t)T_RATE_PER_MIN * (int64_t)(at - s_last[k].at)) return 0;
+    }
+    snprintf(s_last[k].alias, sizeof s_last[k].alias, "%s", alias);
+    s_last[k].v = v;
+    s_last[k].at = at;
+    return 1;
+}
+
+static void sensor(cali_thermo_sensor_t *s, int k, const char *alias, uint64_t now) {
     uint64_t at;
     memset(s, 0, sizeof *s);
     if (!alias[0]) return;   /* none selected */
     s->present = 1;          /* selected: no reading (removed, renamed, not yet seen) is an invalid one */
     snprintf(s->alias, sizeof s->alias, "%s", alias);
-    if (cali_sensors_value(alias, SENSOR_TEMP, &s->value, &at) == 0) {
+    if (cali_sensors_value(alias, SENSOR_TEMP, &s->value, &at) == 0 && plausible(k, alias, s->value, at)) {
         s->age_ms = now >= at ? (int64_t)(now - at) : 0;
     } else {
         s->value = CALI_THERMO_NONE;
@@ -92,7 +119,8 @@ static void cmd_done(int rc, const char *reason) {
     s_cmd_what = c->what;
     s_cmd_res = result_name(rc);
     cali_diag_evt("thermo", "\"e\":\"cmd\",\"what\":\"%s\",\"v\":%ld,\"res\":\"%s\"", c->what, (long)c->value, s_cmd_res);
-    if (rc == CALI_CTL_OK && ++s_i < s_n) {
+    /* switched off or an OFF request since the batch started: the rest stays home, the next step stops */
+    if (rc == CALI_CTL_OK && ++s_i < s_n && !(s_batch_on && !s_on) && s_req != CALI_THERMO_REQ_OFF) {
         submit_next();
         return;
     }
@@ -131,9 +159,9 @@ static void step(uint64_t now) {
     in.request = s_req;
     in.target = C.target;
     in.runtime_min = C.s.runtime_min;
-    sensor(&in.ref, C.ref, now);
-    sensor(&in.backup, C.backup, now);
-    sensor(&in.out, C.out, now);
+    sensor(&in.ref, 0, C.ref, now);
+    sensor(&in.backup, 1, C.backup, now);
+    sensor(&in.out, 2, C.out, now);
     in.outside_on = C.outside_on;
     in.heater = NULL;   /* no frame, or one with no fields: no heater (a present all-NONE one would read OFF) */
     in.heater_age_ms = CALI_THERMO_NONE_MS;
@@ -165,7 +193,8 @@ static void step(uint64_t now) {
         cali_log("thermostat: %s (mode %s, heater %s)", s_out.reason, cali_thermo_mode_names[S.mode],
                  cali_thermo_heater_names[s_out.status.heater]);
     if (s_out.reason) s_reason = s_out.reason;
-    if (s_on || mode_before != CALI_THERMO_OFF || S.mode != CALI_THERMO_OFF) {   /* a disabled idle one logs nothing */
+    int busy = S.mode != CALI_THERMO_OFF || S.has_pending;   /* a mode, or a stop still pending in OFF */
+    if (s_on || mode_before != CALI_THERMO_OFF || busy) {   /* a disabled idle one logs nothing */
         char b[5][16], r[40] = "null";
         int32_t want = S.has_pending && strcmp(S.pending.what, "level") == 0 ? S.pending.value
                        : S.has_expect                                       ? S.expect.level
@@ -184,10 +213,11 @@ static void step(uint64_t now) {
                           cali_thermo_mode_names[mode_before], cali_thermo_mode_names[S.mode],
                           s_out.reason ? s_out.reason : "");
     }
-    cali_session_hold(S.mode != CALI_THERMO_OFF);
+    cali_session_hold(busy);
     memcpy(s_cmds, s_out.cmds, sizeof s_cmds);
     s_n = s_out.n;
     s_i = 0;
+    s_batch_on = s_on;
 }
 
 void cali_thermo_run_init(void) {

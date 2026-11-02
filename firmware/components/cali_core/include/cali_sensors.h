@@ -138,9 +138,17 @@ int cali_sensors_rename(uint16_t id, const char *alias);
  * @param field   The type's field index (govee: 0 temp_c, 1 humidity, 2 battery).
  * @param centi   Out: the value times 100, rounded (centi-degrees C for a temperature).
  * @param at_ms   Out: uptime in ms of the advert it came from.
- * @return 0, or -1 for an unknown alias, a field the type lacks, no reading yet, or a NaN field.
+ * @return 0, or -1 for an unknown alias, a field the type lacks, no reading yet, or a field that is not finite.
  */
 int cali_sensors_value(const char *alias, int field, int32_t *centi, uint64_t *at_ms);
+
+/**
+ * @brief A reading's float as centi-units: times 100, clamped to +-2e9, rounded half away from zero.
+ * @param f    The value.
+ * @param out  Out: the centi value.
+ * @return 0, or -1 when f is NaN or infinite.
+ */
+int cali_sensors_centi(float f, int32_t *out);
 
 /**
  * @brief Get the sensor scan state.

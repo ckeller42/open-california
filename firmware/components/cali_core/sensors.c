@@ -477,13 +477,20 @@ int cali_sensors_rename(uint16_t id, const char *alias) {
     return 0;
 }
 
+int cali_sensors_centi(float f, int32_t *out) {
+    if (!isfinite(f)) return -1;
+    double x = (double)f * 100.0;   /* clamped first: a float -> int32 conversion out of range is UB */
+    if (x > 2e9) x = 2e9;
+    if (x < -2e9) x = -2e9;
+    *out = (int32_t)(x < 0 ? x - 0.5 : x + 0.5);   /* half away from zero, without libm */
+    return 0;
+}
+
 int cali_sensors_value(const char *alias, int field, int32_t *centi, uint64_t *at_ms) {
     for (int i = 0; i < s_cfg.n; i++) {
         const cali_sensor_reading_t *r = &s_val[i].r;
         if (strcmp(s_cfg.e[i].alias, alias) != 0) continue;
-        if (field < 0 || field >= r->n || isnan(r->f[field])) return -1;
-        float x = r->f[field] * 100.0f;   /* rounded half away from zero, without libm (not linked everywhere) */
-        *centi = (int32_t)(x < 0 ? x - 0.5f : x + 0.5f);
+        if (field < 0 || field >= r->n || cali_sensors_centi(r->f[field], centi) != 0) return -1;
         *at_ms = r->at_ms;
         return 0;
     }

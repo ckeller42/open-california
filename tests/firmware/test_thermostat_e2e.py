@@ -6,7 +6,7 @@ test-only ``thermo`` lines of cali-host (host_main.c) switch the feature, set th
 target and a fast period, and ask for AUTO. The fake unit applies the heater writes and pushes 1702.
 
 * a cold cabin (17.0 C, target 21.0 C) -> the START frames (runtime, level, power on), byte for byte
-  calictl's, then a colder reading raises the level;
+  calictl's, then a colder reading (16.0 C, a plausible rate) raises the level;
 * the reference thermometer removed while AUTO -> REFERENCE_LOST, level 1 (no other sensor picked);
 * the heater level changed on the unit -> FOREIGN_CHANGE, AUTO ends, nothing written;
 * a power-save hang-up with camping off while AUTO -> a reconnect, not the rest, and 1702 re-read;
@@ -107,7 +107,7 @@ def _auto(fw, hu):
 
 
 def test_auto_regulates_cold_cabin(host_fw, hci_unit):
-    """17.0 C, target 21.0 C: runtime, level, power on as calictl builds them; 15.0 C later raises the level."""
+    """17.0 C, target 21.0 C: runtime, level, power on as calictl builds them; 16.0 C later raises the level."""
     fw, adv, _ = _setup(host_fw, hci_unit)
     assert _heater_writes(hci_unit) == []
     _auto(fw, hci_unit)
@@ -118,9 +118,14 @@ def test_auto_regulates_cold_cabin(host_fw, hci_unit):
         _frame(hci_unit, "power", "on"),
     ]
     assert len(w) == 3
-    adv.set_mfg(govee(1500))
-    _reading(fw, 1500)
-    fw.expect("LOG", lambda s: s.startswith("thermostat: LEVEL_UP"), timeout=20)
+    adv.set_mfg(govee(1600))
+    # no window for 21 s: 1 C then stays inside the 3 C per minute plausibility rule (R_FW_THERMOSTAT_RUN)
+    time.sleep(21)
+    _reading(fw, 1600)
+    end = time.monotonic() + 20  # fw.log: the sensors polls above may have consumed the line from the queue
+    while not any(s.startswith("LOG thermostat: LEVEL_UP") for s in fw.log):
+        assert time.monotonic() < end, fw.log[-30:]
+        time.sleep(0.2)
     time.sleep(1)
     lv = hci_unit.unit.unit.state["airheater"]["HeatingLevel"]
     assert lv > 6 and _heater_writes(hci_unit)[-1] == _frame(hci_unit, "level", lv)
