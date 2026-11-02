@@ -373,8 +373,11 @@ Send the full 10-field frame every time (shared-send behavior above).
 
 - **Turn on Immediate/Normal Heating for N minutes**: set `RunningTime = N` (via `D4`, which
   writes the raw int unclamped — the bound lives in the UI: the app's heating info page states
-  immediate heating "is limited to 120 minutes" (`infoPage_heating_immediate_description`), and
-  the unit reports `ErrorCode 4` HEATING_TIME_EXCEEDED past it. The app's slider writes only
+  immediate heating "is limited to 120 minutes" (`infoPage_heating_immediate_description`).
+  `ErrorCode 4` is named HEATING_TIME_EXCEEDED in the app (text "Emission limit exceeded … switched
+  on again when moving ≥ 5 km/h"); the T7 limits per a third-party manual copy / dealer explainer
+  are ≤ 120 min per run and ≤ 180 min in total, then locked until driven. That the unit reports
+  code 4 for such a run is **not verified on this van**. The app's slider writes only
   10–120 (index 1–12 × 10, 5.4.0 `d9/u.java:45-176`); calictl enforces the same **10–120** in
   `control._airheater` (`AIRHEATER_MIN_RUNTIME_MIN`/`AIRHEATER_MAX_RUNTIME_MIN`); the 8-bit width
   is not the valid range),
