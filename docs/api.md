@@ -95,8 +95,11 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: calictl.thermostat._rdiv
 .. autofunction:: calictl.thermostat.control
 .. autofunction:: calictl.thermostat.track
+.. autofunction:: calictl.thermostat.initial_state
+.. autofunction:: calictl.thermostat.step
 .. autofunction:: tests.test_thermostat.test_cold_cabin_raises_level
 .. autofunction:: tests.test_thermostat.test_heater_state_table
+.. autofunction:: tests.test_thermostat.test_auto_from_off_sends_runtime_level_power_in_order
 .. autofunction:: calictl.automation.auto_camper_restore_decide
 .. autoclass:: calictl.automation.AutoCamper
   :members: step, set_enabled, snapshot, to_state_dict, load

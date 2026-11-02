@@ -18,6 +18,8 @@ rounds half away from zero through :func:`_rdiv`.
 
 from __future__ import annotations
 
+import copy
+
 HEATER_STATES = ("OFF", "RUNNING", "CONTINUOUS", "TIMER_ARMED", "FAULT", "LOCKED", "BLOCKED", "UNKNOWN")
 
 #: Settings table (Python ``THERMO_DEFAULTS`` = C ``CALI_THERMO_DEFAULTS``); units in the key's comment.
@@ -213,3 +215,324 @@ def track(ctl: dict, cur_level: int, t_ref: int, target: int, cfg: dict) -> dict
     """
     p = _rdiv(cfg["kp"] * (target - t_ref), 100)
     return {**ctl, "i": cur_level * 1000 - p - ctl["u_out"]}
+
+
+_FAULTS = ("FAULT", "LOCKED", "BLOCKED")
+_HEATING = ("RUNNING", "CONTINUOUS")
+
+
+def initial_state() -> dict:
+    """The session state after boot: mode ``OFF`` (AUTO is never persisted).
+
+    :returns: a fresh state dict for :func:`step`.
+    """
+    return {
+        "mode": "OFF",
+        "active": "ref",
+        "ctl": {"i": 0, "last_change_ms": 0, "hot_since_ms": None, "u": 0, "u_out": 0},
+        "pending": None,
+        "expect": None,
+        "batt_low_since_ms": None,
+        "stop_snapshot": None,
+        "last_ctl_ms": None,
+    }
+
+
+def _valid(r: dict | None, cfg: dict) -> bool:
+    if not r:
+        return False
+    return r["value"] is not None and r["age_ms"] is not None and r["age_ms"] <= cfg["stale_after_ms"]
+
+
+def _snap(d: dict, level: int | None) -> dict:
+    return {
+        "normal": 1 if d.get("NormalOperation") else 0,
+        "permanent": 1 if d.get("PermanentOperation") else 0,
+        "level": level,
+    }
+
+
+def _same(a: dict, b: dict) -> bool:
+    """Equal in normal/permanent and in the level; an unknown level (``None``) on either side is no difference."""
+    return (
+        a["normal"] == b["normal"]
+        and a["permanent"] == b["permanent"]
+        and (a["level"] is None or b["level"] is None or a["level"] == b["level"])
+    )
+
+
+def _applied(p: dict, snap: dict) -> bool:
+    if p["what"] == "level":
+        return snap["level"] == p["value"]
+    if p["what"] == "permanent":
+        return snap["permanent"] == 0
+    return snap["normal"] == (1 if p["value"] == "on" else 0)
+
+
+def _resend(p: dict, st: dict, inp: dict, full: bool) -> list:
+    if full and p["what"] == "power" and p["value"] == "on":
+        return [("runtime", inp["runtime_min"]), ("level", st["expect"]["level"]), ("power", "on")]
+    return [(p["what"], p["value"])]
+
+
+def _pend(what: str, value, now: int) -> dict:
+    return {"what": what, "value": value, "since_ms": now, "tries": 1}
+
+
+def _stop(st: dict, can_send: bool, now: int) -> list:
+    """End AUTO with a normal stop of what the ESP left running; link down → ``STOPPING``."""
+    e = st["expect"] or {"normal": 0, "permanent": 0, "level": None}
+    what = "permanent" if e["permanent"] else "power" if e["normal"] else None
+    st["pending"], st["mode"] = None, "OFF"
+    if what is None:
+        return []
+    if can_send:
+        st["pending"] = _pend(what, "off", now)
+        return [(what, "off")]
+    st["mode"], st["stop_snapshot"] = "STOPPING", dict(e)
+    return []
+
+
+def _end(st: dict) -> list:
+    st["mode"], st["pending"] = "OFF", None
+    return []
+
+
+def _refusal(inp: dict, cfg: dict, hs: str, code: int) -> str | None:
+    if not inp["enabled"]:
+        return "AUTO_REFUSED_DISABLED"
+    if not inp["link_ready"]:
+        return "AUTO_REFUSED_NO_LINK"
+    if hs == "UNKNOWN":
+        return "AUTO_REFUSED_STALE_HEATER"
+    if code == -1:
+        return "AUTO_REFUSED_NOT_INSTALLED"
+    if hs in _FAULTS:
+        return "AUTO_REFUSED_FAULT"
+    if hs == "TIMER_ARMED":
+        return "AUTO_REFUSED_TIMER_ARMED"
+    if not (inp["camping_on"] or inp["shore_on"]):
+        return "AUTO_REFUSED_NO_CAMPING"
+    if inp["ignition_on"] is not False:
+        return "AUTO_REFUSED_IGNITION"
+    if not _valid(inp["ref"], cfg):
+        return "AUTO_REFUSED_NO_REFERENCE"
+    return None
+
+
+def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
+    """One decision of the thermostat session (pure: no clock, no I/O; integer arithmetic only).
+
+    .. req:: Thermostat session state machine
+       :id: R_THERMOSTAT_SESSION
+       :status: implemented
+       :tags: thermostat, airheater
+
+       The thermostat shall enter AUTO only on an owner request with the feature enabled, a link,
+       a fresh, installed, fault-free heater with no armed timer, camping mode or shore power,
+       ignition off and a valid reference reading; otherwise it shall refuse with
+       ``AUTO_REFUSED_<WHY>`` and send nothing. From OFF it shall send ``runtime``, ``level`` and
+       one ``power on`` in that order; a running or continuous heater it shall adopt without a
+       command. It shall end AUTO without a command on a heater fault, a change it did not make,
+       the end of the run, and a command not applied after one retry. A ``power on`` is retried
+       at most once and only when a fresh readback shows the heater off; an unconfirmed command
+       is never re-sent blind. An owner stop, low second battery, overheat or a target exceeded
+       at the minimum level stop the heater (``power off`` or ``permanent off``); with the link
+       down the stop waits in ``STOPPING`` and is dropped when the heater changed meanwhile.
+       A lost reference switches to a valid backup, else the level goes to ``min_level``.
+
+    Evaluation order per call (the first rule that ends AUTO wins): pending-command bookkeeping,
+    owner request, ``STOPPING``, faults, heater unknown, foreign change, battery, heater ended,
+    reference validity, control (at most once per ``period_ms``, never while a command is pending).
+
+    :param inp: inputs ``now_ms``, ``enabled``, ``request`` (``None``/``"AUTO"``/``"OFF"``),
+        ``target``, ``runtime_min``, ``ref``/``backup``/``out`` (``{"alias", "value", "age_ms"}``
+        or ``None``), ``outside_on``, ``heater`` (raw 1702 dict or ``None``), ``heater_age_ms``,
+        ``link_ready``, ``camping_on``, ``shore_on``, ``ignition_on``, ``batt2_dv`` and ``cmd``
+        (``None`` or ``{"what", "result"}``: the last command of the previous batch the runner
+        attempted; the runner stops a batch at the first result that is not ``OK``).
+    :param cfg: settings dict (:data:`THERMO_DEFAULTS` keys).
+    :param st: session state (:func:`initial_state`); not modified.
+    :returns: ``(out, new_st)``; ``out`` = ``{"cmds": [(what, value)...], "reason", "mode",
+        "status"}``. ``reason`` is ``None`` for an idle step in mode ``OFF``.
+    """
+    st = copy.deepcopy(st)
+    now, link, target = inp["now_ms"], inp["link_ready"], inp["target"]
+    d = inp["heater"]
+    hs, level, code = heater_state(d, inp["heater_age_ms"], cfg)
+    snap = _snap(d, level) if hs != "UNKNOWN" else None
+    sensors = {"ref": inp["ref"], "backup": inp["backup"]}
+    t_out = inp["out"]["value"] if inp["outside_on"] and _valid(inp["out"], cfg) else None
+    cmds: list = []
+    reason = None
+
+    def out(why):
+        r = sensors[st["active"]]
+        status = {
+            "heater": hs,
+            "t_ref": r["value"] if _valid(r, cfg) else None,
+            "t_out": t_out,
+            "target": target,
+            "level": level,
+            "active_alias": r["alias"] if r else None,
+            "outside_active": t_out is not None,
+            "end": "run" if hs == "RUNNING" else "none",
+        }
+        return {"cmds": cmds, "reason": why, "mode": st["mode"], "status": status}, st
+
+    # (1) pending command: readback, result, verify window
+    p = st["pending"]
+    if p:
+        res = (inp["cmd"] or {}).get("result")
+        start = p["what"] == "power" and p["value"] == "on"
+        post = snap is not None and now - inp["heater_age_ms"] >= p["since_ms"]  # read after the send
+        fail = "START_NOT_CONFIRMED" if start else "NOT_APPLIED"
+        if snap is not None and post and _applied(p, snap):
+            st["pending"], st["expect"] = None, snap
+        elif hs in _FAULTS:
+            pass  # rule (3) ends AUTO with the fault's reason
+        elif res == "REFUSED":
+            st["pending"] = None
+            if p["value"] != "off":
+                _end(st)
+                return out(fail)
+        elif res in ("BUSY", "NOT_READY") and link:
+            cmds = _resend(p, st, inp, full=inp["cmd"]["what"] != "power")
+            p["since_ms"] = now
+        elif snap is not None and post and link and now - p["since_ms"] >= cfg["verify_ms"]:
+            if p["value"] == "off" and not _same(snap, st["expect"]):
+                st["pending"] = None
+                return out("STOP_DROPPED")
+            if p["tries"] >= 2:
+                if p["value"] != "off":
+                    _end(st)
+                st["pending"] = None
+                return out(fail)
+            cmds = _resend(p, st, inp, full=False)
+            p["since_ms"], p["tries"] = now, 2
+        if cmds:
+            reason = "STOPPING" if p["value"] == "off" else "AUTO_ON"
+
+    # (2) owner request (feature disabled while on = owner OFF)
+    on = st["mode"] in ("AUTO", "DEGRADED")
+    req = "OFF" if on and not inp["enabled"] else inp["request"]
+    if req == "OFF" and on:
+        cmds = _stop(st, link and snap is not None, now)
+        return out("STOPPING" if st["mode"] == "STOPPING" else "USER_OFF")
+    if req == "AUTO" and not on:
+        why = _refusal(inp, cfg, hs, code)
+        if why:
+            return out(why)
+        t_ref = inp["ref"]["value"]
+        ctl0 = {"i": 0, "last_change_ms": now, "hot_since_ms": None, "u": 0, "u_out": 0}
+        st.update(
+            mode="AUTO",
+            active="ref",
+            pending=None,
+            batt_low_since_ms=None,
+            stop_snapshot=None,
+            last_ctl_ms=now,
+        )
+        if hs == "OFF":
+            lvl, st["ctl"], _ = control(t_ref, t_out, target, 0, ctl0, cfg, None, now)
+            lvl = lvl or cfg["min_level"]  # overheat at entry: start low, the next step stops
+            st["pending"] = _pend("power", "on", now)
+            st["expect"] = {"normal": 1, "permanent": 0, "level": lvl}
+            cmds = [("runtime", inp["runtime_min"]), ("level", lvl), ("power", "on")]
+            return out("START")
+        _, ctl, _ = control(t_ref, t_out, target, 0, ctl0, cfg, level, now)
+        st["ctl"] = track(ctl, level, t_ref, target, cfg) if level is not None else ctl
+        st["expect"] = snap
+        return out("ADOPT_CONTINUOUS" if hs == "CONTINUOUS" else "ADOPT_RUN")
+    if req == "AUTO" and on and st["active"] == "backup" and _valid(inp["ref"], cfg):
+        st["active"] = "ref"  # back to the reference only by the owner
+        if level is not None:
+            st["ctl"] = track(st["ctl"], level, inp["ref"]["value"], target, cfg)
+
+    # STOPPING: wait for the link, then stop only what the ESP left
+    if st["mode"] == "STOPPING":
+        snap0 = st["stop_snapshot"]
+        if not link or snap is None:
+            return out("STOPPING")
+        st["mode"], st["stop_snapshot"] = "OFF", None
+        if hs not in _HEATING:
+            return out("CONTINUOUS_ENDED" if snap0["permanent"] else "RUN_ENDED")
+        if not _same(snap, snap0):
+            return out("STOP_DROPPED")
+        st["expect"] = snap0
+        cmds = _stop(st, True, now)
+        return out("STOPPING")
+    if not on:
+        return out(reason)
+
+    # (3) faults: AUTO ends, nothing is sent, never retried
+    if hs in _FAULTS:
+        cmds = _end(st)
+        return out("LOCKED" if code == 4 else "FAULT_%d" % code if 1 <= code <= 15 else "HEATER_UNKNOWN")
+    if snap is None:
+        cmds = []  # no writes until fresh; AUTO stays on
+        return out("HEATER_UNKNOWN")
+
+    # (4) foreign change (only while no own command is pending)
+    if st["pending"] is None and hs in _HEATING:
+        if not _same(snap, st["expect"]):
+            cmds = _end(st)
+            return out("FOREIGN_CHANGE")
+        if st["expect"]["level"] is None:
+            st["expect"]["level"] = level
+
+    # (5) second battery low for batt_hold_ms
+    dv = inp["batt2_dv"]
+    if dv is not None and dv < cfg["batt_min_dv"]:
+        if st["batt_low_since_ms"] is None:
+            st["batt_low_since_ms"] = now
+        if now - st["batt_low_since_ms"] >= cfg["batt_hold_ms"]:
+            cmds = _stop(st, link, now)
+            return out("BATTERY_LOW")
+    else:
+        st["batt_low_since_ms"] = None
+
+    # (6) the heater ended by itself
+    if st["pending"] is None and hs not in _HEATING:
+        cmds = _end(st)
+        return out("CONTINUOUS_ENDED" if st["expect"]["permanent"] else "RUN_ENDED")
+
+    # (7) reference validity: backup, else min_level (DEGRADED)
+    act = st["active"]
+    if not _valid(sensors[act], cfg):
+        if act == "ref" and _valid(inp["backup"], cfg):
+            st["active"], st["mode"], st["last_ctl_ms"] = "backup", "AUTO", now
+            if level is not None:
+                st["ctl"] = track(st["ctl"], level, inp["backup"]["value"], target, cfg)
+            return out("BACKUP_SELECTED")
+        st["mode"] = "DEGRADED"
+        if level != cfg["min_level"] and st["pending"] is None and link:
+            cmds = [("level", cfg["min_level"])]
+            st["pending"] = _pend("level", cfg["min_level"], now)
+            st["expect"]["level"] = cfg["min_level"]
+            st["ctl"]["last_change_ms"] = now
+        return out("REFERENCE_LOST")
+    t_ref = sensors[act]["value"]
+    if st["mode"] == "DEGRADED":
+        st["mode"], st["last_ctl_ms"] = "AUTO", now
+        if level is not None:
+            st["ctl"] = track(st["ctl"], level, t_ref, target, cfg)
+        return out("AUTO_ON")
+
+    # (8) control: once per period, frozen while a command is pending
+    if st["pending"] is not None or now - st["last_ctl_ms"] < cfg["period_ms"]:
+        return out(reason or "AUTO_ON")
+    old_change = st["ctl"]["last_change_ms"]
+    lvl, ctl, why = control(t_ref, t_out, target, now - st["last_ctl_ms"], st["ctl"], cfg, level, now)
+    st["ctl"], st["last_ctl_ms"] = ctl, now
+    if why in ("OVERHEAT", "TARGET_EXCEEDED_AT_MIN_LEVEL"):
+        cmds = _stop(st, link, now)
+        return out(why)
+    if lvl is not None and lvl != level and link:
+        cmds = [("level", lvl)]
+        st["pending"] = _pend("level", lvl, now)
+        st["expect"]["level"] = lvl
+        ctl["last_change_ms"] = now
+        return out(why)
+    ctl["last_change_ms"] = old_change  # nothing sent: the dwell does not restart
+    return out("OUTSIDE_INACTIVE" if inp["outside_on"] and t_out is None else "HOLD")
