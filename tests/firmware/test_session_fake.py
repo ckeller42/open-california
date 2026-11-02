@@ -3318,3 +3318,34 @@ def test_mode_change_mid_command_keeps_the_heartbeat(fake):
     assert w == want_writes("lighting", "kitchen", "5")
     between = out[out.index(w[0]) : out.index(w[1])]
     assert calls(between, "write_heartbeat")
+
+
+HEATER = int(
+    re.search(
+        r"#define CALI_SESSION_HEATER_REREAD_MS (\d+)u", (CORE / "include" / "cali_session.h").read_text()
+    ).group(1)
+)
+
+
+def test_hold_keeps_the_link_and_rereads_the_heater(fake):
+    """cali_session_hold(1) (the thermostat outside OFF): a power-save hang-up redials instead of
+    resting, a hold set while resting leaves the rest, and 1702 is re-read every
+    CALI_SESSION_HEATER_REREAD_MS with its frame time stamped; without the hold neither happens.
+
+    .. test:: The thermostat's session hold: no rest, 1702 re-read
+       :id: T_FW_SESSION_HOLD
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(fake, *REST_PRE, "hold 1", *PAIRED, *parked(), "DISCONNECTED 19", "rest")
+    assert out[-2:] == ["LOG session: reconnect in 7000 ms", "REST 0 -1"]
+    out = run(fake, *REST_PRE, *PAIRED, *parked(), "DISCONNECTED 19", "rest", "hold 1", "rest")
+    assert out[-1] == "REST 0 -1" and "LOG session: power-save rest off (thermostat)" in out
+    assert "LOG session: reconnect in 7000 ms" in after(out, "LOG session: power-save rest off (thermostat)")
+    # the heater re-read: due HEATER after the link came up (the read pass read it already)
+    base = [*PAIRED, *READ_ALL, "frameat 1702", "tick %d" % (HEATER - 100), "READ 1302 0 " + LIVE_WATER]
+    out = run(fake, "hold 1", *base, "tick %d" % HEATER, "READ 1702 0 0102", "frameat 1702")
+    tail = after(out, "CALL read %d" % READS[-1])
+    assert [c for c in calls(tail, "read") if c != "CALL read %d" % 0x1302] == ["CALL read %d" % 0x1702]
+    assert out[-1] == "FRAMEAT %d" % HEATER and "FRAMEAT %d" % T in out
+    out = run(fake, *base, "tick %d" % HEATER)  # no hold: water only
+    assert calls(after(out, "CALL read %d" % READS[-1]), "read %d" % 0x1702) == []

@@ -308,3 +308,28 @@ def test_company_id_0001_needs_a_plausible_6_byte_payload(cli, tmp_path):
         ],
     )
     assert json.loads(out[-1][4:])["seen"] == []
+
+
+def test_sensors_value_getter(cli, tmp_path):
+    """cali_sensors_value: a configured alias's field as centi-units with the advert's time; -1 for an
+    unknown alias, a field the type lacks, no reading yet, or a removed sensor (the thermostat's input).
+
+    .. test:: Sensor value getter for the thermostat
+       :id: T_FW_SENSORS_VALUE
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    a = f"adv A4:C1:38:00:00:02 1 -70 GVH5074_0002 {GOVEE_H5074}"
+    out = run(cli, tmp_path, ["init", a, "api 1000"])
+    sid = json.loads(out[-1][4:])["seen"][0]["id"]
+    out = run(cli, tmp_path, ["init", a, f"add {sid} cabin -", "value cabin 0", "now 4200", a,
+                              "value cabin 0", "value cabin 1", "value cabin 3", "value other 0",
+                              f"remove {sid}", "value cabin 0"])  # fmt: skip
+    vals = [line for line in out if line.startswith("VALUE")]
+    assert vals == [
+        "VALUE -1",  # configured, no reading since the add
+        "VALUE 0 2396 4200",  # 23.96 C
+        "VALUE 0 5848 4200",  # 58.48 %
+        "VALUE -1",  # govee has 3 fields
+        "VALUE -1",  # unknown alias
+        "VALUE -1",  # removed
+    ]

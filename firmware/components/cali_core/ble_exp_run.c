@@ -129,7 +129,7 @@ static void exp_tick(uint64_t now_ms, int ign);
 void cali_ble_exp_tick(uint64_t now_ms) {
     s_tick_at = now_ms;
     /* the van's ignition (terminal 15) on an up link (also a probe's): activity, every tick while on */
-    int ign = cali_session_link_up() && cali_ac_ignition() == 1;
+    int ign = (cali_session_link_up() && cali_ac_ignition() == 1) || cali_session_held();   /* + the thermostat */
     if (ign) cali_bi_activity(&s_bi);
     if (s_bx.on) exp_tick(now_ms, ign);
     cali_bi_out_t io = cali_bi_step(&s_bi, now_ms, cali_session_mode(), cali_session_probing(), s_bx.on);

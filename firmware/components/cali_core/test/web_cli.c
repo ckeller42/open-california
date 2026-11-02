@@ -177,6 +177,7 @@ static int s_ready, s_rest;
 static int64_t s_rest_next = -1;
 int cali_session_ready(void) { return s_ready; }
 int cali_session_rest(void) { return s_rest; }
+int cali_session_held(void) { return 0; }   /* ble_exp_run.c: the thermostat never holds here */
 int64_t cali_session_rest_next_ms(void) { return s_rest_next; }
 static int s_redial, s_viewer_ends;
 int cali_session_redial(void) { return s_redial; }

@@ -22,12 +22,43 @@
  *    every case, on a 32-bit and a 64-bit build.
  * @endverbatim
  *
+ * **Run** (thermostat_run.c, owner task, like auto_camper_run.c): cali_thermo_run_tick() runs one
+ * step every `period_ms`, and at once after an owner request, a switch of the feature, or the end of
+ * a command batch. A step's inputs are this ESP's: the stored 1702 frame and its age (no frame, or
+ * one with no fields, is no heater), 1202 State, 1602 StateLandAfs (1 or 2 = shore power),
+ * UTwoBattBemAfs, cali_ac_ignition(), cali_session_ready(), and the configured thermometers'
+ * `temp_c` by alias (cali_sensors_value(); an alias with no reading is an invalid sensor, never
+ * another one). The step's commands go to the control sequencer as `airheater` commands with source
+ * `thermostat`, one at a time (the next from the previous one's done callback); the batch stops at
+ * the first result that is not OK, and that result goes into the next step's `cmd_*` input. The
+ * request is a one-shot: one step sees it. The feature switch is the kv key CALI_THERMO_ON_KEY
+ * (missing = off); the mode is never stored (OFF after boot).
+ *
+ * @verbatim embed:rst:leading-asterisk
+ * .. req:: The satellite runs the cabin thermostat on its own link
+ *    :id: R_FW_THERMOSTAT_RUN
+ *    :status: implemented
+ *    :tags: esp32, thermostat, airheater
+ *
+ *    The firmware shall step the thermostat decision (``R_FW_THERMOSTAT_DECIDE``) once per
+ *    ``period_ms`` and at once after an owner request or a command result, from this link's frames,
+ *    the stored 1702 frame's age and the configured thermometers' readings by alias; send its
+ *    commands through the control sequencer one at a time, stopping at the first result that is not
+ *    OK and handing that result to the next step; ship with the feature off (kv ``th_on``, missing =
+ *    off) and never store the mode. While the mode is not OFF it holds the session: no power-save
+ *    rest, no idle demotion, and 1702 re-read every ``CALI_SESSION_HEATER_REREAD_MS``. It logs one
+ *    ``thermo`` record per step and one ``evt`` ``thermo`` record per mode change and command result,
+ *    only while the feature is on or a mode is active.
+ * @endverbatim
+ *
  * C99, no malloc, no NimBLE/ESP-IDF includes.
  */
 #ifndef CALI_THERMOSTAT_H
 #define CALI_THERMOSTAT_H
 
 #include <stdint.h>
+
+#include "cali_json.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -246,6 +277,68 @@ int cali_thermo_heater_state(const cali_thermo_heater_t *h, int64_t age_ms, cons
  */
 void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, cali_thermo_state_t *st,
                       cali_thermo_out_t *out);
+
+/** @brief kv key of the feature switch: 1 byte, 0 off, 1 on, missing = off. */
+#define CALI_THERMO_ON_KEY "th_on"
+/** @brief Default target, centi-degrees C. */
+#define CALI_THERMO_TARGET_DEFAULT 2000
+
+/** @brief The runner's configuration (defaults now; Task 6 stores it). */
+typedef struct {
+    cali_thermo_cfg_t s;                   /**< The settings (`runtime_min` is the start's run time). */
+    int32_t target;                        /**< Target, centi-degrees C. */
+    char ref[CALI_THERMO_ALIAS_LEN];       /**< Reference thermometer alias, "" = none. */
+    char backup[CALI_THERMO_ALIAS_LEN];    /**< Backup thermometer alias, "" = none. */
+    char out[CALI_THERMO_ALIAS_LEN];       /**< Outside thermometer alias, "" = none. */
+    int outside_on;                        /**< Use the outside feed-forward. */
+} cali_thermo_run_cfg_t;
+
+/** @brief Load the feature switch and reset the session to OFF. Call on the owner task after cali_platform_init. */
+void cali_thermo_run_init(void);
+
+/**
+ * @brief Run a step when one is due. Call on the owner task after cali_session_tick.
+ * @param now_ms  Uptime in ms.
+ */
+void cali_thermo_run_tick(uint64_t now_ms);
+
+/**
+ * @brief Pass an owner request to the next step (once).
+ * @param mode  "AUTO" or "OFF".
+ * @return 0, or -1 for another text.
+ */
+int cali_thermo_request(const char *mode);
+
+/**
+ * @brief Switch the feature and store the switch (CALI_THERMO_ON_KEY). Off while a mode is active stops it.
+ * @param on  1 on, 0 off.
+ * @return 0, or -1 not stored (the switch still changes).
+ */
+int cali_thermo_set_enabled(int on);
+
+/**
+ * @brief The runner's configuration, to change in place on the owner task.
+ * @return The configuration.
+ */
+cali_thermo_run_cfg_t *cali_thermo_run_cfg(void);
+
+/**
+ * @brief Set one setting by its `cali_thermo_cfg_t` member name (for example "period_ms").
+ * @param key    The member name.
+ * @param value  The value.
+ * @return 0, or -1 for an unknown name.
+ */
+int cali_thermo_cfg_set(const char *key, int32_t value);
+
+/**
+ * @brief Write the status object: `{"enabled","mode","reason","heater","t_ref","t_out","target","level","active","outside_active","end"}`.
+ *
+ * `reason` is the last step's reason that was not NULL (null before any); temperatures and the
+ * level are null when unknown.
+ *
+ * @param j  The JSON writer; the caller writes the key first.
+ */
+void cali_thermo_state_json(cali_json_t *j);
 
 #ifdef __cplusplus
 }

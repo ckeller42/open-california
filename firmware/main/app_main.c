@@ -90,6 +90,7 @@
 #include "nimble/nimble_port_freertos.h"
 
 #include "cali_auto_camper.h"
+#include "cali_thermostat.h"
 #include "cali_pi_wake.h"
 #include "cali_ble_exp.h"
 #include "cali_ble_nimble.h"
@@ -333,6 +334,7 @@ static void do_work(void) {
         cali_sensors_tick(now, s_ble, cali_exp_sensors(), cali_runner_in_flow());   /* R_FW_SENSORS */
         cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
         cali_ac_tick(now);            /* auto camper (R_FW_AUTO_CAMPER): restore camping after park */
+        cali_thermo_run_tick(now);    /* cabin thermostat (R_FW_THERMOSTAT_RUN): ships disabled */
         cali_pw_tick(now);            /* Pi wake (R_FW_PI_WAKE): ends a pulse; GPIO9 low on the ignition edge */
         cali_ble_exp_tick(now);       /* the BLE power experiment (R_FW_BLE_EXP): phase modes + probes */
         diag_tick(now);               /* R_FW_DIAG_LOG: boot event, the minute's diag record */
@@ -574,6 +576,7 @@ void app_main(void) {
     cali_ble_exp_init();      /* the unit's advert -> the BLE experiment (R_FW_BLE_EXP) */
     cali_log("exp: sensors %s", cali_exp_sensors() ? "on" : "off");   /* R_FW_EXPERIMENTAL, test_qemu_boot.py */
     cali_sensors_init();      /* the configured sensor list (NVS sens_list, R_FW_SENSORS) */
+    cali_thermo_run_init();   /* the thermostat switch (NVS th_on, missing = off); mode OFF (R_FW_THERMOSTAT_RUN) */
 
     s_lines = xQueueCreate(NLINES, LINE_MAX_LEN);
     configASSERT(s_lines != NULL);
