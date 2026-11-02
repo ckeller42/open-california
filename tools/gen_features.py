@@ -294,7 +294,7 @@ COMMANDS = {
         "level": ("Heating temperature", _r(control.AIRHEATER_LEVEL_RANGE), "10 = HI", 5),
         "runtime": (
             "Run time",
-            "0–%d min" % control.AIRHEATER_MAX_RUNTIME_MIN,
+            "%d–%d min" % (control.AIRHEATER_MIN_RUNTIME_MIN, control.AIRHEATER_MAX_RUNTIME_MIN),
             "not during continuous heating",
             60,
         ),

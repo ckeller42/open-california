@@ -17,7 +17,7 @@
     calictl set airheater power on|off            # immediate heating
     calictl set airheater permanent off           # continuous heating: OFF only (start it from inside the vehicle)
     calictl set airheater level <1-10>
-    calictl set airheater runtime <0-120>         # minutes
+    calictl set airheater runtime <10-120>         # minutes
     calictl set airheater timer HH:MM
     calictl set roofaircondition power on|off       # NOT-LIVE-VERIFIED (not installed on this van)
     calictl set roofaircondition fanspeed <0-4>     # NOT-LIVE-VERIFIED

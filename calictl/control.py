@@ -419,6 +419,7 @@ LIGHT_ZONES = {
 # down; the cooler cooling-timer can only be set while the fridge is OFF.
 _ROOF_CLOSED_POSITIONS = (0, 14)  # matches semantics._ROOF_POS closed values
 AIRHEATER_MAX_RUNTIME_MIN = 120  # the app's cap on immediate heating (its heating info page)
+AIRHEATER_MIN_RUNTIME_MIN = 10  # the app's run-time slider never goes lower (index 1-12 x 10 min)
 AIRHEATER_LEVEL_RANGE = (1, 10)  # app-settable HeatingLevel (10 = HI); HA + the web UI slider read it
 # OperationModeAirHeater is the departure-timer arm (app-observed 2026-09-16, tools/applab):
 # 7 = the app's leave-unchanged sentinel in every frame that doesn't target it, 3 = timer armed
@@ -897,7 +898,7 @@ def _airheater(funcs, what, value, last):
 
        ``calictl`` shall build a full-packet airheater (char 1701) control frame
        for ``power`` (via ``NormalOperationRequest`` = 1/0), ``level`` (via
-       ``HeatingLevel`` 1-10), ``runtime`` (``RunningTime`` 0-120 min — the app's cap),
+       ``HeatingLevel`` 1-10), ``runtime`` (``RunningTime`` 10-120 min — the app's slider range),
        ``timer`` (``TimerHour``/``TimerMin``), ``timer_start`` (arm the departure timer:
        ``OperationModeAirHeater`` = 3 + ``OperationModeCombined`` = 1, the app's
        ``3f3b017f1f3f``), ``timer_cancel`` (``OperationModeAirHeater`` = 0, the app's
@@ -921,7 +922,9 @@ def _airheater(funcs, what, value, last):
         # (the fuel-burning heater's emissions limit; the unit raises ErrorCode 4
         # HEATING_TIME_EXCEEDED past it). Enforce the same bound here so CLI/API/HA can't ask for
         # what the app never sends; 255 is the field WIDTH, not a valid request.
-        rt = _int_range(value, 0, AIRHEATER_MAX_RUNTIME_MIN, "airheater runtime (minutes)")
+        rt = _int_range(
+            value, AIRHEATER_MIN_RUNTIME_MIN, AIRHEATER_MAX_RUNTIME_MIN, "airheater runtime (minutes)"
+        )
         ch = {"RunningTime": rt}
     elif what == "timer":  # start-at TimerHour:TimerMin (rf/b.java:165 B0())
         hh, mm = _hhmm(value)
