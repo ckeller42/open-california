@@ -131,3 +131,85 @@ def heater_state(d: dict | None, age_ms: int | None, cfg: dict) -> tuple[str, in
     else:
         state = "OFF"
     return state, level, err
+
+
+def control(
+    t_ref: int,
+    t_out: int | None,
+    target: int,
+    dt_ms: int,
+    ctl: dict,
+    cfg: dict,
+    cur_level: int | None,
+    now_ms: int,
+) -> tuple[int | None, dict, str]:
+    """One step of the integer PI law with outside feed-forward (demand in milli-levels to a level).
+
+    .. req:: Thermostat control law
+       :id: R_THERMOSTAT_CONTROL
+       :status: implemented
+       :tags: thermostat
+
+       The thermostat shall compute the demand ``u = p + i + u_out`` in milli-levels from the
+       reference error (centi-°C), an integrator frozen on long step gaps and by anti-windup, and
+       an outside feed-forward capped at ``u_out_max``. It shall change the level only when the
+       demand differs from the current level by at least ``500 + hyst`` and ``min_dwell_ms`` has
+       passed. It shall report ``OVERHEAT`` above ``target + overheat`` and
+       ``TARGET_EXCEEDED_AT_MIN_LEVEL`` after ``hot_hold_ms`` above ``target + band_hi`` at the
+       minimum level. All arithmetic is integer; division uses :func:`_rdiv`.
+
+    :param t_ref: reference temperature in centi-°C.
+    :param t_out: outside temperature in centi-°C, or ``None`` (no feed-forward).
+    :param target: target temperature in centi-°C.
+    :param dt_ms: time since the previous step in ms.
+    :param ctl: controller state ``{i, last_change_ms, hot_since_ms, u, u_out}``; not modified.
+    :param cfg: settings dict (:data:`THERMO_DEFAULTS` keys).
+    :param cur_level: the heater's current level 1..10, or ``None`` when unknown.
+    :param now_ms: current time in ms.
+    :returns: ``(new_level_or_None, new_ctl, reason)``. The level is ``None`` for ``HOLD``,
+        ``OVERHEAT`` and ``TARGET_EXCEEDED_AT_MIN_LEVEL``. With ``cur_level`` ``None`` the level
+        comes from the demand alone, with reason ``LEVEL_UP``.
+    """
+    e = target - t_ref
+    p = _rdiv(cfg["kp"] * e, 100)
+    u_out = (
+        0 if t_out is None else min(max(_rdiv(cfg["ka"] * max(0, target - t_out), 100), 0), cfg["u_out_max"])
+    )
+    i = ctl["i"]
+    u_old = p + i + u_out
+    frozen = dt_ms > 3 * cfg["period_ms"] or (u_old < 1000 and e < 0) or (u_old > 10000 and e > 0)
+    if not frozen:
+        i += _rdiv(cfg["ki"] * e * dt_ms, 100 * 60000)
+    u = p + i + u_out
+    hot = cur_level == cfg["min_level"] and t_ref > target + cfg["band_hi"]
+    hot_since = (ctl["hot_since_ms"] if ctl["hot_since_ms"] is not None else now_ms) if hot else None
+    new = {**ctl, "i": i, "u": u, "u_out": u_out, "hot_since_ms": hot_since}
+    if t_ref > target + cfg["overheat"]:
+        return None, new, "OVERHEAT"
+    if hot_since is not None and now_ms - hot_since >= cfg["hot_hold_ms"]:
+        return None, new, "TARGET_EXCEEDED_AT_MIN_LEVEL"
+    level = min(max(_rdiv(u, 1000), cfg["min_level"]), 10)
+    if cur_level is None:
+        return level, new, "LEVEL_UP"
+    if (
+        level == cur_level
+        or abs(u - cur_level * 1000) < 500 + cfg["hyst"]
+        or now_ms - ctl["last_change_ms"] < cfg["min_dwell_ms"]
+    ):
+        return None, new, "HOLD"
+    new["last_change_ms"] = now_ms
+    return level, new, "LEVEL_UP" if level > cur_level else "LEVEL_DOWN"
+
+
+def track(ctl: dict, cur_level: int, t_ref: int, target: int, cfg: dict) -> dict:
+    """Make the next demand equal the current level (bumpless adopt, backup switch, target change).
+
+    :param ctl: controller state; not modified.
+    :param cur_level: the heater's current level.
+    :param t_ref: reference temperature in centi-°C.
+    :param target: target temperature in centi-°C.
+    :param cfg: settings dict.
+    :returns: a copy of ``ctl`` whose integrator makes ``p + i + u_out == cur_level * 1000``.
+    """
+    p = _rdiv(cfg["kp"] * (target - t_ref), 100)
+    return {**ctl, "i": cur_level * 1000 - p - ctl["u_out"]}

@@ -77,3 +77,77 @@ def test_settings_and_reasons():
     assert "FAULT_0" not in th.REASONS and "FAULT_16" not in th.REASONS
     with pytest.raises(AttributeError):
         th.HEATER_STATES.append("X")
+
+
+def _ctl(**kw):
+    return {"i": 0, "last_change_ms": -(10**9), "hot_since_ms": None, "u": 0, "u_out": 0, **kw}
+
+
+def test_cold_cabin_raises_level():
+    """A cold cabin raises the heating level.
+
+    .. test:: Thermostat control law
+       :id: T_THERMOSTAT_CONTROL
+       :links: R_THERMOSTAT_CONTROL
+    """
+    lvl, ctl, why = th.control(1700, None, 2100, 60000, _ctl(), CFG, 3, 0)
+    assert lvl > 3 and why == "LEVEL_UP"
+    assert ctl["u"] > 3000 and ctl["last_change_ms"] == 0
+
+
+def test_hysteresis_and_dwell():
+    lvl, ctl, why = th.control(1700, None, 2100, 60000, _ctl(), CFG, 3, 1_000_000)
+    assert (lvl, why) == (6, "LEVEL_UP") and ctl["last_change_ms"] == 1_000_000
+    lvl, _, why = th.control(1700, None, 2100, 60000, ctl, CFG, 3, 1_060_000)
+    assert (lvl, why) == (None, "HOLD")  # still wants more, but within min_dwell_ms
+    # inside the hysteresis band (u 2500 vs level 2000): no change even after the dwell
+    lvl, _, why = th.control(1900, None, 2100, 0, _ctl(i=-500), CFG, 2, 2_000_000)
+    assert (lvl, why) == (None, "HOLD")
+
+
+def test_outside_off_contributes_zero():
+    _, ctl, _ = th.control(2000, -1000, 2100, 60000, _ctl(), CFG, 3, 0)
+    assert ctl["u_out"] == 3000
+    _, ctl, _ = th.control(2000, None, 2100, 60000, ctl, CFG, 3, 60000)
+    assert ctl["u_out"] == 0
+
+
+def test_outside_cold_adds_up_to_cap():
+    _, ctl, _ = th.control(2100, -1000, 2100, 0, _ctl(), CFG, 3, 0)
+    assert ctl["u_out"] == 3000
+    _, ctl, _ = th.control(2100, 1600, 2100, 0, _ctl(), CFG, 3, 0)
+    assert ctl["u_out"] == 500
+
+
+def test_overheat():
+    lvl, _, why = th.control(2100 + 401, None, 2100, 60000, _ctl(), CFG, 5, 0)
+    assert (lvl, why) == (None, "OVERHEAT")
+
+
+def test_target_exceeded_at_min_level():
+    ctl, now = _ctl(), 0
+    for _ in range(15):
+        lvl, ctl, why = th.control(2100 + 201, None, 2100, 60000, ctl, CFG, 1, now)
+        assert why != "TARGET_EXCEEDED_AT_MIN_LEVEL"
+        now += 60000
+    lvl, ctl, why = th.control(2100 + 201, None, 2100, 60000, ctl, CFG, 1, now)
+    assert (lvl, why) == (None, "TARGET_EXCEEDED_AT_MIN_LEVEL")
+    # cooling below the band resets the timer
+    _, ctl, _ = th.control(2100, None, 2100, 60000, ctl, CFG, 1, now + 60000)
+    assert ctl["hot_since_ms"] is None
+
+
+def test_target_change_keeps_integrator_bumpless():
+    ctl = th.track(_ctl(), 4, 1900, 2100, CFG)
+    _, c1, _ = th.control(1900, None, 2100, 0, ctl, CFG, 4, 0)
+    assert c1["u"] == 4000
+    _, c2, _ = th.control(1900, None, 2150, 0, c1, CFG, 4, 0)
+    assert c2["u"] - c1["u"] == th._rdiv(CFG["kp"] * 50, 100)
+    assert c2["i"] == c1["i"]
+
+
+def test_step_gap_freezes_integrator():
+    _, ctl, _ = th.control(1900, None, 2100, 4 * CFG["period_ms"], _ctl(i=123), CFG, 3, 0)
+    assert ctl["i"] == 123
+    _, ctl, _ = th.control(1900, None, 2100, CFG["period_ms"], _ctl(i=123), CFG, 3, 0)
+    assert ctl["i"] == 123 + th._rdiv(CFG["ki"] * 200 * CFG["period_ms"], 100 * 60000)
