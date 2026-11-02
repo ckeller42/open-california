@@ -519,8 +519,8 @@
           "label": "Do you want to proceed",
           "range": null,
           "controls": {
-            "field": "TimerHour/TimerMin",
-            "action": "B0"
+            "field": "OperationModeAirHeater+OperationModeCombined (arm)",
+            "action": "a2 (5.4.0 H0 + Mode 3)"
           }
         },
         {
@@ -529,8 +529,8 @@
           "label": "Apply new settings now",
           "range": null,
           "controls": {
-            "field": "HeatingLevel/RunningTime",
-            "action": "q4/D4"
+            "field": "NormalOperationRequest + RunningTime",
+            "action": "C2 off, D4, C2 on"
           }
         },
         {

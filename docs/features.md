@@ -136,7 +136,7 @@ Lamp levels: 0 = off, 1–10 = 10–100 %, 11 = the lamp's default.
 | `power` | Immediate heating (Sofortheizen) | on / off | yes | Air Heater Power | yes | on is refused while the unit reports the heater not possible (engine running or water heater on) |
 | `permanent` | Continuous heating (Dauerbetrieb) | off | yes | — | yes | can only be started from inside the vehicle |
 | `level` | Heating temperature (Heizstufe) | 1–10 | yes | Air Heater Set Level | yes | 10 = HI |
-| `runtime` | Run time (Laufzeit) | 0–120 min | yes | — | yes | not during continuous heating |
+| `runtime` | Run time (Laufzeit) | 10–120 min | yes | — | yes | not during continuous heating |
 | `timer` | Start heating at (Heizen startet um) | HH:MM | yes | — | yes | not while the timer is on |
 | `timer_start` | Start timer (Timer starten) | — | yes | — | yes | the heater then starts at the set time for the run time |
 | `timer_cancel` | Stop timer (Timer stoppen) | — | yes | — | yes | — |

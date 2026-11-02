@@ -8885,14 +8885,7 @@
    "value": 0,
    "state": "seed",
    "expect": {
-    "kind": "frames",
-    "frames": [
-     {
-      "char": "1701",
-      "delay_ms": 0,
-      "hex": "3f7b00001f3f"
-     }
-    ]
+    "kind": "bad"
    }
   },
   {
@@ -8902,14 +8895,7 @@
    "value": 0,
    "state": "empty",
    "expect": {
-    "kind": "frames",
-    "frames": [
-     {
-      "char": "1701",
-      "delay_ms": 0,
-      "hex": "3f7b00001f3f"
-     }
-    ]
+    "kind": "bad"
    }
   },
   {
@@ -8919,14 +8905,7 @@
    "value": 0,
    "state": "heater_not_possible",
    "expect": {
-    "kind": "frames",
-    "frames": [
-     {
-      "char": "1701",
-      "delay_ms": 0,
-      "hex": "3f7b00001f3f"
-     }
-    ]
+    "kind": "bad"
    }
   },
   {
@@ -8936,14 +8915,7 @@
    "value": 0,
    "state": "heater_error_4",
    "expect": {
-    "kind": "frames",
-    "frames": [
-     {
-      "char": "1701",
-      "delay_ms": 0,
-      "hex": "3f7b00001f3f"
-     }
-    ]
+    "kind": "bad"
    }
   },
   {
@@ -8964,12 +8936,162 @@
    "value": 0,
    "state": "heater_timer_armed",
    "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/9@seed",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 9,
+   "state": "seed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/9@empty",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 9,
+   "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/9@heater_not_possible",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 9,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/9@heater_error_4",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 9,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/9@heater_permanent",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 9,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "refused",
+    "reason": "the run time cannot be changed while continuous heating is on"
+   }
+  },
+  {
+   "id": "airheater/runtime/9@heater_timer_armed",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 9,
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/10@seed",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 10,
+   "state": "seed",
+   "expect": {
     "kind": "frames",
     "frames": [
      {
       "char": "1701",
       "delay_ms": 0,
-      "hex": "3f7b00001f3f"
+      "hex": "3f7b000a1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/runtime/10@empty",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 10,
+   "state": "empty",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b000a1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/runtime/10@heater_not_possible",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 10,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b000a1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/runtime/10@heater_error_4",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 10,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b000a1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/runtime/10@heater_permanent",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 10,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "refused",
+    "reason": "the run time cannot be changed while continuous heating is on"
+   }
+  },
+  {
+   "id": "airheater/runtime/10@heater_timer_armed",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 10,
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b000a1f3f"
      }
     ]
    }
