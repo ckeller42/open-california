@@ -532,7 +532,8 @@ class MockCamperUnit:
         `campingmode.Enable`; falling clears `Enable` — the coupling seen live 2026-09-16), and
         roof travel (:meth:`_roof_tick`; no frames for ``ROOF_RELEASE_S`` = released), and the cabin
         temperature (``cabin``: ``t_in`` relaxes to ``t_out`` with ``tau_s``, plus ``gain_per_level`` x
-        ``HeatingLevel`` while the heater runs; a float, test tooling).
+        ``HeatingLevel`` while the heater runs; a float, test tooling). The cabin step is explicit Euler,
+        stable only for ``dt`` < ``tau_s``.
         """
         import datetime as _dt
 

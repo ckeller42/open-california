@@ -215,8 +215,9 @@ def test_closed_loop_reaches_target(host_fw, rec_unit):
     cabin starts at 19.0 C, the Govee advert follows the model, and the regulation settles within 1 C of
     the 21.0 C target. The burner starts once (no second ``power`` frame) and the level changes at least
     ``min_dwell_ms`` apart. This tests the control logic in a loop; it does not tune it. The real clock
-    runs the model: the runner's plausibility rule (3 C per minute) and the 60 s scan cadence bound how fast
-    a reading may move, hence the slow cabin (time constant 240 s) and a faster integrator than the van's.
+    runs the model, and the runner rejects a reading that moves faster than 3 C per minute: the cabin is
+    slow (time constant 240 s; from 19.0 C it moves 0.8 C per minute at level 4 and 2.1 at level 5, 3.3 at level 6)
+    so the loop, which stays at level 4, remains inside that rule.
 
     .. test:: Thermostat closed loop on the host tier: the cabin settles, the dwell holds, the burner starts once
        :id: T_THERMOSTAT_CLOSED_LOOP
@@ -226,20 +227,17 @@ def test_closed_loop_reaches_target(host_fw, rec_unit):
     cabin = hu.unit.unit.cabin
     cabin.update(t_in=1900, t_out=900, tau_s=240, gain_per_level=300)
     fw, adv, _ = _setup(host_fw, hu, 1900)
-    fw.send("thermo set ki 300")  # a faster integrator than the van's: the real clock is the test's only one
+    # The fast test cabin (tau 240 s) needs a higher ki; the shipped default ki 50 is not exercised closed-loop
+    # here, and tuning is not covered.
+    fw.send("thermo set ki 300")
     _auto(fw, hu)
     hu.loop.call_soon_threadsafe(
         lambda: hu.loop.create_task(hu.unit.clock())
     )  # the model runs: 1 tick per second
     end, settled_at, trace, advertised = time.monotonic() + 540, None, [], 1900
     while time.monotonic() < end:
-        fw.send("sensors")
-        seen = fw.expect("SENSORS")["configured"][0]["last_seen_s"]
         want = round(cabin["t_in"])
-        # A new advert value only while no scan window is open (windows come every 60 s, last ~5 s): the
-        # runner's plausibility rule rejects a change between adverts 100 ms apart. Late in the gap, so the
-        # reading is fresh when the next window opens.
-        if seen is not None and 38 <= seen <= 46 and want != advertised:
+        if want != advertised:
             adv.set_mfg(govee(want))
             advertised = want
         th = _thermo(fw)
