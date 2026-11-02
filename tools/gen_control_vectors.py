@@ -101,7 +101,7 @@ GRID: dict[str, dict[str, list]] = {
     "airheater": {
         "power": ["on", "off"],
         "level": [1, 10, 0, 11, "5"],
-        "runtime": [0, 120, 121, "60", None],
+        "runtime": [0, 9, 10, 120, 121, "60", None],
         "timer": ["06:45", "25:00", None],
         "timer_start": [None],
         "timer_cancel": [None],
