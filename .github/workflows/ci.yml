@@ -441,7 +441,7 @@ jobs:
     needs: ios-changes
     if: needs.ios-changes.outputs.ios == 'true'
     runs-on: xcode-27
-    timeout-minutes: 60
+    timeout-minutes: 80
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
@@ -486,13 +486,14 @@ jobs:
         run: xcodegen generate --spec ios/project.yml
       - name: App tests on the simulator (unit, snapshot, UI)
         if: ${{ !cancelled() }}   # also after a sanitizer failure: the app tests are separate evidence
-        timeout-minutes: 25   # xcodebuild can hang after the UI tests
+        timeout-minutes: 40   # xcodebuild can hang after the UI tests
         env:
           TEST_RUNNER_SNAPSHOT_ARTIFACTS: ${{ runner.temp }}/snapshot-diffs
         run: |
           set -o pipefail
           xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
             -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' \
+            -test-timeouts-enabled YES -maximum-test-execution-time-allowance 300 \
             -resultBundlePath "$RUNNER_TEMP/Camper.xcresult" | xcbeautify
       # The linters after the tests (also when a test failed): a lint finding must not hide the test
       # result.
