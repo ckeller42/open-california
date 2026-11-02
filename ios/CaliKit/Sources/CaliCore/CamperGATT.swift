@@ -1,4 +1,5 @@
 import CCodec
+import CControl
 import Foundation
 
 /// The unit's GATT map. The char tables are read from the generated C headers (`codec_chars.h`,
@@ -14,6 +15,17 @@ public enum CamperGATT {
     /// function name -> state char short id.
     public static let stateChars: [String: UInt16] = table(CODEC_CHARS, Int(CODEC_NCHARS)) { (e: codec_char) in
         (e.function, e.state_short)
+    }
+
+    /// The state chars a unit of `variant` has (the 1004 `CarVariant`; nil = unknown, every function),
+    /// in one fixed order: `general` first (it carries the protocol gate), then by function name. The
+    /// gate is the satellite's own C table (`cali_variant_has`, the app's isSupportedForVariant), so
+    /// the iPhone app and the satellite cannot drift apart.
+    public static func stateChars(forVariant variant: Int?) -> [(function: String, char: UInt16)] {
+        let v = Int32(variant ?? -1)
+        return stateChars.filter { cali_variant_has($0.key, v) != 0 }
+            .sorted { $0.key == "general" || ($1.key != "general" && $0.key < $1.key) }
+            .map { (function: $0.key, char: $0.value) }
     }
 
     /// function name -> control char short id (the five writable functions).
