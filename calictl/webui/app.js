@@ -3686,6 +3686,7 @@ function spinner() {
 /** @type {?Thermo} */
 let THERMO = null;
 let thermoSheet = false;    // the thermometer sheet is open (survives the 2 s re-render)
+let thermoLoading = false;  // a GET /api/thermostat is in flight
 let thermoAsked = false;    // the first fetch of this page load went out
 let thermoChain = Promise.resolve();   // POSTs run one at a time, each with the then-current rev
 const THERMO_STEP = 50, THERMO_MIN = 500, THERMO_MAX = 3000;   // centi-°C
@@ -3750,11 +3751,16 @@ const thermoShown = () => !!THERMO && thermoWanted();
 /** Fetch GET /api/thermostat (404 / no Govee: no card). @returns {Promise<void>} */
 async function thermoLoad() {
   if (!thermoWanted()) { THERMO = null; return; }
+  if (thermoLoading) return;   // one in flight: the satellite serves one connection, a dead peer must not stack requests
+  thermoLoading = true;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
   try {
-    const r = await fetch("/api/thermostat", { cache: "no-store" });
+    const r = await fetch("/api/thermostat", { cache: "no-store", signal: ac.signal });
     const b = r.ok ? await r.json() : null;
     THERMO = b && typeof b.rev === "number" && b.status ? b : null;
   } catch (e) { THERMO = null; }
+  finally { clearTimeout(timer); thermoLoading = false; }
 }
 
 /** The first visit of the screen asks at once instead of waiting for the next poll. */

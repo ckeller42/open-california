@@ -471,11 +471,15 @@ class FakeUnit:
                 elif parts[0] == "set":
                     fn = parts[1]
                     if fn == "cabin":  # the thermal model: t_in t_out tau_s gain_per_level
-                        for kv in parts[2:]:
+                        new = {}
+                        for kv in parts[2:]:  # validate everything first: a rejected command changes nothing
                             k, v = kv.split("=")
                             if k not in self.unit.cabin:
                                 raise KeyError(k)
-                            self.unit.cabin[k] = int(v)
+                            new[k] = int(v)
+                        if new.get("tau_s", 1) <= 0:
+                            raise ValueError("tau_s must be > 0")
+                        self.unit.cabin.update(new)
                         print(f"cabin -> {self.unit.cabin}", flush=True)
                         return
                     st = self.unit.state.setdefault(fn, {})

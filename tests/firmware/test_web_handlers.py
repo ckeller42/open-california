@@ -3126,7 +3126,8 @@ def test_post_unknown_sensor_400(web_cli):
         b"thinit",
         req("GET", "/api/thermostat"),
     )
-    assert rs[4].json()["ref"] == "kitchen"  # stored by alias, back after a "reboot"
+    assert rs[4].json()["ref"] == "kitchen"
+    assert rs[5].json()["ref"] == "kitchen"  # stored by alias, back after a "reboot" (the GET after thinit)
     assert rs[0].status == 400 and rs[0].json()["error"] == "unknown_sensor"
     b = rs[1].json()
     assert (b["ref"], b["backup"], b["out"], b["outside_on"]) == ("kitchen", None, "kitchen", True)

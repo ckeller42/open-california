@@ -232,6 +232,19 @@ def test_console_set_cabin_changes_the_model_and_rejects_an_unknown_key(capsys):
     assert "error: 'bogus'" in capsys.readouterr().out
 
 
+def test_console_set_cabin_rejects_bad_values_without_changing_the_model(capsys):
+    async def run():
+        _, unit, _ = await _unit_and_central()
+        before = dict(unit.unit.cabin)
+        for bad in ("t_out=-500 tau_s=0", "tau_s=-5", "t_out=-500 tau_s=abc", "t_out=-500 bogus=1"):
+            unit._console_line("set cabin " + bad)
+        return before, dict(unit.unit.cabin)
+
+    before, after = asyncio.run(run())
+    assert after == before  # no partial update, no ZeroDivisionError later in tick()
+    assert capsys.readouterr().out.count("error") == 4
+
+
 def test_console_forget_command_clears_bonds():
     async def run():
         _, unit, central = await _unit_and_central()
