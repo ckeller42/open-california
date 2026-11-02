@@ -67,7 +67,7 @@ COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o
 	sensors.o json.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o pi_wake.o ble_exp.o ble_exp_run.o
+CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o pi_wake.o ble_exp.o ble_exp_run.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
@@ -200,6 +200,10 @@ ota.o: $(COMPONENTS)/cali_core/ota.c $(CORE_H)/cali_ota.h $(CORE_H)/cali_json.h 
 
 # Auto camper mode (R_FW_AUTO_CAMPER): the decide twin + its controller.
 auto_camper.o: $(COMPONENTS)/cali_core/auto_camper.c $(CORE_H)/cali_auto_camper.h $(CORE_H)/cali_json.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The cabin thermostat's decision twin (R_FW_THERMOSTAT_DECIDE).
+thermostat.o: $(COMPONENTS)/cali_core/thermostat.c $(CORE_H)/cali_thermostat.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 auto_camper_run.o: $(COMPONENTS)/cali_core/auto_camper_run.c $(CORE_H)/cali_auto_camper.h $(CORE_H)/cali_control.h \

@@ -305,6 +305,7 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.firmware.test_sdlog
 .. automodule:: tests.firmware.test_diag
 .. automodule:: tests.firmware.test_auto_camper_parity
+.. automodule:: tests.firmware.test_thermostat_parity
 .. automodule:: tests.firmware.test_auto_camper_e2e
 .. automodule:: tests.firmware.test_pi_wake_e2e
 .. automodule:: tests.firmware.test_ble_exp

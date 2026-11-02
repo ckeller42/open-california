@@ -102,6 +102,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "sdlog.c"),
             str(CORE / "diag.c"),
             str(CORE / "auto_camper.c"),
+            str(CORE / "thermostat.c"),
             str(CORE / "auto_camper_run.c"),
             str(CORE / "pi_wake.c"),
             str(CORE / "ble_exp.c"),

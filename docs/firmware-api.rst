@@ -99,6 +99,11 @@ Auto camper
 
 .. doxygenfile:: cali_auto_camper.h
 
+Cabin thermostat
+~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_thermostat.h
+
 Pi wake and halt
 ~~~~~~~~~~~~~~~~
 
