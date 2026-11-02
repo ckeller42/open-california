@@ -441,9 +441,25 @@ def test_continuous_ended_by_engine():
 def test_auto_request_drops_pending_stop():
     out, st = _auto(RUN)
     out, st = _step(st, now_ms=1000, request="OFF", heater=RUN)
-    assert (out["reason"], out["cmds"], st["pending"]["value"]) == ("USER_OFF", [("power", "off")], "off")
+    assert (out["reason"], out["cmds"], st["pending"]["why"]) == ("USER_OFF", [("power", "off")], "USER_OFF")
     busy = {"what": "power", "result": "BUSY"}
+    # accepted: the owner's own stop is dropped, the heater is adopted without a command
     out, st2 = _step(st, now_ms=2000, request="AUTO", cmd=busy, heater=RUN)
-    assert (out["reason"], out["cmds"], st2["pending"]) == ("ADOPT_RUN", [], None)
-    out, st2 = _step(st, now_ms=2000, request="AUTO", cmd=busy, heater=RUN, camping_on=False)
-    assert (out["reason"], out["cmds"], st2["pending"]) == ("AUTO_REFUSED_NO_CAMPING", [], None)
+    assert (out["reason"], out["cmds"], st2["pending"], st2["mode"]) == ("ADOPT_RUN", [], None, "AUTO")
+    # refused: the stop is kept and goes on (re-sent after BUSY)
+    out, st2 = _step(st, now_ms=2000, request="AUTO", cmd=busy, heater=RUN, enabled=False)
+    assert (out["reason"], out["cmds"], st2["mode"]) == ("AUTO_REFUSED_DISABLED", [("power", "off")], "OFF")
+    assert st2["pending"]["value"] == "off"
+    # a safety stop: AUTO is ignored
+    out, st = _step(_auto(RUN)[1], now_ms=P, heater=RUN, ref={"alias": "cabin", "value": 2600, "age_ms": 0})
+    assert (out["reason"], st["pending"]["why"]) == ("OVERHEAT", "OVERHEAT")
+    out, st2 = _step(st, now_ms=P + 1000, request="AUTO", cmd=busy, heater=RUN)
+    assert (out["reason"], out["cmds"], st2["mode"]) == ("STOPPING", [("power", "off")], "OFF")
+    assert st2["pending"]["why"] == "OVERHEAT"
+    # a safety stop waiting for the link: AUTO is ignored too
+    out, st = _step(
+        _auto(RUN)[1], now_ms=P, heater=RUN, link_ready=False, ref={"alias": "c", "value": 2600, "age_ms": 0}
+    )
+    assert (st["mode"], st["stop_snapshot"]["why"]) == ("STOPPING", "OVERHEAT")
+    out, st2 = _step(st, now_ms=P + 1000, request="AUTO", heater=RUN, link_ready=False)
+    assert (out["reason"], st2["mode"]) == ("STOPPING", "STOPPING")

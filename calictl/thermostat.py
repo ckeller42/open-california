@@ -275,9 +275,13 @@ def _resend(p: dict, st: dict, inp: dict, full: bool) -> list:
     return [(p["what"], p["value"])]
 
 
-def _pend(what: str, value, now: int, before: int | None = None) -> dict:
-    """A pending command; ``first_ms`` = first send, ``before`` = the heater's level before it."""
-    return {"what": what, "value": value, "since_ms": now, "tries": 1, "first_ms": now, "before": before}
+def _pend(what: str, value, now: int, before: int | None = None, why: str | None = None) -> dict:
+    """A pending command; ``first_ms`` = first send, ``before`` = the heater's level before it,
+    ``why`` = what caused a stop (``USER_OFF``, ``DISABLED``, ``OVERHEAT``, ``TARGET_EXCEEDED_AT_MIN_LEVEL``,
+    ``BATTERY_LOW``), ``None`` for other commands."""
+    return {
+        "what": what, "value": value, "since_ms": now, "tries": 1, "first_ms": now, "before": before, "why": why,
+    }  # fmt: skip
 
 
 def _start_retry_ok(p: dict, inp: dict, cfg: dict) -> bool:
@@ -291,17 +295,20 @@ def _start_retry_ok(p: dict, inp: dict, cfg: dict) -> bool:
     )
 
 
-def _stop(st: dict, can_send: bool, now: int) -> list:
-    """End AUTO with a normal stop of what the ESP left running; link down → ``STOPPING``."""
+def _stop(st: dict, can_send: bool, now: int, why: str) -> list:
+    """End AUTO with a normal stop of what the ESP left running; link down → ``STOPPING``.
+
+    ``why`` (the stop's cause) goes with the pending stop or the ``STOPPING`` snapshot.
+    """
     e = st["expect"] or {"normal": 0, "permanent": 0, "level": None}
     what = "permanent" if e["permanent"] else "power" if e["normal"] else None
     st["pending"], st["mode"] = None, "OFF"
     if what is None:
         return []
     if can_send:
-        st["pending"] = _pend(what, "off", now)
+        st["pending"] = _pend(what, "off", now, why=why)
         return [(what, "off")]
-    st["mode"], st["stop_snapshot"] = "STOPPING", dict(e)
+    st["mode"], st["stop_snapshot"] = "STOPPING", {**e, "why": why}
     return []
 
 
@@ -343,8 +350,10 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        The thermostat shall enter AUTO only on an owner request with the feature enabled, a link,
        a fresh, installed, fault-free heater with no armed timer, camping mode or shore power,
        ignition off and a valid reference reading; otherwise it shall refuse with
-       ``AUTO_REFUSED_<WHY>`` and send nothing. An AUTO request drops a pending or re-sent stop
-       (the last owner request wins). From OFF it shall send ``runtime``, ``level`` and
+       ``AUTO_REFUSED_<WHY>`` and send nothing. An AUTO request that passes these checks drops the
+       owner's own pending stop (the last owner request wins); a refused one keeps it. While a
+       safety stop (overheat, target exceeded, battery low, feature disabled) is pending or waits
+       in ``STOPPING``, an AUTO request is ignored with ``STOPPING``. From OFF it shall send ``runtime``, ``level`` and
        one ``power on`` in that order; a running or continuous heater it shall adopt without a
        command. It shall end AUTO without a command on a heater fault (ErrorCode 1 excepted: a
        normal stop, ``BATTERY_LOW``), a change it did not make (also during its own pending level
@@ -451,14 +460,18 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
     on = st["mode"] in ("AUTO", "DEGRADED")
     req = "OFF" if on and not inp["enabled"] else inp["request"]
     if req == "OFF" and on:
-        cmds = _stop(st, link and snap is not None, now)
+        cmds = _stop(st, link and snap is not None, now, "USER_OFF" if inp["enabled"] else "DISABLED")
         return out("STOPPING" if st["mode"] == "STOPPING" else "USER_OFF")
+    sp = st["pending"]  # in mode OFF only a stop can be pending
+    held = sp["why"] if sp else st["stop_snapshot"]["why"] if st["mode"] == "STOPPING" else None
+    if req == "AUTO" and not on and held not in (None, "USER_OFF"):
+        req, reason = None, "STOPPING"  # a safety stop runs on: the AUTO request is ignored
     if req == "AUTO" and not on:
-        if st["pending"] is not None and st["pending"]["value"] == "off":
-            st["pending"], cmds = None, []  # the last owner request wins: drop the pending stop
         why = _refusal(inp, cfg, hs, code)
         if why:
-            return out(why)
+            return out(why)  # the owner's own stop (if any) runs on
+        if sp is not None:
+            st["pending"], cmds = None, []  # the last owner request wins: drop the owner's stop
         t_ref = inp["ref"]["value"]
         ctl0 = {"i": 0, "last_change_ms": now, "hot_since_ms": None, "u": 0, "u_out": 0}
         st.update(
@@ -495,15 +508,15 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             return out("CONTINUOUS_ENDED" if snap0["permanent"] else "RUN_ENDED")
         if not _same(snap, snap0):
             return out("STOP_DROPPED")
-        st["expect"] = snap0
-        cmds = _stop(st, True, now)
+        st["expect"] = {k: snap0[k] for k in ("normal", "permanent", "level")}
+        cmds = _stop(st, True, now, snap0["why"])
         return out("STOPPING")
     if not on:
         return out(reason)
 
     # (3) faults: AUTO ends, never retried; only ErrorCode 1 (low battery) stops the heater
     if hs in _FAULTS and code == 1:
-        cmds = _stop(st, link, now)
+        cmds = _stop(st, link, now, "BATTERY_LOW")
         return out("BATTERY_LOW")
     if hs in _FAULTS:
         cmds = _end(st)
@@ -526,7 +539,7 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         if st["batt_low_since_ms"] is None:
             st["batt_low_since_ms"] = now
         if now - st["batt_low_since_ms"] >= cfg["batt_hold_ms"]:
-            cmds = _stop(st, link, now)
+            cmds = _stop(st, link, now, "BATTERY_LOW")
             return out("BATTERY_LOW")
     else:
         st["batt_low_since_ms"] = None
@@ -565,7 +578,7 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
     lvl, ctl, why = control(t_ref, t_out, target, now - st["last_ctl_ms"], st["ctl"], cfg, level, now)
     st["ctl"], st["last_ctl_ms"] = ctl, now
     if why in ("OVERHEAT", "TARGET_EXCEEDED_AT_MIN_LEVEL"):
-        cmds = _stop(st, link, now)
+        cmds = _stop(st, link, now, why)
         return out(why)
     if lvl is not None and lvl != level and link:
         cmds = [("level", lvl)]

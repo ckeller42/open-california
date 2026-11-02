@@ -100,13 +100,23 @@ def flat_in(i):
 def flat_st(s):
     c, p = s["ctl"], s["pending"]
     pend = (
-        [0] + [None] * 6
+        [0] + [None] * 7
         if p is None
-        else [1, p["what"], _onoff(p["value"]), p["since_ms"], p["tries"], p["first_ms"], p["before"]]
+        else [
+            1,
+            p["what"],
+            _onoff(p["value"]),
+            p["since_ms"],
+            p["tries"],
+            p["first_ms"],
+            p["before"],
+            p["why"],
+        ]
     )
     return [
         s["mode"], s["active"], c["i"], c["last_change_ms"], c["hot_since_ms"], c["u"], c["u_out"],
-        *pend, *_snap(s["expect"]), s["batt_low_since_ms"], *_snap(s["stop_snapshot"]), s["last_ctl_ms"],
+        *pend, *_snap(s["expect"]), s["batt_low_since_ms"], *_snap(s["stop_snapshot"]),
+        (s["stop_snapshot"] or {}).get("why"), s["last_ctl_ms"],
     ]  # fmt: skip
 
 
@@ -429,6 +439,26 @@ def sessions(rec):
     session(
         rec, "level_unknown_while_running", 0,
         [{**auto, "heater": run_h(0)}, {"heater": run_h(0)}, {"heater": run_h(11)}, {"heater": run_h(5)}, {"heater": run_h(5)}],
+    )  # fmt: skip
+    busy = {"heater": run_h(5), "ack": "BUSY", "dt": 1000}
+    session(
+        rec, "owner_stop_then_auto_drops_it", 0,
+        [{**auto, "heater": run_h(5)}, {"request": "OFF", "heater": run_h(5)}, {**busy, **auto}, {"heater": run_h(5)}],
+    )  # fmt: skip
+    session(
+        rec, "owner_stop_kept_by_refused_auto", 0,
+        [{**auto, "heater": run_h(5)}, {"request": "OFF", "heater": run_h(5)}, {**busy, **auto, "enabled": False},
+         {"heater": OFF_H}],
+    )  # fmt: skip
+    session(
+        rec, "safety_stop_ignores_auto", 0,
+        [{**auto, "heater": run_h(5)}, {"heater": run_h(5), "ref": sensor(2600)}, {**busy, **auto},
+         {**auto, "heater": run_h(5), "dt": D["verify_ms"]}, {**auto, "heater": OFF_H}],
+    )  # fmt: skip
+    session(
+        rec, "safety_stopping_ignores_auto", 0,
+        [{**auto, "heater": run_h(5)}, {"heater": run_h(5), "ref": sensor(2600), "link_ready": False},
+         {**auto, "heater": run_h(5)}, {"heater": OFF_H}],
     )  # fmt: skip
     session(  # odd cfg: u = -13500 reaches the negative half in the level (masked by min_level)
         rec, "negative_half_demand", 1,

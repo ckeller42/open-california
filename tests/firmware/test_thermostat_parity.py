@@ -37,8 +37,36 @@ def test_vectors_reach_every_reason():
     assert set(th.REASONS) - UNREACHABLE <= seen
     assert not UNREACHABLE & seen
     assert None in seen  # an idle step in mode OFF
-    entry = [c for c in V["cases"] if (c[4][0] or "").startswith(("ADOPT_", "AUTO_REFUSED_"))]
-    assert entry and not [c for c in entry if c[4][10]]  # adopt and refuse never send a command
+    adopt = [c for c in V["cases"] if (c[4][0] or "").startswith("ADOPT_")]
+    assert adopt and not [c for c in adopt if c[4][10]]  # an adopt never sends a command
+    refused = [c[4][11:] for c in V["cases"] if (c[4][0] or "").startswith("AUTO_REFUSED_")]
+    assert any(refused)  # a refusal sends nothing new; only a kept stop is re-sent
+    assert all(cmds in ([], ["power", 0], ["permanent", 0]) for cmds in refused)
+
+
+# Positions of the stop causes in a flat state (pending.why, stop_snapshot.why).
+_PROBE = gen.flat_st(
+    {
+        **th.initial_state(),
+        "pending": th._pend("power", "off", 0, why="P"),
+        "stop_snapshot": {"normal": 1, "permanent": 0, "level": None, "why": "S"},
+    }
+)
+PWHY, SWHY = _PROBE.index("P"), _PROBE.index("S")
+
+
+def test_vectors_never_drop_a_safety_stop():
+    prev, held = None, 0
+    for c in V["cases"]:
+        st = c[3] or prev
+        prev = c[5]
+        cause = st[PWHY] or (st[SWHY] if st[0] == "STOPPING" else None)
+        if c[2][2] == "AUTO" and cause not in (None, "USER_OFF"):
+            held += 1
+            # the AUTO request is ignored; AUTO starts only when the readback showed the stop done
+            assert not (c[4][0] or "").startswith(("ADOPT_", "AUTO_REFUSED_")), c
+            assert c[4][1] != "AUTO" or (c[4][0], c[4][2]) == ("START", "OFF"), c
+    assert held  # the vectors reach the case
 
 
 def test_vectors_have_the_sweep_and_the_sessions():

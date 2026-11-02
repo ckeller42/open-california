@@ -135,7 +135,8 @@ static void resend(const cali_thermo_pending_t *p, const cali_thermo_state_t *st
     add(o, p->what, p->value);
 }
 
-static void pend(cali_thermo_state_t *st, const char *what, int32_t value, int64_t now, int32_t before) {
+static void pend(cali_thermo_state_t *st, const char *what, int32_t value, int64_t now, int32_t before,
+                 const char *why) {
     st->has_pending = 1;
     st->pending.what = what;
     st->pending.value = value;
@@ -143,6 +144,7 @@ static void pend(cali_thermo_state_t *st, const char *what, int32_t value, int64
     st->pending.tries = 1;
     st->pending.first_ms = now;
     st->pending.before = before;
+    st->pending.why = why;
 }
 
 static int start_retry_ok(const cali_thermo_pending_t *p, const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg) {
@@ -151,7 +153,7 @@ static int start_retry_ok(const cali_thermo_pending_t *p, const cali_thermo_in_t
 }
 
 /* Python _stop(): replaces the commands. */
-static void stop(cali_thermo_state_t *st, int can_send, int64_t now, cali_thermo_out_t *o) {
+static void stop(cali_thermo_state_t *st, int can_send, int64_t now, const char *why, cali_thermo_out_t *o) {
     cali_thermo_snap_t e = {0, 0, NONE};
     const char *what;
     if (st->has_expect) e = st->expect;
@@ -161,13 +163,14 @@ static void stop(cali_thermo_state_t *st, int can_send, int64_t now, cali_thermo
     o->n = 0;
     if (!what) return;
     if (can_send) {
-        pend(st, what, 0, now, NONE);
+        pend(st, what, 0, now, NONE, why);
         add(o, what, 0);
         return;
     }
     st->mode = CALI_THERMO_STOPPING;
     st->has_stop_snapshot = 1;
     st->stop_snapshot = e;
+    st->stop_why = why;
 }
 
 /* Python _end(): replaces the commands with none. */
@@ -301,18 +304,25 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
     on = st->mode == CALI_THERMO_AUTO || st->mode == CALI_THERMO_DEGRADED;
     req = on && !in->enabled ? CALI_THERMO_REQ_OFF : in->request;
     if (req == CALI_THERMO_REQ_OFF && on) {
-        stop(st, link && has_snap, now, out);
+        stop(st, link && has_snap, now, in->enabled ? "USER_OFF" : "DISABLED", out);
         RET(st->mode == CALI_THERMO_STOPPING ? "STOPPING" : "USER_OFF");
+    }
+    { /* in mode OFF only a stop can be pending */
+        const char *held = st->has_pending ? st->pending.why : st->mode == CALI_THERMO_STOPPING ? st->stop_why : NULL;
+        if (req == CALI_THERMO_REQ_AUTO && !on && held && !is(held, "USER_OFF")) {
+            req = CALI_THERMO_REQ_NONE; /* a safety stop runs on: the AUTO request is ignored */
+            reason = "STOPPING";
+        }
     }
     if (req == CALI_THERMO_REQ_AUTO && !on) {
         const char *why = refusal(in, cfg, hs, code);
         int32_t t_ref, lvl;
         cali_thermo_ctl_t ctl0;
-        if (st->has_pending && is_off(&st->pending)) { /* the last owner request wins: drop the pending stop */
+        if (why) RET(why); /* the owner's own stop (if any) runs on */
+        if (st->has_pending) { /* the last owner request wins: drop the owner's stop */
             st->has_pending = 0;
             out->n = 0;
         }
-        if (why) RET(why);
         t_ref = in->ref.value;
         ctl0.i = 0;
         ctl0.last_change_ms = now;
@@ -330,7 +340,7 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             lvl = control(t_ref, t_out, target, 0, &ctl0, cfg, NONE, now, &w);
             st->ctl = ctl0;
             if (lvl == NONE || lvl == 0) lvl = cfg->min_level; /* overheat at entry: start low, the next step stops */
-            pend(st, "power", 1, now, NONE);
+            pend(st, "power", 1, now, NONE, NULL);
             st->has_expect = 1;
             st->expect.normal = 1;
             st->expect.permanent = 0;
@@ -365,14 +375,14 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         if (!same(&snap, &snap0)) RET("STOP_DROPPED");
         st->has_expect = 1;
         st->expect = snap0;
-        stop(st, 1, now, out);
+        stop(st, 1, now, st->stop_why, out);
         RET("STOPPING");
     }
     if (!on) RET(reason);
 
     /* (3) faults: AUTO ends, never retried; only ErrorCode 1 (low battery) stops the heater */
     if (faulty && code == 1) {
-        stop(st, link, now, out);
+        stop(st, link, now, "BATTERY_LOW", out);
         RET("BATTERY_LOW");
     }
     if (faulty) {
@@ -397,7 +407,7 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
     if (in->batt2_dv != NONE && in->batt2_dv < cfg->batt_min_dv) {
         if (st->batt_low_since_ms == NONE_MS) st->batt_low_since_ms = now;
         if (now - st->batt_low_since_ms >= cfg->batt_hold_ms) {
-            stop(st, link, now, out);
+            stop(st, link, now, "BATTERY_LOW", out);
             RET("BATTERY_LOW");
         }
     } else {
@@ -424,7 +434,7 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         if (level != cfg->min_level && !st->has_pending && link) {
             out->n = 0;
             add(out, "level", cfg->min_level);
-            pend(st, "level", cfg->min_level, now, level);
+            pend(st, "level", cfg->min_level, now, level, NULL);
             st->expect.level = cfg->min_level;
             st->ctl.last_change_ms = now;
         }
@@ -445,13 +455,13 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         int32_t lvl = control(act->value, t_out, target, now - st->last_ctl_ms, &st->ctl, cfg, level, now, &why);
         st->last_ctl_ms = now;
         if (is(why, "OVERHEAT") || is(why, "TARGET_EXCEEDED_AT_MIN_LEVEL")) {
-            stop(st, link, now, out);
+            stop(st, link, now, why, out);
             RET(why);
         }
         if (lvl != NONE && lvl != level && link) {
             out->n = 0;
             add(out, "level", lvl);
-            pend(st, "level", lvl, now, level);
+            pend(st, "level", lvl, now, level, NULL);
             st->expect.level = lvl;
             st->ctl.last_change_ms = now;
             RET(why);

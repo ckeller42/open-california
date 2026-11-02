@@ -169,6 +169,7 @@ typedef struct {
     int32_t tries;      /**< Sends so far (1 or 2). */
     int64_t first_ms;   /**< First send. */
     int32_t before;     /**< The level before a level command, or CALI_THERMO_NONE. */
+    const char *why;    /**< A stop's cause ("USER_OFF", "DISABLED", "OVERHEAT", "TARGET_EXCEEDED_AT_MIN_LEVEL", "BATTERY_LOW"), else NULL. */
 } cali_thermo_pending_t;
 
 /** @brief The session state (Python `initial_state()`); never persisted. */
@@ -183,6 +184,7 @@ typedef struct {
     int64_t batt_low_since_ms;          /**< Start of the low second battery, or CALI_THERMO_NONE_MS. */
     int has_stop_snapshot;              /**< `stop_snapshot` is set. */
     cali_thermo_snap_t stop_snapshot;   /**< What to stop when the link is back (mode STOPPING). */
+    const char *stop_why;               /**< That stop's cause (as cali_thermo_pending_t.why). */
     int64_t last_ctl_ms;                /**< Last control step, or CALI_THERMO_NONE_MS. */
 } cali_thermo_state_t;
 

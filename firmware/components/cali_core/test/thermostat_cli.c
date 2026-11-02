@@ -43,6 +43,11 @@ static const char *what(void) {
     int k = name(WHATS, 4);
     return k < 0 ? NULL : WHATS[k];
 }
+static const char *const WHYS[5] = {"USER_OFF", "DISABLED", "OVERHEAT", "TARGET_EXCEEDED_AT_MIN_LEVEL", "BATTERY_LOW"};
+static const char *why(void) {
+    int k = name(WHYS, 5);
+    return k < 0 ? NULL : WHYS[k];
+}
 
 static void cfg_read(cali_thermo_cfg_t *c) {
     int32_t *f[17] = {&c->period_ms,    &c->kp,          &c->ki,          &c->ka,          &c->u_out_max,
@@ -124,12 +129,14 @@ static void state_print(const cali_thermo_state_t *st) {
         p32(p->tries);
         p64(p->first_ms);
         p32(p->before);
+        pstr(p->why);
     } else {
-        printf(" - - - - - -");
+        printf(" - - - - - - -");
     }
     snap_print(st->has_expect, &st->expect);
     p64(st->batt_low_since_ms);
     snap_print(st->has_stop_snapshot, &st->stop_snapshot);
+    pstr(st->has_stop_snapshot ? st->stop_why : NULL);
     p64(st->last_ctl_ms);
 }
 
@@ -207,9 +214,11 @@ int main(int argc, char **argv) {
             st.pending.tries = i32();
             st.pending.first_ms = i64();
             st.pending.before = i32();
+            st.pending.why = why();
             snap_read(&st.has_expect, &st.expect);
             st.batt_low_since_ms = i64();
             snap_read(&st.has_stop_snapshot, &st.stop_snapshot);
+            st.stop_why = why();
             st.last_ctl_ms = i64();
 
             cali_thermo_step(&in, &cfg, &st, &out);
