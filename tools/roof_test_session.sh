@@ -6,7 +6,8 @@
 # tools/van_roof_test, and — via a trap that fires on any exit including Ctrl-C — removes the drop-in
 # and restarts the daemon read-only again. Writes are enabled ONLY for the duration of the test.
 #
-# buspi only (needs sudo + systemd). Usage:  sudo -v && bash tools/roof_test_session.sh [-- <test args>]
+# buspi only (needs sudo + systemd). Usage:  sudo -v && bash tools/roof_test_session.sh [--test <module>] [-- <test args>]
+# --test picks the at-the-van runner (default tools.van_roof_test; tools.van_heater_test for the heater).
 set -euo pipefail
 
 UNIT=calictl.service
@@ -14,6 +15,10 @@ DROPIN_DIR="/etc/systemd/system/${UNIT}.d"
 DROPIN="${DROPIN_DIR}/90-enable-writes.conf"
 URL="${CALICTL_URL:-http://localhost:8088}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TEST=tools.van_roof_test
+if [ "${1:-}" = --test ]; then TEST="$2"; shift 2; fi
+[ "${1:-}" = -- ] && shift
+case "$TEST" in tools.van_roof_test|tools.van_heater_test) ;; *) echo "unknown --test $TEST" >&2; exit 2 ;; esac
 
 revert() {
   echo "» reverting calictl to read-only…"
@@ -38,5 +43,5 @@ done
 
 # The harness talks HTTP only (no calictl import), so the system python3 is fine.
 cd "$REPO_ROOT"
-python3 -m tools.van_roof_test --url "$URL" "$@"
+python3 -m "$TEST" --url "$URL" "$@"
 # revert() runs here via the EXIT trap, whatever the test's exit status.
