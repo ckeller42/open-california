@@ -312,4 +312,24 @@ time-sync.target
   The systemd target that services order themselves after to start on a correct clock.
   `systemd-time-wait-sync` makes it mean "the clock is synchronised", bounded to two minutes so a
   van without internet still starts them.
+
+Reference thermometer
+  The Govee thermometer the cabin thermostat regulates on, chosen on the thermostat card. A backup
+  thermometer takes over when it is lost.
+
+AUTO (thermostat)
+  The cabin thermostat's running state. It starts on the owner's tap, keeps the cabin at the target
+  by changing the air heater's level, and ends on a fault, a foreign change or the end of the run.
+
+Outside compensation
+Feed-forward
+  The thermostat adds a share of the gap between the target and the outside temperature to its
+  demand, so it reacts before the cabin cools down.
+
+Hysteresis
+  The distance the demand must have from the current level before the thermostat changes the level.
+
+Dwell
+Dwell time
+  The least time between two level changes of the thermostat.
 ```

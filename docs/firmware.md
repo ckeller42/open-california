@@ -1158,6 +1158,207 @@ The step period is test-tunable on the host build only (`acstep <ms>`, cali-host
 **Not yet verified on the van:** a real drive (the shed, the post-park lock and the satellite's link
 through the crank).
 
+## Cabin thermostat (`R_FW_THERMOSTAT_RUN`)
+
+The satellite can hold the cabin at a target temperature by changing the air heater's level. The
+decision is calictl's: `calictl/thermostat.py` is the Python authority (`R_THERMOSTAT_STATE`,
+`R_THERMOSTAT_CONTROL`, `R_THERMOSTAT_SESSION`), `cali_core/thermostat.c` is its C twin
+(`R_FW_THERMOSTAT_DECIDE`), held equal bit for bit by generated vectors
+(`tests/vectors/thermostat.json`), and `thermostat_run.c` runs it on the owner task
+(`R_FW_THERMOSTAT_RUN`). All arithmetic is integer: temperatures in centi-degrees C, demand in
+milli-levels, time in ms.
+
+**Safety first.** The heater unit's own safety concept stays authoritative: flame monitoring,
+overheat protection, fault switch-off and the immediate-heating lock. The satellite never bypasses
+any of them and never cuts the heater's power. It starts the burner only on the owner's tap on
+*AUTO*, in the one start of an AUTO entry. It never sends `permanent on`, and never a lone
+`runtime` while the heater runs.
+
+### Disabled by default
+
+The thermostat ships **disabled**. The switch is the kv key `th_on` (missing = off). While it is
+off, every AUTO request is refused with `AUTO_REFUSED_DISABLED`, nothing is sent, and the card
+shows *Thermostat disabled* with no AUTO switch. The switch changes only through the API, with an
+explicit confirmation:
+
+```text
+POST /api/thermostat {"enabled": true, "confirm": true}
+```
+
+Switching it off while AUTO runs is an owner stop: the heater is stopped normally.
+
+### The card
+
+The card sits on the Air heater screen of the satellite's web UI. It shows only while at least one
+configured Govee thermometer exists ([External sensors](#external-sensors-r_fw_sensors)) and not on
+a display-only satellite. It holds the {term}`AUTO (thermostat)` switch with its state (*level 4 • running*, *on backup*,
+*degraded*, *stopping*, *off*), the {term}`reference thermometer` reading, the target with
+minus and plus buttons (0.5 °C steps, 5 to 30 °C), the run time (10 to 120 min in steps of 10,
+shown only while the heater is off) and the last reason in plain words, in English and German.
+Starting AUTO asks for a confirmation: it starts the fuel-burning heater.
+
+A tap on *Thermometer* opens the thermometer sheet with three groups of radio buttons, each showing
+alias, temperature and age of the reading (a stale reading is marked and cannot be picked):
+
+- **Regulate on**: the {term}`reference thermometer`.
+- **Backup**: optional. The satellite switches to it when the reference is lost. The reference is not offered here.
+- **Outside**: optional. An outside thermometer for the outside compensation. The reference is not offered here.
+
+The sheet also holds the **Outside compensation** switch. The choices, the target, the run time and
+the switch persist (kv `th_cfg`); the mode never does.
+
+### Entering AUTO
+
+An AUTO request (`POST /api/thermostat {"mode":"AUTO","confirm":true}`) starts AUTO only when all of
+these hold; otherwise the step answers `AUTO_REFUSED_<WHY>` and sends nothing:
+
+1. The feature is enabled.
+2. The link to the unit is ready.
+3. The heater state is fresh (read less than `heater_stale_ms` ago), the heater is installed, has no fault, and no departure timer is armed.
+4. Camping mode is on, or shore power is connected.
+5. The ignition is off.
+6. The reference thermometer has a valid reading (not older than `stale_after_ms`).
+
+If a safety stop (overheat, target exceeded, low battery, feature switched off) is still pending or
+waits for the link, a new AUTO request is ignored with `STOPPING`. The owner's own pending stop is
+dropped by a valid AUTO request: the last request of the owner wins.
+
+What happens next depends on the heater:
+
+- **Heater off**: the satellite sends `runtime` (the run time of the card), `level` (the demand's first level) and `power on`, in this order. The reason is `START`. The `power on` is checked against the next fresh reading of 1702 and retried at most once, and only while the entry conditions still hold. If the heater does not start, the reason is `START_NOT_CONFIRMED` and AUTO ends.
+- **Heater running** (normal operation): AUTO takes it over without any command (`ADOPT_RUN`). The run time already set stays; the controller starts at the heater's current level without a jump.
+- **Continuous heating** already on: AUTO takes it over without any command (`ADOPT_CONTINUOUS`) and regulates the level only. The satellite never starts continuous heating.
+
+### How it regulates
+
+The thermostat changes the **level** only (1 to 10). It never switches the heater on or off to
+regulate. Once per `period_ms`, and never while a command waits for its result, it computes a
+demand `u = p + i + u_out` in milli-levels from the error `target - t_ref`:
+
+- `p` is `kp` times the error.
+- `i` is the integrator (`ki` per minute of error). It is frozen when a step comes more than three periods late, and while the demand is at a limit with the error pushing further (anti-windup). On a start, a backup switch, a return from degraded mode and a target change the integrator is set so that the demand equals the current level: no jump.
+- `u_out` is the outside {term}`feed-forward <outside compensation>`: `ka` per degree below the target at the outside thermometer, capped at `u_out_max`. It is zero when the switch is off or the outside reading is invalid (reason `OUTSIDE_INACTIVE` when it is switched on but not available).
+
+The wanted level is the demand divided by 1000 and rounded, kept between `min_level` and 10. The
+level changes only when the demand is at least `500 + hyst` milli-levels away from the current level
+({term}`hysteresis`) and `min_dwell_ms` has passed since the last change ({term}`dwell time <dwell>`).
+Otherwise the reason is `HOLD`.
+
+Above the target the controller goes down to `min_level` and stays there; it does not switch the
+heater off for being warm. Two limits stop the heater: the reference more than `overheat` above the
+target (`OVERHEAT`), and the reference more than `band_hi` above the target at the minimum level for
+`hot_hold_ms` (`TARGET_EXCEEDED_AT_MIN_LEVEL`). A stop sends `power off` (or `permanent off` for
+continuous heating) and ends AUTO.
+
+While AUTO runs, the thermostat holds the BLE session: no power-save rest and no idle demotion, and
+1702 is read again every minute. When AUTO is off, the session behaves as before.
+
+### Failures
+
+| Situation | Reaction | Reason |
+|---|---|---|
+| The reference has no valid reading (removed or renamed in Satellite settings, stale, out of range) and a valid backup exists | The controller continues on the backup; only the owner switches back to the reference | `BACKUP_SELECTED` |
+| The reference is lost and there is no valid backup | Mode `DEGRADED`: the level goes to `min_level` and stays. With a valid reading again, `AUTO` continues | `REFERENCE_LOST`, then `AUTO_ON` |
+| A reading outside -40 to 60 °C, or one that changes more than 3 °C per minute against the last accepted one | The reading is invalid; the sensor counts as lost | as above |
+| The heater reports a fault (ErrorCode 2, 3 or 5 to 15, or the fault bit) | AUTO ends, no command, never retried | `FAULT_<n>` |
+| ErrorCode 4 (heater locked until the van has driven) | AUTO ends, no command. A new AUTO request is refused until the lock clears | `LOCKED`, then `AUTO_REFUSED_FAULT` |
+| ErrorCode 1 (low battery, the heater's own report) | A normal stop, then AUTO is off | `BATTERY_LOW` |
+| The second battery stays below `batt_min_dv` for `batt_hold_ms` | A normal stop, then AUTO is off | `BATTERY_LOW` |
+| Someone else changes the heater (the unit's panel, the phone app, the normal level slider of the satellite) | AUTO ends and leaves the heater as it is | `FOREIGN_CHANGE` |
+| The run time ends or the heater stops by itself | AUTO ends | `RUN_ENDED` / `CONTINUOUS_ENDED` |
+| The 1702 reading is older than `heater_stale_ms` | No command until a fresh reading; AUTO stays on | `HEATER_UNKNOWN` |
+| A command is not applied after one retry | AUTO ends | `NOT_APPLIED` |
+| The link is down when a stop is due | Mode `STOPPING`. After the link is back, a heater that the satellite left running is stopped; a heater that changed meanwhile is left alone | `STOPPING`, then `STOP_DROPPED` / `RUN_ENDED` / `CONTINUOUS_ENDED` |
+| The owner taps AUTO off | A normal stop of what the satellite left running | `USER_OFF` |
+| The satellite reboots | Mode `OFF`, and no blind resume: the mode is never stored. An immediate run ends by itself; continuous heating continues at its last level | none |
+
+A level command is never sent when the link is down. A command that returned `BUSY` or
+`NOT_READY` is repeated by the next step; a command that returned `REFUSED` is never repeated.
+
+### Reason codes
+
+`GET /api/thermostat` returns the last one as `status.reason`; the card shows it in plain words.
+
+| Code | Meaning |
+|---|---|
+| `AUTO_ON` | AUTO runs (also after a return from degraded mode) |
+| `AUTO_REFUSED_DISABLED` | The feature switch is off |
+| `AUTO_REFUSED_NOT_INSTALLED` | The unit reports no air heater |
+| `AUTO_REFUSED_FAULT` | The heater has a fault, is locked or is blocked |
+| `AUTO_REFUSED_NO_LINK` | No ready link to the unit |
+| `AUTO_REFUSED_NO_CAMPING` | Neither camping mode nor shore power |
+| `AUTO_REFUSED_IGNITION` | The ignition is on, or unknown |
+| `AUTO_REFUSED_NO_REFERENCE` | No valid reading of the reference thermometer |
+| `AUTO_REFUSED_TIMER_ARMED` | A departure timer is armed |
+| `AUTO_REFUSED_STALE_HEATER` | The heater state is unknown or too old |
+| `START` | AUTO started the heater (`runtime`, `level`, `power on`) |
+| `ADOPT_RUN` | AUTO took over a running heater |
+| `ADOPT_CONTINUOUS` | AUTO took over continuous heating |
+| `LEVEL_UP` / `LEVEL_DOWN` | The level was changed |
+| `HOLD` | The level stays (hysteresis, dwell or equal) |
+| `TARGET_EXCEEDED_AT_MIN_LEVEL` | Warmer than the target at the lowest level for `hot_hold_ms`: stop |
+| `OVERHEAT` | More than `overheat` above the target: stop |
+| `BACKUP_SELECTED` | The reference is lost, the backup regulates |
+| `REFERENCE_LOST` | No valid thermometer: the level goes to `min_level` |
+| `OUTSIDE_INACTIVE` | Outside compensation is on but the outside reading is not valid |
+| `FAULT_1` to `FAULT_15` | The heater reports this ErrorCode; AUTO ends |
+| `LOCKED` | ErrorCode 4: the heater is locked until the van has driven |
+| `FOREIGN_CHANGE` | Someone else changed the heater; AUTO ends |
+| `NOT_APPLIED` | A command was not applied; AUTO ends |
+| `START_NOT_CONFIRMED` | The heater did not start; AUTO ends |
+| `RUN_ENDED` / `CONTINUOUS_ENDED` | The run or the continuous heating ended; AUTO ends |
+| `BATTERY_LOW` | Low battery: a normal stop |
+| `HEATER_UNKNOWN` | No fresh heater state; AUTO waits |
+| `USER_OFF` | The owner stopped AUTO |
+| `STOPPING` | A stop is sent or waits for the link |
+| `STOP_DROPPED` | The heater changed before the stop; it was not stopped |
+
+### Settings
+
+`GET /api/thermostat` returns all of them in `cfg`; `POST` changes them with `"cfg":{…}` and
+`"confirm":true`, all values checked before anything changes. They persist in kv `th_cfg`.
+
+| Key | Default | Unit | Meaning |
+|---|---|---|---|
+| `period_ms` | 60000 | ms | time between control steps |
+| `kp` | 1500 | milli-level per °C | proportional gain |
+| `ki` | 50 | milli-level per °C per minute | integral gain |
+| `ka` | 100 | milli-level per °C | outside compensation gain |
+| `u_out_max` | 3000 | milli-level | cap of the outside compensation |
+| `hyst` | 500 | milli-level | hysteresis added to the half-level step |
+| `min_dwell_ms` | 300000 | ms | least time between level changes |
+| `band_hi` | 200 | centi-°C | band above the target for the minimum-level stop |
+| `hot_hold_ms` | 900000 | ms | time in that band before the stop |
+| `overheat` | 400 | centi-°C | stop above the target plus this |
+| `min_level` | 1 | level | lowest level (1 to 10) |
+| `stale_after_ms` | 600000 | ms | a thermometer reading older than this is invalid |
+| `heater_stale_ms` | 180000 | ms | a heater state older than this is unknown |
+| `batt_min_dv` | 119 | 0.1 V | second battery limit (100 to 150) |
+| `batt_hold_ms` | 300000 | ms | time below that limit before the stop |
+| `verify_ms` | 10000 | ms | time before an unconfirmed command is checked |
+| `runtime_min` | 120 | min | run time of an AUTO start from off (10 to 120) |
+
+The target is not a setting of this table: 500 to 3000 centi-°C in steps of 50 (default 2000).
+
+### SD log
+
+While the feature is on or a mode is active, each step writes one `thermo` record, and each mode
+change and each command result writes one `evt` `thermo` record ([Diagnostics on the SD log](#diagnostics-on-the-sd-log-r_fw_diag_log)).
+
+| `ev` | Fields |
+|---|---|
+| `thermo` | `r` reason (`null` for an idle step), `m` mode, `h` heater state, `t` reference and `o` outside temperature (centi-°C, `null` when invalid), `g` target, `u` demand, `i` integrator, `uo` outside part (milli-level), `l` the level the satellite wants, `lc` the heater's level, `rem` the heater's `RunningTimeinAction` |
+| `evt` `thermo` `e`=`mode` | `from`, `to`, `r` |
+| `evt` `thermo` `e`=`cmd` | `what`, `v`, `res` (`OK`, `BUSY`, `NOT_READY`, `FAILED`, `TIMEOUT`, `UNCONFIRMED`, `REFUSED`) |
+
+### Test
+
+`tests/firmware/test_thermostat_e2e.py` runs the real firmware against the mock unit with a
+thermal model of the cabin (`tools/mock_unit.py`) and a Govee advert that follows it. The cabin
+settles within 1 °C of the target, the burner starts once, and the level changes are at least
+`min_dwell_ms` apart. This tests the control logic in a loop; it does not tune the gains for a
+real van.
+
 ## Pi wake (`R_FW_PI_WAKE`)
 
 The satellite wakes the halted buspi on the ignition edge. A Pi 4 halted with EEPROM
