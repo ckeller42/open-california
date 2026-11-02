@@ -200,7 +200,10 @@ struct ScreenSnapshotTests {
     ///
     /// - Test: T_IOS_SNAPSHOT_SETUP
     /// - Verifies: R_IOS_PAIRING, R_IOS_LOOK, R_IOS_I18N, R_IOS_NO_VIN
-    @Test func setupScreensSnapshot() {
+    @Test func setupScreensSnapshot() async {
+        // The trace card as on a fresh install: switch off, no trace (a manual run may leave both).
+        UserDefaults.standard.removeObject(forKey: CamperStore.traceKey)
+        await CamperStore.traceFile.delete()
         // Each state with the bond it comes with, so the status card above it matches.
         let steps: [(String, PairingGuide.Step, Bond)] = [
             ("collapsed", .collapsed, .paired), ("open", .openPanel, .notPaired), ("searching", .searching, .notPaired),

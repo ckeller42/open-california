@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import os
 
 @testable import CaliBLE
 @testable import CaliCore
@@ -41,12 +42,14 @@ private struct TraceRig {
     let fake: FakeCamperTransport
     let url = FileManager.default.temporaryDirectory.appending(path: "trace-\(UUID().uuidString).jsonl")
     let file: TraceFile
+    let traced: TracingTransport
     let s: CamperSession
 
-    init(on: Bool = true) {
+    init(isOn: @escaping @Sendable () -> Bool = { true }) {
         fake = FakeCamperTransport(clock: clock, frames: Mock.frames)
         file = TraceFile(url: url)
-        s = CamperSession(transport: TracingTransport(fake, file: file, isOn: { on }), clock: clock)
+        traced = TracingTransport(fake, file: file, isOn: isOn)
+        s = CamperSession(transport: traced, clock: clock)
     }
 
     /// Runs `cmd`, moving the clock in 100 ms steps until it has its result (the heartbeat beats).
@@ -130,7 +133,7 @@ struct TracingTransportTests {
     /// - Test: T_IOS_TRACE_OFF
     /// - Verifies: R_BLE_TRACE, R_IOS_TESTED
     @Test func offWritesNoFile() async throws {
-        let r = TraceRig(on: false)
+        let r = TraceRig(isOn: { false })
         try await r.s.ensureConnected(timeout: .seconds(10))
         await r.fake.pushForeign(char: CamperGATT.stateChars["campingmode"]!, bytes: Mock.campingOn)
         #expect(await r.fake.reads.count > 0)
@@ -184,5 +187,49 @@ struct TracingTransportTests {
                 #"{"t":1700000000.25,"ev":"disconnect","addr":null,"reason":"remoteHangUp"}"#,
             ])
         await file.delete()
+    }
+
+    /// Review Focus 1: a notification and a read of the same char at the same moment give two whole
+    /// lines (the order between the two is a race, so it is not checked), 20 times over.
+    /// - Test: T_IOS_TRACE_CONCURRENT
+    /// - Verifies: R_BLE_TRACE, R_IOS_TESTED
+    @Test func aNotifyAndAReadAtOnceGiveTwoWholeLines() async throws {
+        let r = TraceRig()
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        let camping = CamperGATT.stateChars["campingmode"]!
+        for n in 0..<20 {
+            let before = r.lines().count
+            await r.fake.echo(camping, Mock.camping)
+            async let read = r.traced.read(camping)
+            await r.fake.pushForeign(char: camping, bytes: Mock.campingOn)
+            _ = try await read
+            try await until("two lines (\(n))") { r.lines().count >= before + 2 }
+            let new = try r.events().suffix(from: before)
+            #expect(new.count == 2, "\(n)")
+            #expect(Set(new.map { $0["ev"] as? String }) == ["read", "notify"], "\(n)")
+            for e in new {
+                #expect(Set(e.keys) == ["t", "ev", "char", "fn", "hex"] && e["char"] as? String == "1202", "\(n)")
+            }
+            #expect(new.first { $0["ev"] as? String == "notify" }?["hex"] as? String == "21")
+        }
+        #expect(r.lines().allSatisfy { $0.hasPrefix(#"{"t":"#) && $0.hasSuffix("}") })
+        await r.cleanUp()
+    }
+
+    /// Review Focus 3: the switch turned on during a link: the trace starts with the next event (no
+    /// line of the link's start, no partial line).
+    /// - Test: T_IOS_TRACE_MID_LINK
+    /// - Verifies: R_BLE_TRACE, R_IOS_TESTED
+    @Test func turnedOnDuringALinkStartsWithTheNextEvent() async throws {
+        let on = OSAllocatedUnfairLock(initialState: false)
+        let r = TraceRig(isOn: { on.withLock { $0 } })
+        try await r.s.ensureConnected(timeout: .seconds(10))
+        #expect(!r.file.exists)
+        on.withLock { $0 = true }
+        await r.fake.pushForeign(char: CamperGATT.stateChars["campingmode"]!, bytes: Mock.campingOn)
+        try await until("the notify line") { !r.lines().isEmpty }
+        #expect(r.lines().count == 1)
+        #expect(r.lines().first?.hasSuffix(#","ev":"notify","char":"1202","fn":"campingmode","hex":"21"}"#) == true)
+        await r.cleanUp()
     }
 }

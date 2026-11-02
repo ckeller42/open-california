@@ -30,6 +30,7 @@ struct TraceCard: View {
     var file: TraceFile = CamperStore.traceFile
     @AppStorage(CamperStore.traceKey) private var isOn = false
     @State private var exists = false
+    @State private var confirmingDelete = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -43,10 +44,7 @@ struct TraceCard: View {
                 }
                 .frame(minHeight: 44)
                 Button(role: .destructive) {
-                    Task {
-                        await file.delete()
-                        exists = file.exists
-                    }
+                    confirmingDelete = true
                 } label: {
                     Label("Delete trace", systemImage: "trash")
                 }
@@ -56,6 +54,15 @@ struct TraceCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .alert("Delete the Bluetooth trace?", isPresented: $confirmingDelete) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    await file.delete()
+                    exists = file.exists
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
         // ponytail: polls the file's presence every 2 s while the tab shows (the first line can
         // come at any time); a callback from TraceFile if the poll ever matters.
         .task {
@@ -73,7 +80,7 @@ struct TraceExport: Transferable {
     let file: TraceFile
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .plainText) { export in
+        FileRepresentation(exportedContentType: UTType(filenameExtension: "jsonl") ?? .json) { export in
             guard let copy = await export.file.snapshot() else { throw CocoaError(.fileNoSuchFile) }
             return SentTransferredFile(copy)
         }

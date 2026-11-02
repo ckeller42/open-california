@@ -70,10 +70,11 @@ public actor TraceFile {
         }
     }
 
-    /// Removes the trace and its predecessor.
+    /// Removes the trace, its predecessor and the last shared copy.
     public func delete() {
         try? FileManager.default.removeItem(at: url)
         try? FileManager.default.removeItem(at: previous)
+        try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appending(path: url.lastPathComponent))
     }
 
     private func append(_ line: String) {
@@ -85,7 +86,13 @@ public actor TraceFile {
         let data = Data((line + "\n").utf8)
         guard let h = try? FileHandle(forWritingTo: url) else {
             try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? data.write(to: url)
+            // A new file only: an existing one that does not open keeps its lines (this one is lost).
+            try? data.write(to: url, options: .withoutOverwriting)
+            // A bug-report file: kept on the device, never in a backup.
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            var file = url
+            try? file.setResourceValues(values)
             return
         }
         defer { try? h.close() }
@@ -142,7 +149,8 @@ public actor TracingTransport: CamperTransport {
 
     public func write(_ char: UInt16, _ bytes: [UInt8]) async throws {
         try await inner.write(char, bytes)
-        if isOn() { await file.io("write", char: char, bytes: bytes) }
+        // The heartbeat (~0.6 s, for hours) never waits for the file actor (a snapshot can hold it).
+        if char != CamperGATT.heartbeat, isOn() { await file.io("write", char: char, bytes: bytes) }
     }
 
     public func subscribe(_ chars: [UInt16]) async throws { try await inner.subscribe(chars) }

@@ -39,7 +39,7 @@ struct TraceWiringTests {
 
         defaults.set(true, forKey: CamperStore.traceKey)
         await fake.pushForeign(char: CamperGATT.stateChars["campingmode"]!, bytes: [0x21])
-        try await until("the notify line") { file.exists }
+        try await until("the notify line") { (try? String(contentsOf: file.url, encoding: .utf8))?.hasSuffix("}\n") == true }
         let text = try String(contentsOf: file.url, encoding: .utf8)
         #expect(text.split(separator: "\n").count == 1)
         #expect(text.hasSuffix(#","ev":"notify","char":"1202","fn":"campingmode","hex":"21"}"# + "\n"))

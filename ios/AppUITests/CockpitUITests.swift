@@ -217,6 +217,10 @@ extension XCUIApplication {
         var clean: Set<String> = []
         /// Element-less text issues of a scrolled pass (glyphs cut at the edge under a bar).
         var cutGlyphs = 0
+        /// The issues that are not exempt: `auditScreen` fails on each.
+        var failures: [String] = []
+        /// The labelled elements moved during the pass: it measured moving content.
+        var moved = false
     }
 
     /// Audits the open screen over its whole height: at the top, then after each scroll until the
@@ -225,9 +229,28 @@ extension XCUIApplication {
     /// nothing is exempt.
     @MainActor
     func auditScreen(file: StaticString = #filePath, line: UInt = #line) throws {
+        // One pass. A pass with failures that measured moving content (a scroll, a large title or a
+        // bounce still settling) runs once more at rest; a failure at rest fails the test.
+        func settledPass(scrolled: Bool) throws -> AuditPass {
+            var pass = try audit(scrolled: scrolled)
+            if pass.moved, !pass.failures.isEmpty {
+                print("AUDIT content moved during the pass: again")
+                _ = stableFrames()
+                pass = try audit(scrolled: scrolled)
+            }
+            for failure in pass.failures { XCTFail("Accessibility audit: \(failure)", file: file, line: line) }
+            if !pass.failures.isEmpty {
+                XCTContext.runActivity(named: "Audit failure: the screen at rest") { activity in
+                    let shot = XCTAttachment(screenshot: screenshot())
+                    shot.lifetime = .keepAlways
+                    activity.add(shot)
+                }
+            }
+            return pass
+        }
         Thread.sleep(forTimeInterval: 1)  // a launch read or a push has settled
         _ = stableFrames()
-        var passes = [try audit(scrolled: false)]
+        var passes = [try settledPass(scrolled: false)]
         for _ in 0..<4 {
             let before = stableFrames()
             // A drag with a hold: the content rests where the finger stops (no momentum, no bounce).
@@ -236,9 +259,11 @@ extension XCUIApplication {
             area.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.75)).press(
                 forDuration: 0.2, thenDragTo: area.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.35)),
                 withVelocity: .default, thenHoldForDuration: 0.5)
-            // Wait until the content rests (a page that fits bounces back), then see whether it moved.
+            // Wait until the content rests (a page that fits bounces back, a large title snaps), as
+            // before the top pass, then see whether it moved.
+            Thread.sleep(forTimeInterval: 1)
             if stableFrames() == before { break }
-            passes.append(try audit(scrolled: true))
+            passes.append(try settledPass(scrolled: true))
         }
         let clean = passes.reduce(into: Set<String>()) { $0.formUnion($1.clean) }
         // Measured on Lighting (the longest page): 8 such issues in one pass. More would hide real
@@ -295,14 +320,17 @@ extension XCUIApplication {
     /// audited cleanly in another pass. Also exempt after a scroll only: an "inaccessible text"
     /// issue with no element, and only when a labelled element crosses the navigation bar's lower
     /// edge in that pass (a row really is cut there; at most 8 per pass). Each exemption is attached
-    /// to the result (kept on success).
+    /// to the result (kept on success). Every other issue goes into `failures`, and `moved` tells
+    /// whether the content moved during the pass; `auditScreen` fails on them.
     @MainActor
     func audit(scrolled: Bool) throws -> AuditPass {
-        print("AUDIT pass on \(navigationBars.firstMatch.identifier) scrolled=\(scrolled)")
         let screen = windows.firstMatch.frame
         let top = scrolled && navigationBars.firstMatch.exists ? navigationBars.firstMatch.frame.maxY + 44 : screen.minY
         let bottom = tabBars.firstMatch.exists ? tabBars.firstMatch.frame.minY - 44 : screen.maxY
         let clear = CGRect(x: screen.minX, y: top, width: screen.width, height: max(0, bottom - top))
+        print(
+            "AUDIT pass on \(navigationBars.firstMatch.identifier) scrolled=\(scrolled) clear=\(clear)"
+                + " navigationBar=\(navigationBars.firstMatch.frame) tabBar=\(tabBars.firstMatch.frame)")
         var pass = AuditPass()
         let all = frames()
         pass.clean = Set(all.filter { clear.contains($0.value) }.keys)
@@ -342,8 +370,11 @@ extension XCUIApplication {
                     activity.add(attachment)
                 }
             }
-            return outside
+            // Decided after the pass (`auditScreen`): a pass that measured moving content runs again.
+            if !outside { pass.failures.append("\(issue.compactDescription) | \(label) \(frame) | \(issue.detailedDescription)") }
+            return true
         }
+        pass.moved = frames() != all
         return pass
     }
 }

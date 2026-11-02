@@ -25,9 +25,11 @@ def _lines():
         return [json.loads(line) for line in f if line.strip()]
 
 
-def test_every_line_has_the_keys_trace_py_writes():
-    """I/O lines: exactly ``t,ev,char,fn,hex`` in order, ``fn`` as calictl names the char; link lines:
-    ``t,ev,addr`` (+ ``reason`` on a disconnect) with ``addr`` null; no heartbeat line."""
+def test_io_lines_have_trace_py_keys_and_link_lines_the_plans():
+    """I/O lines: exactly the keys of trace.py's I/O lines, ``t,ev,char,fn,hex`` in order, ``fn`` as
+    calictl names the char. Link lines: ``t,ev,addr`` with ``addr`` null, plus the plan's ``reason``
+    on a disconnect (calictl writes ``attempt`` on a connect and no reason; ``trace_compare`` reads
+    no link key). No heartbeat line."""
     events = _lines()
     assert {e["ev"] for e in events} == {"connect", "read", "write", "notify", "disconnect"}
     for e in events:
