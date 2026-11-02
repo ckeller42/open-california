@@ -222,8 +222,8 @@ final class LabControlUITests: XCTestCase {
         if step == "forget" {
             XCTAssertTrue(waitLive(app, 30), "a live link before the forget")
             let forget = app.buttons["Forget this camper unit…"]
-            XCTAssertTrue(reveal(app, forget), "the forget button")
-            forget.tap()
+            XCTAssertTrue(forget.waitForExistence(timeout: 10), "the forget button")
+            forget.tap()  // a tap scrolls the button into view
             let confirm = app.alerts.buttons["Forget"]
             XCTAssertTrue(confirm.waitForExistence(timeout: 5), "the confirmation")
             shot(app, "forget-confirm")
@@ -233,9 +233,9 @@ final class LabControlUITests: XCTestCase {
             shot(app, "forgotten")
             return
         }
+        // Right after a forget the guide offers "Pair again…"; after a fresh start it opens at step 1.
         let again = app.buttons["Pair again…"]
-        XCTAssertTrue(reveal(app, again), "Pair again…")
-        again.tap()
+        if again.waitForExistence(timeout: 5) { again.tap() }
         let open = app.buttons["I'm on that screen"]
         XCTAssertTrue(open.waitForExistence(timeout: 10), "the guide's first step")
         open.tap()
