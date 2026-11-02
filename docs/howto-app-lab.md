@@ -34,7 +34,8 @@ missing:
 | Java 17, `unzip`, `Xvfb`, `rsync` | SDK tools, the headless display, the lab copy | installed by the script when `sudo -n` needs no password; otherwise `sudo apt-get install -y openjdk-17-jre-headless unzip xvfb rsync` |
 
 You also need ssh access to `pi@buspi` (the script copies the app's split APKs from
-`~/apks/<version>/` there) or to an existing lab host (see [Move a lab](#move-a-lab-to-another-host)).
+`~/apks/<version>/` there; `APK_SRC` names another `scp` source) or to an existing lab host (see
+[Move a lab](#move-a-lab-to-another-host)).
 The SDK and one system image need about 5 GB of disk.
 
 ## Set up a lab on Linux
@@ -53,7 +54,7 @@ It installs everything under `~/android-lab` (`LAB_DIR`):
 | Android SDK, emulator, platform tools, the Android 34 `google_apis;x86_64` image | `sdk/` |
 | the AVD `lab34` (a `pixel_6`) | `avd/` |
 | a Bumble venv with a pinned Bumble, `grpcio`, `protobuf` and `pyyaml` | `venv-bumble/` |
-| the app's split APKs of `APK_VERSION` (default: the version the owner's phone runs) | `apks/<version>/` |
+| the app's split APKs of `APK_VERSION` (default: the version pinned in `setup_linux.sh`) | `apks/<version>/` |
 | the environment file | `env.sh` |
 
 `env.sh` exports `LAB_DIR`, `AVD`, `BUMBLE_PY`, the Android SDK variables and `PATH`, and
