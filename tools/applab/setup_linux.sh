@@ -13,7 +13,8 @@
 #   BUMBLE_VERSION     the Bumble pin for that venv                               [0.0.235]
 #   APK_SRC            scp source of the per-version APK dirs                     [pi@buspi:~/apks/]
 #   APK_VERSION        the app version dir to copy (the phone's version)          [5.4.0.3036]
-#   LAB_FROM           ssh host of an existing lab: its AVD, vin and APKs are copied (rsync)
+#   LAB_FROM           ssh host of an existing lab: its AVD, vin, fake-unit keystore and APKs are
+#                      copied (rsync); the keystore holds the bond the AVD's app expects
 #   CMDLINE_TOOLS_ZIP  Google's cmdline-tools archive        [commandlinetools-linux-13114758_latest.zip]
 #
 # Missing packages (Java 17, unzip, Xvfb, rsync) are installed with `sudo -n apt-get` when sudo needs
@@ -65,6 +66,8 @@ if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
 fi
 cat >"$LAB_DIR/env.sh" <<EOF
 export LAB_DIR=$LAB_DIR AVD=$AVD BUMBLE_PY=$BUMBLE_PY
+# the fake unit's bond keys belong to this lab's AVD, not to a repo checkout
+export FAKE_UNIT_KEYSTORE=$LAB_DIR/fake_unit_keys.json
 export ANDROID_SDK_ROOT=$SDK ANDROID_HOME=$SDK
 export ANDROID_USER_HOME=$LAB_DIR/.android ANDROID_AVD_HOME=$LAB_DIR/avd ANDROID_EMULATOR_HOME=$LAB_DIR/.android
 export PATH=\$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:\$ANDROID_SDK_ROOT/platform-tools:\$ANDROID_SDK_ROOT/emulator:\$PATH
@@ -89,6 +92,8 @@ if [ -n "$LAB_FROM" ] && [ ! -d "$LAB_DIR/avd/$AVD.avd" ]; then
   rsync -a "$LAB_FROM:android-lab/avd/$AVD.ini" "$LAB_DIR/avd/"
   sed -i "s|^path=.*|path=$LAB_DIR/avd/$AVD.avd|" "$LAB_DIR/avd/$AVD.ini"
   rsync -a "$LAB_FROM:android-lab/vin" "$LAB_DIR/" && chmod 600 "$LAB_DIR/vin"
+  rsync -a "$LAB_FROM:android-lab/fake_unit_keys.json" "$LAB_DIR/" 2>/dev/null || \
+    echo "setup_linux: $LAB_FROM has no android-lab/fake_unit_keys.json: copy the keystore that paired with its AVD (a checkout's tools/applab/.fake_unit_keys.json) to $LAB_DIR/fake_unit_keys.json, or pair again" >&2
   rsync -a "$LAB_FROM:android-lab/apks/" "$LAB_DIR/apks/"
 fi
 avdmanager list avd -c | grep -qx "$AVD" || echo no | avdmanager create avd -n "$AVD" -k "$IMAGE" -d pixel_6 >/dev/null

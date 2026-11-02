@@ -79,9 +79,10 @@ tools/applab/labctl.sh up                      # emulator on a private Xvfb, fak
 tools/applab/labctl.sh install                 # install/update the newest APK version as an update
 ```
 
-`LAB_FROM` copies the AVD (stop the emulator on that host first), `vin` and `apks/` with `rsync`,
-so the app keeps its onboarding; the app pairs again with the fake unit on the new host (the fake's
-keystore is per checkout).
+`LAB_FROM` copies the AVD (stop the emulator on that host first), `vin`, `fake_unit_keys.json` and
+`apks/` with `rsync`, so the app keeps its onboarding and its bond with the fake unit. On Linux the
+fake's keystore lives in the lab (`env.sh` exports `FAKE_UNIT_KEYSTORE=$LAB_DIR/fake_unit_keys.json`),
+because the bond belongs to the AVD, not to a repo checkout.
 
 **GPU.** On Linux `labctl.sh` boots the emulator with `-gpu swangle_indirect` (ANGLE over SwiftShader
 Vulkan) on a private `Xvfb :120`, which it starts when it is not up (`LAB_GPU`, `LAB_DISPLAY`

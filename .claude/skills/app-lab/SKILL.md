@@ -5,7 +5,7 @@ description: Use when you need the real CaliforniaOnTour app running against the
 
 # The California app lab (emulator + netsim + Bumble fake unit)
 
-The real app (**5.4.0.3036** on thinky since 2026-10-10, the phone's version; the committed
+The real app (**5.4.0.3036** in the lab since 2026-10-10, the phone's version; the committed
 `tests/vectors/app/` recordings are still 5.0.8.3028) runs in an Android emulator whose virtual radio (netsim) is bridged to
 `tools/applab/fake_unit_ble.py`, a Bumble peripheral serving `tools/mock_unit.py` over the unit's real
 GATT. Every app screen, dialog and write frame is protocol evidence (tier **APP-OBSERVED**). Generic
@@ -14,7 +14,24 @@ THIS repo and THIS machine.
 Real phone + real unit instead (frames, link drops and timing only the van shows): the
 `phone-app-lab` skill.
 
-## Who launches what (the disk-permission split)
+## The Linux lab host: odelly
+
+odelly (x86_64, KVM) is the lab host; thinky and the Mac are fallbacks. Over ssh, no owner step:
+
+```bash
+ssh odelly
+cd ~/src/oc-applab && . ~/android-lab/env.sh     # a checkout of open-california; env.sh sets LAB_DIR,
+tools/applab/labctl.sh up                        # AVD, BUMBLE_PY, FAKE_UNIT_KEYSTORE; VIN from $LAB_DIR/vin
+tools/applab/labctl.sh status
+```
+
+`labctl.sh up` renders on a private `Xvfb :120` with `-gpu swangle_indirect`. The app reconnects
+over the stored bond (`$LAB_DIR/fake_unit_keys.json`). When it asks for a passkey ("Connection
+failure" + `### PASSKEY` in `/tmp/applab/fake_unit.log`): **Try again**, expand the shade, tap
+**Pairing request**, type the code, **OK** (README, "Pairing the app"). Move the lab to another
+Linux host with `LAB_FROM=odelly tools/applab/setup_linux.sh` (stop the emulator first).
+
+## Who launches what on the Mac (the disk-permission split)
 
 This session usually runs under agent-deck's **tmux**, which macOS never grants *Removable Volumes*
 access, so `/Volumes/External/android-lab` (SDK, AVD, APK, the lab's venv) is **unreadable here**
@@ -65,10 +82,8 @@ The phone's APKs are pulled to `buspi:~/apks/<version>/` (`base.apk` + `split_co
 `version.txt`). Install them as an **update** so app data (onboarding, the VIN) survives:
 
 ```bash
-scp -3 'buspi:~/apks/5.4.0.3036/*.apk' thinky:android-lab/apks/5.4.0.3036/   # via your Mac: buspi→thinky has no host key
-cd ~/android-lab/apks/5.4.0.3036 && adb install-multiple -r base.apk split_config.arm64_v8a.apk \
-  split_config.en.apk split_config.de.apk split_config.xxhdpi.apk split_config.mdpi.apk
-adb shell dumpsys package de.volkswagen.CaliforniaOnTour | grep -E 'versionName|primaryCpuAbi'
+scp -3 'buspi:~/apks/5.4.0.3036/*.apk' odelly:android-lab/apks/5.4.0.3036/   # via your Mac: buspi has no key for odelly
+tools/applab/labctl.sh install    # on odelly: install-multiple -r, location grants, prints versionName + primaryCpuAbi
 ```
 
 The phone's splits are **arm64-only** (5.0.8 from apk-pure was universal). The `lab34` image
@@ -140,10 +155,10 @@ Error=1` (workshop dialog), `set roof Position=…`/`InfoPopUp=9`, `set campingm
 ## Recording a scenario (walk.py)
 
 Scripted recording beats grepping the log: add a scenario in `tools/applab/scenarios.py`, then on
-thinky (Linux lab: `tools/applab/README.md`, "One-time setup") run:
+odelly (Linux lab: `tools/applab/README.md`, "One-time setup") run:
 
 ```bash
-~/esp-venv/bin/python tools/applab/walk.py <scenario>      # -> tests/vectors/app/<scenario>.jsonl
+"$BUMBLE_PY" tools/applab/walk.py <scenario>      # -> tests/vectors/app/<scenario>.jsonl
 python3 -m tools.capture_diff tests/vectors/app/<scenario>.jsonl --recording
 python3 -m pytest tests/test_app_recordings.py -k <scenario>
 ```
