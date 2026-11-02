@@ -251,7 +251,11 @@ extension XCUIApplication {
         Thread.sleep(forTimeInterval: 1)  // a launch read or a push has settled
         _ = stableFrames()
         var passes = [try settledPass(scrolled: false)]
-        for _ in 0..<4 {
+        // Drag until the content stops moving: the last pass shows the end of the page. A page that
+        // still moves after `maxDrags` fails (its end was never audited).
+        let maxDrags = 10
+        var reachedEnd = false
+        for _ in 0..<maxDrags {
             let before = stableFrames()
             // A drag with a hold: the content rests where the finger stops (no momentum, no bounce).
             let area = windows.firstMatch
@@ -262,9 +266,13 @@ extension XCUIApplication {
             // Wait until the content rests (a page that fits bounces back, a large title snaps), as
             // before the top pass, then see whether it moved.
             Thread.sleep(forTimeInterval: 1)
-            if stableFrames() == before { break }
+            if stableFrames() == before {
+                reachedEnd = true
+                break
+            }
             passes.append(try settledPass(scrolled: true))
         }
+        if !reachedEnd { XCTFail("the page still scrolls after \(maxDrags) drags", file: file, line: line) }
         let clean = passes.reduce(into: Set<String>()) { $0.formUnion($1.clean) }
         // Measured on Lighting (the longest page): 8 such issues in one pass. More would hide real
         // text without an element.
@@ -291,18 +299,21 @@ extension XCUIApplication {
         return last
     }
 
-    /// The frames of the labelled elements, keyed "label#n" (the n-th element with that label in tree
-    /// order), so two rows with one name ("Background lighting") are two keys. One snapshot: also a
-    /// cheap check whether the content moved.
+    /// The frames of the labelled elements, keyed "name#n" (the n-th element with that name in tree
+    /// order), so two rows with one name ("Background lighting") are two keys. The name is the
+    /// element's accessibility identifier if it has one (the pill, whose label ticks with the age:
+    /// "as of 1 min ago", then "2 min ago"), else its label. One snapshot: also a cheap check
+    /// whether the content moved.
     @MainActor
     private func frames() -> [String: CGRect] {
         var out: [String: CGRect] = [:]
         var seen: [String: Int] = [:]
         func walk(_ e: XCUIElementSnapshot) {
             if !e.label.isEmpty {
-                let n = seen[e.label, default: 0]
-                seen[e.label] = n + 1
-                out["\(e.label)#\(n)"] = e.frame
+                let name = e.identifier.isEmpty ? e.label : e.identifier
+                let n = seen[name, default: 0]
+                seen[name] = n + 1
+                out["\(name)#\(n)"] = e.frame
             }
             e.children.forEach(walk)
         }
@@ -337,16 +348,23 @@ extension XCUIApplication {
         let edge = navigationBars.firstMatch.exists ? navigationBars.firstMatch.frame.maxY : screen.minY
         let rowCut = scrolled && all.values.contains { $0.minY < edge && $0.maxY > edge }
         try performAccessibilityAudit { issue in
-            // The element's key: the element with that label nearest to the issue's frame.
+            // The element's key: the element with that name nearest to the issue's frame. A text inside
+            // a combined element (the pill's "offline") has no entry of its own: the smallest
+            // labelled element that holds it.
             let label =
                 issue.element.map { el in
                     let frame = el.frame
-                    return all.filter { $0.key.hasPrefix(el.label + "#") }
+                    let name = el.identifier.isEmpty ? el.label : el.identifier
+                    let nearest = all.filter { $0.key.hasPrefix(name + "#") }
                         .min {
                             abs($0.value.midY - frame.midY) + abs($0.value.midX - frame.midX) < abs($1.value.midY - frame.midY)
                                 + abs($1.value.midX - frame.midX)
                         }?
-                        .key ?? el.label + "#?"
+                        .key
+                    let holder = all.filter { $0.value.contains(frame) }
+                        .min { $0.value.width * $0.value.height < $1.value.width * $1.value.height }?
+                        .key
+                    return nearest ?? holder ?? name + "#?"
                 } ?? "-"
             pass.clean.remove(label)
             // After a scroll, a row cut at the hard edge under the navigation bar leaves glyph pieces

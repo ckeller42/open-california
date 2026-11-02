@@ -62,6 +62,8 @@ struct PillLabel: View, Equatable {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: spoken))
         .accessibilityAddTraits(.isStaticText)
+        // A name that stays while the age ticks (the UI audit keys elements by it).
+        .accessibilityIdentifier("path-pill")
     }
 }
 
