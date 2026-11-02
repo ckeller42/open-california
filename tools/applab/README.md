@@ -313,7 +313,7 @@ the XY point and run it again; nothing retries.
 
 ```sh
 . $LAB_DIR/env.sh
-~/esp-venv/bin/python tools/applab/walk.py cooler airheater
+python3 tools/applab/walk.py cooler airheater
 python3 -m tools.capture_diff tests/vectors/app/cooler.jsonl --recording    # the replay, write by write
 python3 -m tools.app_parity tests/vectors/app/session.jsonl                  # app / calictl / ESP lifecycle
 ```
