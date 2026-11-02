@@ -251,8 +251,9 @@ extension XCUIApplication {
         Thread.sleep(forTimeInterval: 1)  // a launch read or a push has settled
         _ = stableFrames()
         var passes = [try settledPass(scrolled: false)]
-        // Drag until the content stops moving: the last pass shows the end of the page. A page that
-        // still moves after `maxDrags` fails (its end was never audited).
+        // Drag until the content no longer scrolls (`scrollShift`: texts that tick or come and go do
+        // not count): the last pass shows the end of the page. A page that still scrolls after
+        // `maxDrags` fails (its end was never audited).
         let maxDrags = 10
         var reachedEnd = false
         for _ in 0..<maxDrags {
@@ -266,7 +267,7 @@ extension XCUIApplication {
             // Wait until the content rests (a page that fits bounces back, a large title snaps), as
             // before the top pass, then see whether it moved.
             Thread.sleep(forTimeInterval: 1)
-            if stableFrames() == before {
+            if scrollShift(from: before, to: stableFrames()) == nil {
                 reachedEnd = true
                 break
             }
@@ -286,14 +287,15 @@ extension XCUIApplication {
         for _ in 0..<passes.count { swipeDown() }
     }
 
-    /// `frames()` once two reads 0.3 s apart agree (at most 3 s).
+    /// `frames()` once the content did not scroll between two reads 0.3 s apart (at most 3 s). A text
+    /// that ticks or a banner does not keep it waiting (`scrollShift`).
     @MainActor
     private func stableFrames() -> [String: CGRect] {
         var last = frames()
         for _ in 0..<10 {
             Thread.sleep(forTimeInterval: 0.3)
             let now = frames()
-            if now == last { return now }
+            if scrollShift(from: last, to: now) == nil { return now }
             last = now
         }
         return last
@@ -344,53 +346,52 @@ extension XCUIApplication {
                 + " navigationBar=\(navigationBars.firstMatch.frame) tabBar=\(tabBars.firstMatch.frame)")
         var pass = AuditPass()
         let all = frames()
-        pass.clean = Set(all.filter { clear.contains($0.value) }.keys)
         let edge = navigationBars.firstMatch.exists ? navigationBars.firstMatch.frame.maxY : screen.minY
         let rowCut = scrolled && all.values.contains { $0.minY < edge && $0.maxY > edge }
-        try performAccessibilityAudit { issue in
-            // The element's key: the element with that name nearest to the issue's frame. A text inside
-            // a combined element (the pill's "offline") has no entry of its own: the smallest
-            // labelled element that holds it.
-            let label =
-                issue.element.map { el in
-                    let frame = el.frame
-                    let name = el.identifier.isEmpty ? el.label : el.identifier
-                    let nearest = all.filter { $0.key.hasPrefix(name + "#") }
-                        .min {
-                            abs($0.value.midY - frame.midY) + abs($0.value.midX - frame.midX) < abs($1.value.midY - frame.midY)
-                                + abs($1.value.midX - frame.midX)
-                        }?
-                        .key
-                    let holder = all.filter { $0.value.contains(frame) }
-                        .min { $0.value.width * $0.value.height < $1.value.width * $1.value.height }?
-                        .key
-                    return nearest ?? holder ?? name + "#?"
-                } ?? "-"
-            pass.clean.remove(label)
-            // After a scroll, a row cut at the hard edge under the navigation bar leaves glyph pieces
-            // with no element ("potentially inaccessible text"); the same rows are elements in the
-            // top pass.
-            let cutGlyphs = rowCut && issue.element == nil && issue.auditType == .elementDetection
-            if cutGlyphs { pass.cutGlyphs += 1 }
-            let outside =
-                cutGlyphs
-                || issue.element.map { !clear.contains($0.frame) } ?? false
-                    && [.contrast, .dynamicType, .textClipped].contains(issue.auditType)
-            let frame = issue.element.map { "\($0.frame)" } ?? ""
-            let exempt = outside ? "exempt (outside the clear screen) " : ""
-            print("AUDIT \(exempt)\(issue.compactDescription) | \(label) \(frame) | \(issue.detailedDescription)")
-            if outside {
-                if !cutGlyphs { pass.exempt.append(label) }
-                let name = "Audit exemption (outside the clear screen): \(issue.compactDescription)"
-                XCTContext.runActivity(named: name) { activity in
-                    let attachment = XCTAttachment(string: "\(label)\n\(issue.detailedDescription)")
-                    attachment.lifetime = .keepAlways
-                    activity.add(attachment)
+        // XCTest's own audit can time out on a loaded simulator (not a finding): once more, then fail.
+        for attempt in 1...2 {
+            pass = AuditPass()
+            pass.clean = Set(all.filter { clear.contains($0.value) }.keys)
+            do {
+                try performAccessibilityAudit { issue in
+                    let label =
+                        issue.element.map { el in
+                            elementKey(name: el.identifier.isEmpty ? el.label : el.identifier, frame: el.frame, in: all)
+                        } ?? "-"
+                    pass.clean.remove(label)
+                    // After a scroll, a row cut at the hard edge under the navigation bar leaves glyph pieces
+                    // with no element ("potentially inaccessible text"); the same rows are elements in the
+                    // top pass.
+                    let cutGlyphs = rowCut && issue.element == nil && issue.auditType == .elementDetection
+                    if cutGlyphs { pass.cutGlyphs += 1 }
+                    let outside =
+                        cutGlyphs
+                        || issue.element.map { !clear.contains($0.frame) } ?? false
+                            && [.contrast, .dynamicType, .textClipped].contains(issue.auditType)
+                    let frame = issue.element.map { "\($0.frame)" } ?? ""
+                    let exempt = outside ? "exempt (outside the clear screen) " : ""
+                    print("AUDIT \(exempt)\(issue.compactDescription) | \(label) \(frame) | \(issue.detailedDescription)")
+                    if outside {
+                        if !cutGlyphs { pass.exempt.append(label) }
+                        let name = "Audit exemption (outside the clear screen): \(issue.compactDescription)"
+                        XCTContext.runActivity(named: name) { activity in
+                            let attachment = XCTAttachment(string: "\(label)\n\(issue.detailedDescription)")
+                            attachment.lifetime = .keepAlways
+                            activity.add(attachment)
+                        }
+                    }
+                    // Decided after the pass (`auditScreen`): a pass that measured moving content runs again.
+                    if !outside {
+                        pass.failures.append("\(issue.compactDescription) | \(label) \(frame) | \(issue.detailedDescription)")
+                    }
+                    return true
                 }
+                break
+            } catch let error as NSError
+                where error.domain == "com.apple.xcode.xctest.accessibilityAudit" && error.code == -56 && attempt == 1
+            {
+                print("AUDIT the audit did not complete in time (\(error.code)): again")
             }
-            // Decided after the pass (`auditScreen`): a pass that measured moving content runs again.
-            if !outside { pass.failures.append("\(issue.compactDescription) | \(label) \(frame) | \(issue.detailedDescription)") }
-            return true
         }
         pass.moved = frames() != all
         return pass
