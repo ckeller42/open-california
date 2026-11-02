@@ -63,8 +63,10 @@ def test_vectors_never_drop_a_safety_stop():
         cause = st[PWHY] or (st[SWHY] if st[0] == "STOPPING" else None)
         if c[2][2] == "AUTO" and cause not in (None, "USER_OFF"):
             held += 1
-            # the AUTO request is ignored; AUTO starts only when the readback showed the stop done
-            assert not (c[4][0] or "").startswith(("ADOPT_", "AUTO_REFUSED_")), c
+            # the AUTO request is ignored; AUTO starts (or is refused) only when the readback of this
+            # same step showed the stop done (no stop pending or waiting afterwards)
+            done = c[5][PWHY] is None and c[5][0] != "STOPPING"
+            assert done or not (c[4][0] or "").startswith(("ADOPT_", "AUTO_REFUSED_")), c
             assert c[4][1] != "AUTO" or (c[4][0], c[4][2]) == ("START", "OFF"), c
     assert held  # the vectors reach the case
 

@@ -61,6 +61,7 @@ REASONS = (
             "NO_REFERENCE",
             "TIMER_ARMED",
             "STALE_HEATER",
+            "WARM",
         )
     ),
     "START",
@@ -72,6 +73,7 @@ REASONS = (
     "TARGET_EXCEEDED_AT_MIN_LEVEL",
     "OVERHEAT",
     "BACKUP_SELECTED",
+    "REFERENCE_SELECTED",
     "REFERENCE_LOST",
     "OUTSIDE_INACTIVE",
     *("FAULT_%d" % n for n in range(1, 16)),
@@ -336,6 +338,8 @@ def _refusal(inp: dict, cfg: dict, hs: str, code: int) -> str | None:
         return "AUTO_REFUSED_IGNITION"
     if not _valid(inp["ref"], cfg):
         return "AUTO_REFUSED_NO_REFERENCE"
+    if hs == "OFF" and inp["ref"]["value"] > inp["target"] + cfg["band_hi"]:
+        return "AUTO_REFUSED_WARM"  # a start would soon stop again: a burner short cycle
     return None
 
 
@@ -349,7 +353,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
 
        The thermostat shall enter AUTO only on an owner request with the feature enabled, a link,
        a fresh, installed, fault-free heater with no armed timer, camping mode or shore power,
-       ignition off and a valid reference reading; otherwise it shall refuse with
+       ignition off and a valid reference reading, and from an OFF heater a reference not above
+       ``target + band_hi``; otherwise it shall refuse with
        ``AUTO_REFUSED_<WHY>`` and send nothing. An AUTO request that passes these checks drops the
        owner's own pending stop (the last owner request wins); a refused one keeps it. While a
        safety stop (overheat, target exceeded, battery low, feature disabled) is pending or waits
@@ -364,7 +369,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        ``NOT_APPLIED``. An owner stop, low second battery, overheat or a target exceeded
        at the minimum level stop the heater (``power off`` or ``permanent off``); with the link
        down the stop waits in ``STOPPING`` and is dropped when the heater changed meanwhile.
-       A lost reference switches to a valid backup, else the level goes to ``min_level``.
+       A lost reference switches to a valid backup, a lost active backup back to a valid
+       reference, else the level goes to ``min_level``.
 
     Evaluation order per call (the first rule that ends AUTO wins): pending-command bookkeeping,
     owner request, ``STOPPING``, faults, heater unknown, foreign change, battery, heater ended,
@@ -549,7 +555,7 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         cmds = _end(st)
         return out("CONTINUOUS_ENDED" if st["expect"]["permanent"] else "RUN_ENDED")
 
-    # (7) reference validity: backup, else min_level (DEGRADED)
+    # (7) reference validity: the other valid thermometer, else min_level (DEGRADED)
     act = st["active"]
     if not _valid(sensors[act], cfg):
         if act == "ref" and _valid(inp["backup"], cfg):
@@ -557,6 +563,11 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             if level is not None:
                 st["ctl"] = track(st["ctl"], level, inp["backup"]["value"], target, cfg)
             return out("BACKUP_SELECTED")
+        if act == "backup" and _valid(inp["ref"], cfg):
+            st["active"], st["mode"], st["last_ctl_ms"] = "ref", "AUTO", now
+            if level is not None:
+                st["ctl"] = track(st["ctl"], level, inp["ref"]["value"], target, cfg)
+            return out("REFERENCE_SELECTED")
         st["mode"] = "DEGRADED"
         if level != cfg["min_level"] and st["pending"] is None and link:
             cmds = [("level", cfg["min_level"])]

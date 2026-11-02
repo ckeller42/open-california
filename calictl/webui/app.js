@@ -3681,7 +3681,7 @@ function spinner() {
 // GET/POST /api/thermostat exist on the satellite only (buspi: no card). The card shows while a Govee is
 // configured (ext) and the satellite accepts writes. The firmware ships it DISABLED: then the card says so and offers no AUTO switch
 // (enabling is API-only, with confirm). The heater unit's own safety concept stays authoritative.
-/** @typedef {{enabled:boolean, mode:string, reason:?string, heater:string, t_ref:?number, target:?number, level:?number, active:?string, end:string}} ThermoStatus */
+/** @typedef {{enabled:boolean, mode:string, reason:?string, heater:string, t_ref:?number, target:?number, level:?number, active:?string, end:string}} ThermoStatus end: "run" (a normal run that ends by itself) or "none" */
 /** @typedef {{rev:number, mode:string, target:number, runtime_min:number, ref:?string, backup:?string, out:?string, outside_on:boolean, status:ThermoStatus}} Thermo */
 /** @type {?Thermo} */
 let THERMO = null;
@@ -3700,10 +3700,11 @@ const THERMO_REASON = {
   AUTO_REFUSED_FAULT: "Heater fault — AUTO not started",
   AUTO_REFUSED_NO_LINK: "Not connected to the camper unit",
   AUTO_REFUSED_NO_CAMPING: "Camping mode is off",
-  AUTO_REFUSED_IGNITION: "Not while the ignition is on",
+  AUTO_REFUSED_IGNITION: "Ignition is on or not known yet",
   AUTO_REFUSED_NO_REFERENCE: "Choose a thermometer first",
   AUTO_REFUSED_TIMER_ARMED: "Stop the timer first",
   AUTO_REFUSED_STALE_HEATER: "Heater state not known yet — try again in a moment",
+  AUTO_REFUSED_WARM: "Already warm enough — heater not started",
   START: "Heater started",
   ADOPT_RUN: "Taking over the running heater",
   ADOPT_CONTINUOUS: "Taking over continuous heating",
@@ -3713,6 +3714,7 @@ const THERMO_REASON = {
   TARGET_EXCEEDED_AT_MIN_LEVEL: "Warmer than the target at the lowest level",
   OVERHEAT: "Too warm — heater stopped",
   BACKUP_SELECTED: "Using the backup thermometer",
+  REFERENCE_SELECTED: "Using the main thermometer again",
   REFERENCE_LOST: "Thermometer lost — lowest level",
   OUTSIDE_INACTIVE: "Outside thermometer not available",
   LOCKED: "Heater locked",
@@ -3762,13 +3764,16 @@ function thermoAsk() {
   thermoLoad().then(() => { if (THERMO && view === "airheater") render(); });
 }
 
-/** POST one change with the current rev; a stale rev reloads and says so. @param {Record<string, any>} patch */
+/** POST one change with the current rev; a stale rev reloads and says so. A plain AUTO off goes without
+ * rev, also with no state loaded: the firmware never blocks a stop. @param {Record<string, any>} patch */
 function thermoPost(patch) {
+  const off = Object.keys(patch).length === 1 && patch.mode === "OFF";
   thermoChain = thermoChain.then(async () => {
-    if (!THERMO) return;
+    if (!THERMO && !off) return;
     try {
+      const body = off ? patch : Object.assign({}, patch, { rev: /** @type {Thermo} */ (THERMO).rev });
       const r = await api("/api/thermostat", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.assign({}, patch, { rev: THERMO.rev })) });
+        body: JSON.stringify(body) });
       if (r && typeof r.rev === "number") THERMO = r;
       else if (r && r.error === "stale_rev") {
         await thermoLoad();
@@ -3785,7 +3790,8 @@ function thermoStatusText(th) {
   if (st.mode === "OFF") return /** @type {string} */ (t("off"));
   if (st.mode === "STOPPING") return /** @type {string} */ (t("stopping"));
   const lv = st.level != null ? tf("level {n}", { n: st.level }) + " • " : "";
-  if (st.mode === "DEGRADED") return lv + (st.active && st.active === th.backup ? t("on backup") : t("degraded"));
+  if (st.mode === "DEGRADED") return lv + t("degraded");
+  if (st.active && st.active === th.backup && th.backup !== th.ref) return lv + t("on backup");
   return lv + (st.heater === "CONTINUOUS" ? t("continuous") : t("running"));
 }
 
@@ -3850,7 +3856,7 @@ function thermoSheetEl(th) {
   row.appendChild(thermoEl("lbl", /** @type {string} */ (t("Outside compensation"))));
   const sw = document.createElement("button");
   sw.className = "switch";
-  sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", "Outside compensation");
+  sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", /** @type {string} */ (t("Outside compensation")));
   sw.setAttribute("aria-checked", th.outside_on ? "true" : "false");
   sw.disabled = readOnly();
   sw.onclick = () => thermoPost({ outside_on: !th.outside_on });
@@ -3874,7 +3880,7 @@ function thermostatCard() {
     auto.appendChild(thermoEl("sval", thermoStatusText(th)));
     const sw = document.createElement("button");
     sw.className = "switch";
-    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", "AUTO");
+    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", /** @type {string} */ (t("AUTO")));
     sw.setAttribute("aria-checked", st.mode === "OFF" ? "false" : "true");
     sw.disabled = readOnly();
     sw.onclick = () => {
@@ -3922,8 +3928,7 @@ function thermostatCard() {
     rt.appendChild(sel);
     card.appendChild(rt);
   }
-  const why = st.end && st.end !== "none" ? st.end : st.reason;
-  if (why) card.appendChild(thermoEl("note thermo-line", thermoReasonShown(why)));
+  if (st.reason) card.appendChild(thermoEl("note thermo-line", thermoReasonShown(st.reason)));
   const open = document.createElement("button");
   open.className = "row thermo-open";
   open.setAttribute("aria-expanded", thermoSheet ? "true" : "false");

@@ -190,20 +190,61 @@ def test_stale_rev_reloads_and_tells_the_user(stub):
 
 @pytest.mark.parametrize("lang", ["en", "de"])
 def test_reason_text_en_and_de(stub, error_gated_page, lang):
+    # the ignition may be on OR not yet known (-1): the text claims neither alone
     _enable(stub, reason="AUTO_REFUSED_IGNITION", end="none")
     cm, pg = _open(stub, error_gated_page, lang)
     try:
-        want = "Not while the ignition is on" if lang == "en" else "Nicht bei eingeschalteter Zündung"
+        want = "Ignition is on or not known yet" if lang == "en" else "Zündung ist an oder noch nicht bekannt"
         expect(pg.locator("#app .card .thermo-line")).to_have_text(want)
     finally:
         cm.__exit__(None, None, None)
 
 
-def test_end_reason_wins_over_last_step(stub, error_gated_page):
-    _enable(stub, reason="HOLD", end="BATTERY_LOW")
+def test_reason_line_shows_the_reason_not_the_end_kind(stub, error_gated_page):
+    # the firmware's status.end is only "run" or "none": the line is status.reason, never "run"
+    _enable(stub, mode="AUTO", heater="RUNNING", level=4, reason="HOLD", end="run")
     cm, pg = _open(stub, error_gated_page)
     try:
-        expect(pg.locator("#app .card .thermo-line")).to_have_text("Battery low — AUTO off")
+        expect(pg.locator("#app .card .thermo-line")).to_have_text("Holding the level")
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "mode,active,want",
+    [
+        ("AUTO", "bed", "level 4 • on backup"),
+        ("AUTO", "cabin", "level 4 • running"),
+        ("DEGRADED", "bed", "level 4 • degraded"),
+    ],
+)
+def test_state_on_backup_and_degraded(stub, error_gated_page, mode, active, want):
+    _enable(stub, mode=mode, heater="RUNNING", level=4, active=active, reason="AUTO_ON", end="run")
+    stub.fixtures["satellite"]["/api/thermostat"].update(mode=mode, backup="bed")
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).get_by_text(want, exact=True)).to_be_visible()
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_auto_off_posts_without_rev_even_without_state(stub, error_gated_page):
+    _enable(stub, mode="AUTO", heater="RUNNING", level=4, reason="AUTO_ON", end="run")
+    stub.fixtures["satellite"]["/api/thermostat"]["mode"] = "AUTO"
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        _card(pg).get_by_role("switch", name="AUTO").click()  # on -> off: no confirm
+        for _ in range(50):
+            if stub.thermostat_posts:
+                break
+            pg.wait_for_timeout(100)
+        assert stub.thermostat_posts == [{"mode": "OFF"}]  # never blocked by a stale rev
+        pg.evaluate("() => { THERMO = null; thermoPost({ mode: 'OFF' }); }")  # no state loaded: still sent
+        for _ in range(50):
+            if len(stub.thermostat_posts) == 2:
+                break
+            pg.wait_for_timeout(100)
+        assert stub.thermostat_posts == [{"mode": "OFF"}, {"mode": "OFF"}]
     finally:
         cm.__exit__(None, None, None)
 
@@ -217,5 +258,16 @@ def test_every_reason_code_has_en_and_de(stub, error_gated_page):
             list(thermostat.REASONS),
         )
         assert bad == []
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_switch_names_follow_the_ui_language(stub, error_gated_page):
+    _enable(stub)
+    cm, pg = _open(stub, error_gated_page, "de")
+    try:
+        _card(pg).get_by_role("button", name="Thermometer: cabin").click()
+        expect(_card(pg).get_by_role("switch", name="Außentemperatur-Ausgleich")).to_be_visible()
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_be_visible()
     finally:
         cm.__exit__(None, None, None)

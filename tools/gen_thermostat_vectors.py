@@ -250,6 +250,22 @@ def sessions(rec):
         ],
     )  # fmt: skip
     session(
+        rec, "backup_lost_back_to_reference", 0,
+        [
+            {**auto, "heater": run_h(4), "backup": sensor(1900, alias="bed")},
+            {"ref": sensor(None), "backup": sensor(1900, alias="bed")},
+            {"ref": sensor(1850), "backup": sensor(None, alias="bed")},
+            {"ref": sensor(None), "backup": sensor(None, alias="bed")},
+        ],
+    )  # fmt: skip
+    session(
+        rec, "warm_cabin_refused_then_start_at_the_edge", 0,
+        [
+            {**auto, "ref": sensor(D["band_hi"] + 2101), "target": 2100},
+            {**auto, "ref": sensor(D["band_hi"] + 2100), "target": 2100},
+        ],
+    )  # fmt: skip
+    session(
         rec, "reference_lost_no_backup_degraded", 0,
         [
             {**auto, "heater": run_h(6)},

@@ -191,6 +191,8 @@ static const char *refusal(const cali_thermo_in_t *in, const cali_thermo_cfg_t *
     if (!(in->camping_on || in->shore_on)) return "AUTO_REFUSED_NO_CAMPING";
     if (in->ignition_on != 0) return "AUTO_REFUSED_IGNITION";
     if (!valid(&in->ref, cfg)) return "AUTO_REFUSED_NO_REFERENCE";
+    if (hs == CALI_THERMO_H_OFF && (int64_t)in->ref.value > (int64_t)in->target + cfg->band_hi)
+        return "AUTO_REFUSED_WARM"; /* a start would soon stop again: a burner short cycle */
     return NULL;
 }
 
@@ -420,7 +422,7 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         RET(st->expect.permanent ? "CONTINUOUS_ENDED" : "RUN_ENDED");
     }
 
-    /* (7) reference validity: backup, else min_level (DEGRADED) */
+    /* (7) reference validity: the other valid thermometer, else min_level (DEGRADED) */
     act = st->active ? &in->backup : &in->ref;
     if (!valid(act, cfg)) {
         if (st->active == 0 && valid(&in->backup, cfg)) {
@@ -429,6 +431,13 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             st->last_ctl_ms = now;
             if (level != NONE) track(&st->ctl, level, in->backup.value, target, cfg);
             RET("BACKUP_SELECTED");
+        }
+        if (st->active == 1 && valid(&in->ref, cfg)) {
+            st->active = 0;
+            st->mode = CALI_THERMO_AUTO;
+            st->last_ctl_ms = now;
+            if (level != NONE) track(&st->ctl, level, in->ref.value, target, cfg);
+            RET("REFERENCE_SELECTED");
         }
         st->mode = CALI_THERMO_DEGRADED;
         if (level != cfg->min_level && !st->has_pending && link) {

@@ -199,6 +199,17 @@ def test_auto_refused_without_camping_or_shore():
     assert _auto(OFF_H, ref=stale)[0]["reason"] == "AUTO_REFUSED_NO_REFERENCE"
 
 
+def test_auto_refused_when_already_warm():
+    """AUTO from an OFF heater is refused above ``target + band_hi``; adopting a running heater is not."""
+    warm = {"alias": "cabin", "value": 2100 + CFG["band_hi"] + 1, "age_ms": 0}
+    out, st = _auto(OFF_H, ref=warm)
+    assert (out["reason"], out["mode"], out["cmds"]) == ("AUTO_REFUSED_WARM", "OFF", [])
+    edge = {**warm, "value": 2100 + CFG["band_hi"]}
+    assert _auto(OFF_H, ref=edge)[0]["reason"] == "START"
+    assert _auto(RUN, ref=warm)[0]["reason"] == "ADOPT_RUN"
+    assert _auto(CONT, ref=warm)[0]["reason"] == "ADOPT_CONTINUOUS"
+
+
 def test_auto_refused_while_timer_armed():
     out, _ = _auto({"Installed": 1, "OperationModeAirHeater": 3})
     assert (out["reason"], out["mode"], out["cmds"]) == ("AUTO_REFUSED_TIMER_ARMED", "OFF", [])
@@ -352,6 +363,20 @@ def test_reference_lost_uses_backup_then_min_level():
     _, st = _step(st, now_ms=P, heater=RUN, ref=lost, backup=good_b)
     _, st = _step(st, now_ms=2 * P, heater=RUN, request="AUTO", backup=good_b)
     assert st["active"] == "ref"
+
+
+def test_active_backup_lost_falls_back_to_a_valid_reference():
+    """The active backup goes invalid while the reference is valid: back to the reference (bumpless)."""
+    good_b = {"alias": "bed", "value": 1800, "age_ms": 0}
+    lost = {"alias": "cabin", "value": 1700, "age_ms": CFG["stale_after_ms"] + 1}
+    _, st = _auto(RUN, backup=good_b)
+    _, st = _step(st, now_ms=P, heater=RUN, ref=lost, backup=good_b)
+    assert st["active"] == "backup"
+    good_r = {"alias": "cabin", "value": 1900, "age_ms": 0}
+    out, st2 = _step(st, now_ms=2 * P, heater=RUN, ref=good_r, backup={**good_b, "value": None})
+    assert (out["reason"], out["cmds"], out["mode"]) == ("REFERENCE_SELECTED", [], "AUTO")
+    assert st2["active"] == "ref" and out["status"]["active_alias"] == "cabin"
+    assert st2["ctl"] == th.track(st["ctl"], 5, 1900, 2100, CFG) and st2["last_ctl_ms"] == 2 * P
 
 
 @pytest.mark.parametrize("code", range(1, 16))

@@ -505,7 +505,7 @@ replies for a client that sends `Accept-Encoding: gzip` (`Vary: Accept-Encoding`
 | `GET /api/log?since=<seq>&max=<n>` | One page of the SD log for buspi's `calictl esp-ingest` (`R_FW_LOG_API`, [below](#sd-log-r_fw_sd_log)), in every WiFi mode: 200 `application/x-ndjson`, the record lines with `seq > since`, oldest first, at most `max` (default 2000) and what fits the 400 KB PSRAM page buffer, then the trailer `{"next":<last seq sent, or since>,"more":<bool>,"boot":<current boot>,"lost":<n>}`. 400 `bad_value` (any other query), 503 `no_card` / `sd_read`, 409 `busy`, 405 `method`. |
 | `POST /api/ota` | `{"action":"check"\|"install"}` (`R_FW_OTA`, [Firmware update from GitHub](#firmware-update-from-github-r_fw_ota)): starts the OTA task -> 200 `{"ok":true}` at once, progress in `/api/state` `device.ota`. Station mode only (403 `setup_mode`), 400 `bad_json`/`bad_action`, 409 `busy`, 503 `ota_unavailable` (host build, QEMU). `{"channel":"stable"\|"latest"}` (never together with `action`) stores the release channel (kv `ota_channel`) -> 200 `{"ok":true}`, the next check uses it, `device.ota.channel`; 400 `bad_value` for another string, 500 `store` (works without OTA I/O too). |
 | `POST /api/auto_camper` | `{"enabled":<bool>}` (exactly that object; serve's endpoint, `R_FW_AUTO_CAMPER`): saves the toggle -> 200 `{"ok":true,"auto_camper":<bool>}`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
-| `GET /api/thermostat`, `POST /api/thermostat` | The cabin thermostat (`R_FW_THERMOSTAT_API`). GET -> 200 `{rev,mode,target,runtime_min,ref,backup,out,outside_on,cfg,status}`: `target` in centi-degrees C, `ref`/`backup`/`out` the thermometer aliases or `null`, `cfg` all settings by name, `status` = `enabled`, `mode`, `reason`, `heater`, `t_ref`, `t_out`, `target`, `level`, `active`, `outside_active`, `end`. The thermostat ships off (`enabled` false): while off, an AUTO request is refused with the reason `AUTO_REFUSED_DISABLED` and nothing is sent. POST takes any of `enabled`, `mode` (`AUTO`/`OFF`), `target` (500..3000, steps of 50), `runtime_min` (10..120), `ref`/`backup`/`out` (the alias of a configured Govee, or `null`), `outside_on`, `cfg` (an object of settings), `rev` and `confirm`; `enabled`, `mode` `AUTO` and `cfg` need `"confirm":true`. A `rev` other than the current one -> 409 `stale_rev`; every accepted POST counts `rev`; a POST without `rev` is accepted. All values are checked before anything changes. -> 200 the GET body. The settings, target, run time, aliases and `outside_on` persist (`th_cfg`), the switch too (`th_on`), the mode never (OFF after boot). Errors: 400 `bad_json` (also an unknown `cfg` key), 400 `bad_value`, 400 `unknown_sensor`, 400 `confirm_required`, 409 `stale_rev`, 403 `setup_mode` (POST; GET works in every mode), 500 `store`, 405. |
+| `GET /api/thermostat`, `POST /api/thermostat` | The cabin thermostat (`R_FW_THERMOSTAT_API`). GET -> 200 `{rev,mode,target,runtime_min,ref,backup,out,outside_on,cfg,status}`: `target` in centi-degrees C, `ref`/`backup`/`out` the thermometer aliases or `null`, `cfg` all settings by name, `status` = `enabled`, `mode`, `reason`, `heater`, `t_ref`, `t_out`, `target`, `level`, `active` (the alias of the thermometer in use), `outside_active`, `end` (`run` while the heater is in a normal run that ends by itself, else `none`). The thermostat ships off (`enabled` false): while off, an AUTO request is refused with the reason `AUTO_REFUSED_DISABLED` and nothing is sent. POST takes any of `enabled`, `mode` (`AUTO`/`OFF`), `target` (500..3000, steps of 50), `runtime_min` (10..120), `ref`/`backup`/`out` (the alias of a configured Govee, or `null`), `outside_on`, `cfg` (an object of settings), `rev` and `confirm`; `enabled`, `mode` `AUTO` and `cfg` need `"confirm":true`. A `rev` other than the current one -> 409 `stale_rev`, except for a body that is only `mode` `OFF` (with or without `rev`): a stop is never blocked; every accepted POST counts `rev`; a POST without `rev` is accepted. All values are checked before anything changes. -> 200 the GET body. The settings, target, run time, aliases and `outside_on` persist (`th_cfg`), the switch too (`th_on`), the mode never (OFF after boot). Errors: 400 `bad_json` (also an unknown `cfg` key), 400 `bad_value`, 400 `unknown_sensor`, 400 `confirm_required`, 409 `stale_rev`, 403 `setup_mode` (POST; GET works in every mode), 500 `store`, 405. |
 | `POST /api/pi_wake` | `{}` or no body (`R_FW_PI_WAKE`, [Pi wake](#pi-wake-r_fw_pi_wake)): one manual wake, GPIO9 low 200 ms -> 200 `{"ok":true}`; 409 `busy` while a pulse is in progress. Station mode only (403 `setup_mode`), 400 `bad_json` (any other body). |
 | `POST /api/pi_halt` | `{}` or no body (`R_FW_PI_HALT`, [Pi halt](#pi-halt-r_fw_pi_halt)): one manual halt, GPIO8 low 500 ms -> 200 `{"ok":true}`; 409 `busy` while either Pi line is low. Station mode only (403 `setup_mode`), 400 `bad_json` (any other body). |
 | `POST /api/pi_wake_setting` | any non-empty subset of `{"enabled":<bool>,"halt_after_min":0..1440,"halt_soc_pct":0..100}`, each key once (`R_FW_PI_WAKE`, `R_FW_PI_HALT`): Satellite settings' "Wake on ignition" switch and the two shutdown selects -> kv `pw_ign` / `ph_min` / `ph_soc` -> 200 `{"ok":true,"pi_wake":<bool>,"halt_after_min":n,"halt_soc_pct":n}`. Station mode only (403 `setup_mode`), 400 `bad_json` (an unknown or repeated key, a wrong type, `{}`), 400 `bad_value` (out of range), 500 `store` (keys saved before the failing one stay saved). |
@@ -1177,7 +1177,7 @@ any of them and never cuts the heater's power. It starts the burner only on the 
 ### Disabled by default
 
 The thermostat ships **disabled**. The switch is the kv key `th_on` (missing = off). While it is
-off, every AUTO request is refused with `AUTO_REFUSED_DISABLED`, nothing is sent, and the card
+off, every AUTO request is refused with `AUTO_REFUSED_DISABLED` (while a stop caused by switching it off still runs, the answer is `STOPPING`), nothing is sent, and the card
 shows *Thermostat disabled* with no AUTO switch. The switch changes only through the API, with an
 explicit confirmation:
 
@@ -1193,11 +1193,12 @@ normally, and an AUTO request is ignored with `STOPPING` until that stop is done
 The card sits on the Air heater screen of the satellite's web UI. It shows only while at least one
 configured Govee thermometer exists ([External sensors](#external-sensors-r_fw_sensors)), which needs
 the sensor track switch (*Sensors* in Satellite settings, [Sensor switch](#sensor-switch-r_fw_experimental))
-on, and not on a display-only satellite. It holds the {term}`AUTO (thermostat)` switch with its state (*level 4 • running*, *degraded*, *on backup*,
-*stopping*, *off*; *on backup* shows only in mode `DEGRADED` while the backup is the active thermometer, so after `BACKUP_SELECTED` the card shows *running*), the {term}`reference thermometer` reading, the target with
+on, and not on a display-only satellite. It holds the {term}`AUTO (thermostat)` switch with its state (*level 4 • running*, *on backup*, *degraded*,
+*stopping*, *off*; *on backup* shows in mode `AUTO` while the backup is the active thermometer, *degraded* in mode `DEGRADED`), the {term}`reference thermometer` reading, the target with
 minus and plus buttons (0.5 °C steps, 5 to 30 °C), the run time (10 to 120 min in steps of 10,
-shown only while the heater is off) and the last reason in plain words, in English and German.
-Starting AUTO asks for a confirmation: it starts the fuel-burning heater.
+shown only while the heater is off) and the last reason (`status.reason`) in plain words, in English and German.
+Starting AUTO asks for a confirmation: it starts the fuel-burning heater. Switching AUTO off sends
+`{"mode":"OFF"}` without `rev`, so a change made elsewhere never blocks the stop.
 
 A tap on *Thermometer* opens the thermometer sheet with three groups of radio buttons, each showing
 alias, temperature and age of the reading (a stale reading is marked and cannot be picked):
@@ -1220,6 +1221,9 @@ these hold; otherwise the step answers `AUTO_REFUSED_<WHY>` and sends nothing:
 4. Camping mode is on, or shore power is connected.
 5. The ignition is off.
 6. The reference thermometer has a valid reading (not older than `stale_after_ms`).
+7. With the heater off: the reference is not more than `band_hi` above the target. A start would
+   soon end again with `TARGET_EXCEEDED_AT_MIN_LEVEL` or `OVERHEAT`. Taking over a running heater is
+   not affected.
 
 If a safety stop (overheat, target exceeded, low battery, feature switched off) is still pending or
 waits for the link, a new AUTO request is ignored with `STOPPING`. The owner's own pending stop is
@@ -1238,7 +1242,7 @@ regulate. Once per `period_ms`, and never while a command waits for its result, 
 demand `u = p + i + u_out` in milli-levels from the error `target - t_ref`:
 
 - `p` is `kp` times the error.
-- `i` is the integrator (`ki` per minute of error). It is frozen when a step comes more than three periods late, and while the demand is at a limit with the error pushing further (anti-windup). On a start, a backup switch, a return from degraded mode and a target change the integrator is set so that the demand equals the current level: no jump.
+- `i` is the integrator (`ki` per minute of error). It is frozen when a step comes more than three periods late, and while the demand is at a limit with the error pushing further (anti-windup). On a start, a switch between reference and backup, a return from degraded mode and a target change the integrator is set so that the demand equals the current level: no jump.
 - `u_out` is the outside {term}`feed-forward <outside compensation>`: `ka` per degree below the target at the outside thermometer, capped at `u_out_max`. It is zero when the switch is off or the outside reading is invalid (reason `OUTSIDE_INACTIVE` when it is switched on but not available).
 
 The wanted level is the demand divided by 1000 and rounded, kept between `min_level` and 10. The
@@ -1259,7 +1263,8 @@ While AUTO runs, the thermostat holds the BLE session: no power-save rest and no
 
 | Situation | Reaction | Reason |
 |---|---|---|
-| The reference has no valid reading (removed or renamed in Satellite settings, stale, out of range) and a valid backup exists | The controller continues on the backup; only the owner switches back to the reference | `BACKUP_SELECTED` |
+| The reference has no valid reading (removed or renamed in Satellite settings, stale, out of range) and a valid backup exists | The controller continues on the backup; while the backup stays valid, only the owner switches back to the reference (an AUTO request) | `BACKUP_SELECTED` |
+| The active backup has no valid reading and the reference is valid again | The controller continues on the reference | `REFERENCE_SELECTED` |
 | The reference is lost and there is no valid backup | Mode `DEGRADED`: the level goes to `min_level` and stays. With a valid reading again, `AUTO` continues | `REFERENCE_LOST`, then `AUTO_ON` |
 | A reading outside -40 to 60 °C, or one that changes more than 3 °C per minute against the last accepted one (the time difference is floored at one minute, so up to 3 °C between two quick adverts is accepted) | The reading is invalid; the sensor counts as lost | as above |
 | The heater reports ErrorCode 2, 3 or 5 to 15 | AUTO ends, no command, never retried | `FAULT_<n>` |
@@ -1290,10 +1295,11 @@ A level command is never sent when the link is down. A command that returned `BU
 | `AUTO_REFUSED_FAULT` | The heater has a fault, is locked or is blocked |
 | `AUTO_REFUSED_NO_LINK` | No ready link to the unit |
 | `AUTO_REFUSED_NO_CAMPING` | Neither camping mode nor shore power |
-| `AUTO_REFUSED_IGNITION` | The ignition is on, or unknown |
+| `AUTO_REFUSED_IGNITION` | The ignition is on, or not known yet |
 | `AUTO_REFUSED_NO_REFERENCE` | No valid reading of the reference thermometer |
 | `AUTO_REFUSED_TIMER_ARMED` | A departure timer is armed |
 | `AUTO_REFUSED_STALE_HEATER` | The heater state is unknown or too old |
+| `AUTO_REFUSED_WARM` | The heater is off and the reference is more than `band_hi` above the target |
 | `START` | AUTO started the heater (`runtime`, `level`, `power on`) |
 | `ADOPT_RUN` | AUTO took over a running heater |
 | `ADOPT_CONTINUOUS` | AUTO took over continuous heating |
@@ -1302,6 +1308,7 @@ A level command is never sent when the link is down. A command that returned `BU
 | `TARGET_EXCEEDED_AT_MIN_LEVEL` | Warmer than the target at the lowest level for `hot_hold_ms`: stop |
 | `OVERHEAT` | More than `overheat` above the target: stop |
 | `BACKUP_SELECTED` | The reference is lost, the backup regulates |
+| `REFERENCE_SELECTED` | The active backup is lost, the valid reference regulates again |
 | `REFERENCE_LOST` | No valid thermometer: the level goes to `min_level` |
 | `OUTSIDE_INACTIVE` | Outside compensation is on but the outside reading is not valid |
 | `FAULT_2` to `FAULT_15` | The heater reports this ErrorCode (not 4: `LOCKED`; 1 is a `BATTERY_LOW` stop during a run); AUTO ends. At entry any fault is `AUTO_REFUSED_FAULT` |
