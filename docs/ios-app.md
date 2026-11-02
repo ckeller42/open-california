@@ -170,7 +170,8 @@ power-save, Siri says so ("try again in a few seconds") instead of failing silen
 The start screen is a "cockpit": the second-battery level as a large ring, three small values
 (fresh water, outside temperature, solar) and large buttons for camping mode, lights, cooler and
 air heater, with tabs Cockpit / Energy / Water / Setup. Icons are {term}`SF Symbols`, never emoji.
-Amber marks light, green marks "on". The app follows the iPhone's light and dark mode.
+Amber marks light, green marks "on". The app follows the iPhone's light and dark mode. The app icon
+is the web app's icon (`calictl/webui/icon-master.png`), built for iOS by `tools/make_pwa_icons.py`.
 ```
 
 ```{req} German and English

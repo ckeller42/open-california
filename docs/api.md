@@ -325,3 +325,10 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tools.fake_unit_peripheral
 .. automodule:: tests.test_fake_unit_peripheral
 ```
+
+## App icons (PWA and the iPhone app)
+
+```{eval-rst}
+.. automodule:: tools.make_pwa_icons
+.. automodule:: tests.test_ios_app_icon
+```
