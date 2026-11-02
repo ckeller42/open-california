@@ -16,17 +16,17 @@ HOW IT TALKS TO THE VAN
 
 WRITES
   The runner writes to the unit in exactly one step, behind a typed YES: `R4` (one lone `runtime`
-  write while the heater runs). It never pushes a run past the immediate-heating limits (VW's manual
-  for the T6.1: 120 min per run, 180 min in total, then the heater locks until the van has been
-  driven — ErrorCode 4). R4 needs the daemon with writes enabled: run the session through
+  write while the heater runs). The runner does not track the daily heating total: the owner keeps
+  immediate heating within the limit (120 min per run, 180 min in total, then the heater locks until
+  the van has been driven). R4 needs the daemon with writes enabled: run the session through
   `bash tools/roof_test_session.sh --test tools.van_heater_test -- --run A`, which enables writes for
   the session and reverts to read-only on exit. Every other step only reads. Ctrl-C sends nothing:
   stop the heater from the app or the panel.
 
 SAFETY
   The owner is at the van, the van is parked outdoors with the exhaust free. At most 3 heater starts
-  per day; no OFF→ON within a minute; the runner counts the starts it sees (NormalOperation or
-  PermanentOperation rising) in ~/.cache/calictl/heater_starts.json and warns at the budget.
+  per day; no OFF→ON within a minute; the runner counts the starts it sees (the combined running
+  state rising) in ~/.cache/calictl/heater_starts.json and warns at the budget.
 
 USAGE
   python3 -m tools.van_heater_test --run baseline        # 10 min, no write
@@ -125,10 +125,8 @@ def status_line(s: dict) -> str:
 
 
 def count_start(prev: dict | None, cur: dict) -> bool:
-    """A start = NormalOperation or PermanentOperation rising from a known 0."""
-    if not prev:
-        return False
-    return any(prev.get(k) is False and cur.get(k) is True for k in ("normal", "permanent"))
+    """A start = the combined running state (Normal or Permanent) rising from a known False."""
+    return bool(prev) and prev.get("running") is False and cur.get("running") is True
 
 
 def starts_today() -> int:
@@ -146,6 +144,10 @@ def add_start() -> int:
     return n
 
 
+class RecordingUnavailable(RuntimeError):
+    """The JSONL evidence file cannot be written: the run must stop."""
+
+
 class Recorder:
     """Samples the daemon in a thread, keeps its session warm, appends everything to one JSONL."""
 
@@ -154,10 +156,19 @@ class Recorder:
         self.last: dict = {}
         self._stop = threading.Event()
         self._lock = threading.Lock()
+        self.error: OSError | None = None
 
     def write(self, rec: dict) -> None:
-        with self._lock, open(self.out, "a") as f:
-            f.write(json.dumps({"t": round(time.time(), 2), **rec}, separators=(",", ":")) + "\n")
+        try:
+            with self._lock, open(self.out, "a") as f:
+                f.write(json.dumps({"t": round(time.time(), 2), **rec}, separators=(",", ":")) + "\n")
+        except OSError as e:  # never raises: the sampler thread must survive to report it
+            self.error = e
+            self._stop.set()
+
+    def check(self) -> None:
+        if self.error is not None:
+            raise RecordingUnavailable("evidence file %s is not writable: %r" % (self.out, self.error))
 
     def _run(self) -> None:
         keep = 0.0
@@ -169,6 +180,7 @@ class Recorder:
             try:
                 s = sample_of(self.dae.state())
             except Exception as e:
+                self.last = {}  # state unknown now: a stale "running" must not pass the R4 gate
                 self.write({"ev": "error", "detail": repr(e)})
             else:
                 if count_start(self.last, s):
@@ -348,13 +360,16 @@ SCALE = 1.0  # --scale: shortens every wait for a dry run against the mock
 def wait_minutes(rec: Recorder, minutes: float) -> None:
     end = time.monotonic() + minutes * 60 * SCALE
     while time.monotonic() < end:
+        rec.check()
         left = int(end - time.monotonic())
         print("\r  %3d:%02d  %s   " % (left // 60, left % 60, status_line(rec.last)), end="", flush=True)
         time.sleep(1)
     print()
+    rec.check()
 
 
 def lone_runtime_write(dae: Daemon, rec: Recorder, value: int, warning: str) -> dict:
+    rec.check()
     s = rec.last
     if not s.get("running"):
         print("  the heater is not running — skipping (the write only makes sense during a run)")
@@ -368,12 +383,16 @@ def lone_runtime_write(dae: Daemon, rec: Recorder, value: int, warning: str) -> 
     )
     print("  answer:", json.dumps(res))
     rec.write({"ev": "write", "what": "runtime", "value": value, "answer": res, "remaining_before": before})
+    if "error" in res:
+        print("  the daemon refused the write — no watch, no verdict")
+        return {"skipped": "write rejected", "answer": res}
     print("  watching 3 min for 'left' to jump to %d …" % value)
     wait_minutes(rec, 3)
     return {"answer": res, "remaining_before": before, "remaining_after": rec.last.get("remaining")}
 
 
 def run_step(dae: Daemon, rec: Recorder, step: dict) -> None:
+    rec.check()
     print("\n== %s  %s" % (step["id"], step["say"]))
     rec.write({"ev": "mark", "step": step["id"], "phase": "begin"})
     out: dict = {}
@@ -446,9 +465,19 @@ def main(argv=None) -> int:
     )
     rec.start()
     time.sleep(a.every + 1)
-    for step in steps:
-        run_step(dae, rec, step)
-    rec.write({"ev": "end"})
+    try:
+        rec.check()
+        for step in steps:
+            run_step(dae, rec, step)
+        rec.write({"ev": "end"})
+        rec.check()
+    except RecordingUnavailable as e:
+        rec.stop()
+        print(
+            "\n  STOP: %s\n  Nothing more was sent; stop the heater from the app or the panel." % e,
+            file=sys.stderr,
+        )
+        return 2
     rec.stop()
     print("\n  evidence: %s" % out)
     return 0
