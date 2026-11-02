@@ -16,7 +16,11 @@ struct DeviceStatusView: View {
         let amb = store.value("general", "amb_sw_version")?.string
         let comm = store.value("general", "comm_version")?.number.map { String(Int($0)) }
         guard amb != nil || comm != nil else { return nil }
-        let software = amb.map { $0.count == 4 ? "\($0.prefix(2)).\($0.suffix(2))" : $0 }
+        // "0410" -> "04.10"; anything else as reported, an empty one as unknown.
+        let software = amb.flatMap { a -> String? in
+            if a.isEmpty { return nil }
+            return a.count == 4 && a.allSatisfy(\.isNumber) ? "\(a.prefix(2)).\(a.suffix(2))" : a
+        }
         return "\(software ?? "?") (protocol \(comm ?? "?"))"
     }
 

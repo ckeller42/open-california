@@ -942,7 +942,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verbinde in %lld s …"
+            "value": "Verbindung wird in %lld s aufgebaut…"
           }
         },
         "en": {

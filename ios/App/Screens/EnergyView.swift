@@ -121,8 +121,8 @@ struct EnergyView: View {
         if stale { return Text("stale (starter asleep)") }
         guard let m = num("age_min") else { return nil }
         if Int(m) == 0 { return Text(verbatim: LocalizedStringResource("just now").string(locale)) }
-        let minutes = "\(Int(m))\(nbsp)min"
-        return Text(verbatim: LocalizedStringResource("\(minutes) ago").string(locale))
+        // The shared "%lld min ago" (German "vor 5 Min"), as every other age in the app.
+        return Text(verbatim: LocalizedStringResource("\(Int(m)) min ago").string(locale))
     }
 
     private func starterAgeSpoken(_ stale: Bool) -> String? {
