@@ -17,6 +17,39 @@ struct CBMappingTests {
         #expect(CoreBluetoothTransport.mapDisconnect(nil) == .localCancel)
     }
 
+    /// The race of #482, in its event order: "Forget" (or `stop()` while connecting) cancels the link
+    /// and tears it down at once; "Pair again…" opens a new connect to the same `CBPeripheral`; then
+    /// the cancel's late `didDisconnectPeripheral` (no error) arrives. The new connect survives it
+    /// and comes up; a later disconnect of the up link still ends it.
+    ///
+    /// - Test: T_IOS_CB_LATE_CANCEL_DISCONNECT
+    /// - Verifies: R_IOS_PAIRING, R_IOS_BLE_DIRECT
+    @Test func lateDisconnectOfACancelledLinkSparesANewConnect() {
+        typealias CB = CoreBluetoothTransport
+        var phase = CB.Phase.up
+        phase = .idle  // forgetUnit: cancelPeripheralConnection + tearDown, no callback yet
+        #expect(!CB.disconnectEndsLink(phase, nil))  // nothing to end
+        phase = .connecting  // "Pair again…": open(p) on the same peripheral
+        if CB.disconnectEndsLink(phase, nil) { phase = .idle }  // the old cancel's late callback
+        #expect(phase == .connecting)
+        phase = .up  // didConnect, discovery, the authenticated 1004 read: `.encrypted`
+        #expect(CB.disconnectEndsLink(phase, nil))  // our own stop() of an up link ends at its callback
+        #expect(CB.disconnectEndsLink(.discovering, nil))
+    }
+
+    /// A genuine loss while connecting has an error and still ends the connect.
+    ///
+    /// - Test: T_IOS_CB_CONNECT_LOSS_ENDS
+    /// - Verifies: R_IOS_BLE_DIRECT, R_IOS_HONEST
+    @Test func genuineDisconnectDuringConnectEndsIt() {
+        let lost: [Error] = [CBError(.peripheralDisconnected), CBError(.connectionTimeout), CBError(.unknown)]
+        for e in lost {
+            #expect(CoreBluetoothTransport.disconnectEndsLink(.connecting, e))
+            #expect(CoreBluetoothTransport.disconnectEndsLink(.waitingForPower, e))
+            #expect(!CoreBluetoothTransport.disconnectEndsLink(.idle, e))
+        }
+    }
+
     /// - Test: T_IOS_CB_PAIRING_MAP
     /// - Verifies: R_IOS_PAIRING
     @Test func pairingErrors() {

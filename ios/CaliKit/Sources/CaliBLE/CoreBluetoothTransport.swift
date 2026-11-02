@@ -52,7 +52,7 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     private var candidates: (list: CandidateList, k: CheckedContinuation<[PairingCandidate], any Error>)?
     private var policy = PeerPolicy(saved: UserDefaults.standard.string(forKey: peripheralKey).flatMap(UUID.init(uuidString:)))
 
-    private enum Phase: Int, Comparable {
+    enum Phase: Int, Comparable {
         case idle, waitingForPower, connecting, discovering, probing, up
         static func < (a: Phase, b: Phase) -> Bool { a.rawValue < b.rawValue }
     }
@@ -85,6 +85,18 @@ public final class CoreBluetoothTransport: NSObject, CamperTransport, @unchecked
     public static func mapDisconnect(_ error: Error?) -> DisconnectReason {
         guard let error else { return .localCancel }
         return (error as? CBError)?.code == .peripheralDisconnected ? .remoteHangUp : .linkLost
+    }
+
+    /// True: a `didDisconnectPeripheral` in `phase` ends the current link. False for a callback
+    /// without an error before `didConnect` (#482): no error means a `cancelPeripheralConnection` we
+    /// issued, and in `.idle`/`.waitingForPower`/`.connecting` every such cancel has already torn the
+    /// link down (`forgetUnit`, `stop`), so it belongs to an earlier connect; a new connect to the
+    /// same `CBPeripheral` instance must survive it. A real failure while connecting carries an error
+    /// (`didFailToConnect`, or a disconnect with an error) and still ends it.
+    /// Assumption (not documented by Apple): CoreBluetooth delivers the cancel's callback before the
+    /// `didConnect` of a later connect to the same peripheral, so it never meets `.discovering` or later.
+    static func disconnectEndsLink(_ phase: Phase, _ error: Error?) -> Bool {
+        phase > .connecting || (phase != .idle && error != nil)
     }
 
     /// An error that means "no usable bond": iOS shows its own passkey dialog on the next access,
@@ -378,7 +390,7 @@ extension CoreBluetoothTransport: CBCentralManagerDelegate {
     }
 
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
-        guard p === peripheral, phase != .idle else { return }
+        guard p === peripheral, Self.disconnectEndsLink(phase, error) else { return }
         if Self.needsPairing(error) { sink.yield(.pairingRequired) }
         tearDown()
         sink.yield(.disconnected(reason: Self.mapDisconnect(error)))
