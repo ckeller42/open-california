@@ -16,7 +16,7 @@ import XCTest
 /// - `link.live` (wait for a live link, tapping "Tap to connect" when it shows) and `link.lost` (the
 ///   link must leave "live" once the fake unit is gone),
 /// - `setup.forget.x`, `link.unpaired.x`, `setup.repair.x` (forget the unit, a fresh start that must stay
-///   unpaired, and pairing again through the guide),
+///   unpaired, and pairing again through the guide), `setup.trace.<on|off>` (the Bluetooth trace switch),
 /// - `device.autolock.<choice>` (sets the iPhone's Auto-Lock, so a long lab run is not stopped by a
 ///   locked iPhone) and `device.autolock.read` (prints `LAB_AUTOLOCK=<value>`, so the driver can
 ///   restore the owner's value at the end).
@@ -265,6 +265,12 @@ final class LabControlUITests: XCTestCase {
         app.launch()
 
         if parts[0] == "setup" {
+            if parts[1] == "trace" {
+                // The Bluetooth trace switch on Setup; it acts at once and needs no link.
+                app.tabBars.buttons["Setup"].tap()
+                try runSwitch(app, .tab("Setup"), "Record Bluetooth trace", on: parts[2] == "on")
+                return
+            }
             try runSetup(app, parts[1])
             return
         }
