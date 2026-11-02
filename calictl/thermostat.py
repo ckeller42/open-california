@@ -343,7 +343,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        The thermostat shall enter AUTO only on an owner request with the feature enabled, a link,
        a fresh, installed, fault-free heater with no armed timer, camping mode or shore power,
        ignition off and a valid reference reading; otherwise it shall refuse with
-       ``AUTO_REFUSED_<WHY>`` and send nothing. From OFF it shall send ``runtime``, ``level`` and
+       ``AUTO_REFUSED_<WHY>`` and send nothing. An AUTO request drops a pending or re-sent stop
+       (the last owner request wins). From OFF it shall send ``runtime``, ``level`` and
        one ``power on`` in that order; a running or continuous heater it shall adopt without a
        command. It shall end AUTO without a command on a heater fault (ErrorCode 1 excepted: a
        normal stop, ``BATTERY_LOW``), a change it did not make (also during its own pending level
@@ -453,6 +454,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         cmds = _stop(st, link and snap is not None, now)
         return out("STOPPING" if st["mode"] == "STOPPING" else "USER_OFF")
     if req == "AUTO" and not on:
+        if st["pending"] is not None and st["pending"]["value"] == "off":
+            st["pending"], cmds = None, []  # the last owner request wins: drop the pending stop
         why = _refusal(inp, cfg, hs, code)
         if why:
             return out(why)

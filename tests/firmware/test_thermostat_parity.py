@@ -37,6 +37,8 @@ def test_vectors_reach_every_reason():
     assert set(th.REASONS) - UNREACHABLE <= seen
     assert not UNREACHABLE & seen
     assert None in seen  # an idle step in mode OFF
+    entry = [c for c in V["cases"] if (c[4][0] or "").startswith(("ADOPT_", "AUTO_REFUSED_"))]
+    assert entry and not [c for c in entry if c[4][10]]  # adopt and refuse never send a command
 
 
 def test_vectors_have_the_sweep_and_the_sessions():

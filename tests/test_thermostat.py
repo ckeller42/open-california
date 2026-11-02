@@ -436,3 +436,14 @@ def test_continuous_ended_by_engine():
     _, st = _auto(CONT)
     out, _ = _step(st, now_ms=P, heater=OFF_H)
     assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "CONTINUOUS_ENDED", [])
+
+
+def test_auto_request_drops_pending_stop():
+    out, st = _auto(RUN)
+    out, st = _step(st, now_ms=1000, request="OFF", heater=RUN)
+    assert (out["reason"], out["cmds"], st["pending"]["value"]) == ("USER_OFF", [("power", "off")], "off")
+    busy = {"what": "power", "result": "BUSY"}
+    out, st2 = _step(st, now_ms=2000, request="AUTO", cmd=busy, heater=RUN)
+    assert (out["reason"], out["cmds"], st2["pending"]) == ("ADOPT_RUN", [], None)
+    out, st2 = _step(st, now_ms=2000, request="AUTO", cmd=busy, heater=RUN, camping_on=False)
+    assert (out["reason"], out["cmds"], st2["pending"]) == ("AUTO_REFUSED_NO_CAMPING", [], None)

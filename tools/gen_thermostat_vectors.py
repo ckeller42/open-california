@@ -430,6 +430,10 @@ def sessions(rec):
         rec, "level_unknown_while_running", 0,
         [{**auto, "heater": run_h(0)}, {"heater": run_h(0)}, {"heater": run_h(11)}, {"heater": run_h(5)}, {"heater": run_h(5)}],
     )  # fmt: skip
+    session(  # odd cfg: u = -13500 reaches the negative half in the level (masked by min_level)
+        rec, "negative_half_demand", 1,
+        [{**auto, "heater": run_h(2), "ref": sensor(3100)}, {"heater": run_h(2), "ref": sensor(4100)}],
+    )  # fmt: skip
     session(
         rec, "shore_only_entry", 1,
         [{**auto, "camping_on": False, "shore_on": True}, {"camping_on": False, "shore_on": True}],

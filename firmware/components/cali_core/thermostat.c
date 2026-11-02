@@ -308,6 +308,10 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         const char *why = refusal(in, cfg, hs, code);
         int32_t t_ref, lvl;
         cali_thermo_ctl_t ctl0;
+        if (st->has_pending && is_off(&st->pending)) { /* the last owner request wins: drop the pending stop */
+            st->has_pending = 0;
+            out->n = 0;
+        }
         if (why) RET(why);
         t_ref = in->ref.value;
         ctl0.i = 0;
