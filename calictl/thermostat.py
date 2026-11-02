@@ -104,12 +104,12 @@ def heater_state(d: dict | None, age_ms: int | None, cfg: dict) -> tuple[str, in
     """Reduce the raw decoded 1702 dict to ``(state, level_or_None, error_code)``.
 
     :param d: raw decoded air-heater dict (``Installed``, ``ErrorCode``, ``HeatingLevel`` ...).
-    :param age_ms: age of that read in ms; ``None`` skips the staleness check.
+    :param age_ms: age of that read in ms; ``None`` (unknown age) counts as stale.
     :param cfg: settings dict; ``heater_stale_ms`` is the staleness limit.
     :returns: state from :data:`HEATER_STATES`; the level 1..10 or ``None`` (0, 11..15 and a
         missing value are no level); the ``ErrorCode`` (-1 when not installed, 0 when none).
     """
-    if not d or (age_ms is not None and age_ms > cfg["heater_stale_ms"]):
+    if not d or age_ms is None or age_ms > cfg["heater_stale_ms"]:
         return "UNKNOWN", None, 0
     if d.get("Installed") == 0:
         return "FAULT", None, -1

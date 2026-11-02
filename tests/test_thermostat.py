@@ -22,6 +22,7 @@ def test_heater_state_table():
     assert _hs({})[0] == "UNKNOWN"
     assert _hs(None)[0] == "UNKNOWN"
     assert _hs(ok, CFG["heater_stale_ms"] + 1)[0] == "UNKNOWN"
+    assert _hs(ok, None)[0] == "UNKNOWN"
     assert _hs(ok, CFG["heater_stale_ms"])[0] == "OFF"
     assert _hs({**ok, "ErrorCode": 4}) == ("LOCKED", None, 4)
     assert _hs({**ok, "ErrorCode": 5}) == ("BLOCKED", None, 5)
