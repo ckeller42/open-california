@@ -219,6 +219,21 @@ changed. Every 5.0.8 control write site has a 1:1 counterpart:
 | Water 1302 | same 9 fields, same unconditional decode (see `value-freshness.md` "App 5.4.0") |
 | 1004 vehicle | same layout; roll/pitch /100 |
 
+**Why the app writes the neutral frame (DECOMPILE 5.4.0, 2026-11-02).** Each control characteristic
+has one writer object with one mutable field model, shared by every screen (cooler and heater `jg/a`,
+camping `ch/a`, energy `gh/a`, lighting `vg/a`, roof `ah/a`). A command sets only its target field on
+that model and writes the whole model (`d4(true)`, e.g. the camping screen `bh/b.java:155-159`); 500 ms
+later the timer calls the writer's `c4()`, which sets every field back to its leave-unchanged sentinel,
+and writes the reset model (`f40/v.java:234-251`, `c1/c.java:342-352`). Without the reset the next
+command on the same characteristic would re-send the previous one's target ("heater on", then "level
+5" would send "on" again). Only streams skip it (`d4(false)`): the roof hold (`zg/d`, `u1/a`), the
+`1003` heartbeat (`n2/q1`) and V3 `F002` (`sg/e`); all 40 one-shot commands use `d4(true)`.
+calictl, the satellite and the iPhone app keep no model between commands: every frame is built fresh
+from the sentinels plus its own target (`control.build`, `control.c`), so the reset has nothing to
+clear and they send no neutral frame. The unit acts on the write, not on what stays in the register:
+calictl's "power on" without a neutral frame ran the heater exactly 30 min and it stayed idle after
+(CAPTURE 2026-10-11, `cooler-airheater.md`).
+
 New on this van's code path (no wire change): heater **ErrorCode 6/7** (`ig/b.java:606-700`,
 `alert-states.md` §3), the rear-USB rule (`signals.md`), the "Disconnected to save energy" card
 (`gg/k.java:44-95`; StateLand STANDBY now also counts as shore power for the stay-connected rule),
