@@ -1185,14 +1185,16 @@ explicit confirmation:
 POST /api/thermostat {"enabled": true, "confirm": true}
 ```
 
-Switching it off while AUTO runs is an owner stop: the heater is stopped normally.
+Switching it off while AUTO runs is a safety stop with the cause `DISABLED`: the heater is stopped
+normally, and an AUTO request is ignored with `STOPPING` until that stop is done.
 
 ### The card
 
 The card sits on the Air heater screen of the satellite's web UI. It shows only while at least one
-configured Govee thermometer exists ([External sensors](#external-sensors-r_fw_sensors)) and not on
-a display-only satellite. It holds the {term}`AUTO (thermostat)` switch with its state (*level 4 • running*, *on backup*,
-*degraded*, *stopping*, *off*), the {term}`reference thermometer` reading, the target with
+configured Govee thermometer exists ([External sensors](#external-sensors-r_fw_sensors)), which needs
+the sensor track switch (*Sensors* in Satellite settings, [Sensor switch](#sensor-switch-r_fw_experimental))
+on, and not on a display-only satellite. It holds the {term}`AUTO (thermostat)` switch with its state (*level 4 • running*, *degraded*, *on backup*,
+*stopping*, *off*; *on backup* shows only in mode `DEGRADED` while the backup is the active thermometer, so after `BACKUP_SELECTED` the card shows *running*), the {term}`reference thermometer` reading, the target with
 minus and plus buttons (0.5 °C steps, 5 to 30 °C), the run time (10 to 120 min in steps of 10,
 shown only while the heater is off) and the last reason in plain words, in English and German.
 Starting AUTO asks for a confirmation: it starts the fuel-burning heater.
@@ -1200,7 +1202,7 @@ Starting AUTO asks for a confirmation: it starts the fuel-burning heater.
 A tap on *Thermometer* opens the thermometer sheet with three groups of radio buttons, each showing
 alias, temperature and age of the reading (a stale reading is marked and cannot be picked):
 
-- **Regulate on**: the {term}`reference thermometer`.
+- **Regulate on**: the reference thermometer.
 - **Backup**: optional. The satellite switches to it when the reference is lost. The reference is not offered here.
 - **Outside**: optional. An outside thermometer for the outside compensation. The reference is not offered here.
 
@@ -1259,8 +1261,9 @@ While AUTO runs, the thermostat holds the BLE session: no power-save rest and no
 |---|---|---|
 | The reference has no valid reading (removed or renamed in Satellite settings, stale, out of range) and a valid backup exists | The controller continues on the backup; only the owner switches back to the reference | `BACKUP_SELECTED` |
 | The reference is lost and there is no valid backup | Mode `DEGRADED`: the level goes to `min_level` and stays. With a valid reading again, `AUTO` continues | `REFERENCE_LOST`, then `AUTO_ON` |
-| A reading outside -40 to 60 °C, or one that changes more than 3 °C per minute against the last accepted one | The reading is invalid; the sensor counts as lost | as above |
-| The heater reports a fault (ErrorCode 2, 3 or 5 to 15, or the fault bit) | AUTO ends, no command, never retried | `FAULT_<n>` |
+| A reading outside -40 to 60 °C, or one that changes more than 3 °C per minute against the last accepted one (the time difference is floored at one minute, so up to 3 °C between two quick adverts is accepted) | The reading is invalid; the sensor counts as lost | as above |
+| The heater reports ErrorCode 2, 3 or 5 to 15 | AUTO ends, no command, never retried | `FAULT_<n>` |
+| The fault bit with ErrorCode 0, or the heater reported as not installed during a run | AUTO ends, no command | `HEATER_UNKNOWN` |
 | ErrorCode 4 (heater locked until the van has driven) | AUTO ends, no command. A new AUTO request is refused until the lock clears | `LOCKED`, then `AUTO_REFUSED_FAULT` |
 | ErrorCode 1 (low battery, the heater's own report) | A normal stop, then AUTO is off | `BATTERY_LOW` |
 | The second battery stays below `batt_min_dv` for `batt_hold_ms` | A normal stop, then AUTO is off | `BATTERY_LOW` |
@@ -1301,14 +1304,14 @@ A level command is never sent when the link is down. A command that returned `BU
 | `BACKUP_SELECTED` | The reference is lost, the backup regulates |
 | `REFERENCE_LOST` | No valid thermometer: the level goes to `min_level` |
 | `OUTSIDE_INACTIVE` | Outside compensation is on but the outside reading is not valid |
-| `FAULT_1` to `FAULT_15` | The heater reports this ErrorCode; AUTO ends |
+| `FAULT_2` to `FAULT_15` | The heater reports this ErrorCode (not 4: `LOCKED`; 1 is a `BATTERY_LOW` stop during a run); AUTO ends. At entry any fault is `AUTO_REFUSED_FAULT` |
 | `LOCKED` | ErrorCode 4: the heater is locked until the van has driven |
 | `FOREIGN_CHANGE` | Someone else changed the heater; AUTO ends |
 | `NOT_APPLIED` | A command was not applied; AUTO ends |
 | `START_NOT_CONFIRMED` | The heater did not start; AUTO ends |
 | `RUN_ENDED` / `CONTINUOUS_ENDED` | The run or the continuous heating ended; AUTO ends |
 | `BATTERY_LOW` | Low battery: a normal stop |
-| `HEATER_UNKNOWN` | No fresh heater state; AUTO waits |
+| `HEATER_UNKNOWN` | No fresh heater state (AUTO waits), or a fault bit without an ErrorCode or a heater reported as not installed (AUTO ends) |
 | `USER_OFF` | The owner stopped AUTO |
 | `STOPPING` | A stop is sent or waits for the link |
 | `STOP_DROPPED` | The heater changed before the stop; it was not stopped |
