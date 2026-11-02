@@ -250,6 +250,8 @@ class MockCamperUnit:
         for fn, vals in (seed or {}).items():
             base.setdefault(fn, {}).update(vals)
         self.state: dict[str, dict] = base
+        # Cabin thermal model for the thermostat's closed-loop tests (:meth:`tick`): centi-°C, seconds.
+        self.cabin: dict = {"t_in": 2000, "t_out": 0, "tau_s": 3600, "gain_per_level": 300}
         self.armed = False
         self.online = True  # False models the parked unit deep-asleep (not advertising)
         self.last_beat: int | None = None
@@ -528,7 +530,9 @@ class MockCamperUnit:
         starter-battery age (`AgeOneBattValuesMinutes` +1/min while the ignition is off, 0 while
         on, 255 cap), the ignition edge (terminal 15 rising sheds camping master and raises
         `campingmode.Enable`; falling clears `Enable` — the coupling seen live 2026-09-16), and
-        roof travel (:meth:`_roof_tick`; no frames for ``ROOF_RELEASE_S`` = released).
+        roof travel (:meth:`_roof_tick`; no frames for ``ROOF_RELEASE_S`` = released), and the cabin
+        temperature (``cabin``: ``t_in`` relaxes to ``t_out`` with ``tau_s``, plus ``gain_per_level`` x
+        ``HeatingLevel`` while the heater runs; a float, test tooling).
         """
         import datetime as _dt
 
@@ -604,6 +608,13 @@ class MockCamperUnit:
         if e is not None and ign and e.get("AgeOneBattValuesMinutes", 0) != 0:
             e["AgeOneBattValuesMinutes"] = 0
             changed.add("energy")
+
+        # cabin: first-order lag to the outside plus the heater's level while it runs
+        cb, ah = self.cabin, self.state.get("airheater") or {}
+        heat = (ah.get("NormalOperation") or ah.get("PermanentOperation")) and int(
+            ah.get("HeatingLevel") or 0
+        )
+        cb["t_in"] += dt / cb["tau_s"] * (cb["t_out"] - cb["t_in"] + (heat or 0) * cb["gain_per_level"])
 
         # per-minute counters
         self._acc_minute += dt

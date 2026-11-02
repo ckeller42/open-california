@@ -208,3 +208,54 @@ def test_sd_log_has_thermo_records(host_fw, hci_unit):
     assert all(r["m"] == "OFF" and r["h"] == "OFF" for r in recs)
     assert max(len(s) - 4 for s in fw.log if s.startswith('REC "ev":"thermo"')) <= 288
     assert _heater_writes(hci_unit) == []
+
+
+def test_closed_loop_reaches_target(host_fw, rec_unit):
+    """AUTO against the mock's cabin thermal model (9 C outside, time constant 240 s, 3 C per level): the
+    cabin starts at 19.0 C, the Govee advert follows the model, and the regulation settles within 1 C of
+    the 21.0 C target. The burner starts once (no second ``power`` frame) and the level changes at least
+    ``min_dwell_ms`` apart. This tests the control logic in a loop; it does not tune it. The real clock
+    runs the model: the runner's plausibility rule (3 C per minute) and the 60 s scan cadence bound how fast
+    a reading may move, hence the slow cabin (time constant 240 s) and a faster integrator than the van's.
+
+    .. test:: Thermostat closed loop on the host tier: the cabin settles, the dwell holds, the burner starts once
+       :id: T_THERMOSTAT_CLOSED_LOOP
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    hu, rec = rec_unit
+    cabin = hu.unit.unit.cabin
+    cabin.update(t_in=1900, t_out=900, tau_s=240, gain_per_level=300)
+    fw, adv, _ = _setup(host_fw, hu, 1900)
+    fw.send("thermo set ki 300")  # a faster integrator than the van's: the real clock is the test's only one
+    _auto(fw, hu)
+    hu.loop.call_soon_threadsafe(
+        lambda: hu.loop.create_task(hu.unit.clock())
+    )  # the model runs: 1 tick per second
+    end, settled_at, trace, advertised = time.monotonic() + 540, None, [], 1900
+    while time.monotonic() < end:
+        fw.send("sensors")
+        seen = fw.expect("SENSORS")["configured"][0]["last_seen_s"]
+        want = round(cabin["t_in"])
+        # A new advert value only while no scan window is open (windows come every 60 s, last ~5 s): the
+        # runner's plausibility rule rejects a change between adverts 100 ms apart. Late in the gap, so the
+        # reading is fresh when the next window opens.
+        if seen is not None and 38 <= seen <= 46 and want != advertised:
+            adv.set_mfg(govee(want))
+            advertised = want
+        th = _thermo(fw)
+        trace.append((want, th["mode"], th["reason"], th["level"], th["t_ref"]))
+        if abs(cabin["t_in"] - 2100) <= 100:
+            settled_at = settled_at or time.monotonic()
+            if time.monotonic() - settled_at > 90:  # and stayed there
+                break
+        else:
+            settled_at = None
+        time.sleep(3)
+    assert settled_at and abs(cabin["t_in"] - 2100) <= 100, (cabin, trace[-12:])
+    assert _thermo(fw)["mode"] == "AUTO"
+    assert _heater_writes(hu).count(_frame(hu, "power", "on")) == 1  # the START only
+    levels = {_frame(hu, "level", n): n for n in range(1, 11)}
+    rows = [json.loads(s) for s in rec.read_text().splitlines()]
+    at = [r["t"] for r in rows if r.get("ev") == "write" and r.get("hex") in {f.hex() for f in levels}]
+    assert len(at) >= 2, rows[-10:]
+    assert all(b - a >= 2.8 for a, b in zip(at, at[1:])), at  # min_dwell_ms 3000, 0.2 s jitter

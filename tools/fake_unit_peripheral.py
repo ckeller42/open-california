@@ -450,7 +450,7 @@ class FakeUnit:
             return
         log.info(
             "scenario console: echo commands into %s "
-            "(set <fn> F=v | raw <fn> <hex> | show <fn> | pair on|off | rotate | forget | q)",
+            "(set <fn> F=v | set cabin t_out=-500 | raw <fn> <hex> | show <fn> | pair on|off | rotate | forget | q)",
             path,
         )
 
@@ -470,6 +470,14 @@ class FakeUnit:
                     os._exit(0)
                 elif parts[0] == "set":
                     fn = parts[1]
+                    if fn == "cabin":  # the thermal model: t_in t_out tau_s gain_per_level
+                        for kv in parts[2:]:
+                            k, v = kv.split("=")
+                            if k not in self.unit.cabin:
+                                raise KeyError(k)
+                            self.unit.cabin[k] = int(v)
+                        print(f"cabin -> {self.unit.cabin}", flush=True)
+                        return
                     st = self.unit.state.setdefault(fn, {})
                     for kv in parts[2:]:
                         k, v = kv.split("=")
