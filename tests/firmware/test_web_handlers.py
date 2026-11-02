@@ -46,6 +46,9 @@ from .api_shape import (
     SENSORS_KEYS,
     STATE_DIAG_KEYS,
     STATE_KEYS,
+    THERMOSTAT_API_KEYS,
+    THERMOSTAT_STATE_KEYS,
+    THERMOSTAT_STATUS_KEYS,
     TIME_DIAG_KEYS,
     TIME_KEYS,
     WIFI_GET_KEYS,
@@ -103,6 +106,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "diag.c"),
             str(CORE / "auto_camper.c"),
             str(CORE / "thermostat.c"),
+            str(CORE / "thermostat_run.c"),
             str(CORE / "auto_camper_run.c"),
             str(CORE / "pi_wake.c"),
             str(CORE / "ble_exp.c"),
@@ -2968,3 +2972,256 @@ def test_app_shell_load_is_a_viewer(web_cli):
         "CALL session_set_mode off idle",
         "CALL session_set_mode hold idle",  # after GET /app
     ]
+
+
+# ---- /api/thermostat + device.thermostat (R_FW_THERMOSTAT_API) ---------------------------------
+
+TH_DEFAULT_CFG = {
+    "period_ms": 60000, "kp": 1500, "ki": 50, "ka": 100, "u_out_max": 3000, "hyst": 500,
+    "min_dwell_ms": 300000, "band_hi": 200, "hot_hold_ms": 900000, "overheat": 400, "min_level": 1,
+    "stale_after_ms": 600000, "heater_stale_ms": 180000, "batt_min_dv": 119, "batt_hold_ms": 300000,
+    "verify_ms": 10000, "runtime_min": 120,
+}  # fmt: skip
+
+
+def th_get(cli, setup=STATION, extra=()):
+    rs, other = drive(cli, [*(s.encode() for s in [*setup, *extra]), req("GET", "/api/thermostat")])
+    assert rs[-1].status == 200
+    return rs[-1].json(), other
+
+
+def th_post(cli, body, setup=STATION, extra=()):
+    """POST /api/thermostat after ``setup``/``extra`` lines, then GET it; (post response, get body, other)."""
+    rs, other = drive(
+        cli,
+        [
+            *(s.encode() for s in [*setup, *extra]),
+            req("POST", "/api/thermostat", body),
+            req("GET", "/api/thermostat"),
+        ],
+    )
+    return rs[0], rs[1].json(), other
+
+
+def th_with_govee(cli, *steps):
+    """Drive STATION + a configured ``kitchen`` Govee, then ``steps`` (bytes lines); the responses after the add."""
+    on = ["kvhex exp_sensors 01", *STATION, *GOVEE_SEEN]
+    rs, _ = drive(cli, [*(s.encode() for s in on), req("GET", "/api/sensors")])
+    sid = rs[0].json()["seen"][0]["id"]
+    add = req("POST", "/api/sensors", '{"add":%d,"alias":"kitchen"}' % sid)
+    rs, other = drive(cli, [*(s.encode() for s in on), add, *steps])
+    return rs[1:], other
+
+
+def test_thermostat_get_defaults(web_cli):
+    """A fresh satellite ships with the thermostat off and the default settings.
+
+    .. test:: GET /api/thermostat: the shape and the defaults, feature switch off
+       :id: T_FW_THERMOSTAT_API
+       :links: R_FW_THERMOSTAT_API
+    """
+    b, _ = th_get(web_cli, extra=["thinit"])  # as at boot
+    assert set(b) == THERMOSTAT_API_KEYS
+    assert (b["rev"], b["mode"], b["target"], b["runtime_min"]) == (0, "OFF", 2000, 120)
+    assert (b["ref"], b["backup"], b["out"], b["outside_on"]) == (None, None, None, False)
+    assert b["cfg"] == TH_DEFAULT_CFG
+    assert set(b["status"]) == THERMOSTAT_STATUS_KEYS
+    assert b["status"]["enabled"] is False and b["status"]["mode"] == "OFF"
+
+
+def test_auto_refused_while_disabled(web_cli):
+    """AUTO is accepted by the API but refused by the step while the switch is off: nothing is sent."""
+    rs, other = drive(
+        web_cli,
+        [*(s.encode() for s in STATION), req("POST", "/api/thermostat", '{"mode":"AUTO","confirm":true}'),
+         b"thtick", req("GET", "/api/thermostat")],
+    )  # fmt: skip
+    st = rs[1].json()["status"]
+    assert (st["enabled"], st["mode"], st["reason"]) == (False, "OFF", "AUTO_REFUSED_DISABLED")
+    assert not [ln for ln in other if ln.startswith("CALL submit")]
+
+
+def test_enable_needs_confirm_and_persists(web_cli):
+    """``enabled`` changes only with ``confirm:true``, lands in kv ``th_on`` and survives a reboot."""
+    p, b, _ = th_post(web_cli, '{"enabled":true}')
+    assert (p.status, p.json()) == (400, {"ok": False, "error": "confirm_required"})
+    assert b["status"]["enabled"] is False and b["rev"] == 0
+    rs, other = drive(
+        web_cli,
+        [*(s.encode() for s in STATION), req("POST", "/api/thermostat", '{"enabled":true,"confirm":true}'),
+         b"kv th_on", b"thinit", req("GET", "/api/thermostat"),
+         req("POST", "/api/thermostat", '{"enabled":false,"confirm":true}'), b"kv th_on"],
+    )  # fmt: skip
+    assert rs[0].status == 200 and rs[0].json()["status"]["enabled"] is True
+    assert rs[1].json()["status"]["enabled"] is True  # after a "reboot"
+    assert rs[2].json()["status"]["enabled"] is False
+    assert [ln for ln in other if ln.startswith("KV ")] == ["KV \x01", "KV "]
+    assert "LOG thermostat: ENABLED" in other
+
+
+def test_post_auto_needs_confirm(web_cli):
+    """AUTO without ``confirm`` is refused before it reaches the step; OFF needs none; other text is bad_value."""
+    rs, other = drive(
+        web_cli,
+        [b"kvhex th_on 01", b"thinit", *(s.encode() for s in STATION),
+         req("POST", "/api/thermostat", '{"mode":"AUTO"}'), b"thtick",
+         req("POST", "/api/thermostat", '{"mode":"AUTO","confirm":false}'),
+         req("POST", "/api/thermostat", '{"mode":"auto","confirm":true}'),
+         req("POST", "/api/thermostat", '{"mode":"OFF"}'), req("GET", "/api/thermostat")],
+    )  # fmt: skip
+    assert (rs[0].status, rs[0].json()) == (400, {"ok": False, "error": "confirm_required"})
+    assert rs[1].status == 400 and rs[1].json()["error"] == "confirm_required"
+    assert (rs[2].status, rs[2].json()) == (400, {"ok": False, "error": "bad_value"})
+    assert rs[3].status == 200
+    assert rs[4].json()["status"]["reason"] is None  # the refused AUTO never reached a step
+
+
+def test_post_stale_rev_409(web_cli):
+    """``rev`` must equal the current one; a POST without ``rev`` is accepted; every accepted POST counts."""
+    rs, _ = drive(
+        web_cli,
+        [*(s.encode() for s in STATION),
+         req("POST", "/api/thermostat", "{}"),
+         req("POST", "/api/thermostat", '{"rev":0,"target":2100}'),
+         req("POST", "/api/thermostat", '{"rev":1,"target":2100}'),
+         req("POST", "/api/thermostat", '{"rev":1,"target":2150}'),
+         req("GET", "/api/thermostat")],
+    )  # fmt: skip
+    assert rs[0].status == 200 and rs[0].json()["rev"] == 1
+    assert (rs[1].status, rs[1].json()) == (409, {"ok": False, "error": "stale_rev"})
+    assert rs[2].status == 200 and (rs[2].json()["rev"], rs[2].json()["target"]) == (2, 2100)
+    assert rs[3].status == 409
+    assert (rs[4].json()["rev"], rs[4].json()["target"]) == (2, 2100)
+
+
+def test_post_unknown_sensor_400(web_cli):
+    """``ref``/``backup``/``out`` name a configured Govee; ``null`` clears; the alias is stored."""
+    rs, _ = drive(web_cli, [*(s.encode() for s in STATION),
+                            req("POST", "/api/thermostat", '{"ref":"nope"}'),
+                            req("POST", "/api/thermostat", '{"ref":"a-very-long-alias-over-16"}'),
+                            req("POST", "/api/thermostat", '{"ref":""}')])  # fmt: skip
+    assert all((r.status, r.json()) == (400, {"ok": False, "error": "unknown_sensor"}) for r in rs)
+    rs, _ = th_with_govee(
+        web_cli,
+        req("POST", "/api/thermostat", '{"ref":"kitchen","backup":"kitchen","out":"nope"}'),
+        req("POST", "/api/thermostat", '{"ref":"kitchen","out":"kitchen","outside_on":true}'),
+        req("POST", "/api/thermostat", '{"backup":null}'),
+        req("POST", "/api/thermostat", '{"ref":null}'),
+        req("POST", "/api/thermostat", '{"ref":"kitchen"}'),
+        b"thinit",
+        req("GET", "/api/thermostat"),
+    )
+    assert rs[4].json()["ref"] == "kitchen"  # stored by alias, back after a "reboot"
+    assert rs[0].status == 400 and rs[0].json()["error"] == "unknown_sensor"
+    b = rs[1].json()
+    assert (b["ref"], b["backup"], b["out"], b["outside_on"]) == ("kitchen", None, "kitchen", True)
+    assert rs[2].json()["backup"] is None and rs[3].json()["ref"] is None
+
+
+def test_cfg_needs_confirm_and_persists(web_cli):
+    """``cfg`` (and the target, the aliases) need ``confirm`` for cfg only, are stored whole in ``th_cfg``
+    and come back after a reboot."""
+    rs, other = drive(
+        web_cli,
+        [*(s.encode() for s in STATION),
+         req("POST", "/api/thermostat", '{"cfg":{"kp":2000}}'), b"kv th_cfg",
+         req("POST", "/api/thermostat", '{"cfg":{"kp":2000,"min_level":2},"target":2150,"runtime_min":60,"confirm":true}'),
+         b"kv th_cfg", b"thinit", req("GET", "/api/thermostat")],
+    )  # fmt: skip
+    assert (rs[0].status, rs[0].json()["error"]) == (400, "confirm_required")
+    assert rs[1].status == 200
+    b = rs[2].json()
+    assert (b["cfg"]["kp"], b["cfg"]["min_level"], b["target"], b["runtime_min"]) == (2000, 2, 2150, 60)
+    assert b["cfg"]["runtime_min"] == 60
+    assert [ln for ln in other if ln.startswith("KV ")] == ["KV <missing>", "KV \x01"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        '{"target":525}', '{"target":450}', '{"target":3050}', '{"target":0}', '{"runtime_min":9}',
+        '{"runtime_min":121}', '{"cfg":{"kp":-1},"confirm":true}', '{"cfg":{"period_ms":0},"confirm":true}',
+        '{"cfg":{"min_dwell_ms":-5},"confirm":true}', '{"cfg":{"min_level":0},"confirm":true}',
+        '{"cfg":{"min_level":11},"confirm":true}', '{"cfg":{"batt_min_dv":99},"confirm":true}',
+        '{"cfg":{"batt_min_dv":151},"confirm":true}', '{"cfg":{"runtime_min":9},"confirm":true}',
+        '{"cfg":{"hyst":99999999999},"confirm":true}', '{"target":2100,"cfg":{"verify_ms":0},"confirm":true}',
+    ],
+)  # fmt: skip
+def test_thermostat_out_of_range_is_bad_value_and_changes_nothing(web_cli, body):
+    p, b, _ = th_post(web_cli, body)
+    assert (p.status, p.json()) == (400, {"ok": False, "error": "bad_value"})
+    assert (b["rev"], b["target"], b["cfg"]) == (0, 2000, TH_DEFAULT_CFG)
+
+
+@pytest.mark.parametrize(
+    "method,body,status,error",
+    [
+        ("PUT", "{}", 405, "method"),
+        ("POST", "", 400, "bad_json"),
+        ("POST", "[]", 400, "bad_json"),
+        ("POST", '{"x":1}', 400, "bad_json"),
+        ("POST", '{"target":"2100"}', 400, "bad_json"),
+        ("POST", '{"target":21.5}', 400, "bad_json"),
+        ("POST", '{"target":2100,"target":2100}', 400, "bad_json"),
+        ("POST", '{"cfg":{"nope":1},"confirm":true}', 400, "bad_json"),
+        ("POST", '{"cfg":{"kp":"1"},"confirm":true}', 400, "bad_json"),
+        ("POST", '{"cfg":5,"confirm":true}', 400, "bad_json"),
+        ("POST", '{"enabled":1,"confirm":true}', 400, "bad_json"),
+        ("POST", '{"mode":5}', 400, "bad_json"),
+        ("POST", '{"rev":"0"}', 400, "bad_json"),
+        ("POST", '{"target":2100}x', 400, "bad_json"),
+    ],
+)
+def test_thermostat_errors(web_cli, method, body, status, error):
+    r, _ = one(web_cli, method, "/api/thermostat", body, setup=STATION)
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+def test_thermostat_store_failure_is_500_and_changes_nothing(web_cli):
+    p, b, _ = th_post(web_cli, '{"target":2100}', extra=["kvfail 1"])
+    assert (p.status, p.json()) == (500, {"ok": False, "error": "store"})
+    assert (b["rev"], b["target"]) == (0, 2000)
+    p, b, _ = th_post(web_cli, '{"enabled":true,"confirm":true}', extra=["kvfail 1"])
+    assert (p.status, p.json()) == (500, {"ok": False, "error": "store"})
+    assert b["status"]["enabled"] is False and b["rev"] == 0  # an enable that could not be stored stays off
+
+
+def test_mode_not_persisted_across_reboot(web_cli):
+    """The mode is never stored: after a reboot it is OFF, whatever was requested."""
+    rs, other = drive(
+        web_cli,
+        [b"kvhex th_on 01", b"thinit", *(s.encode() for s in STATION),
+         req("POST", "/api/thermostat", '{"mode":"AUTO","confirm":true}'),
+         b"kv th_cfg", b"thinit", req("GET", "/api/thermostat")],
+    )  # fmt: skip
+    assert rs[0].status == 200
+    assert [ln for ln in other if ln.startswith("KV ")] == [
+        "KV <missing>"
+    ]  # a mode request stores no settings
+    assert rs[1].json()["mode"] == "OFF" and rs[1].json()["status"]["enabled"] is True
+
+
+def test_setup_mode_403(web_cli):
+    """Writing is station mode only; reading is open."""
+    r, _ = one(web_cli, "POST", "/api/thermostat", '{"target":2100}', setup=["wifi setup_ap"])
+    assert (r.status, r.json()) == (403, {"ok": False, "error": "setup_mode"})
+    r, _ = one(web_cli, "GET", "/api/thermostat", setup=["wifi setup_ap"])
+    assert r.status == 200
+
+
+def test_state_block_absent_without_reference(web_cli):
+    """``device.thermostat`` shows only when a reference sensor is selected."""
+    assert "thermostat" not in json.loads(get(web_cli, "/api/state", setup=STATION))["device"]
+    rs, _ = th_with_govee(web_cli, req("POST", "/api/thermostat", '{"ref":"kitchen"}'), req("GET", "/api/state"),
+                          req("POST", "/api/thermostat", '{"ref":null}'), req("GET", "/api/state"))  # fmt: skip
+    assert rs[0].status == 200
+    t = json.loads(rs[1].body)["device"]["thermostat"]
+    assert set(t) == THERMOSTAT_STATE_KEYS
+    assert (t["mode"], t["target"], t["reason"]) == ("OFF", 2000, None)
+    assert "thermostat" not in json.loads(rs[3].body)["device"]
+
+
+def test_thermostat_bad_stored_config_falls_back_to_defaults(web_cli):
+    """A stored ``th_cfg`` that is the wrong size or has a value out of range is dropped, not half used."""
+    b, _ = th_get(web_cli, extra=["kvhex th_cfg 0102", "thinit"])
+    assert (b["target"], b["cfg"]) == (2000, TH_DEFAULT_CFG)

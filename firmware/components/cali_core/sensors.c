@@ -497,6 +497,12 @@ int cali_sensors_value(const char *alias, int field, int32_t *centi, uint64_t *a
     return -1;
 }
 
+const char *cali_sensors_type(const char *alias) {
+    for (int i = 0; i < s_cfg.n; i++)
+        if (strcmp(s_cfg.e[i].alias, alias) == 0) return TYPES[s_cfg.e[i].type].id;
+    return NULL;
+}
+
 const char *cali_sensors_scan_state(void) { return s_paused ? "paused" : "ok"; }
 
 void cali_sensors_set_aes(cali_sensors_aes_fn fn) { s_aes = fn; }

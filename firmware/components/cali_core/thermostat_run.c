@@ -220,10 +220,78 @@ static void step(uint64_t now) {
     s_batch_on = s_on;
 }
 
+/* ---- the settings table: name, place in cali_thermo_cfg_t, range (R_FW_THERMOSTAT_API). The range is
+ * the API's: periods and times above 0, gains not below 0; cali_thermo_cfg_set() itself takes any value. ---- */
+#define I32 INT32_MAX
+#define CFG_TABLE(X)                                                                               \
+    X(period_ms, 1, I32) X(kp, 0, I32) X(ki, 0, I32) X(ka, 0, I32) X(u_out_max, 0, I32)         \
+    X(hyst, 0, I32) X(min_dwell_ms, 1, I32) X(band_hi, 1, I32) X(hot_hold_ms, 1, I32)            \
+    X(overheat, 1, I32) X(min_level, 1, 10) X(stale_after_ms, 1, I32) X(heater_stale_ms, 1, I32) \
+    X(batt_min_dv, 100, 150) X(batt_hold_ms, 1, I32) X(verify_ms, 1, I32) X(runtime_min, 10, 120)
+#define X(m, lo, hi) #m,
+const char *const cali_thermo_cfg_keys[CALI_THERMO_CFG_N] = {CFG_TABLE(X)};
+#undef X
+static const struct { size_t off; int64_t lo, hi; } LIM[CALI_THERMO_CFG_N] = {
+#define X(m, lo, hi) {offsetof(cali_thermo_cfg_t, m), lo, hi},
+    CFG_TABLE(X)
+#undef X
+};
+#define CFG_RUNTIME (CALI_THERMO_CFG_N - 1)   /* runtime_min, last in the table */
+typedef char cfg_table_matches_struct[sizeof(cali_thermo_cfg_t) == CALI_THERMO_CFG_N * sizeof(int32_t) ? 1 : -1];
+
+static int32_t *cfg_at(cali_thermo_cfg_t *s, int i) { return (int32_t *)((char *)s + LIM[i].off); }
+static int cfg_ok(int i, int64_t v) { return v >= LIM[i].lo && v <= LIM[i].hi; }
+static int target_ok(int64_t v) {
+    return v >= CALI_THERMO_TARGET_MIN && v <= CALI_THERMO_TARGET_MAX && v % CALI_THERMO_TARGET_STEP == 0;
+}
+static int alias_chars_ok(const char *a, size_t cap) {   /* "" or [a-z0-9_-]{1,16}, NUL-terminated */
+    size_t n = 0;
+    while (n < cap && a[n]) n++;
+    if (n == cap) return 0;
+    for (size_t i = 0; i < n; i++)
+        if (!((a[i] >= 'a' && a[i] <= 'z') || (a[i] >= '0' && a[i] <= '9') || a[i] == '_' || a[i] == '-')) return 0;
+    return 1;
+}
+
+/* The stored configuration: a version byte, then the whole cali_thermo_run_cfg_t (all int32 and char, so
+ * the layout is the same on every build). Anything that does not check is dropped for the defaults. */
+typedef struct {
+    uint8_t ver, pad[3];
+    cali_thermo_run_cfg_t c;
+} th_blob_t;
+#define TH_BLOB_VER 1
+
+static int cfg_valid(const cali_thermo_run_cfg_t *c) {
+    cali_thermo_cfg_t s = c->s;
+    for (int i = 0; i < CALI_THERMO_CFG_N; i++)
+        if (!cfg_ok(i, *cfg_at(&s, i))) return 0;
+    return target_ok(c->target) && (c->outside_on == 0 || c->outside_on == 1) &&
+           alias_chars_ok(c->ref, sizeof c->ref) && alias_chars_ok(c->backup, sizeof c->backup) &&
+           alias_chars_ok(c->out, sizeof c->out);
+}
+
+static int cfg_store(const cali_thermo_run_cfg_t *c) {
+    th_blob_t b;
+    memset(&b, 0, sizeof b);
+    b.ver = TH_BLOB_VER;
+    b.c = *c;
+    return cali_kv_set(CALI_THERMO_CFG_KEY, &b, sizeof b) == 0 ? 0 : -1;
+}
+
+static unsigned s_rev;   /* counts the accepted POSTs; not stored */
+
 void cali_thermo_run_init(void) {
     uint8_t b;
     size_t n = 1;
+    th_blob_t blob;
+    size_t bn = sizeof blob;
     s_on = cali_kv_get(CALI_THERMO_ON_KEY, &b, &n) == CALI_KV_OK && n == 1 && b != 0;   /* missing = off */
+    static const cali_thermo_run_cfg_t DEFAULTS = {.s = CALI_THERMO_DEFAULTS, .target = CALI_THERMO_TARGET_DEFAULT};
+    C = DEFAULTS;
+    if (cali_kv_get(CALI_THERMO_CFG_KEY, &blob, &bn) == CALI_KV_OK && bn == sizeof blob && blob.ver == TH_BLOB_VER &&
+        cfg_valid(&blob.c))
+        C = blob.c;
+    s_rev = 0;
     cali_thermo_init(&S);
     memset(&s_out, 0, sizeof s_out);
     s_out.status.heater = CALI_THERMO_H_UNKNOWN;
@@ -260,15 +328,9 @@ int cali_thermo_set_enabled(int on) {
 cali_thermo_run_cfg_t *cali_thermo_run_cfg(void) { return &C; }
 
 int cali_thermo_cfg_set(const char *key, int32_t value) {
-#define K(m) {#m, offsetof(cali_thermo_cfg_t, m)}
-    static const struct { const char *name; size_t off; } KEYS[] = {
-        K(period_ms), K(kp), K(ki), K(ka), K(u_out_max), K(hyst), K(min_dwell_ms), K(band_hi), K(hot_hold_ms),
-        K(overheat), K(min_level), K(stale_after_ms), K(heater_stale_ms), K(batt_min_dv), K(batt_hold_ms),
-        K(verify_ms), K(runtime_min)};
-#undef K
-    for (size_t i = 0; i < sizeof KEYS / sizeof KEYS[0]; i++)
-        if (strcmp(KEYS[i].name, key) == 0) {
-            memcpy((char *)&C.s + KEYS[i].off, &value, sizeof value);
+    for (int i = 0; i < CALI_THERMO_CFG_N; i++)
+        if (strcmp(cali_thermo_cfg_keys[i], key) == 0) {
+            *cfg_at(&C.s, i) = value;
             return 0;
         }
     return -1;
@@ -304,4 +366,98 @@ void cali_thermo_state_json(cali_json_t *j) {
     cali_json_key(j, "end");
     cali_json_str(j, st->end ? st->end : "none");
     cali_json_obj_end(j);
+}
+
+static void alias_json(cali_json_t *j, const char *key, const char *alias) {
+    cali_json_key(j, key);
+    if (alias[0]) cali_json_str(j, alias);
+    else cali_json_null(j);
+}
+
+void cali_thermo_api_json(cali_json_t *j) {
+    cali_thermo_cfg_t s = C.s;
+    cali_json_key(j, "rev");
+    cali_json_int(j, s_rev);
+    cali_json_key(j, "mode");
+    cali_json_str(j, cali_thermo_mode_names[S.mode]);
+    cali_json_key(j, "target");
+    cali_json_int(j, C.target);
+    cali_json_key(j, "runtime_min");
+    cali_json_int(j, C.s.runtime_min);
+    alias_json(j, "ref", C.ref);
+    alias_json(j, "backup", C.backup);
+    alias_json(j, "out", C.out);
+    cali_json_key(j, "outside_on");
+    cali_json_bool(j, C.outside_on);
+    cali_json_key(j, "cfg");
+    cali_json_obj_begin(j);
+    for (int i = 0; i < CALI_THERMO_CFG_N; i++) {
+        cali_json_key(j, cali_thermo_cfg_keys[i]);
+        cali_json_int(j, *cfg_at(&s, i));
+    }
+    cali_json_obj_end(j);
+    cali_json_key(j, "status");
+    cali_thermo_state_json(j);
+}
+
+int cali_thermo_has_ref(void) { return C.ref[0] != 0; }
+
+void cali_thermo_brief_json(cali_json_t *j) {
+    cali_json_obj_begin(j);
+    cali_json_key(j, "mode");
+    cali_json_str(j, cali_thermo_mode_names[S.mode]);
+    opt_num(j, "target", C.target);
+    opt_num(j, "t_ref", s_out.status.t_ref);
+    opt_num(j, "level", s_out.status.level);
+    cali_json_key(j, "reason");
+    if (s_reason) cali_json_str(j, s_reason);
+    else cali_json_null(j);
+    cali_json_obj_end(j);
+}
+
+static int sensor_ok(const char *alias) {   /* "" clears; else a configured Govee */
+    const char *t = alias[0] ? cali_sensors_type(alias) : "govee";
+    return t && strcmp(t, "govee") == 0;
+}
+
+int cali_thermo_apply(const cali_thermo_patch_t *p) {
+    cali_thermo_run_cfg_t n = C;
+    unsigned h = p->has;
+    int auto_req = 0;
+    if ((h & CALI_THERMO_P_REV) && p->rev != (int64_t)s_rev) return CALI_THERMO_E_STALE;
+    if (h & CALI_THERMO_P_MODE) {
+        if (strcmp(p->mode, "AUTO") == 0) auto_req = 1;
+        else if (strcmp(p->mode, "OFF") != 0) return CALI_THERMO_E_VALUE;
+    }
+    if (((h & CALI_THERMO_P_TARGET) && !target_ok(p->target)) ||
+        ((h & CALI_THERMO_P_RUNTIME) && !cfg_ok(CFG_RUNTIME, p->runtime_min)))
+        return CALI_THERMO_E_VALUE;
+    for (int i = 0; (h & CALI_THERMO_P_CFG) && i < CALI_THERMO_CFG_N; i++)
+        if ((p->cfg_has >> i & 1u) && !cfg_ok(i, p->cfg[i])) return CALI_THERMO_E_VALUE;
+    if (((h & CALI_THERMO_P_REF) && !sensor_ok(p->ref)) || ((h & CALI_THERMO_P_BACKUP) && !sensor_ok(p->backup)) ||
+        ((h & CALI_THERMO_P_OUT) && !sensor_ok(p->out)))
+        return CALI_THERMO_E_SENSOR;
+    if (((h & (CALI_THERMO_P_ENABLED | CALI_THERMO_P_CFG)) || auto_req) && !((h & CALI_THERMO_P_CONFIRM) && p->confirm))
+        return CALI_THERMO_E_CONFIRM;
+
+    if (h & CALI_THERMO_P_TARGET) n.target = (int32_t)p->target;
+    if (h & CALI_THERMO_P_RUNTIME) n.s.runtime_min = (int32_t)p->runtime_min;
+    if (h & CALI_THERMO_P_REF) snprintf(n.ref, sizeof n.ref, "%s", p->ref);
+    if (h & CALI_THERMO_P_BACKUP) snprintf(n.backup, sizeof n.backup, "%s", p->backup);
+    if (h & CALI_THERMO_P_OUT) snprintf(n.out, sizeof n.out, "%s", p->out);
+    if (h & CALI_THERMO_P_OUTSIDE) n.outside_on = p->outside_on != 0;
+    for (int i = 0; (h & CALI_THERMO_P_CFG) && i < CALI_THERMO_CFG_N; i++)
+        if (p->cfg_has >> i & 1u) *cfg_at(&n.s, i) = (int32_t)p->cfg[i];
+    if (memcmp(&n, &C, sizeof n) != 0) {
+        if (cfg_store(&n) != 0) return CALI_THERMO_E_STORE;
+        C = n;
+    }
+    if ((h & CALI_THERMO_P_ENABLED) && cali_thermo_set_enabled(p->enabled) != 0) {
+        if (p->enabled) (void)cali_thermo_set_enabled(0);   /* an enable that could not be stored stays off */
+        return CALI_THERMO_E_STORE;
+    }
+    if (auto_req) (void)cali_thermo_request("AUTO");
+    else if (h & CALI_THERMO_P_MODE) (void)cali_thermo_request("OFF");
+    s_rev++;
+    return 0;
 }

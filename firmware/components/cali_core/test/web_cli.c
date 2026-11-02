@@ -1,7 +1,7 @@
 /* web_cli.c — line-protocol driver for tests/firmware/test_web_handlers.py ONLY; not part of the ESP
  * build. Links web.c + http_core.c + captive_dns.c (for cali_captive_is_probe) + json.c + snapshot.c
  * + ota.c + time.c + auto_camper.c + auto_camper_run.c (never ticked here) + pi_wake.c + ble_exp.c +
- * ble_exp_run.c + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
+ * ble_exp_run.c + thermostat.c + thermostat_run.c + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
  * frames, the runner state, a transport (has_bond/identity), an in-memory kv store, the clock, the
  * log, cali_fw_version ("test"), the WiFi runtime (cali_wifi_run.h) and the control sequencer
  * (cali_ctl_submit).
@@ -43,6 +43,8 @@
  *   kvfail 0|1       cali_kv_set fails
  *   kvhex <key> <hex>   store <hex> bytes under <key> (e.g. a stale auto-camper debt)
  *   acinit           cali_ac_init (the toggle + debt from the kv store, as at boot)
+ *   thinit           cali_thermo_run_init (the thermostat switch + settings from the kv store, as at boot)
+ *   thtick           cali_thermo_run_tick(the clock): one step when due (no 1702 frame here, so no heater)
  *   pwinit           cali_pw_init (the Pi-wake toggle from the kv store, as at boot)
  *   ign <-1|0|1>     cali_pw_step(<ignition>, the clock): the Pi wake's edge rule (R_FW_PI_WAKE)
  *   ntp <epoch_ms>   SNTP synced at this (fixed) wall clock: cali_time_ts answers it (R_FW_BLE_EXP)
@@ -90,6 +92,7 @@
 #include "cali_runner.h"
 #include "cali_sensors.h"
 #include "cali_session.h"
+#include "cali_thermostat.h"
 #include "cali_web.h"
 #include "cali_wifi_run.h"
 #include "codec_chars.h"
@@ -178,6 +181,8 @@ static int64_t s_rest_next = -1;
 int cali_session_ready(void) { return s_ready; }
 int cali_session_rest(void) { return s_rest; }
 int cali_session_held(void) { return 0; }   /* ble_exp_run.c: the thermostat never holds here */
+void cali_session_hold(int on) { (void)on; }   /* thermostat_run.c */
+uint64_t cali_session_frame_ms(size_t i) { (void)i; return 0; }   /* thermostat_run.c: no 1702 frame here */
 int64_t cali_session_rest_next_ms(void) { return s_rest_next; }
 static int s_redial, s_viewer_ends;
 int cali_session_redial(void) { return s_redial; }
@@ -461,6 +466,8 @@ int main(void) {
         else if (strcmp(w, "kvfail") == 0) s_kvfail = (int)v;
         else if (strcmp(w, "ctlbusy") == 0) s_ctl_busy = (int)v;
         else if (strcmp(w, "acinit") == 0) cali_ac_init();
+        else if (strcmp(w, "thinit") == 0) cali_thermo_run_init();
+        else if (strcmp(w, "thtick") == 0) cali_thermo_run_tick(s_now);
         else if (strcmp(w, "pwinit") == 0) cali_pw_init();
         else if (strcmp(w, "ign") == 0) cali_pw_step((int)v, s_now);
         else if (strcmp(w, "pwtick") == 0) cali_pw_tick(s_now);
@@ -537,7 +544,7 @@ int main(void) {
                 snprintf(s_done_reason, sizeof s_done_reason, "%s", off ? line + off : "");
             }
         } else if (strcmp(w, "kv") == 0) {
-            char buf[128];
+            char buf[512];
             size_t len = sizeof buf;
             if (cali_kv_get(a1, buf, &len) == CALI_KV_OK) printf("KV %.*s\n", (int)len, buf);
             else printf("KV <missing>\n");

@@ -143,6 +143,13 @@ int cali_sensors_rename(uint16_t id, const char *alias);
 int cali_sensors_value(const char *alias, int field, int32_t *centi, uint64_t *at_ms);
 
 /**
+ * @brief The type of a configured sensor, by alias.
+ * @param alias  The sensor's alias.
+ * @return The type id ("govee", "victron_mppt", "victron_battery"), or NULL for an alias that is not configured.
+ */
+const char *cali_sensors_type(const char *alias);
+
+/**
  * @brief A reading's float as centi-units: times 100, clamped to +-2e9, rounded half away from zero.
  * @param f    The value.
  * @param out  Out: the centi value.

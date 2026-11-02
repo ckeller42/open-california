@@ -25,6 +25,7 @@
 #include "cali_time.h"
 #include "cali_snapshot.h"
 #include "cali_status.h"
+#include "cali_thermostat.h"
 #include "cali_wifi_run.h"
 #include "cali_wifi_sm.h"
 #include "pairing_consts.h"
@@ -59,6 +60,8 @@ static const char ERR_CONFIRM[] = "{\"ok\":false,\"error\":\"confirm_required\"}
 static const char ERR_SETUP_MODE[] = "{\"ok\":false,\"error\":\"setup_mode\"}";
 static const char ERR_BAD_VALUE[] = "{\"ok\":false,\"error\":\"bad_value\"}";
 static const char ERR_BAD_ACTION[] = "{\"ok\":false,\"error\":\"bad_action\"}";
+static const char ERR_STALE_REV[] = "{\"ok\":false,\"error\":\"stale_rev\"}";   /* /api/thermostat */
+static const char ERR_UNKNOWN_SENSOR[] = "{\"ok\":false,\"error\":\"unknown_sensor\"}";
 static const char ERR_BUSY[] = "{\"ok\":false,\"error\":\"busy\"}";
 static const char ERR_NOT_PAIRED[] = "{\"ok\":false,\"error\":\"not_paired\"}";   /* /api/ble connect */
 static const char ERR_NO_TIME[] = "{\"ok\":false,\"error\":\"no_time\"}";   /* /api/ble: no wall clock */
@@ -306,6 +309,10 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_battery_json(&j);
     cali_json_key(&j, "auto_camper");   /* restore camping after park (R_FW_AUTO_CAMPER) */
     cali_ac_json(&j);
+    if (cali_thermo_has_ref()) {   /* the cabin thermostat, once a reference thermometer is selected (R_FW_THERMOSTAT_API) */
+        cali_json_key(&j, "thermostat");
+        cali_thermo_brief_json(&j);
+    }
     cali_json_key(&j, "pi_wake");   /* wake the halted Pi over GPIO9 (R_FW_PI_WAKE) */
     cali_pw_json(&j);
     cali_json_key(&j, "ble");   /* the BLE link mode + the night experiment (R_FW_BLE_MODE, R_FW_BLE_EXP) */
@@ -428,7 +435,7 @@ static int index_of(const char *s, const char *const *set, size_t n) {
 /* parses keys[i]'s value at c into ctx: 0 ok, nonzero malformed */
 typedef int (*field_fn)(cursor_t *c, int i, void *ctx);
 
-/* One object {"key":value,...} whose keys are all in keys[0..n) (n <= 16), each at most once; field
+/* One object {"key":value,...} whose keys are all in keys[0..n) (n <= 30), each at most once; field
  * parses each value. The keys seen (bit i = keys[i]; {} = 0), or -1 not that shape. Every POST body
  * goes through here: each handler keeps only its values and its own rules on which keys it needs. */
 static int parse_obj(cursor_t *c, const char *const *keys, size_t n, field_fn field, void *ctx) {
@@ -861,6 +868,109 @@ static void api_auto_camper(const cali_http_req_t *req, cali_http_resp_t *resp) 
     } else {
         SET_CONST(resp, 200, "{\"ok\":true,\"auto_camper\":false}");
     }
+}
+
+/* ---- GET/POST /api/thermostat (R_FW_THERMOSTAT_API): the body keys are the bits of cali_thermo_patch_t.has,
+ * in this order. POST: station mode only. ---- */
+static const char *const K_THERMO[] = {"enabled", "mode", "target", "runtime_min", "ref", "backup",
+                                       "out", "outside_on", "cfg", "rev", "confirm"};
+
+/* A signed integer -?(0|[1-9][0-9]*), clamped to +-2^62 (the value check refuses it); a fraction or
+ * exponent leaves its '.'/'e' behind, which the object parser then rejects. 0 ok, -1 not an integer. */
+static int parse_i64(cursor_t *c, int64_t *out) {
+    int neg;
+    int64_t v = 0;
+    const char *p0;
+    skip_ws(c);
+    neg = c->p < c->end && *c->p == '-';
+    if (neg) c->p++;
+    p0 = c->p;
+    while (c->p < c->end && *c->p >= '0' && *c->p <= '9') {
+        if (v < ((int64_t)1 << 62) / 10) v = v * 10 + (*c->p - '0');
+        else v = (int64_t)1 << 62;
+        c->p++;
+    }
+    if (c->p == p0 || (*p0 == '0' && c->p - p0 > 1)) return -1;
+    *out = neg ? -v : v;
+    return 0;
+}
+
+/* an alias: a string or null (= ""); an empty or longer text becomes "!", which names no sensor */
+static int parse_alias(cursor_t *c, char out[CALI_THERMO_ALIAS_LEN]) {
+    char tmp[CALI_THERMO_ALIAS_LEN];
+    size_t len;
+    skip_ws(c);
+    if (c->end - c->p >= 4 && memcmp(c->p, "null", 4) == 0) {
+        c->p += 4;
+        out[0] = 0;
+        return 0;
+    }
+    if (parse_str(c, tmp, sizeof tmp, &len) != 0) return -1;
+    snprintf(out, CALI_THERMO_ALIAS_LEN, "%s", len == 0 || len >= sizeof tmp ? "!" : tmp);
+    return 0;
+}
+
+static int thermo_cfg_field(cursor_t *c, int i, void *ctx) {
+    return parse_i64(c, &((cali_thermo_patch_t *)ctx)->cfg[i]);
+}
+
+static int thermo_field(cursor_t *c, int i, void *ctx) {
+    cali_thermo_patch_t *p = ctx;
+    size_t len;
+    int seen;
+    switch (i) {
+    case 0: return parse_bool(c, &p->enabled);
+    case 1:
+        if (parse_str(c, p->mode, sizeof p->mode, &len) != 0) return -1;
+        if (len >= sizeof p->mode) snprintf(p->mode, sizeof p->mode, "?");
+        return 0;
+    case 2: return parse_i64(c, &p->target);
+    case 3: return parse_i64(c, &p->runtime_min);
+    case 4: return parse_alias(c, p->ref);
+    case 5: return parse_alias(c, p->backup);
+    case 6: return parse_alias(c, p->out);
+    case 7: return parse_bool(c, &p->outside_on);
+    case 8:
+        seen = parse_obj(c, cali_thermo_cfg_keys, CALI_THERMO_CFG_N, thermo_cfg_field, p);
+        p->cfg_has = (unsigned)seen;
+        return seen < 0 ? -1 : 0;
+    case 9: return parse_i64(c, &p->rev);
+    default: return parse_bool(c, &p->confirm);
+    }
+}
+
+static void api_thermostat(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static cali_thermo_patch_t p;
+    int seen, rc = 0;
+    cali_json_t j;
+    if (strcmp(req->method, "POST") == 0) {
+        if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+            SET_CONST(resp, 403, ERR_SETUP_MODE);
+            return;
+        }
+        memset(&p, 0, sizeof p);
+        seen = parse_body(req->body, req->body_len, K_THERMO, N_OF(K_THERMO), thermo_field, &p);
+        if (seen < 0) {
+            SET_CONST(resp, 400, ERR_BAD_JSON);
+            return;
+        }
+        p.has = (unsigned)seen;
+        rc = cali_thermo_apply(&p);
+    } else if (strcmp(req->method, "GET") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+        return;
+    }
+    switch (rc) {
+    case 0: break;
+    case CALI_THERMO_E_STALE: SET_CONST(resp, 409, ERR_STALE_REV); return;
+    case CALI_THERMO_E_VALUE: SET_CONST(resp, 400, ERR_BAD_VALUE); return;
+    case CALI_THERMO_E_SENSOR: SET_CONST(resp, 400, ERR_UNKNOWN_SENSOR); return;
+    case CALI_THERMO_E_CONFIRM: SET_CONST(resp, 400, ERR_CONFIRM); return;
+    default: SET_CONST(resp, 500, ERR_STORE); return;
+    }
+    cali_json_begin(&j, s_json, sizeof s_json);
+    cali_thermo_api_json(&j);
+    finish_json(&j, resp);
 }
 
 /* ---- POST /api/pi_wake {} or no body (R_FW_PI_WAKE): one manual wake pulse, station mode only ---- */
@@ -1452,6 +1562,10 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/auto_camper") == 0) {
         api_auto_camper(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/thermostat") == 0) {
+        api_thermostat(req, resp);
         return 1;
     }
     if (strcmp(req->path, "/api/pi_wake") == 0) {

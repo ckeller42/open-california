@@ -51,6 +51,31 @@
  *    only while the feature is on or a mode is active.
  * @endverbatim
  *
+ * **API** (thermostat_run.c, served by web.c): ``GET /api/thermostat`` reads the configuration and the
+ * status, ``POST /api/thermostat`` changes it through cali_thermo_apply(). The switch, an AUTO request
+ * and the settings need ``confirm``; every value is range-checked before anything changes; the
+ * configuration is stored whole in kv ``th_cfg``; the mode is never stored.
+ *
+ * @verbatim embed:rst:leading-asterisk
+ * .. req:: The satellite serves the cabin thermostat's settings and switch
+ *    :id: R_FW_THERMOSTAT_API
+ *    :status: implemented
+ *    :tags: esp32, thermostat, airheater, web
+ *
+ *    The firmware shall serve ``GET /api/thermostat`` (``rev``, ``mode``, ``target``, ``runtime_min``,
+ *    the thermometer aliases, ``outside_on``, all settings, the status with the reason) and
+ *    ``POST /api/thermostat`` (station mode only) with any of ``enabled``, ``mode``, ``target``,
+ *    ``runtime_min``, ``ref``, ``backup``, ``out`` (an alias of a configured Govee, or null),
+ *    ``outside_on``, ``cfg``, ``rev`` and ``confirm``. The switch, an AUTO request and ``cfg`` shall be
+ *    refused without ``confirm: true``; a value outside its range (target 500..3000 in steps of 50,
+ *    run time 10..120 min, ``min_level`` 1..10, ``batt_min_dv`` 100..150, periods and times above
+ *    0, gains not below 0) shall be refused before anything changes; a ``rev`` other than the current
+ *    one shall be refused; every accepted POST shall count ``rev``. The settings, the target, the
+ *    aliases and ``outside_on`` shall persist in kv ``th_cfg``, the switch in ``th_on``, the mode
+ *    never. ``/api/state`` shall carry ``device.thermostat`` (``mode``, ``target``, ``t_ref``,
+ *    ``level``, ``reason``) only while a reference thermometer is selected.
+ * @endverbatim
+ *
  * C99, no malloc, no NimBLE/ESP-IDF includes.
  */
 #ifndef CALI_THERMOSTAT_H
@@ -283,7 +308,7 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
 /** @brief Default target, centi-degrees C. */
 #define CALI_THERMO_TARGET_DEFAULT 2000
 
-/** @brief The runner's configuration (defaults now; Task 6 stores it). */
+/** @brief The runner's configuration (stored whole under CALI_THERMO_CFG_KEY). */
 typedef struct {
     cali_thermo_cfg_t s;                   /**< The settings (`runtime_min` is the start's run time). */
     int32_t target;                        /**< Target, centi-degrees C. */
@@ -339,6 +364,90 @@ int cali_thermo_cfg_set(const char *key, int32_t value);
  * @param j  The JSON writer; the caller writes the key first.
  */
 void cali_thermo_state_json(cali_json_t *j);
+
+/** @brief kv key of the stored configuration (settings, target, aliases, outside_on). */
+#define CALI_THERMO_CFG_KEY "th_cfg"
+/** @brief Number of settings in cali_thermo_cfg_t (the keys of the `cfg` object). */
+#define CALI_THERMO_CFG_N 17
+/** @brief Lowest target, centi-degrees C. */
+#define CALI_THERMO_TARGET_MIN 500
+/** @brief Highest target, centi-degrees C. */
+#define CALI_THERMO_TARGET_MAX 3000
+/** @brief Target step, centi-degrees C. */
+#define CALI_THERMO_TARGET_STEP 50
+
+/** @brief The settings' names in cali_thermo_cfg_t order (the keys of the API's `cfg` object). */
+extern const char *const cali_thermo_cfg_keys[CALI_THERMO_CFG_N];
+
+/** @brief Which members of a cali_thermo_patch_t are given. */
+enum cali_thermo_patch_e {
+    CALI_THERMO_P_ENABLED = 1 << 0,  /**< `enabled`. */
+    CALI_THERMO_P_MODE = 1 << 1,     /**< `mode`. */
+    CALI_THERMO_P_TARGET = 1 << 2,   /**< `target`. */
+    CALI_THERMO_P_RUNTIME = 1 << 3,  /**< `runtime_min`. */
+    CALI_THERMO_P_REF = 1 << 4,      /**< `ref` (an empty alias = null). */
+    CALI_THERMO_P_BACKUP = 1 << 5,   /**< `backup`. */
+    CALI_THERMO_P_OUT = 1 << 6,      /**< `out`. */
+    CALI_THERMO_P_OUTSIDE = 1 << 7,  /**< `outside_on`. */
+    CALI_THERMO_P_CFG = 1 << 8,      /**< `cfg` (members in `cfg_has`). */
+    CALI_THERMO_P_REV = 1 << 9,      /**< `rev`. */
+    CALI_THERMO_P_CONFIRM = 1 << 10  /**< `confirm`. */
+};
+
+/** @brief A parsed `POST /api/thermostat` body. */
+typedef struct {
+    unsigned has;                          /**< CALI_THERMO_P_* of the members given. */
+    int enabled;                           /**< The feature switch. */
+    int outside_on;                        /**< Use the outside feed-forward. */
+    int confirm;                           /**< `confirm: true`. */
+    char mode[8];                          /**< "AUTO" or "OFF"; anything else (also a longer text) is refused. */
+    int64_t target;                        /**< Target, centi-degrees C (any value; range-checked by cali_thermo_apply()). */
+    int64_t runtime_min;                   /**< Run time with a start, min (range-checked likewise). */
+    int64_t rev;                           /**< The revision the client saw. */
+    char ref[CALI_THERMO_ALIAS_LEN];       /**< Reference alias; a longer text must arrive as "!" (never an alias). */
+    char backup[CALI_THERMO_ALIAS_LEN];    /**< Backup alias. */
+    char out[CALI_THERMO_ALIAS_LEN];       /**< Outside alias. */
+    unsigned cfg_has;                      /**< Bit i = `cfg[i]` given (cali_thermo_cfg_keys order). */
+    int64_t cfg[CALI_THERMO_CFG_N];        /**< The settings given. */
+} cali_thermo_patch_t;
+
+/** @brief cali_thermo_apply() results; 0 = applied. */
+enum cali_thermo_err_e {
+    CALI_THERMO_E_STALE = 1,    /**< `rev` is not the current one. */
+    CALI_THERMO_E_VALUE = 2,    /**< A value is out of range, or the mode text is wrong. */
+    CALI_THERMO_E_SENSOR = 3,   /**< An alias is not a configured Govee. */
+    CALI_THERMO_E_CONFIRM = 4,  /**< The switch, AUTO or `cfg` without `confirm: true`. */
+    CALI_THERMO_E_STORE = 5     /**< The kv store failed. */
+};
+
+/**
+ * @brief Check, apply and store a patch, all or nothing; count `rev` when it applied.
+ *
+ * Order of the checks: `rev`, the values (mode text, target, run time, aliases, settings), `confirm`.
+ * A stored change goes to kv first; the switch (CALI_THERMO_ON_KEY) and an AUTO or OFF request follow.
+ *
+ * @param p  The patch.
+ * @return 0 or a CALI_THERMO_E_* code (nothing changed, except E_STORE of the switch, see cali_thermo_set_enabled()).
+ */
+int cali_thermo_apply(const cali_thermo_patch_t *p);
+
+/**
+ * @brief Write the `GET /api/thermostat` members: `"rev","mode","target","runtime_min","ref","backup","out","outside_on","cfg","status"`.
+ * @param j  The JSON writer, just after cali_json_begin() (which writes the object's `{`).
+ */
+void cali_thermo_api_json(cali_json_t *j);
+
+/**
+ * @brief Whether a reference thermometer is selected (`device.thermostat` is shown).
+ * @return 1 or 0.
+ */
+int cali_thermo_has_ref(void);
+
+/**
+ * @brief Write the `device.thermostat` object: `{"mode","target","t_ref","level","reason"}`.
+ * @param j  The JSON writer; the caller writes the key first.
+ */
+void cali_thermo_brief_json(cali_json_t *j);
 
 #ifdef __cplusplus
 }

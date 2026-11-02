@@ -68,6 +68,7 @@ int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t
     if (rc == CALI_CTL_PENDING) s_done = done;
     return rc;
 }
+const char *cali_sensors_type(const char *alias) { (void)alias; return NULL; }   /* the API is not driven here */
 int cali_sensors_value(const char *alias, int field, int32_t *centi, uint64_t *at_ms) {
     (void)field;
     for (int i = 0; i < 4; i++)
