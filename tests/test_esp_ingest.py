@@ -577,6 +577,36 @@ DIAG_CASES = [
         {"msg": "GATT procedure timeout"},
     ),
     ({"ev": "log", "dropped": 12}, "esp_log", {}, {"dropped": 12.0}),
+    (  # the thermostat's step record (thermostat_run.c, docs/firmware.md "SD log"); an idle step's r is null
+        {
+            "ev": "thermo",
+            "r": "HOLD",
+            "m": "AUTO",
+            "h": "RUNNING",
+            "t": 2050,
+            "o": None,
+            "g": 2100,
+            "u": 4120,
+            "i": 3370,
+            "uo": 0,
+            "l": 4,
+            "lc": 4,
+            "rem": 87,
+        },
+        "esp_thermo",
+        {"m": "AUTO", "h": "RUNNING"},
+        {
+            "r": "HOLD",
+            "t": 2050.0,
+            "g": 2100.0,
+            "u": 4120.0,
+            "i": 3370.0,
+            "uo": 0.0,
+            "l": 4.0,
+            "lc": 4.0,
+            "rem": 87.0,
+        },
+    ),  # fmt: skip
 ]
 
 
@@ -654,8 +684,14 @@ def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frame
         drec(5, {"ev": "log", "lvl": "E", "tag": "sd", "msg": "fsync"}, ts=T0 + 2000, up=7000),
         drec(6, {"ev": "unknown_ev", "x": 1}, ts=T0 + 3000, up=8000),  # not ours: skipped
         drec(7, {**UX_HEAD, **UX_EVENTS[0]}, ts=T0 + 4000, up=9000),
+        drec(
+            8,
+            {"ev": "thermo", "r": None, "m": "OFF", "h": "OFF", "t": 1900, "g": 2100},
+            ts=T0 + 5000,
+            up=10000,
+        ),
     ]
-    counts = {"esp_diag": 1, "esp_perf": 1, "esp_evt": 1, "esp_log": 1, "ui_ux": 1}
+    counts = {"esp_diag": 1, "esp_perf": 1, "esp_evt": 1, "esp_log": 1, "ui_ux": 1, "esp_thermo": 1}
     db, diag = DB({"cooler": [T0]}), []
     s = esp_ingest.ingest(
         pager(records, boot=1), db, str(tmp_path / "dry.json"), dry_run=True, report=[], diag=diag
@@ -667,6 +703,7 @@ def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frame
         ("esp_diag", T0 + 1000),
         ("esp_log", T0 + 2000),
         ("ui_ux", T0 + 4000),
+        ("esp_thermo", T0 + 5000),
     ]
 
     s = esp_ingest.ingest(pager(records, boot=1), db, str(tmp_path / "c.json"))
@@ -678,8 +715,9 @@ def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frame
         ("esp_diag", T0 + 1000),
         ("esp_log", T0 + 2000),
         ("ui_ux", (T0 + 4000) * 1_000_000 + 7),
+        ("esp_thermo", T0 + 5000),
     ]
-    assert json.loads((tmp_path / "c.json").read_text())["seq"] == 7
+    assert json.loads((tmp_path / "c.json").read_text())["seq"] == 8
 
 
 def test_verify_diag_marks_measurements_missing_from_influx():

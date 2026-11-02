@@ -1050,7 +1050,7 @@ try-lock: a concurrent caller, a full queue or a body that does not fit `CALI_SD
 
 buspi's `calictl esp-ingest` writes these records to InfluxDB as they are, at their time, one
 measurement per `ev` — `esp_diag`, `esp_perf` (tag `route` or `char` + `op`), `esp_evt` (tag
-`kind`), `esp_log` (tags `lvl`, `tag`) — with no gap-fill rule, for the dashboard's 📟 ESP satellite
+`kind`), `esp_log` (tags `lvl`, `tag`), `esp_thermo` (the thermostat's step record, tags `m`, `h`) — with no gap-fill rule, for the dashboard's 📟 ESP satellite
 row (`R_ESP_INGEST_DIAG`, [raspberry-pi-setup](raspberry-pi-setup.md#esp-ingest-gap-fill)).
 
 `cali_log` lines have no level and stay console-only. Size: a stamped line is ~70 B + the body. A

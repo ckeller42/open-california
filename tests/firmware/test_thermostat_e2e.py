@@ -74,6 +74,9 @@ async def _hang_up(fu):
         await fu.conn.disconnect(0x13)  # the unit's power-save hang-up (remote user terminated)
 
 
+DWELL_MS = 3000  # the test's min_dwell_ms (the shipped default is 300 s)
+
+
 def _setup(host_fw, hu, centi=1700):
     """Paired and read, the Govee configured as ``cabin`` with a reading, the thermostat set up
     (feature on, reference cabin, target 21.0 C, 1 s period, 3 s dwell), not yet AUTO."""
@@ -89,7 +92,7 @@ def _setup(host_fw, hu, centi=1700):
     _reading(fw, centi)
     time.sleep(ARM_S)
     for line in ("thermo ref cabin", "thermo target 2100", "thermo set period_ms 1000",
-                 "thermo set min_dwell_ms 3000", "thermo on"):  # fmt: skip
+                 "thermo set min_dwell_ms %d" % DWELL_MS, "thermo on"):  # fmt: skip
         fw.send(line)
     return fw, adv, seen["id"]
 
@@ -216,7 +219,7 @@ def test_closed_loop_reaches_target(host_fw, rec_unit):
     the 21.0 C target. The burner starts once (no second ``power`` frame) and the level changes at least
     ``min_dwell_ms`` apart. This tests the control logic in a loop; it does not tune it. The real clock
     runs the model, and the runner rejects a reading that moves faster than 3 C per minute: the cabin is
-    slow (time constant 240 s; from 19.0 C it moves 0.8 C per minute at level 4 and 2.1 at level 5, 3.3 at level 6)
+    slow (time constant 240 s; from 19.0 C it moves 0.5 C per minute at level 4, 1.25 at level 5, 2.0 at level 6)
     so the loop, which stays at level 4, remains inside that rule.
 
     .. test:: Thermostat closed loop on the host tier: the cabin settles, the dwell holds, the burner starts once
@@ -256,4 +259,5 @@ def test_closed_loop_reaches_target(host_fw, rec_unit):
     rows = [json.loads(s) for s in rec.read_text().splitlines()]
     at = [r["t"] for r in rows if r.get("ev") == "write" and r.get("hex") in {f.hex() for f in levels}]
     assert len(at) >= 2, rows[-10:]
-    assert all(b - a >= 2.8 for a, b in zip(at, at[1:])), at  # min_dwell_ms 3000, 0.2 s jitter
+    # the dwell, less 0.5 s for the scheduling jitter of the host tier (owner tick, mock writes, recorder)
+    assert all(b - a >= DWELL_MS / 1000 - 0.5 for a, b in zip(at, at[1:])), at
