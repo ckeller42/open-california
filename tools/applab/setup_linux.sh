@@ -1,37 +1,61 @@
 #!/usr/bin/env bash
-# setup_linux.sh — one-time, idempotent install of the app lab on a Linux x86_64 host with KVM
-# (thinky). Every step checks before it acts, so re-running is safe. Nothing it fetches is
-# committed. It never touches the network configuration, NetworkManager or any interface.
+# setup_linux.sh — one-time, idempotent install of the app lab on a Linux x86_64 host with KVM.
+# Every step checks before it acts, so re-running is safe. Nothing it fetches is committed. It never
+# touches the network configuration, NetworkManager or any interface.
 #
-#   tools/applab/setup_linux.sh
+#   tools/applab/setup_linux.sh                     # fresh lab (onboard + pair the app once, README)
+#   LAB_FROM=thinky tools/applab/setup_linux.sh     # move a lab: copy the onboarded AVD, VIN, APKs
 #
-# Env (defaults suit thinky):
-#   LAB_DIR            lab root (sdk/, avd/, apks/, env.sh)          [$HOME/android-lab]
-#   AVD                AVD name (the runbook + XY points use it)     [lab34]
-#   BUMBLE_PY          the python that has Bumble                    [$HOME/esp-venv/bin/python]
-#   APK_SRC            scp source of the CaliforniaOnTour APK        [pi@buspi:~/apks/]
-#   CMDLINE_TOOLS_ZIP  Google's cmdline-tools archive                [commandlinetools-linux-13114758_latest.zip]
+# Env:
+#   LAB_DIR            lab root (sdk/, avd/, apks/, venv-bumble/, env.sh, vin)  [$HOME/android-lab]
+#   AVD                AVD name                                                   [lab34]
+#   BUMBLE_PY          a python with Bumble; unset = $LAB_DIR/venv-bumble (created)
+#   BUMBLE_VERSION     the Bumble pin for that venv                               [0.0.235]
+#   APK_SRC            scp source of the per-version APK dirs                     [pi@buspi:~/apks/]
+#   APK_VERSION        the app version dir to copy (the phone's version)          [5.4.0.3036]
+#   LAB_FROM           ssh host of an existing lab: its AVD, vin, fake-unit keystore and APKs are
+#                      copied (rsync); the keystore holds the bond the AVD's app expects
+#   CMDLINE_TOOLS_ZIP  Google's cmdline-tools archive        [commandlinetools-linux-13114758_latest.zip]
+#
+# Missing packages (Java 17, unzip, Xvfb, rsync) are installed with `sudo -n apt-get` when sudo needs
+# no password; otherwise the script stops with the command to run.
 set -euo pipefail
 
 LAB_DIR="${LAB_DIR:-$HOME/android-lab}"
 AVD="${AVD:-lab34}"
-BUMBLE_PY="${BUMBLE_PY:-$HOME/esp-venv/bin/python}"
+BUMBLE_VERSION="${BUMBLE_VERSION:-0.0.235}"
+BUMBLE_PY="${BUMBLE_PY:-$LAB_DIR/venv-bumble/bin/python}"
 APK_SRC="${APK_SRC:-pi@buspi:~/apks/}"
+APK_VERSION="${APK_VERSION:-5.4.0.3036}"
+LAB_FROM="${LAB_FROM:-}"
 CMDLINE_TOOLS_ZIP="${CMDLINE_TOOLS_ZIP:-commandlinetools-linux-13114758_latest.zip}"
 IMAGE="system-images;android-34;google_apis;x86_64"
 die() { echo "setup_linux: $*" >&2; exit 1; }
 
-[ "$(uname -s)-$(uname -m)" = Linux-x86_64 ] || die "needs Linux x86_64 (the APK ships x86_64 libs; on an arm64 Mac follow the README's macOS recipe)"
+# need CMD PKG: install PKG when CMD is missing (sudo -n), else stop with the command.
+need() {
+  command -v "$1" >/dev/null && return
+  if sudo -n true 2>/dev/null; then
+    echo "setup_linux: installing $2"
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$2" >/dev/null
+  else
+    die "no $1: sudo apt-get install -y $2"
+  fi
+}
+
+[ "$(uname -s)-$(uname -m)" = Linux-x86_64 ] || die "needs Linux x86_64 (on an arm64 Mac follow the README's macOS recipe)"
 [ -e /dev/kvm ] || die "no /dev/kvm: enable virtualisation in the firmware setup"
 id -nG | tr ' ' '\n' | grep -qx kvm || die "$USER is not in group kvm: sudo usermod -aG kvm $USER, then log in again"
 { [ -r /dev/kvm ] && [ -w /dev/kvm ]; } || die "/dev/kvm is not read/writable for $USER (log in again after usermod)"
-command -v java >/dev/null || die "no java (sdkmanager needs 17+): sudo apt-get install -y openjdk-17-jre-headless"
-command -v unzip >/dev/null || die "no unzip: sudo apt-get install -y unzip"
-{ [ -x "$BUMBLE_PY" ] && "$BUMBLE_PY" -c 'import bumble' 2>/dev/null; } || die "no Bumble at $BUMBLE_PY (set BUMBLE_PY)"
 [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" = yes ] || \
   die "linger is off: netsim.ini lives in \$XDG_RUNTIME_DIR, which systemd removes when the last ssh session ends — sudo loginctl enable-linger $USER"
+need java openjdk-17-jre-headless
+need unzip unzip
+need Xvfb xvfb       # labctl's default GPU mode renders on a private Xvfb display
+need rsync rsync
 
 mkdir -p "$LAB_DIR"/sdk "$LAB_DIR"/avd "$LAB_DIR"/apks "$LAB_DIR"/.android
+chmod 700 "$LAB_DIR"   # the VIN and the fake unit's bond keys live here (Bumble rewrites the keystore)
 SDK="$LAB_DIR/sdk"
 if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
   tmp="$(mktemp -d)"
@@ -42,6 +66,9 @@ if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
   rm -rf "$tmp"
 fi
 cat >"$LAB_DIR/env.sh" <<EOF
+export LAB_DIR=$LAB_DIR AVD=$AVD BUMBLE_PY=$BUMBLE_PY
+# the fake unit's bond keys belong to this lab's AVD, not to a repo checkout
+export FAKE_UNIT_KEYSTORE=$LAB_DIR/fake_unit_keys.json
 export ANDROID_SDK_ROOT=$SDK ANDROID_HOME=$SDK
 export ANDROID_USER_HOME=$LAB_DIR/.android ANDROID_AVD_HOME=$LAB_DIR/avd ANDROID_EMULATOR_HOME=$LAB_DIR/.android
 export PATH=\$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:\$ANDROID_SDK_ROOT/platform-tools:\$ANDROID_SDK_ROOT/emulator:\$PATH
@@ -51,9 +78,39 @@ EOF
 yes | sdkmanager --licenses >/dev/null || true
 sdkmanager --install platform-tools emulator "build-tools;35.0.0" "platforms;android-34" "$IMAGE" >/dev/null
 emulator -accel-check 2>&1 | grep -q 'is installed and usable' || die "KVM not usable by the emulator: $(emulator -accel-check 2>&1 | tail -1)"
+
+# Bumble: its own venv unless BUMBLE_PY points at one that works.
+if ! { [ -x "$BUMBLE_PY" ] && "$BUMBLE_PY" -c 'import bumble, grpc, google.protobuf' 2>/dev/null; }; then
+  [ "$BUMBLE_PY" = "$LAB_DIR/venv-bumble/bin/python" ] || die "BUMBLE_PY=$BUMBLE_PY has no bumble/grpcio/protobuf"
+  python3 -m venv "$LAB_DIR/venv-bumble"
+  "$BUMBLE_PY" -m pip install -q "bumble==$BUMBLE_VERSION" grpcio protobuf pyyaml
+fi
+
+# AVD: copy an onboarded one from LAB_FROM (keeps the app's setup + VIN), else create a fresh one.
+# rsync resumes, and the marker is written only after every copy succeeded, so a failed move re-runs.
+if [ -n "$LAB_FROM" ] && [ ! -f "$LAB_DIR/.moved_from_$LAB_FROM" ]; then
+  echo "setup_linux: copying the AVD, vin and APKs from $LAB_FROM (stop its emulator first)"
+  rsync -a "$LAB_FROM:android-lab/avd/$AVD.avd" "$LAB_DIR/avd/"
+  rsync -a "$LAB_FROM:android-lab/avd/$AVD.ini" "$LAB_DIR/avd/"
+  sed -i "s|^path=.*|path=$LAB_DIR/avd/$AVD.avd|" "$LAB_DIR/avd/$AVD.ini"
+  rsync -a "$LAB_FROM:android-lab/vin" "$LAB_DIR/" && chmod 600 "$LAB_DIR/vin"
+  rsync -a "$LAB_FROM:android-lab/fake_unit_keys.json" "$LAB_DIR/" 2>/dev/null || \
+    echo "setup_linux: $LAB_FROM has no android-lab/fake_unit_keys.json: copy the keystore that paired with its AVD (a checkout's tools/applab/.fake_unit_keys.json) to $LAB_DIR/fake_unit_keys.json, or pair again" >&2
+  rsync -a "$LAB_FROM:android-lab/apks/" "$LAB_DIR/apks/"
+  touch "$LAB_DIR/.moved_from_$LAB_FROM"
+fi
 avdmanager list avd -c | grep -qx "$AVD" || echo no | avdmanager create avd -n "$AVD" -k "$IMAGE" -d pixel_6 >/dev/null
-"$BUMBLE_PY" -c 'import grpc, google.protobuf' 2>/dev/null || "$BUMBLE_PY" -m pip install -q grpcio protobuf
-ls "$LAB_DIR"/apks/*.apk >/dev/null 2>&1 || scp -q -o BatchMode=yes -o ConnectTimeout=10 "${APK_SRC}*.apk" "$LAB_DIR/apks/" || true
-ls "$LAB_DIR"/apks/*.apk >/dev/null 2>&1 || echo "setup_linux: no APK in $LAB_DIR/apks yet (scp from $APK_SRC failed — buspi offline?). Copy it by hand later: scp ${APK_SRC}*.apk $LAB_DIR/apks/" >&2
+
+# APKs: the phone's split APKs per version (buspi:~/apks/<version>/); labctl.sh install installs them.
+# Copied into a temporary directory first, so an interrupted copy never looks complete.
+if [ ! -f "$LAB_DIR/apks/$APK_VERSION/base.apk" ]; then
+  tmp="$LAB_DIR/apks/.$APK_VERSION.part"; rm -rf "$tmp"; mkdir -p "$tmp"
+  if scp -q -o BatchMode=yes -o ConnectTimeout=10 "${APK_SRC}${APK_VERSION}/*.apk" "$tmp/"; then
+    rm -rf "$LAB_DIR/apks/$APK_VERSION"; mv "$tmp" "$LAB_DIR/apks/$APK_VERSION"
+  else
+    rm -rf "$tmp"
+    echo "setup_linux: no APKs for $APK_VERSION (scp from $APK_SRC failed — buspi offline?); re-run setup later" >&2
+  fi
+fi
 echo "app lab ready: LAB_DIR=$LAB_DIR AVD=$AVD BUMBLE_PY=$BUMBLE_PY"
-echo "next: LAB_DIR=$LAB_DIR AVD=$AVD BUMBLE_PY=$BUMBLE_PY FAKE_UNIT_VIN=\$(cat $LAB_DIR/vin) tools/applab/labctl.sh up"
+echo "next: . $LAB_DIR/env.sh && FAKE_UNIT_VIN=\$(cat $LAB_DIR/vin) tools/applab/labctl.sh up"
