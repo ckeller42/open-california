@@ -79,6 +79,7 @@ final class LabControlUITests: XCTestCase {
     /// Scrolls until `element` can be tapped (at most six swipes).
     @MainActor
     private func reveal(_ app: XCUIApplication, _ element: XCUIElement) -> Bool {
+        guard element.exists else { return false }
         for _ in 0..<6 {
             if element.exists && element.isHittable { return true }
             app.swipeUp()
@@ -152,14 +153,16 @@ final class LabControlUITests: XCTestCase {
     }
 
     /// Picks `option` in the menu `name`, then waits until the menu shows it (the unit's feedback).
+    /// A menu's accessibility label is its name and its value: "Heating temperature, Level 5".
     @MainActor
     private func runMenu(_ app: XCUIApplication, _ screen: Screen, _ name: String, _ option: String) throws {
         open(app, screen)
-        let picker = app.buttons[name]
+        let picker = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name + ", ")).firstMatch
         XCTAssertTrue(picker.waitForExistence(timeout: 10), "menu \(name)")
         XCTAssertTrue(reveal(app, picker), "menu \(name) on screen")
         shot(app, "before")
-        if picker.value as? String == option {
+        let chosen = name + ", " + option
+        if picker.label == chosen {
             throw XCTSkip("\(name) is already \(option)")
         }
         picker.tap()
@@ -169,8 +172,8 @@ final class LabControlUITests: XCTestCase {
         shot(app, "menu")
         choice.tap()
         confirmIfAsked(app)
-        expectation(for: NSPredicate(format: "value == %@", option), evaluatedWith: picker)
-        waitForExpectations(timeout: 20)
+        let applied = app.buttons.matching(NSPredicate(format: "label == %@", chosen)).firstMatch
+        XCTAssertTrue(applied.waitForExistence(timeout: 20), "menu shows \(option)")
     }
 
     /// Turns the switch `label` on or off, then waits until it shows the new state.
@@ -197,8 +200,9 @@ final class LabControlUITests: XCTestCase {
         guard let action = ProcessInfo.processInfo.environment["LAB_ACTION"], !action.isEmpty else {
             throw XCTSkip("lab only: set TEST_RUNNER_LAB_ACTION")
         }
-        let parts = action.split(separator: ".").map(String.init)
-        XCTAssertEqual(parts.count, 3, "action \(action)")
+        // `link.live` and `link.lost` have no value part.
+        let parts = (action.split(separator: ".").map(String.init) + [""]).prefix(3).map { $0 }
+        XCTAssertTrue(action.split(separator: ".").count >= 2, "action \(action)")
         if parts[0] == "device" {
             try setAutoLock(parts[2])
             return
