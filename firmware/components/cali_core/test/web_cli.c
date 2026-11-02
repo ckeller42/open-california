@@ -182,6 +182,7 @@ int cali_session_ready(void) { return s_ready; }
 int cali_session_rest(void) { return s_rest; }
 int cali_session_held(void) { return 0; }   /* ble_exp_run.c: the thermostat never holds here */
 void cali_session_hold(int on) { (void)on; }   /* thermostat_run.c */
+void cali_session_connect_now(void) {}          /* thermostat_run.c: an AUTO request */
 uint64_t cali_session_frame_ms(size_t i) { (void)i; return 0; }   /* thermostat_run.c: no 1702 frame here */
 int64_t cali_session_rest_next_ms(void) { return s_rest_next; }
 static int s_redial, s_viewer_ends;

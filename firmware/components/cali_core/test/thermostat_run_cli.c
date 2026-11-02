@@ -15,8 +15,8 @@
  *   ref|backup <alias|->     the configured thermometers
  *   target <centi> | set <key> <value>
  *   state                    "THERMO <cali_thermo_state_json>"
- * Output: "SUBMIT <what> <value>" per submit, "HOLD <0|1>" per cali_session_hold change, "REC <body>"
- * per diagnostics record. */
+ * Output: "SUBMIT <what> <value>" per submit, "HOLD <0|1>" per cali_session_hold change, "CONNECT_NOW"
+ * per cali_session_connect_now, "REC <body>" per diagnostics record. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,6 +57,7 @@ void cali_session_hold(int on) {
     if (on != s_hold) printf("HOLD %d\n", on);
     s_hold = on;
 }
+void cali_session_connect_now(void) { printf("CONNECT_NOW\n"); }
 int cali_ac_ignition(void) { return s_ign; }
 int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now, cali_ctl_done_t done,
                     const char **reason, const char *src) {

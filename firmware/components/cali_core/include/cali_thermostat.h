@@ -70,7 +70,8 @@
  *    refused without ``confirm: true``; a value outside its range (target 500..3000 in steps of 50,
  *    run time 10..120 min, ``min_level`` 1..10, ``batt_min_dv`` 100..150, periods and times above
  *    0, gains not below 0) shall be refused before anything changes; a ``rev`` other than the current
- *    one shall be refused; every accepted POST shall count ``rev``. The settings, the target, the
+ *    one shall be refused, except for a body that is only ``mode`` ``OFF`` (a stop is never blocked);
+ *    every accepted POST shall count ``rev``. The settings, the target, the
  *    aliases and ``outside_on`` shall persist in kv ``th_cfg``, the switch in ``th_on``, the mode
  *    never. ``/api/state`` shall carry ``device.thermostat`` (``mode``, ``target``, ``t_ref``,
  *    ``level``, ``reason``) only while a reference thermometer is selected.
@@ -327,8 +328,15 @@ void cali_thermo_run_init(void);
  */
 void cali_thermo_run_tick(uint64_t now_ms);
 
+/** Longest wait of an AUTO request from OFF for the link it woke, ms; then the step answers it. */
+#define CALI_THERMO_LINK_WAIT_MS 30000u
+
 /**
  * @brief Pass an owner request to the next step (once).
+ *
+ * "AUTO" with the feature on also asks the session to connect now (cali_session_connect_now): with the
+ * link down, a request from mode OFF waits up to CALI_THERMO_LINK_WAIT_MS for a ready link before the step answers it.
+ *
  * @param mode  "AUTO" or "OFF".
  * @return 0, or -1 for another text.
  */
@@ -423,7 +431,8 @@ enum cali_thermo_err_e {
 /**
  * @brief Check, apply and store a patch, all or nothing; count `rev` when it applied.
  *
- * Order of the checks: `rev`, the values (mode text, target, run time, aliases, settings), `confirm`.
+ * Order of the checks: `rev` (skipped for a body that is only `mode` "OFF"), the values (mode text,
+ * target, run time, aliases, settings), `confirm`.
  * A stored change goes to kv first; the switch (CALI_THERMO_ON_KEY) and an AUTO or OFF request follow.
  *
  * @param p  The patch.

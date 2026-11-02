@@ -3127,6 +3127,34 @@ def test_ignition_in_quiet_aborts_the_phase_back_to_hold(fake):
     ]
 
 
+def test_thermostat_hold_in_quiet_aborts_the_phase_with_its_own_label(fake):
+    """The thermostat's session hold in the quiet phase: the phase ends aborted like on the ignition,
+    but the record names the thermostat (``by``), not the ignition.
+
+    .. test:: the thermostat hold aborts the experiment's phase under its own label
+       :id: T_FW_BLE_EXP_THERMOSTAT
+       :links: R_FW_BLE_EXP
+    """
+    t = T + 100
+    p = t + 60000
+    q = p + WARM + 200
+    out = run(fake, *PAIRED, *READ_ALL, CLOCK, "diaghook", "> ble exp 1 00-00", "tick %d" % t, *_probe_done(p),
+              "tick %d" % q, "tick %d" % (q + 100), "hold 1", "tick %d" % (q + 200),
+              "tick %d" % (q + 200 + 10 * 60000 + 100))  # fmt: skip
+    ev = [e for e in _diag(out) if e["ev"] == "evt" and e["kind"] in ("ble_phase", "ble_mode")]
+    assert ev[2:] == [
+        {"ev": "evt", "kind": "ble_mode", "mode": "hold", "why": "thermostat"},
+        {
+            "ev": "evt",
+            "kind": "ble_phase",
+            "mode": "quiet",
+            "aborted": True,
+            "dur_ms": 200,
+            "by": "thermostat",
+        },
+    ]
+
+
 GONE = 185000  # CALI_BX_GONE_MS (test_ble_exp checks it against the sensor scan period + window)
 
 

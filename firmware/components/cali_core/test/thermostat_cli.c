@@ -75,8 +75,7 @@ static void sensor_read(cali_thermo_sensor_t *s) {
     next();
     s->alias[0] = '\0';
     if (!none()) {
-        strncpy(s->alias, tok, CALI_THERMO_ALIAS_LEN - 1);
-        s->alias[CALI_THERMO_ALIAS_LEN - 1] = '\0';
+        snprintf(s->alias, sizeof s->alias, "%.*s", (int)sizeof s->alias - 1, tok);
     }
     s->value = i32();
     s->age_ms = i64();
@@ -197,7 +196,7 @@ int main(int argc, char **argv) {
             in.batt2_dv = i32();
             in.cmd_what = what();
             next();
-            strncpy(res, tok, sizeof res - 1);
+            snprintf(res, sizeof res, "%.*s", (int)sizeof res - 1, tok);
             in.cmd_result = none() ? NULL : res;
 
             st.mode = name(cali_thermo_mode_names, 4);

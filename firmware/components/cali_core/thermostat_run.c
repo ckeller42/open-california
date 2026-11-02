@@ -34,6 +34,7 @@ static cali_thermo_out_t s_out;     /* the last step's output (status) */
 static const char *s_reason;        /* the last reason that was not NULL */
 static int s_on, s_req, s_due;
 static uint64_t s_next;
+static uint64_t s_link_wait;        /* an AUTO tap waits for the link it woke until this uptime; 0 = not yet */
 /* the batch going out: s_cmds[s_i] is in flight while s_wait */
 static cali_thermo_cmd_t s_cmds[CALI_THERMO_MAX_CMDS];
 static int s_n, s_i, s_wait;
@@ -305,6 +306,12 @@ void cali_thermo_run_init(void) {
 
 void cali_thermo_run_tick(uint64_t now_ms) {
     if (s_wait || s_n) return;   /* a batch is going out: its done callback sends the next */
+    /* an AUTO tap from OFF woke the link (cali_thermo_request): give it time to come up, then step */
+    if (s_req == CALI_THERMO_REQ_AUTO && s_on && S.mode == CALI_THERMO_OFF && !cali_session_ready()) {
+        if (!s_link_wait) s_link_wait = now_ms + CALI_THERMO_LINK_WAIT_MS;
+        if (now_ms < s_link_wait) return;
+    }
+    s_link_wait = 0;
     if (!s_due && now_ms < s_next) return;
     s_due = 0;
     s_next = now_ms + (uint64_t)C.s.period_ms;
@@ -313,9 +320,12 @@ void cali_thermo_run_tick(uint64_t now_ms) {
 }
 
 int cali_thermo_request(const char *mode) {
-    if (strcmp(mode, "AUTO") == 0) s_req = CALI_THERMO_REQ_AUTO;
-    else if (strcmp(mode, "OFF") == 0) s_req = CALI_THERMO_REQ_OFF;
+    if (strcmp(mode, "AUTO") == 0) {
+        s_req = CALI_THERMO_REQ_AUTO;
+        if (s_on) cali_session_connect_now();   /* the idle policy may have the link down: wake it for the tap */
+    } else if (strcmp(mode, "OFF") == 0) s_req = CALI_THERMO_REQ_OFF;
     else return -1;
+    s_link_wait = 0;
     s_due = 1;
     return 0;
 }
@@ -427,7 +437,9 @@ int cali_thermo_apply(const cali_thermo_patch_t *p) {
     cali_thermo_run_cfg_t n = C;
     unsigned h = p->has;
     int auto_req = 0;
-    if ((h & CALI_THERMO_P_REV) && p->rev != (int64_t)s_rev) return CALI_THERMO_E_STALE;
+    /* a body that is only mode OFF (+ rev) is never blocked by a stale rev: a stop always goes through */
+    int plain_off = (h & ~(unsigned)CALI_THERMO_P_REV) == CALI_THERMO_P_MODE && strcmp(p->mode, "OFF") == 0;
+    if ((h & CALI_THERMO_P_REV) && !plain_off && p->rev != (int64_t)s_rev) return CALI_THERMO_E_STALE;
     if (h & CALI_THERMO_P_MODE) {
         if (strcmp(p->mode, "AUTO") == 0) auto_req = 1;
         else if (strcmp(p->mode, "OFF") != 0) return CALI_THERMO_E_VALUE;

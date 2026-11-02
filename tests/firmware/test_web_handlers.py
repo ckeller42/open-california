@@ -3094,6 +3094,21 @@ def test_post_stale_rev_409(web_cli):
     assert (rs[4].json()["rev"], rs[4].json()["target"]) == (2, 2100)
 
 
+def test_post_plain_off_skips_the_rev_check(web_cli):
+    """A body that is only ``mode`` ``OFF`` is never blocked by a stale ``rev``; anything more still is."""
+    rs, _ = drive(
+        web_cli,
+        [*(s.encode() for s in STATION),
+         req("POST", "/api/thermostat", '{"rev":7,"mode":"OFF"}'),
+         req("POST", "/api/thermostat", '{"rev":7,"mode":"OFF","target":2100}'),
+         req("POST", "/api/thermostat", '{"rev":7,"mode":"AUTO","confirm":true}'),
+         req("POST", "/api/thermostat", '{"mode":"OFF"}')],
+    )  # fmt: skip
+    assert rs[0].status == 200 and rs[0].json()["rev"] == 1
+    assert [r.status for r in rs[1:3]] == [409, 409]
+    assert rs[3].status == 200 and rs[3].json()["rev"] == 2
+
+
 def test_post_unknown_sensor_400(web_cli):
     """``ref``/``backup``/``out`` name a configured Govee; ``null`` clears; the alias is stored."""
     rs, _ = drive(web_cli, [*(s.encode() for s in STATION),

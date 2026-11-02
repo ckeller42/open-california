@@ -1026,12 +1026,12 @@ try-lock: a concurrent caller, a full queue or a body that does not fit `CALI_SD
 | `evt` `panic` | right after `boot`, when the previous boot panicked (`R_FW_PANIC_CAPTURE`, below) | `task` (the task running on the panicking core), `reason` (the exception, or abort()/assert's details; <= 47 chars), `bt` (up to 16 backtrace PCs, innermost first, space-separated bare hex) |
 | `evt` `link_up` | link encrypted (session.c) | `reconnect_ms` (down -> up; `null` for the first link of a boot), `attempts` (`connect_bonded` calls since) |
 | `evt` `link_down` | an up link went | `reason` (`disconnected`/`connect_fail`/`enc_fail`/`heartbeat`/`discover`/`connect_timeout`/`enc_timeout`/`ble_off`/`rest`/`stop`; `rest` = the satellite dropped a rest probe's link after its read pass), `status` (the transport status: NimBLE, HCI = 0x200 + code, e.g. 531 = 0x13), `dur_ms` |
-| `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why`: `console` (`ble mode`), `api` (`POST /api/ble`), `command` (a control command in `quiet`/`off`), `connect` (`POST /api/ble` `connect`), `pairing`, `exp` (an experiment phase starts), `exp_abort` (a phase cut short), `exp_off` (`ble exp off`), `idle` (the idle policy, `R_FW_BLE_IDLE`) |
+| `evt` `ble_mode` | the BLE link mode changed (session.c, [BLE modes](#ble-modes-r_fw_ble_mode)) | `mode` (`hold`/`quiet`/`off`), `why`: `console` (`ble mode`), `api` (`POST /api/ble`), `command` (a control command in `quiet`/`off`), `connect` (`POST /api/ble` `connect`), `pairing`, `exp` (an experiment phase starts), `exp_abort` (a phase cut short), `thermostat` (the thermostat holds the session), `exp_off` (`ble exp off`), `idle` (the idle policy, `R_FW_BLE_IDLE`) |
 | `evt` `ble_idle` | the idle policy was set (`POST /api/ble` `idle_min`; ble_exp_run.c, `R_FW_BLE_IDLE`) | `probe_min` (0 = hold) |
 | `evt` `ble_rest` | the rest poll was set (`POST /api/ble` `rest_poll_min`; ble_exp_run.c, `R_FW_BLE_REST`) | `poll_min` (0 = no probe) |
 | `evt` `rest` | the power-save rest began or ended (session.c, `R_FW_BLE_REST`) | `on` (bool), `why`: `camping_off` (entered), `command`, `connect`, `unit_state` (a rest probe read camping on, shore power or the ignition on), `pairing`, `stop` |
 | `evt` `ble_exp` | the BLE experiment started / stopped (ble_exp_run.c, `R_FW_BLE_EXP`) | `on` (bool); on start also `phase_min`, `from`, `to` (Berlin local hours) |
-| `evt` `ble_phase` | an experiment phase ended (also: stopped or restarted mid-phase) | `mode` (the phase: `hold`/`quiet`/`off`), `aborted` (bool: cut short by a viewer, a mode change from outside — a command in `quiet`/`off`, the console, `/api/ble`, also during the probe —, the ignition on an up link, the window's end, `ble exp off` or a new `ble exp`; `false` = ran its length, probe done), `dur_ms` (the phase's span: a `hold` phase logs no `ble_mode` at its start) |
+| `evt` `ble_phase` | an experiment phase ended (also: stopped or restarted mid-phase) | `mode` (the phase: `hold`/`quiet`/`off`), `aborted` (bool: cut short by a viewer, a mode change from outside — a command in `quiet`/`off`, the console, `/api/ble`, also during the probe —, the ignition on an up link, the thermostat's session hold, the window's end, `ble exp off` or a new `ble exp`; `false` = ran its length, probe done), `dur_ms` (the phase's span: a `hold` phase logs no `ble_mode` at its start), `by` (only `thermostat`: the thermostat's session hold cut it short, not the ignition) |
 | `evt` `unit_adv` | the bonded unit's own advert, while an experiment runs (ble_exp_run.c, `R_FW_BLE_EXP`): first seen in a sensor window, or gone (no sighting for `CALI_BX_GONE_MS` = 3 sensor scan periods + one window, 185 s) | `seen` (bool; never the address) |
 | `evt` `probe` | a probe ended (or the experiment's phase-end / the idle policy's probe was refused: `ok` false, `reason` `refused`) | `ok` (bool), `mode` (the mode it returns to), `reason` (`read_all` on success, else the failure: `connect_timeout`/`connect_fail`/`enc_timeout`/`enc_fail`/`disconnected`/`discover`/`heartbeat`) |
 | `evt` `wifi_up` / `wifi_down` | station online / lost (wifi_run.c) | `rssi`, `ip_changed` (bool, never the address) / `reason` `lost`, `rssi`, `dur_ms` |
@@ -1224,6 +1224,10 @@ these hold; otherwise the step answers `AUTO_REFUSED_<WHY>` and sends nothing:
 7. With the heater off: the reference is not more than `band_hi` above the target. A start would
    soon end again with `TARGET_EXCEEDED_AT_MIN_LEVEL` or `OVERHEAT`. Taking over a running heater is
    not affected.
+
+With the feature on and the link down (for example after the idle policy let it go), the AUTO request
+first wakes the link and waits up to 30 s (`CALI_THERMO_LINK_WAIT_MS`) for it; only then are the
+conditions checked, so the tap does not end in `AUTO_REFUSED_NO_LINK` while the link comes up.
 
 If a safety stop (overheat, target exceeded, low battery, feature switched off) is still pending or
 waits for the link, a new AUTO request is ignored with `STOPPING`. The owner's own pending stop is

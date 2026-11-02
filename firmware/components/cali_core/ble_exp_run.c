@@ -22,14 +22,16 @@ static uint64_t s_adv_at;     /* ... at this now_ms */
 static int s_adv_mode = -1;   /* the session mode the gone below was armed in */
 static int s_adv_armed;       /* a gone was logged in s_adv_mode: a reappearance there is a wake */
 
-static void phase_evt(int mode, int aborted, uint64_t now_ms) {
-    cali_diag_evt("ble_phase", "\"mode\":\"%s\",\"aborted\":%s,\"dur_ms\":%llu", cali_session_mode_name(mode),
-                  aborted ? "true" : "false", (unsigned long long)(now_ms - s_phase_at));
+/* by: what cut the phase short when it was not a viewer, a command or the ignition ("thermostat"), or NULL */
+static void phase_evt(int mode, int aborted, uint64_t now_ms, const char *by) {
+    cali_diag_evt("ble_phase", "\"mode\":\"%s\",\"aborted\":%s,\"dur_ms\":%llu%s%s%s", cali_session_mode_name(mode),
+                  aborted ? "true" : "false", (unsigned long long)(now_ms - s_phase_at), by ? ",\"by\":\"" : "",
+                  by ? by : "", by ? "\"" : "");
 }
 
 /* a stop or a restart while a phase runs: log that phase (aborted) first, so the report keeps it */
 static void end_running_phase(void) {
-    if (s_bx.on && s_bx.want >= 0) phase_evt(s_bx.want, 1, s_tick_at);
+    if (s_bx.on && s_bx.want >= 0) phase_evt(s_bx.want, 1, s_tick_at, NULL);
 }
 
 int cali_ble_exp_start(unsigned phase_min, int from_h, int to_h) {
@@ -124,14 +126,15 @@ void cali_ble_exp_init(void) {
     cali_session_set_rest_poll(min);
 }
 
-static void exp_tick(uint64_t now_ms, int ign);
+static void exp_tick(uint64_t now_ms, int ign, int held);
 
 void cali_ble_exp_tick(uint64_t now_ms) {
     s_tick_at = now_ms;
     /* the van's ignition (terminal 15) on an up link (also a probe's): activity, every tick while on */
-    int ign = (cali_session_link_up() && cali_ac_ignition() == 1) || cali_session_held();   /* + the thermostat */
-    if (ign) cali_bi_activity(&s_bi);
-    if (s_bx.on) exp_tick(now_ms, ign);
+    int ign = cali_session_link_up() && cali_ac_ignition() == 1;
+    int held = cali_session_held();   /* the thermostat holds the session: activity too, under its own label */
+    if (ign || held) cali_bi_activity(&s_bi);
+    if (s_bx.on) exp_tick(now_ms, ign, held);
     cali_bi_out_t io = cali_bi_step(&s_bi, now_ms, cali_session_mode(), cali_session_probing(), s_bx.on);
     if (io.set_mode >= 0) (void)cali_session_set_mode(io.set_mode, "idle");
     /* in the power-save rest only its own poll wakes the unit (R_FW_BLE_REST) */
@@ -142,17 +145,18 @@ void cali_ble_exp_tick(uint64_t now_ms) {
     }
 }
 
-static void exp_tick(uint64_t now_ms, int ign) {
+static void exp_tick(uint64_t now_ms, int ign, int held) {
     int64_t ts;
     int hour = cali_time_ts(&ts) == CALI_TSRC_NONE ? -1 : cali_time_berlin_hour(ts);
     /* the ignition: like a viewer, every tick while it is on, so a night drive never reaches the next
      * phase (off: the unit's advert, adv_transition) */
-    if (ign) cali_bx_activity(&s_bx, now_ms);
+    if (ign || held) cali_bx_activity(&s_bx, now_ms);
     adv_transition(cali_bx_seen(&s_bx, now_ms, 0), now_ms);   /* the gone check; off: the advert's wake */
     cali_bx_out_t o = cali_bx_step(&s_bx, now_ms, hour, cali_session_mode(), cali_session_probing());
-    if (o.done_mode >= 0) phase_evt(o.done_mode, o.aborted, now_ms);
+    const char *by = o.aborted && held && !ign ? "thermostat" : NULL;
+    if (o.done_mode >= 0) phase_evt(o.done_mode, o.aborted, now_ms, by);
     if (o.started >= 0) s_phase_at = now_ms;
-    if (o.set_mode >= 0) (void)cali_session_set_mode(o.set_mode, o.aborted ? "exp_abort" : "exp");
+    if (o.set_mode >= 0) (void)cali_session_set_mode(o.set_mode, by ? by : o.aborted ? "exp_abort" : "exp");
     if (o.probe && !cali_session_rest() && cali_session_probe() != 0) {
         cali_log("ble-exp: probe refused");
         cali_diag_evt("probe", "\"ok\":false,\"mode\":\"%s\",\"reason\":\"refused\"",

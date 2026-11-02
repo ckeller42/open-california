@@ -27,8 +27,9 @@
  *    long, with a probe at the end of every phase; outside the window the mode is ``hold``. Without a
  *    wall clock it is refused (``no_time``). A viewer (``GET /api/state``, or the page load ``GET /`` / ``/app``), a mode change from outside
  *    (a control command in ``quiet`` or ``off``, ``ble mode``, ``/api/ble``, pairing — also while the
- *    phase-end probe runs) or, on an up link, the van's ignition (terminal 15, ``cali_ac_ignition``)
- *    ends the running phase as ``aborted`` and returns to ``hold``; the cycle then holds 10 min
+ *    phase-end probe runs), on an up link the van's ignition (terminal 15, ``cali_ac_ignition``), or the
+ *    thermostat's session hold (``cali_session_held``; logged with ``by`` ``thermostat``) ends the running
+ *    phase as ``aborted`` and returns to ``hold``; the cycle then holds 10 min
  *    (``CALI_BX_IDLE_MS``, renewed by every further viewer poll and every tick with the ignition on, so a
  *    night drive never reaches the next phase) and goes on with the next phase. The unit's own advert is
  *    the sleep indicator: a sensor window (``sensors on`` only — no window runs otherwise) that sees an

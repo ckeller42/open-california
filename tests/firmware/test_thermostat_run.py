@@ -135,3 +135,22 @@ def test_batch_rest_dropped_after_switch_off_or_off_request(cli, tmp_path, cut):
     )
     s = submits(out)
     assert s[0] == "runtime 120" and "level 6" not in s and "power on" not in s, s
+
+
+def test_auto_tap_wakes_the_link_and_waits_for_it(cli, tmp_path):
+    """An AUTO tap with the link down (the idle policy's quiet/off) asks the session to connect now and
+    waits for the ready link up to CALI_THERMO_LINK_WAIT_MS instead of answering AUTO_REFUSED_NO_LINK;
+    past that wait it is refused.
+
+    .. test:: Thermostat runner: an AUTO tap wakes the link
+       :id: T_FW_THERMOSTAT_RUN_WAKE
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(cli, tmp_path, [*SETUP, "ready 0", "auto", "tick", "now 6000", "tick", "state",
+                              "ready 1", "now 7000", "tick", "state"])  # fmt: skip
+    assert "CONNECT_NOW" in out
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert states[0]["reason"] is None and states[0]["mode"] == "OFF"  # waiting, nothing answered yet
+    assert states[1]["mode"] == "AUTO" and submits(out) == ["runtime 120"]  # the start batch begins
+    out = run(cli, tmp_path, [*SETUP, "ready 0", "auto", "tick", "now 31000", "tick", "state"])
+    assert state(out)["reason"] == "AUTO_REFUSED_NO_LINK" and submits(out) == []
