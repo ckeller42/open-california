@@ -8,9 +8,12 @@
 import json
 import os
 
-from PIL import Image, ImageChops
+import pytest
 
-from tools import make_pwa_icons
+PIL = pytest.importorskip("PIL", reason="Pillow builds the icons; CI has none, the dev suite checks it")
+from PIL import Image, ImageChops  # noqa: E402
+
+from tools import make_pwa_icons  # noqa: E402
 
 ICONSET = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

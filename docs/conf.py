@@ -39,7 +39,7 @@ myst_heading_anchors = 3
 # no bumble, and "_bumble_link" is a bare (non-package) sibling import inside tests/ (not on
 # sys.path here, and never needs to be -- mocking the name means autodoc never has to resolve or
 # import it at all, real or otherwise).
-autodoc_mock_imports = ["bleak", "paho", "influxdb_client", "yaml", "pytest", "bumble", "_bumble_link"]
+autodoc_mock_imports = ["bleak", "paho", "influxdb_client", "yaml", "pytest", "bumble", "_bumble_link", "PIL"]
 autodoc_default_options = {"members": True, "undoc-members": False}
 
 # --- sphinx-needs -----------------------------------------------------------

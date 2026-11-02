@@ -310,6 +310,7 @@ final class CamperStore {
         await session.forgetUnit()
         state = CamperState()
         bond = .notPaired
+        link = await session.link  // at once, not only through the update stream: "not paired"
         if let saveURL { try? FileManager.default.removeItem(at: saveURL) }
     }
 
