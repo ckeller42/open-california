@@ -33,6 +33,10 @@ public actor FakeCamperTransport: CamperTransport {
 
     /// Every write attempt, in order, including a rejected one.
     public private(set) var writes: [Write] = []
+    /// Every subscribe call's chars, in call order (the order a session subscribes in).
+    public private(set) var subscribeCalls: [[UInt16]] = []
+    /// Every read, in order.
+    public private(set) var reads: [UInt16] = []
 
     public init(
         clock: any Clock<Duration> = ContinuousClock(), frames: [UInt16: [UInt8]] = [:],
@@ -183,6 +187,7 @@ public actor FakeCamperTransport: CamperTransport {
 
     public func read(_ char: UInt16) throws -> [UInt8] {
         guard connected else { throw TransportError.notConnected }
+        reads.append(char)
         guard let f = frames[char] else { throw TransportError.noSuchChar(char) }
         return f
     }
@@ -225,6 +230,7 @@ public actor FakeCamperTransport: CamperTransport {
     /// Like the real unit, sends nothing on subscribe: the caller must `read` each char.
     public func subscribe(_ chars: [UInt16]) throws {
         guard connected else { throw TransportError.notConnected }
+        subscribeCalls.append(chars)
         subscribed.formUnion(chars)
     }
 

@@ -174,13 +174,12 @@ public actor CamperSession {
     /// The user cancelled the first pairing: its link ends, and with it the pick.
     public func cancelPairing() async { await transport.cancel() }
 
-    /// Reads every state function once; each frame replaces that function's last one.
-    /// A function whose read fails (not offered by the unit) is skipped.
-    public func readAll() async throws {
+    /// Reads every state function of the unit's variant once (general first, then by name); each
+    /// frame replaces that function's last one. A function whose read fails (not offered by the
+    /// unit) is skipped. `skip` leaves out chars this link has just read.
+    public func readAll(skip: Set<UInt16> = []) async throws {
         guard link == .up else { throw SessionError.unreachable }
-        // general first: it carries the protocol gate.
-        let order = CamperGATT.stateChars.sorted { $0.key == "general" || ($1.key != "general" && $0.key < $1.key) }
-        for (_, char) in order {
+        for (_, char) in CamperGATT.stateChars(forVariant: carVariant) where !skip.contains(char) {
             do {
                 store(char, try await transport.read(char))
             } catch TransportError.notConnected {
@@ -257,12 +256,19 @@ public actor CamperSession {
 
     private func subscribeAndRead() async throws {
         let gen = linkGen
+        // 1004 first, as the app and the satellite: its CarVariant decides which functions this unit
+        // has (no frame: every function). The same gated list, in one order, is subscribed and read.
+        var skip: Set<UInt16> = []
+        if let v = try? await transport.read(CamperGATT.auth) {
+            store(CamperGATT.auth, v)
+            skip.insert(CamperGATT.auth)
+        }
         do {
-            try await transport.subscribe(Array(CamperGATT.stateChars.values))
+            try await transport.subscribe(CamperGATT.stateChars(forVariant: carVariant).map(\.char))
         } catch {
             throw SessionError.unreachable
         }
-        try await readAll()
+        try await readAll(skip: skip)
         guard gen == linkGen, link == .up, !Task.isCancelled else { throw SessionError.unreachable }
         ready = true
         publish()
@@ -397,6 +403,9 @@ public actor CamperSession {
         else { return false }
         return shore != "active" && shore != "standby"
     }
+
+    /// The unit's vehicle variant from its 1004 frame (`CarVariant`); nil while there is none.
+    private var carVariant: Int? { state.fields["vehicle"]?["CarVariant"].map { Int($0) } }
 
     /// auto_camper_run.c `cali_ac_ignition() == 0`: `vehicle` TerminalOneFive and `campingmode` Enable
     /// are both 0 where known, and at least one is known. While driving, a hang-up is no rest.

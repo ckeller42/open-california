@@ -31,7 +31,10 @@ temperature, so the cockpit shows fresh water and solar only.
 :tags: ios
 
 The app connects to the camper unit directly over Bluetooth Low Energy ({term}`CoreBluetooth`). It needs
-no satellite, no Pi and no network for any phase-1 function.
+no satellite, no Pi and no network for any phase-1 function. On each link it reads `1004` first, then
+subscribes to and reads only the functions of the unit's vehicle variant (`CarVariant`), in one fixed
+order (`general` first, then by name), as the vendor app and the satellite do; without a `1004` frame
+it takes every function. The gate is the satellite's own C function (`cali_variant_has`).
 ```
 
 ```{req} Guided first pairing
