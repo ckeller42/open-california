@@ -441,7 +441,7 @@ jobs:
     needs: ios-changes
     if: needs.ios-changes.outputs.ios == 'true'
     runs-on: xcode-27
-    timeout-minutes: 80
+    timeout-minutes: 90
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
@@ -484,17 +484,27 @@ jobs:
       - name: Generate the Xcode project
         if: ${{ !cancelled() }}   # also after a sanitizer failure: the app tests are separate evidence
         run: xcodegen generate --spec ios/project.yml
-      - name: App tests on the simulator (unit, snapshot, UI)
+      # Two steps, each with its own limit: slow UI tests must not cut off the unit and snapshot
+      # tests. The first step builds; the second reuses that build.
+      - name: App unit and snapshot tests on the simulator
         if: ${{ !cancelled() }}   # also after a sanitizer failure: the app tests are separate evidence
-        timeout-minutes: 40   # xcodebuild can hang after the UI tests
+        timeout-minutes: 25
         env:
           TEST_RUNNER_SNAPSHOT_ARTIFACTS: ${{ runner.temp }}/snapshot-diffs
         run: |
           set -o pipefail
           xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
-            -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' -only-testing:AppTests \
+            -resultBundlePath "$RUNNER_TEMP/AppTests.xcresult" | xcbeautify
+      - name: App UI tests on the simulator
+        if: ${{ !cancelled() }}   # also after a failed unit or snapshot test
+        timeout-minutes: 35   # xcodebuild can hang after the UI tests
+        run: |
+          set -o pipefail
+          xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' -only-testing:AppUITests \
             -test-timeouts-enabled YES -maximum-test-execution-time-allowance 600 \
-            -resultBundlePath "$RUNNER_TEMP/Camper.xcresult" | xcbeautify
+            -resultBundlePath "$RUNNER_TEMP/AppUITests.xcresult" | xcbeautify
       # The linters after the tests (also when a test failed): a lint finding must not hide the test
       # result.
       - name: SwiftLint
@@ -510,6 +520,7 @@ jobs:
           name: ios-test-results
           path: |
             ${{ runner.temp }}/snapshot-diffs
-            ${{ runner.temp }}/Camper.xcresult
+            ${{ runner.temp }}/AppTests.xcresult
+            ${{ runner.temp }}/AppUITests.xcresult
             ${{ runner.temp }}/sanitize-sample-*.txt
           if-no-files-found: ignore

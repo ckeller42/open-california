@@ -8,7 +8,8 @@ import XCTest
 ///
 /// Actions: `<function>.<what>.<on|off>` for a switch, `lighting.profile.<1|5|6|7>` for a favourite,
 /// `link.live` (wait for a live link, tapping "Tap to connect" when it shows) and `link.lost` (the
-/// link must leave "live" once the fake unit is gone).
+/// link must leave "live" once the fake unit is gone), and `device.autolock.<choice>` (sets the
+/// iPhone's Auto-Lock, so a long lab run is not stopped by a locked iPhone).
 final class LabControlUITests: XCTestCase {
     /// The cockpit tile and the switch label of each switch action.
     private static let switches: [String: (tile: String, label: String)] = [
@@ -42,6 +43,40 @@ final class LabControlUITests: XCTestCase {
         return live.exists
     }
 
+    /// `device.autolock.<choice>`: Settings → Display & Brightness → Auto-Lock → the choice (English
+    /// or German Settings), so a lab run is not stopped by a locked iPhone. `<choice>` is the row's
+    /// label, for example `Never`/`Nie` or `30 Seconds`.
+    @MainActor
+    private func setAutoLock(_ choice: String) throws {
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        settings.launch()
+        func tapFirst(_ labels: [String]) -> Bool {
+            for _ in 0..<6 {
+                for label in labels {
+                    let cell = settings.staticTexts[label].firstMatch
+                    if cell.exists && cell.isHittable {
+                        cell.tap()
+                        return true
+                    }
+                }
+                settings.swipeUp()
+            }
+            return false
+        }
+        // Back to the root of Settings first.
+        while settings.navigationBars.buttons.element(boundBy: 0).exists
+            && settings.navigationBars.buttons.element(boundBy: 0).isHittable
+        {
+            settings.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+        XCTAssertTrue(tapFirst(["Display & Brightness", "Anzeige & Helligkeit"]), "Display & Brightness")
+        XCTAssertTrue(tapFirst(["Auto-Lock", "Automatische Sperre"]), "Auto-Lock")
+        let names = choice == "Never" || choice == "Nie" ? ["Never", "Nie"] : [choice]
+        XCTAssertTrue(tapFirst(names), choice)
+        shot(settings, "auto-lock")
+        settings.terminate()
+    }
+
     @MainActor
     func testLabAction() throws {
         guard let action = ProcessInfo.processInfo.environment["LAB_ACTION"], !action.isEmpty else {
@@ -49,6 +84,10 @@ final class LabControlUITests: XCTestCase {
         }
         let parts = action.split(separator: ".").map(String.init)
         XCTAssertEqual(parts.count, 3, "action \(action)")
+        if parts[0] == "device" {
+            try setAutoLock(parts[2])
+            return
+        }
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
