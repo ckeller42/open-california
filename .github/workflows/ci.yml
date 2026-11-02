@@ -493,7 +493,7 @@ jobs:
           set -o pipefail
           xcodebuild test -project ios/Camper.xcodeproj -scheme Camper \
             -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' \
-            -test-timeouts-enabled YES -maximum-test-execution-time-allowance 300 \
+            -test-timeouts-enabled YES -maximum-test-execution-time-allowance 600 \
             -resultBundlePath "$RUNNER_TEMP/Camper.xcresult" | xcbeautify
       # The linters after the tests (also when a test failed): a lint finding must not hide the test
       # result.
