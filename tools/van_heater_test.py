@@ -15,10 +15,10 @@ HOW IT TALKS TO THE VAN
   every sample, mark and verdict to one JSONL file.
 
 WRITES
-  The runner writes to the unit in exactly two steps, each behind a typed YES: `R4` (one lone
-  `runtime` write while the heater runs) and `R7` (further lone `runtime` writes that push the total
-  run past 120 min — it can raise ErrorCode 4, which blocks the heater until the van has moved at
-  ≥ 5 km/h). Both need the daemon with writes enabled: run the session through
+  The runner writes to the unit in exactly one step, behind a typed YES: `R4` (one lone `runtime`
+  write while the heater runs). It never pushes a run past the immediate-heating limits (VW's manual
+  for the T6.1: 120 min per run, 180 min in total, then the heater locks until the van has been
+  driven — ErrorCode 4). R4 needs the daemon with writes enabled: run the session through
   `bash tools/roof_test_session.sh --test tools.van_heater_test -- --run A`, which enables writes for
   the session and reverts to read-only on exit. Every other step only reads. Ctrl-C sends nothing:
   stop the heater from the app or the panel.
@@ -188,7 +188,7 @@ class Recorder:
 
 
 # --- steps -------------------------------------------------------------------
-# kind: "do" = the owner acts, then Enter; "wait" = watch for `min` minutes; "r4"/"r7" = runner writes.
+# kind: "do" = the owner acts, then Enter; "wait" = watch for `min` minutes; "r4" = the runner writes.
 # `q` is the verdict question asked at the end of the step (empty = none).
 
 RUNS: dict[str, list[dict]] = {
@@ -340,15 +340,6 @@ RUNS: dict[str, list[dict]] = {
         },
     ],
 }
-OPTIONAL = {
-    "R7": {
-        "id": "R7",
-        "kind": "r7",
-        "value": 60,
-        "say": "Push the total run past 120 min with lone runtime writes (may raise ErrorCode 4 = blocked until driving).",
-        "q": "Did ErrorCode 4 appear?",
-    },
-}
 
 
 SCALE = 1.0  # --scale: shortens every wait for a dry run against the mock
@@ -395,13 +386,6 @@ def run_step(dae: Daemon, rec: Recorder, step: dict) -> None:
         out = lone_runtime_write(
             dae, rec, step["value"], "One lone RunningTime write during a run (never sent by the app)."
         )
-    elif step["kind"] == "r7":
-        out = lone_runtime_write(
-            dae,
-            rec,
-            step["value"],
-            "This can raise ErrorCode 4: the heater then stays blocked until the van has moved at ≥ 5 km/h.",
-        )
     if step.get("q") and not out.get("skipped"):
         ans = ask("  %s [y/n]: " % step["q"]).lower()
         out.update(answer=ans, note=ask("  note (optional): "))
@@ -422,7 +406,7 @@ def preflight(dae: Daemon, run: str) -> None:
         % (meta.get("online"), meta.get("session"), meta.get("read_only"))
     )
     print("  " + status_line(sample_of(st)))
-    needs_write = any(s["kind"] in ("r4", "r7") for s in RUNS[run])
+    needs_write = any(s["kind"] == "r4" for s in RUNS[run])
     if needs_write and meta.get("read_only"):
         print(
             "  ⚠  daemon is READ-ONLY: step R4 will be refused. For R4 run\n"
@@ -444,12 +428,11 @@ def main(argv=None) -> int:
     ap.add_argument("--out", default=None, help="JSONL evidence file [~/heater-<run>-<time>.jsonl]")
     ap.add_argument("--every", type=float, default=2.0, help="sample period, s")
     ap.add_argument("--scale", type=float, default=1.0, help="multiply every wait (dry runs only)")
-    ap.add_argument("--with-r7", action="store_true", help="append the optional R7 step (ErrorCode 4 risk)")
     a = ap.parse_args(argv)
     global SCALE
     SCALE = a.scale
     dae = Daemon(a.url)
-    steps = RUNS[a.run] + ([OPTIONAL["R7"]] if a.with_r7 else [])
+    steps = RUNS[a.run]
     out = a.out or os.path.expanduser("~/heater-%s-%s.jsonl" % (a.run, time.strftime("%Y%m%d-%H%M%S")))
     preflight(dae, a.run)
     rec = Recorder(dae, out, a.every)
