@@ -11,6 +11,7 @@ Outputs (in calictl/webui/):
   icon-192.png, icon-512.png, apple-touch-icon.png        purpose "any"
   maskable-icon-192.png, maskable-icon-512.png            purpose "maskable" (content in safe zone)
   favicon-16x16.png, favicon-32x32.png, favicon.ico       browser tab
+
 And the iPhone app's icon: ios/App/Assets.xcassets/AppIcon.appiconset/AppIcon.png (1024, opaque).
 """
 
