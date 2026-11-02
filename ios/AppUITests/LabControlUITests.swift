@@ -15,6 +15,8 @@ import XCTest
 /// - `lighting.profile.<1|5|6|7>` for a favourite,
 /// - `link.live` (wait for a live link, tapping "Tap to connect" when it shows) and `link.lost` (the
 ///   link must leave "live" once the fake unit is gone),
+/// - `setup.forget.x`, `link.unpaired.x`, `setup.repair.x` (forget the unit, a fresh start that must stay
+///   unpaired, and pairing again through the guide),
 /// - `device.autolock.<choice>` (sets the iPhone's Auto-Lock, so a long lab run is not stopped by a
 ///   locked iPhone) and `device.autolock.read` (prints `LAB_AUTOLOCK=<value>`, so the driver can
 ///   restore the owner's value at the end).
@@ -211,6 +213,41 @@ final class LabControlUITests: XCTestCase {
         waitForExpectations(timeout: 20)
     }
 
+    /// `setup.forget`: Setup → "Forget this camper unit…" → "Forget"; the guide then says the app has
+    /// forgotten the unit and the pill "not paired". `setup.repair`: "Pair again…" → the guide → the
+    /// unit (iOS still holds the bond, so no passkey) → a live link again.
+    @MainActor
+    private func runSetup(_ app: XCUIApplication, _ step: String) throws {
+        app.tabBars.buttons["Setup"].tap()
+        if step == "forget" {
+            XCTAssertTrue(waitLive(app, 30), "a live link before the forget")
+            let forget = app.buttons["Forget this camper unit…"]
+            XCTAssertTrue(reveal(app, forget), "the forget button")
+            forget.tap()
+            let confirm = app.alerts.buttons["Forget"]
+            XCTAssertTrue(confirm.waitForExistence(timeout: 5), "the confirmation")
+            shot(app, "forget-confirm")
+            confirm.tap()
+            XCTAssertTrue(app.staticTexts["The app has forgotten the camper unit"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["not paired"].waitForExistence(timeout: 10), "not paired")
+            shot(app, "forgotten")
+            return
+        }
+        let again = app.buttons["Pair again…"]
+        XCTAssertTrue(reveal(app, again), "Pair again…")
+        again.tap()
+        let open = app.buttons["I'm on that screen"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10), "the guide's first step")
+        open.tap()
+        let unit = app.buttons.matching(NSPredicate(format: "label CONTAINS 'VWCAMPER'")).firstMatch
+        if unit.waitForExistence(timeout: 20) { unit.tap() }
+        let close = app.buttons["Close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 60), "the guide's done step")
+        shot(app, "repaired")
+        close.tap()
+        XCTAssertTrue(waitLive(app, 30), "a live link after pairing again")
+    }
+
     @MainActor
     func testLabAction() throws {
         guard let action = ProcessInfo.processInfo.environment["LAB_ACTION"], !action.isEmpty else {
@@ -227,7 +264,19 @@ final class LabControlUITests: XCTestCase {
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
 
+        if parts[0] == "setup" {
+            try runSetup(app, parts[1])
+            return
+        }
         if parts[0] == "link" {
+            if parts[1] == "unpaired" {
+                // A fresh start after a forget: the app must not reach the old unit by itself.
+                XCTAssertTrue(app.staticTexts["not paired"].waitForExistence(timeout: 15), "not paired")
+                sleep(15)
+                XCTAssertFalse(app.staticTexts["live"].exists, "no link to the forgotten unit")
+                shot(app, "link-unpaired")
+                return
+            }
             if parts[1] == "lost" {
                 let live = app.staticTexts["live"]
                 let gone = NSPredicate(format: "exists == false")
