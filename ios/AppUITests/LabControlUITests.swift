@@ -16,7 +16,8 @@ import XCTest
 /// - `link.live` (wait for a live link, tapping "Tap to connect" when it shows) and `link.lost` (the
 ///   link must leave "live" once the fake unit is gone),
 /// - `device.autolock.<choice>` (sets the iPhone's Auto-Lock, so a long lab run is not stopped by a
-///   locked iPhone).
+///   locked iPhone) and `device.autolock.read` (prints `LAB_AUTOLOCK=<value>`, so the driver can
+///   restore the owner's value at the end).
 final class LabControlUITests: XCTestCase {
     /// Where an action's control is: a cockpit tile or a tab.
     enum Screen {
@@ -121,6 +122,7 @@ final class LabControlUITests: XCTestCase {
     /// `device.autolock.<choice>`: Settings → Display & Brightness → Auto-Lock → the choice (English
     /// or German Settings), so a lab run is not stopped by a locked iPhone. `<choice>` is the row's
     /// label, for example `Never`/`Nie` or `30 Seconds`.
+    /// `read` prints the current value as `LAB_AUTOLOCK=<value>` and changes nothing.
     @MainActor
     private func setAutoLock(_ choice: String) throws {
         let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
@@ -145,7 +147,21 @@ final class LabControlUITests: XCTestCase {
             settings.navigationBars.buttons.element(boundBy: 0).tap()
         }
         XCTAssertTrue(tapFirst(["Display & Brightness", "Anzeige & Helligkeit"]), "Display & Brightness")
-        XCTAssertTrue(tapFirst(["Auto-Lock", "Automatische Sperre"]), "Auto-Lock")
+        let rowNames = ["Auto-Lock", "Automatische Sperre"]
+        if choice == "read" {
+            // The row shows its name and the current value; the driver keeps the value to restore it.
+            let row = settings.cells.containing(
+                NSPredicate(format: "label IN %@", rowNames)
+            ).firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 5), "Auto-Lock row")
+            let texts = row.staticTexts.allElementsBoundByIndex.map(\.label).filter { !rowNames.contains($0) }
+            let value = texts.first ?? (row.value as? String ?? "")
+            print("LAB_AUTOLOCK=\(value)")
+            shot(settings, "auto-lock-read")
+            settings.terminate()
+            return
+        }
+        XCTAssertTrue(tapFirst(rowNames), "Auto-Lock")
         let names = choice == "Never" || choice == "Nie" ? ["Never", "Nie"] : [choice]
         XCTAssertTrue(tapFirst(names), choice)
         shot(settings, "auto-lock")
