@@ -333,8 +333,11 @@ extension XCUIApplication {
         for _ in 0..<passes.count { swipeDown() }
     }
 
-    /// The bottom edge of the lowest labelled element inside the first scroll view (or list) of the
-    /// screen; the navigation bar, the tab bar and the toolbar are outside it. `nil` without a
+    /// The bottom edge of the lowest labelled content element (text, image, control) inside the first
+    /// scroll view (or list) of the screen; the navigation bar, the tab bar and the toolbar are
+    /// outside it. Not the scroll view's own scroll bar: it is an `other` element inside the scroll
+    /// view while it shows, and its bottom edge does not move with the content (measured on bar
+    /// 2026-11-03: 791 pt on every page, so two drags compared the bar with itself). `nil` without a
     /// scroll view.
     @MainActor
     private func contentBottom() -> CGFloat? {
@@ -344,7 +347,7 @@ extension XCUIApplication {
             return e.children.lazy.compactMap(scroller).first
         }
         func lowest(_ e: XCUIElementSnapshot) -> CGFloat? {
-            let own = e.label.isEmpty ? nil : e.frame.maxY
+            let own = e.label.isEmpty || e.elementType == .other ? nil : e.frame.maxY
             return (e.children.compactMap(lowest) + [own].compactMap { $0 }).max()
         }
         return scroller(s).flatMap(lowest)
