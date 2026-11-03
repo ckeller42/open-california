@@ -44,7 +44,7 @@ struct DeviceStatusView: View {
 }
 
 /// A label and its value, read as one element.
-private struct StatusRow: View {
+struct StatusRow: View {
     let label: LocalizedStringResource
     let value: LocalizedStringResource
     /// A symbol after the value, not read by VoiceOver.

@@ -17,7 +17,16 @@ struct SetupView: View {
             DeviceStatusView(store: store)
             PairingGuideView(store: store, guide: guide)
             TraceCard()
-                .padding(.bottom, 44)  // the last card clears the tab bar's blur band
+            NavigationLink {
+                DiagnosticsView(store: store)
+            } label: {
+                Label("Diagnostics", systemImage: "stethoscope")
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .padding(.horizontal)
+                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+            }
+            .accessibilityIdentifier("setup.diagnostics")
+            .padding(.bottom, 44)  // the last card clears the tab bar's blur band
         }
     }
 }

@@ -443,6 +443,23 @@
         }
       }
     },
+    "App version": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App-Version"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App version"
+          }
+        }
+      }
+    },
     "Applied": {
       "extractionState": "manual",
       "localizations": {
@@ -1123,6 +1140,23 @@
         }
       }
     },
+    "Crash and hang reports": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Absturz- und Hängeberichte"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash and hang reports"
+          }
+        }
+      }
+    },
     "D": {
       "extractionState": "manual",
       "localizations": {
@@ -1204,6 +1238,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Delete trace"
+          }
+        }
+      }
+    },
+    "Diagnostics": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnose"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnostics"
           }
         }
       }
@@ -1361,6 +1412,23 @@
         }
       }
     },
+    "Export diagnostics": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnose teilen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export diagnostics"
+          }
+        }
+      }
+    },
     "Export trace": {
       "extractionState": "manual",
       "localizations": {
@@ -1510,6 +1578,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fill level sensor in waste water tank. Please visit a workshop."
+          }
+        }
+      }
+    },
+    "For a bug report: the app's log since it started, crash and hang reports, and the Bluetooth trace if one is recorded. No location, no names.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für eine Fehlermeldung: das Protokoll der App seit ihrem Start, Absturz- und Hängeberichte und der Bluetooth-Mitschnitt, falls einer aufgezeichnet ist. Kein Ort, keine Namen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For a bug report: the app's log since it started, crash and hang reports, and the Bluetooth trace if one is recorded. No location, no names."
           }
         }
       }
@@ -4264,6 +4349,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "error"
+          }
+        }
+      }
+    },
+    "iOS version": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS-Version"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS version"
           }
         }
       }

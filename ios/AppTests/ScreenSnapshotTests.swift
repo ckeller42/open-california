@@ -229,6 +229,19 @@ struct ScreenSnapshotTests {
         check(NavigationStack { SetupView(store: CamperStore.preview(.staleRestore, now: Self.now)) }, "setup-stale")
     }
 
+    /// Setup → Diagnostics, with no crash report and no trace (a fresh install).
+    ///
+    /// - Test: T_IOS_SNAPSHOT_DIAGNOSTICS
+    /// - Verifies: R_IOS_TESTED, R_IOS_LOOK, R_IOS_I18N, R_IOS_NO_VIN
+    @Test func diagnosticsSnapshot() {
+        UserDefaults.standard.removeObject(forKey: CamperStore.traceKey)
+        let sink = MetricKitSink(folder: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
+        let view = NavigationStack { DiagnosticsView(store: CamperStore.preview(.parked, now: Self.now), sink: sink) }
+        check(view, "diagnostics")
+        snap(view, "diagnostics-de", locale: Locale(identifier: "de_DE"))
+        snap(view, "diagnostics-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: 1600))
+    }
+
     /// The feedback banner sits above the tab bar: it hides no control and not the pill's offline or
     /// stale state; at the largest accessibility text size too.
     ///
