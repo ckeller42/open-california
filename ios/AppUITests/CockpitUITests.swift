@@ -320,7 +320,16 @@ extension XCUIApplication {
             bottom = now
             passes.append(try settledPass(scrolled: true))
         }
-        let clean = passes.reduce(into: Set<String>()) { $0.formUnion($1.clean) }
+        var clean = passes.reduce(into: Set<String>()) { $0.formUnion($1.clean) }
+        // Each element that was exempt and never clean: scroll that one element into the clear part
+        // of the screen and audit there (a drag can stop short of the end of a page, or a bounce can
+        // leave the page where the last row sits under the tab bar).
+        for key in Set(passes.flatMap(\.exempt)).sorted() where !clean.contains(key) {
+            guard bringIntoClear(key) else { continue }
+            let pass = try settledPass(scrolled: true)
+            passes.append(pass)
+            clean.formUnion(pass.clean)
+        }
         // Measured on Lighting (the longest page): 8 such issues in one pass. More would hide real
         // text without an element.
         for p in passes where p.cutGlyphs > 8 {
@@ -331,6 +340,39 @@ extension XCUIApplication {
         }
         // Back to the top for the caller.
         for _ in 0..<passes.count { swipeDown() }
+    }
+
+    /// The clear part of the screen (see `audit(scrolled:)`): below the navigation bar and its 44 pt
+    /// band (after a scroll), above the tab bar's 44 pt band.
+    @MainActor
+    func clearRect(scrolled: Bool) -> CGRect {
+        let screen = windows.firstMatch.frame
+        let top = scrolled && navigationBars.firstMatch.exists ? navigationBars.firstMatch.frame.maxY + 44 : screen.minY
+        let bottom = tabBars.firstMatch.exists ? tabBars.firstMatch.frame.minY - 44 : screen.maxY
+        return CGRect(x: screen.minX, y: top, width: screen.width, height: max(0, bottom - top))
+    }
+
+    /// Scrolls the element of `key` (a `frames()` key) into the clear part of the screen with slow
+    /// press-drags in the left margin by the measured distance (no momentum, no bounce); at most
+    /// three tries. True when it is inside.
+    @MainActor
+    private func bringIntoClear(_ key: String) -> Bool {
+        let clear = clearRect(scrolled: true)
+        let origin = windows.firstMatch.coordinate(withNormalizedOffset: .zero)
+        for attempt in 0...3 {
+            _ = stableFrames()
+            guard let f = frames()[key] else { return false }
+            print("AUDIT bring \(key) into \(clear): at \(f), try \(attempt)")
+            if clear.contains(f) { return true }
+            if attempt == 3 { break }
+            // Positive: the content moves down. A drag stays inside the clear part.
+            let dy = max(-(clear.height - 20), min(clear.height - 20, clear.midY - f.midY))
+            let startY = dy > 0 ? clear.minY + 10 : clear.maxY - 10
+            origin.withOffset(CGVector(dx: 8, dy: startY)).press(
+                forDuration: 0.2, thenDragTo: origin.withOffset(CGVector(dx: 8, dy: startY + dy)),
+                withVelocity: .slow, thenHoldForDuration: 0.5)
+        }
+        return false
     }
 
     /// The bottom edge of the lowest labelled content element (text, image, control) inside the first
@@ -404,9 +446,7 @@ extension XCUIApplication {
     @MainActor
     func audit(scrolled: Bool) throws -> AuditPass {
         let screen = windows.firstMatch.frame
-        let top = scrolled && navigationBars.firstMatch.exists ? navigationBars.firstMatch.frame.maxY + 44 : screen.minY
-        let bottom = tabBars.firstMatch.exists ? tabBars.firstMatch.frame.minY - 44 : screen.maxY
-        let clear = CGRect(x: screen.minX, y: top, width: screen.width, height: max(0, bottom - top))
+        let clear = clearRect(scrolled: scrolled)
         print(
             "AUDIT pass on \(navigationBars.firstMatch.identifier) scrolled=\(scrolled) clear=\(clear)"
                 + " navigationBar=\(navigationBars.firstMatch.frame) tabBar=\(tabBars.firstMatch.frame)")
