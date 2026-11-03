@@ -536,6 +536,34 @@ aktivieren?") → 1702 `PermanentOperation` 1, `NormalOperation` 0, level 9. ESP
 restored. `ErrorCode` 0 throughout. This is the thermostat's actuator path: a panel start, level
 changes and the OFF all from the ESP.
 
+**First thermostat AUTO run (DEVICE 2026-11-03 22:31–23:02, ESP fw `e276eab`, owner in the van,
+ignition off, roof closed, outdoor steady at 6.7 °C, reference `unten`):** immediate heating started
+from the ESP (`runtime 120`, `level 10`, `power on`); camping mode on, the thermostat enabled with
+target 16 °C and `POST /api/thermostat {"mode":"AUTO"}` → `ADOPT_RUN` with no command and no level
+jump. At 22:45 the target changed to 13 °C; the controller stepped the level down on its own.
+Settings: the shipped placeholders (`kp` 1500, `ki` 50, `ka` 100, `min_dwell` 5 min, outside
+compensation on).
+
+| Time | Event | `unten` °C | Level | Battery 2 current |
+|---|---|---|---|---|
+| 22:31 | immediate heating on | 7.6 | 10 | |
+| 22:38 | AUTO `ADOPT_RUN`, target 16 | 8.3 | 10 | −3.6 to −3.7 A (22:42) |
+| 22:45 | target 13 | 9.8 | 10 | |
+| 22:47 | controller step | 10.4 | 5 | −0.9 A (22:50) |
+| 22:52 | controller step | 11.5 | 4 | |
+| 22:56 | controller step | 12.6 | 3 | −1.5 A (22:58) |
+| 23:01 | mode OFF → `USER_OFF`, heater off within 5 s | 13.5 | — | |
+
+- The cabin responds about 5 min after a level change; then `unten` rises 0.22–0.25 K/min at level 10.
+- The approach overshot: 13.5 °C at the stop and still rising 0.2 K/min at level 3. The run ended
+  before the hold level showed, and a door opened near the end.
+- The heat stays low: `govee` (in a cupboard) rose from +1.4 to +2.2 K over outdoor, `dach` (near
+  the roof) from +0.0 to +0.5 K.
+- Level 10 draws about 3.6–3.7 A at 13.2 V (≈ 48 W, the whole second-battery load); levels 3–5 about
+  1–1.5 A. The run took about 1.3 Ah.
+- `GET /api/thermostat` `status.heater` shows the heater state of the last step: it reads `RUNNING`
+  for up to one period (60 s) after the stop, then `OFF`.
+
 ---
 
 ## Open questions (UNVERIFIED, out of scope of these two files)
