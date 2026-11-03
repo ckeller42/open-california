@@ -528,6 +528,14 @@ drives the real heater. Each write through `POST /api/command` applied; 1702 rea
   no settings of its own. Its "Luftzufuhr" line is empty while 1702 `AirDistribution` is 0.
 - The panel calls the page "Heizen & Lüften"; its (i) shows only an energy note, no run-time limit.
 
+**Continuous heating from the panel, level and OFF from the ESP (DEVICE 2026-11-03, same setup):**
+the owner started "Dauerbetrieb" on the panel (confirm "Möchten Sie die Luftstandheizung dauerhaft
+aktivieren?") → 1702 `PermanentOperation` 1, `NormalOperation` 0, level 9. ESP `level 3` →
+`HeatingLevel` 3 with `PermanentOperation` still 1, panel "Heizstufe 3". ESP `permanent off`
+(`0f7b007f1f3f`) → `PermanentOperation` 0, panel "Dauerbetrieb" off and the heater icon gone. Level 9
+restored. `ErrorCode` 0 throughout. This is the thermostat's actuator path: a panel start, level
+changes and the OFF all from the ESP.
+
 ---
 
 ## Open questions (UNVERIFIED, out of scope of these two files)
