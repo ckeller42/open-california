@@ -227,6 +227,7 @@ void cali_thermo_init(cali_thermo_state_t *st) {
     memset(st, 0, sizeof *st);
     st->mode = CALI_THERMO_OFF;
     st->ctl.hot_since_ms = NONE_MS;
+    st->ctl.u_out = NONE; /* no outside reading in use yet */
     st->batt_low_since_ms = NONE_MS;
     st->last_ctl_ms = NONE_MS;
 }

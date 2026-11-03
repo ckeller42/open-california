@@ -241,7 +241,7 @@ def initial_state() -> dict:
     return {
         "mode": "OFF",
         "active": "ref",
-        "ctl": {"i": 0, "last_change_ms": 0, "hot_since_ms": None, "u": 0, "u_out": 0},
+        "ctl": {"i": 0, "last_change_ms": 0, "hot_since_ms": None, "u": 0, "u_out": None},
         "pending": None,
         "expect": None,
         "batt_low_since_ms": None,
