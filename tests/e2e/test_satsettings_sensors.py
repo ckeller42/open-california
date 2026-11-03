@@ -237,7 +237,8 @@ def test_configured_rows_read_as_type_name_values_age(stub, error_gated_page):
     with _open(error_gated_page, stub, "en") as pg:
         row = _cfg_row(pg, "innen")
         expect(row).to_contain_text(
-            "Thermo-hygrometer (Govee) · innen · 16.5\u00a0°C · 58.6\u00a0% · 6 s"  # no sensor battery: two bare % read alike
+            # the sensor's own battery carries 🔋, so it never reads like the humidity
+            "Thermo-hygrometer (Govee) · innen · 16.5\u00a0°C · 58.6\u00a0% · 🔋\u00a049\u00a0% · 6 s"
         )
 
 

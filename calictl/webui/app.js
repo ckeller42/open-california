@@ -1003,6 +1003,7 @@ const FEATURES = {
             + (fw.untested ? t("  ⚠ untested") : t("  ✓ tested"));
         } },
     ],
+    warn: () => lowSensorBatteries(),
     // The climate inside when the ESP reads a Govee (the first by alias), else the ignition.
     summary: (s) => {
       const g = extEntries("govee")[0];
@@ -2823,7 +2824,7 @@ const SENS_TYPE = { govee: "Thermo-hygrometer (Govee)", victron_mppt: "Solar cha
 const SENS_ERR = { bad_alias: "Name already used", bad_key: "Key must be 32 hex digits",
   key_mismatch: "Key does not match this device", full: "Sensor list is full (16)" };
 /** a field name -> its unit, in display order (the rest is not shown here) @type {[RegExp, string][]} */
-const SENS_UNIT = [[/_c$/, "°C"], [/humidity/, "%"], [/voltage/, "V"], [/power/, "W"], [/kwh/, "kWh"], [/current/, "A"]];
+const SENS_UNIT = [[/_c$/, "°C"], [/humidity/, "%"], [/voltage/, "V"], [/power/, "W"], [/kwh/, "kWh"], [/current/, "A"], [/^battery$/, "%"]];   // battery: the sensor's own, "🔋 49 %"
 let sensOn = false, sensBusy = false;
 
 async function satSensPoll() {
@@ -2840,7 +2841,7 @@ function sensVals(v) {
   const out = [];
   for (const [k, x] of Object.entries(v)) {
     const i = SENS_UNIT.findIndex(([re]) => re.test(k));
-    if (i >= 0 && x !== null) out.push([i, x + " " + SENS_UNIT[i][1]]);
+    if (i >= 0 && x !== null) out.push([i, (k === "battery" ? "🔋 " : "") + x + " " + SENS_UNIT[i][1]]);
   }
   return out.sort((a, b) => a[0] - b[0]).slice(0, 3).map((e) => e[1]);
 }
@@ -2972,7 +2973,7 @@ function renderSummary() {
 const CHARGE_STATES = { 0: "off", 2: "fault", 3: "bulk", 4: "absorption", 5: "float", 6: "storage", 7: "equalize",
   245: "starting up", 247: "recondition", 252: "external control" };
 const SENSOR_STALE_S = 600;   // the firmware's /api/sensors drops a reading this old too
-const LOW_SENSOR_BATTERY = 20;   // % — below it the Govee's battery joins its temperature row
+const LOW_SENSOR_BATTERY = 20;   // % — below it the Govee's battery joins its temperature row and badges the Vehicle tile
 
 /** @param {unknown} v @param {number} digits @param {string} [unit] @returns {string} a number, else "—" */
 const fix = (v, digits, unit = "") => (typeof v === "number" ? v.toFixed(digits) + unit : "—");
@@ -3034,6 +3035,19 @@ function houseLoad(s) {
   if (amps < -0.5) return "—";
   const a = Math.max(0, amps);
   return `${Math.round(a * s.batt2_v)} W · ${a.toFixed(1)} A`;
+}
+
+/**
+ * The Govees whose own battery is below LOW_SENSOR_BATTERY, as one warning (the Vehicle tile's ⚠ badge
+ * and its page's banner); null when none. An old reading still warns and names its age: a sensor that
+ * went quiet at 15 % must not look healthy.
+ * @returns {string|null}
+ */
+function lowSensorBatteries() {
+  const low = extEntries("govee").filter(([, e]) => typeof e.battery === "number" && e.battery < LOW_SENSOR_BATTERY)
+    .map(([alias, e]) => `${cap(alias)} ${e.battery} %`
+      + (extStale(e) ? ` 🕒 ${agoText(ageNow(/** @type {number|null} */ (e.age_s)))}` : ""));
+  return low.length ? tf("⚠ Sensor battery low: {list}", { list: low.join(", ") }) : null;
 }
 
 /** @param {string} type @returns {[string, SensorReading][]} the `ext` entries of a type, by alias */
