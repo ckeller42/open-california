@@ -282,6 +282,16 @@ body is unchanged. No lights or USB **switch** is shown on this page; whether ta
 writes (the 2026-09-16 session recorded `0f` / `f3` from the front-door / USB row icons,
 `control-and-actuation.md` §3) was not re-tested in this pass.
 
+**The unit's own screen** (owner photo 2026-11-03 14:04, with the satellite's raw 1202 at the same
+moment: `InteriorLight 1`, `OutsideLight 1`) names the same two bits **"Licht aus, wenn vordere Türen
+öffnen"** and shows it **on**. That is the complementary sentence to the app's row, not an inversion:
+app 5.4.0.3036 binds the row to `kg/b.G1` = `!(OutsideLight || InteriorLight)` (`kg/b.java:90,199`)
+and its setter `kg/b.d0(on)` writes `on ? 0 : 1` to both bits (`kg/b.java:150-158`); the only other
+writer of those slots is the roof air-condition frame of the R8-merged writer class. The bits move
+together, so one boolean holds.
+Our web UI follows the unit's wording: `R_CAMPING_DOOR_LIGHTS_ROW`, `AD_CAMPING_DOOR_LIGHTS_UNIT_WORDING`
+([UI design rationale](https://ckeller42.github.io/open-california/UI-DESIGN-RATIONALE.html)).
+
 ### 4. Correct command recipe
 
 Full-packet resend rule applies (4 fields, all 2-bit, sentinel `3`). Recipes:

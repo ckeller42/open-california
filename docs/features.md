@@ -63,7 +63,7 @@ The evidence for each claim is in the [evidence ledger](https://ckeller42.github
 | Web UI label | Value | Unit |
 |---|---|---|
 | — | `enable` | — |
-| Exterior and interior lighting (Außen- und Innenbeleuchtung) | `lights_on` | — |
+| Lights off when front doors open (Licht aus, wenn vordere Türen öffnen) | `lights_on` | — |
 | Camping mode (Campingmodus) | `master_on` | — |
 | Rear USB ports (Hintere USB-Anschlüsse) | `usb_charger` | — |
 
@@ -72,7 +72,7 @@ The evidence for each claim is in the [evidence ledger](https://ckeller42.github
 | Command | Label | Values | buspi | Home Assistant | Satellite | Note |
 |---|---|---|---|---|---|---|
 | `master` | Camping mode (Campingmodus) | on / off | yes | Camping Mode | yes | the web UI greys it while the ignition is on |
-| `lights` | Exterior and interior lighting (Außen- und Innenbeleuchtung) | on / off | yes | Camping Lights Switch | yes | only while camping mode is on |
+| `lights` | Lights off when front doors open (Licht aus, wenn vordere Türen öffnen) | on / off | yes | Camping Lights Switch | yes | only while camping mode is on; inverted: `on` lets the front lights come on, so the switch shows off |
 | `usb` | Rear USB ports (Hintere USB-Anschlüsse) | on / off | yes | Rear USB Ports Switch | yes | only while camping mode is on |
 
 ## Lighting (Beleuchtung)

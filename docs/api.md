@@ -153,6 +153,7 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.test_ha
 .. autofunction:: tests.e2e.test_gui.test_wakeup_light_time_and_switch_reach_the_unit
 .. autofunction:: tests.e2e.test_gui.test_door_contact_switch_round_trips
+.. autofunction:: tests.e2e.test_gui.test_front_door_lights_switch_follows_the_unit_screen
 .. autofunction:: tests.e2e.test_gui.test_all_lights_master_stays_on
 .. autofunction:: tests.e2e.test_gui.test_favourite_save_then_activate
 .. autofunction:: tests.e2e.test_gui.test_favourite_tiles_are_a_b_c_d_mapped_to_1_5_6_7
