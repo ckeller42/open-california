@@ -387,7 +387,9 @@ Send the full 10-field frame every time (shared-send behavior above).
   0 clears. The app raises the dialogs from **every 1702 decode**, not after a refused start
   (5.4.0 `ig/b.O`, `ig/b.java:292-721`): codes 5, 6, 7 always; codes 1–4 only after the app has
   seen a code 0 since the subscribe of the current connection (latch `e0`, gate
-  `e0 || code < 1 || code >= 5`, `ig/b.java:319`; reset per connect); each code's dialog once,
+  `e0 || code < 1 || code >= 5`, `ig/b.java:319`; reset per connect — APP-OBSERVED 2026-11-03: code 2
+  already present at the subscribe raises no dialog until a 0 and then a 2 arrive, code 6 present at
+  the subscribe raises its dialog at once); each code's dialog once,
   until the code returns to 0. The dashboard "error" flag uses the same latch. Only code 5 is tied
   to a tap: ON under code 5 writes nothing and re-shows its dialog. DECOMPILE 5.4.0.3036 (2026-11-02); texts of all
   seven codes APP-OBSERVED 2026-11-02 (odelly lab). Code 4 says the heater "can be switched on
@@ -410,13 +412,22 @@ Send the full 10-field frame every time (shared-send behavior above).
   writes RunningTime alone (owner rule: no heater short cycles; unverified on the unit — OPEN).
 - "Start heating at": **greyed** (tap does nothing) while the timer is armed.
 - Start timer while continuous heating is on: "Continuous heating will turn off when the timer
-  ends. Would you like to proceed?"
+  ends. Would you like to proceed?" (the app spells it "Continious"). "Yes, start the timer" writes
+  only `3f3b017f1f3f` (+ neutral): no start time, and no `PermanentOperationRequest=0` — the app does
+  not end continuous heating itself. Cancel writes nothing (APP-OBSERVED 2026-11-03, odelly lab).
 - Status bar while active with the timer armed: "Active • Remaining time: N • Timer starts: HH:MM";
   continuous + armed: "Active • Continuous heating • Timer starts in HH:MM".
 - No ignition / engine / battery gate. Permanent-heating card while off: a clickable card that opens
   "Continuous heating can be initiated only in the vehicle." (no write).
 - calictl mirrors the refusals in `control.command_precondition` (Python + the ESP's C twin,
   `REASON_AIRHEATER_*`) and the greying/confirms/status in the shared web UI.
+- Dashboard tile icon (Vehicle tab): idle → `3d7b007f1f3f`, heating → `3c7b007f1f3f`, each + neutral
+  ~500 ms later — the same frames as *Immediate heating*. Under continuous heating the icon opens
+  "Turn off continuous heating?"; *Turn off* → `0f7b007f1f3f`, Cancel → no write (APP-OBSERVED
+  2026-11-03, odelly lab).
+- The "Heating & Cooling" page (5.4.0 `wi/b`, departure timer for other heater combinations) is not
+  reachable on this T7: no tile, menu entry or link on the Vehicle tab, Vehicle Information, the
+  heater page or How-to & Info (APP-OBSERVED 2026-11-03, odelly lab).
 - Elsewhere in the app (recorded, not mirrored): the dashboard tile says "Error" for codes 1–5 and
   "Warning" for 6–7; `Installed=0` hides the tile; disconnected greys every quick button; energy
   `WarningLevelActive=1` ("Battery is flat. Charge now!") and `SleepWarning=1` (charging cable still
