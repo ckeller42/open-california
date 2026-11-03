@@ -15,6 +15,11 @@ Camper unit
 buspi
   The Raspberry Pi that runs calictl and the other readers in the van.
 
+LoRaWAN
+  A long-range, low-power radio network protocol. The satellite's experimental LoRa module sends the
+  van's energy picture through The Things Network's gateways to The Things Stack (`R_FW_LORA`); a
+  few dozen bytes every 10 to 60 minutes, within a daily airtime budget.
+
 GPIO
   A general-purpose input/output pin. On the Raspberry Pi header, GPIO3 (pin 5) wakes a halted Pi
   and GPIO17 (pin 11) is the satellite's shutdown line.

@@ -36,6 +36,7 @@ DEVICE_KEYS = frozenset(
         "display",
         "ux",
         "experimental",
+        "energy",
         "water_held",
     }
 )  # /api/state device

@@ -335,6 +335,33 @@ def test_sensors_value_getter(cli, tmp_path):
     ]
 
 
+def test_sensors_type_sum_and_first(cli, tmp_path):
+    """The chargers' sum for the house load and the first charger for the LoRa uplink: a configured
+    charger without a fresh reading makes the sum unknown (-1), none configured sums to 0.
+
+    .. test:: Sensor sum per type (house load) and first reading per type (LoRa uplink)
+       :id: T_FW_SENSORS_TYPE_SUM
+       :links: R_FW_ENERGY_COUNTERS
+    """
+    adv = victron(0xA075, 0x01, SOLAR)
+    out = run(cli, tmp_path, ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "api 1000"])
+    sid = json.loads(out[-1][4:])["seen"][0]["id"]
+    out = run(cli, tmp_path, ["init", "typesum victron_mppt 0 0 60000", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}",
+                              f"add {sid} - {KEY.hex()}", "typesum victron_mppt 0 1000 60000", "first victron_mppt",
+                              f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "typesum victron_mppt 0 60000 60000",
+                              "typesum victron_mppt 0 60001 60000", "first victron_battery", "typesum govee 0 0 1"])  # fmt: skip
+    got = [line for line in out if line.startswith(("TYPESUM", "FIRST"))]
+    assert got == [
+        "TYPESUM 0 0.00",  # none configured
+        "TYPESUM -1 0.00",  # configured, no reading since the add
+        "FIRST 0 0 0.00",
+        "TYPESUM 1 2.30",  # 2.3 A, 60 s old: still counts
+        "TYPESUM -1 0.00",  # 1 ms older: unknown
+        "FIRST -1 0 0.00",
+        "TYPESUM 0 0.00",
+    ]
+
+
 def test_sensors_centi_rejects_non_finite_and_clamps(cli, tmp_path):
     """NaN and infinity are no value; a huge float clamps before the int32 conversion (no UB).
 

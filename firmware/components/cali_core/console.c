@@ -12,6 +12,7 @@
 #include "cali_pi_wake.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
+#include "cali_lora.h"
 #include "cali_sensors.h"
 #include "cali_session.h"
 #include "cali_snapshot.h"
@@ -385,6 +386,8 @@ void cali_console_line(const char *line) {
         wifi_cmd(cmd + 4);
     } else if (strncmp(cmd, "sensors", 7) == 0 && (cmd[7] == ' ' || cmd[7] == '\t' || cmd[7] == 0)) {
         sensors_cmd(cmd + 7);
+    } else if (strncmp(cmd, "lora", 4) == 0 && (cmd[4] == ' ' || cmd[4] == '\t' || cmd[4] == 0)) {
+        cali_lora_console(cmd + 4 + (cmd[4] != 0));   /* R_FW_LORA; "lora keys" is wiped below */
     } else if (strncmp(cmd, "ble", 3) == 0 && (cmd[3] == ' ' || cmd[3] == '\t' || cmd[3] == 0)) {
         ble_cmd(cmd + 3);
     } else if (strncmp(cmd, "pi", 2) == 0 && (cmd[2] == ' ' || cmd[2] == '\t' || cmd[2] == 0)) {
