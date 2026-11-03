@@ -51,6 +51,7 @@ struct CamperApp: App {
             RootView(store: store)
                 .task {
                     guard live else { return }
+                    MetricKitSink.shared.start()
                     store.start()
                     await store.connect()
                 }
