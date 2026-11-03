@@ -82,27 +82,3 @@ def test_ruff_on_edit_ignores_other_files(tmp_path):
     f.write_text("x = {'a':1}\n")
     r = run_hook("ruff-on-edit.py", {"tool_name": "Edit", "tool_input": {"file_path": str(f)}})
     assert r.returncode == 0 and r.stdout == "" and f.read_text() == "x = {'a':1}\n"
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "calictl/semantics.py",
-        "calictl/webui/app.js",
-        "firmware/components/cali_core/session.c",
-        "ios/App/X.swift",
-    ],
-)
-def test_docs_sync_reminder_asks_for_requirement_and_decision(path):
-    """A runtime change anywhere (Python, web UI, firmware, iOS) is reminded to record its WHY as
-    sphinx-needs: a ``req`` for the behaviour and a ``decision`` for a choice between alternatives."""
-    out = run_hook("docs-sync-reminder.py", {"tool_input": {"file_path": "/x/open-california/" + path}})
-    msg = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
-    assert "`req`" in msg and "`decision`" in msg and "`test`" in msg, msg
-
-
-def test_docs_sync_reminder_is_quiet_for_tests():
-    out = run_hook(
-        "docs-sync-reminder.py", {"tool_input": {"file_path": "/x/open-california/tests/test_a.py"}}
-    )
-    assert out.stdout == ""

@@ -24,10 +24,6 @@ WHERE = (
         "/calictl/webui/",
         "docs/ (the UI behaviour page, e.g. firmware.md for satellite screens) + strings.de.js for every new label",
     ),
-    (
-        "/ios/",
-        "docs/ios-app.md (the section for this screen or service) + the Swift doc comment's `- Requirement:` id",
-    ),
     ("/csrc/", "docs/cross-language-codec page + docs/firmware.md if the satellite's behaviour changes"),
     (
         "/calictl/",
@@ -40,12 +36,7 @@ for frag, docs in WHERE:
             "You changed runtime code (%s). Update the docs in the same PR: %s. "
             "CI's docs-touched check fails without a docs change unless the PR says "
             "'Docs: n/a — <reason>'. Write it per docs/building-the-docs.md \"Writing reader pages\": "
-            "behaviour → the page, proof → an evidence-ledger row. "
-            "Record the WHY as sphinx-needs (docs/conf.py needs_types): a new or changed behaviour is a "
-            "`req` (R_…) at system level, a choice between alternatives (whose wording, which design, "
-            "what we deviate from) is a `decision` (AD_…), and the verifying test carries a `test` "
-            "(T_…) with `:links:` to both. Python: in the docstring; JS/C/Swift: in the docs page "
-            "(MyST ```{req}``` / ```{decision}```), linked from the test's docstring."
+            "behaviour → the page, proof → an evidence-ledger row."
             % (fp.split("/open-california/")[-1], docs)
         )
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": msg}}))
