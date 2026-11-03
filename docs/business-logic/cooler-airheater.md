@@ -557,8 +557,9 @@ compensation on).
 - The cabin responds about 5 min after a level change; then `unten` rises 0.22–0.25 K/min at level 10.
 - The approach overshot: 13.5 °C at the stop and still rising 0.2 K/min at level 3. The run ended
   before the hold level showed, and a door opened near the end.
-- The heat stays low: `govee` (in a cupboard) rose from +1.4 to +2.2 K over outdoor, `dach` (near
-  the roof) from +0.0 to +0.5 K.
+- `govee` (in a cupboard) rose only from +1.4 to +2.2 K over outdoor. `dach` sits in the closed
+  pop-top roof, a space mostly separate from the cabin while the roof is down: it rose from +0.0 to
+  +0.5 K. It says nothing about the cabin air until the roof is open.
 - Level 10 draws about 3.6–3.7 A at 13.2 V (≈ 48 W, the whole second-battery load); levels 3–5 about
   1–1.5 A. The run took about 1.3 Ah.
 - `GET /api/thermostat` `status.heater` shows the heater state of the last step: it reads `RUNNING`
