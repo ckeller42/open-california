@@ -119,7 +119,7 @@ window.STRINGS_DE = {
     "{b}? Am Fahrzeug noch nicht verifiziert. Fortfahren?",
 
   // --- camping mode --------------------------------------------------------------------------
-  "Exterior and interior lighting": "Außen- und Innenbeleuchtung",
+  "Lights off when front doors open": "Licht aus, wenn vordere Türen öffnen",
   "Rear USB ports": "Hintere USB-Anschlüsse",
   "Restore camping after you park": "Campingmodus nach dem Parken wiederherstellen",
   "⟳ will restore on park": "⟳ wird beim Parken wiederhergestellt",
@@ -571,15 +571,15 @@ window.STRINGS_DE = {
     + "ausgeschalteter Kühlbox einstellen.\n\nFlüstermodus und Timer sind am Fahrzeug noch nicht "
     + "verifiziert. Hinweise zeigen, was die Einheit meldet: Tür nicht ganz geschlossen, Notbetrieb "
     + "oder ein Fehler für die Werkstatt.",
-  ["Camping mode is the unit's master switch for the camper functions. Exterior and interior lighting and "
+  ["Camping mode is the unit's master switch for the camper functions. The front-door light setting and "
     + "the rear USB ports only work while it is on; the rear USB ports are off whenever camping mode is off.\n\n"
     + "The unit turns camping mode off when the engine starts and does not allow it while the ignition is "
     + "on: it is only possible when stationary.\n\n"
     + "Restore camping after you park: turns camping mode and the rear USB ports back on once you park "
     + "(ignition off), if the engine had switched them off. It respects a manual off and stands down on "
     + "low battery, so it never fights the unit's power saving."]:
-    "Der Campingmodus ist der Hauptschalter der Einheit für die Camper-Funktionen. Außen- und "
-    + "Innenbeleuchtung und die hinteren USB-Anschlüsse funktionieren nur, solange er an ist; die "
+    "Der Campingmodus ist der Hauptschalter der Einheit für die Camper-Funktionen. Die Einstellung "
+    + "„Licht aus, wenn vordere Türen öffnen“ und die hinteren USB-Anschlüsse funktionieren nur, solange er an ist; die "
     + "hinteren USB-Anschlüsse sind immer aus, wenn der Campingmodus aus ist.\n\nDie Einheit schaltet "
     + "den Campingmodus beim Motorstart aus und lässt ihn bei eingeschalteter Zündung nicht zu: Er ist "
     + "nur im Stand möglich.\n\nCampingmodus nach dem Parken wiederherstellen: schaltet Campingmodus "

@@ -149,7 +149,7 @@ UI_LABELS = {
         "timer_active": "Timer",
     },
     "campingmode": {
-        "lights_on": "Exterior and interior lighting",
+        "lights_on": "Lights off when front doors open",
         "master_on": "Camping mode",
         "usb_charger": "Rear USB ports",
     },
@@ -240,7 +240,12 @@ COMMANDS = {
     },
     "campingmode": {
         "master": ("Camping mode", _ONOFF, "the web UI greys it while the ignition is on", "on"),
-        "lights": ("Exterior and interior lighting", _ONOFF, "only while camping mode is on", "on"),
+        "lights": (
+            "Lights off when front doors open",
+            _ONOFF,
+            "only while camping mode is on; inverted: `on` lets the front lights come on, so the switch shows off",
+            "on",
+        ),
         "usb": ("Rear USB ports", _ONOFF, "only while camping mode is on", "on"),
     },
     "lighting": {

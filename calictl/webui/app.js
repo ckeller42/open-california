@@ -181,7 +181,8 @@
  * `disabled(s)` returns true/a-reason-string when the current state forbids the control
  * (greyed + blocked, mirroring the app), a falsy value when it's available.
  * @typedef {{ what: string, label: string, confirm?: ConfirmSpec, disabled?: (s: FnState) => (boolean|string|undefined) }} ControlBase
- * @typedef {ControlBase & { kind: 'toggle', state: keyof FnState }} ToggleControl
+ * @typedef {ControlBase & { kind: 'toggle', state: keyof FnState, invert?: boolean }} ToggleControl  invert: the switch shows the
+ *   opposite of `state` (the unit's own wording); the command still sends the value for `state`
  * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, step?: number, unit?: string }} SliderControl
  * @typedef {ControlBase & { kind: 'select', options: SelectOption[], current?: (s: FnState) => (string|null|undefined) }} SelectControl
  * @typedef {ControlBase & { kind: 'hour', current?: (s: FnState) => number }} HourControl
@@ -651,7 +652,7 @@ const HELP = {
     + "Quiet mode and timer are not yet verified on the van. Banners show what the unit reports: the door "
     + "is not fully closed, emergency mode, or an error for the workshop."],
   campingmode: ["business-logic/auto-camper-mode.html",
-    "Camping mode is the unit's master switch for the camper functions. Exterior and interior lighting and "
+    "Camping mode is the unit's master switch for the camper functions. The front-door light setting and "
     + "the rear USB ports only work while it is on; the rear USB ports are off whenever camping mode is off.\n\n"
     + "The unit turns camping mode off when the engine starts and does not allow it while the ignition is "
     + "on: it is only possible when stationary.\n\n"
@@ -814,7 +815,11 @@ const FEATURES = {
       // Gate on the OPTIMISTIC master value (what the master switch itself shows), not the raw
       // polled state: after tapping master ON the real state lands only after the BLE write +
       // readback (0.6-3 s live), and greying lights/USB for that window reads as a failed tap.
-      { what: "lights", kind: "toggle", label: "Exterior and interior lighting", state: "lights_on",
+      // The unit's own screen names these bits "Licht aus, wenn vordere Türen öffnen" (on = both
+      // bits 1); the app's row says the opposite sentence (lights_on = both bits 0). Show the
+      // unit's wording and direction, so the switch matches the unit screen; the command stays
+      // `lights on|off` (on = the front lights come on when a door opens).
+      { what: "lights", kind: "toggle", label: "Lights off when front doors open", state: "lights_on", invert: true,
         disabled: (s) => !optOn("campingmode", "master", !!s.master_on) && "Turn camping mode on first" },
       { what: "usb", kind: "toggle", label: "Rear USB ports", state: "usb_powered",
         disabled: (s) => !optOn("campingmode", "master", !!s.master_on) && "Turn camping mode on first" },
@@ -3521,13 +3526,14 @@ function renderControl(fn, c, s) {
     act(fn, c.what, val);
   };
   if (c.kind === "toggle") {
-    const on = optOn(fn, c.what, !!s[c.state]);
+    const lit = optOn(fn, c.what, !!s[c.state]);   // the value of `state` (what a command sets)
+    const on = c.invert ? !lit : lit;
     const sw = document.createElement("button");
     sw.className = "switch" + (isPending ? " pending" : "");
     sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", c.label);
     sw.setAttribute("aria-checked", on ? "true" : "false");
     sw.disabled = ro;
-    sw.onclick = () => fire(on ? "off" : "on");
+    sw.onclick = () => fire(lit ? "off" : "on");
     row.appendChild(sw);
   } else if (c.kind === "slider") {
     const val = optNum(fn, c.what, /** @type {number} */ (s[c.state] != null ? s[c.state] : c.min));

@@ -337,10 +337,42 @@ def test_camping_lights_and_usb_greyed_until_master_on(page):
         master.click()
         expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
         expect(master).to_have_attribute("aria-checked", "false")
-    expect(page.get_by_role("switch", name="Exterior and interior lighting")).to_be_disabled()
+    expect(page.get_by_role("switch", name="Lights off when front doors open")).to_be_disabled()
     expect(page.get_by_role("switch", name="Rear USB ports")).to_be_disabled()
     expect(page.locator(".row.ctl-off")).to_have_count(2)  # exactly lights + usb greyed
     expect(master).to_be_enabled()  # master itself is usable
+
+
+def test_front_door_lights_switch_follows_the_unit_screen(page, base_url):
+    """The camping row uses the unit's own wording, "Lights off when front doors open", and its
+    direction: on = both light bits 1. The command stays ``lights on|off`` (on = the front lights come
+    on when a door opens, both bits 0), so the switch shows the opposite of ``lights_on``. Asserted on
+    the unit path (``/api/state`` from the mock's frames), not on the optimistic overlay.
+
+    .. test:: The camping front-door lights switch follows the unit's screen
+       :id: T_CAMPING_DOOR_LIGHTS_ROW
+       :links: R_CAMPING_DOOR_LIGHTS_ROW, AD_CAMPING_DOOR_LIGHTS_UNIT_WORDING
+    """
+    page.get_by_text("Camping mode", exact=True).first.click()
+    master = page.get_by_role("switch", name="Camping mode")
+    if master.get_attribute("aria-checked") != "true":
+        master.click()
+        _poll(page, base_url, lambda st: st["campingmode"]["master_on"] is True, "camping master on")
+    sw = page.get_by_role("switch", name="Lights off when front doors open")
+    expect(sw).to_be_enabled(timeout=15000)
+    if page.request.get(base_url + "/api/state").json()["campingmode"]["lights_on"] is not True:
+        assert page.request.post(
+            base_url + "/api/command", data={"function": "campingmode", "what": "lights", "value": "on"}
+        ).ok
+        _poll(page, base_url, lambda st: st["campingmode"]["lights_on"] is True, "front lights on (bits 0)")
+    expect(sw).to_have_attribute("aria-checked", "false")  # bits 0/0: lights come on -> "lights off" is off
+    bodies = []
+    page.on("request", lambda rq: bodies.append(rq.post_data) if rq.url.endswith("/api/command") else None)
+    sw.click()
+    _poll(page, base_url, lambda st: st["campingmode"]["lights_on"] is False, "unit-reported bits 1/1")
+    expect(sw).to_have_attribute("aria-checked", "true")
+    sent = [{k: json.loads(b)[k] for k in ("function", "what", "value")} for b in bodies]
+    assert sent == [{"function": "campingmode", "what": "lights", "value": "off"}]
 
 
 def test_cooler_quiet_and_timer_controls_follow_power(page):
