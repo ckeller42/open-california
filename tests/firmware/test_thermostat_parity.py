@@ -81,7 +81,10 @@ def test_vectors_have_the_sweep_and_the_sessions():
 def test_vectors_cover_the_control_branches():
     assert {
         "windup_low",
+        "windup_min_level",
         "windup_high",
+        "outside_lost",
+        "outside_found",
         "opposite_sign_integrates",
         "gap_frozen",
         "cur_level_none",

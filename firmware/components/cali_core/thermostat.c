@@ -58,12 +58,18 @@ static int32_t control(int32_t t_ref, int32_t t_out, int32_t target, int64_t dt_
                        const cali_thermo_cfg_t *cfg, int32_t cur_level, int64_t now, const char **why) {
     int64_t e = (int64_t)target - t_ref;
     int64_t p = rdiv(cfg->kp * e, 100);
-    int64_t u_out = t_out == NONE ? 0 : mn(mx(rdiv(cfg->ka * mx(0, (int64_t)target - t_out), 100), 0), cfg->u_out_max);
-    int64_t i = ctl->i, u_old = p + i + u_out, u, level, dist, last_change = ctl->last_change_ms;
-    int frozen = dt_ms > 3 * (int64_t)cfg->period_ms || (u_old < 1000 && e < 0) || (u_old > 10000 && e > 0);
-    int hot;
+    /* u_out NONE = no outside reading in use (Python None) */
+    int64_t u_out = t_out == NONE ? NONE : mn(mx(rdiv(cfg->ka * mx(0, (int64_t)target - t_out), 100), 0), cfg->u_out_max);
+    int64_t prev = ctl->u_out, ff = u_out == NONE ? 0 : u_out;
+    int64_t i = ctl->i, u_old, u, level, dist, last_change = ctl->last_change_ms;
+    int frozen, hot;
+    if (cur_level != NONE && (prev == NONE) != (u_out == NONE))
+        i += (prev == NONE ? 0 : prev) - ff; /* bumpless: the outside share moves into the integrator */
+    u_old = p + i + ff;
+    frozen = dt_ms > 3 * (int64_t)cfg->period_ms || (u_old < (int64_t)cfg->min_level * 1000 && e < 0) ||
+             (u_old > 10000 && e > 0);
     if (!frozen) i += rdiv(cfg->ki * e * dt_ms, 100 * 60000);
-    u = p + i + u_out;
+    u = p + i + ff;
     hot = cur_level == cfg->min_level && t_ref > (int64_t)target + cfg->band_hi;
     ctl->i = (int32_t)i;
     ctl->u = (int32_t)u;
@@ -96,7 +102,7 @@ static int32_t control(int32_t t_ref, int32_t t_out, int32_t target, int64_t dt_
 /* Python track(): the next demand equals the current level. */
 static void track(cali_thermo_ctl_t *ctl, int32_t cur_level, int32_t t_ref, int32_t target, const cali_thermo_cfg_t *cfg) {
     int64_t p = rdiv(cfg->kp * ((int64_t)target - t_ref), 100);
-    ctl->i = (int32_t)((int64_t)cur_level * 1000 - p - ctl->u_out);
+    ctl->i = (int32_t)((int64_t)cur_level * 1000 - p - (ctl->u_out == NONE ? 0 : ctl->u_out));
 }
 
 static int valid(const cali_thermo_sensor_t *r, const cali_thermo_cfg_t *cfg) {

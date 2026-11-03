@@ -199,18 +199,18 @@ static void step(uint64_t now) {
     if (s_out.reason) s_reason = s_out.reason;
     int busy = S.mode != CALI_THERMO_OFF || S.has_pending;   /* a mode, or a stop still pending in OFF */
     if (s_on || mode_before != CALI_THERMO_OFF || busy) {   /* a disabled idle one logs nothing */
-        char b[5][16], r[40] = "null";
+        char b[6][16], r[40] = "null";
         int32_t want = S.has_pending && strcmp(S.pending.what, "level") == 0 ? S.pending.value
                        : S.has_expect                                       ? S.expect.level
                                                                             : CALI_THERMO_NONE;
         if (s_out.reason) snprintf(r, sizeof r, "\"%s\"", s_out.reason);
         (void)cali_diag_rec("thermo",
                             "\"r\":%s,\"m\":\"%s\",\"h\":\"%s\",\"t\":%s,\"o\":%s,\"g\":%ld,\"u\":%ld,\"i\":%ld,"
-                            "\"uo\":%ld,\"l\":%s,\"lc\":%s,\"rem\":%s",
+                            "\"uo\":%s,\"l\":%s,\"lc\":%s,\"rem\":%s",
                             r,
                             cali_thermo_mode_names[S.mode], cali_thermo_heater_names[s_out.status.heater],
                             num(b[0], s_out.status.t_ref), num(b[1], s_out.status.t_out), (long)C.target,
-                            (long)S.ctl.u, (long)S.ctl.i, (long)S.ctl.u_out, num(b[2], want),
+                            (long)S.ctl.u, (long)S.ctl.i, num(b[5], S.ctl.u_out), num(b[2], want),
                             num(b[3], s_out.status.level), num(b[4], field(h, nh, "RunningTimeinAction")));
         if (S.mode != mode_before)
             cali_diag_evt("thermo", "\"e\":\"mode\",\"from\":\"%s\",\"to\":\"%s\",\"r\":\"%s\"",
