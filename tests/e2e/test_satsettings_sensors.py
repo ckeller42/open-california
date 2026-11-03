@@ -242,6 +242,13 @@ def test_configured_rows_read_as_type_name_values_age(stub, error_gated_page):
         )
 
 
+def test_a_zero_battery_still_shows_in_the_configured_row(stub, error_gated_page):
+    """0 is a reading, not a missing one: the flattest battery must not drop out of the row."""
+    _configured(stub, (GOVEE_A, "innen", {**GOVEE_VALUE, "battery": 0}))
+    with _open(error_gated_page, stub, "en") as pg:
+        expect(_cfg_row(pg, "innen")).to_contain_text("🔋\u00a00\u00a0%")
+
+
 @pytest.mark.parametrize("step", ["remove", "rename", "add"])
 def test_the_poll_leaves_an_open_step_alone(stub, error_gated_page, step):
     _configured(stub, (GOVEE_A, "innen", GOVEE_VALUE))
