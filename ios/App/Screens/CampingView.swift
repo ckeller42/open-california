@@ -22,16 +22,19 @@ struct CampingView: View {
             let master = on("master_on")
             Card {
                 ControlRow(disabledBecause: ignitionOn ? "Only possible when stationary" : nil) {
-                    SwitchRow(label: Text("Camping mode"), isOn: Binding(get: { master }, set: { run(Self.master($0)) }))
+                    SwitchRow(
+                        id: "camping.master", label: Text("Camping mode"),
+                        isOn: Binding(get: { master }, set: { run(Self.master($0)) }))
                 }
                 ControlRow(disabledBecause: master ? nil : "Turn camping mode on first") {
                     SwitchRow(
-                        label: Text("Exterior and interior lighting"),
+                        id: "camping.lights", label: Text("Exterior and interior lighting"),
                         isOn: Binding(get: { on("lights_on") }, set: { run(Self.lights($0)) }))
                 }
                 ControlRow(disabledBecause: master ? nil : "Turn camping mode on first") {
                     SwitchRow(
-                        label: Text("Rear USB ports"), isOn: Binding(get: { on("usb_powered") }, set: { run(Self.usb($0)) }))
+                        id: "camping.usb", label: Text("Rear USB ports"),
+                        isOn: Binding(get: { on("usb_powered") }, set: { run(Self.usb($0)) }))
                 }
             }
             Card {

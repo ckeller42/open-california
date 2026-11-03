@@ -276,8 +276,9 @@ struct PairingGuideView: View {
             } icon: {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.onGreen)
             }
-            action("Pair again…", prominent: false) { guide.expand() }
+            action("Pair again…", id: "setup.pairAgain", prominent: false) { guide.expand() }
             Button("Forget this camper unit…", role: .destructive) { confirmingForget = true }
+                .accessibilityIdentifier("setup.forget")
                 .foregroundStyle(Self.forgetRed)
                 .frame(maxWidth: .infinity, minHeight: 44)
         case .openPanel:
@@ -285,7 +286,7 @@ struct PairingGuideView: View {
             Text("The passcode is valid for about 30 seconds; each attempt shows a new one.").font(.subheadline)
             Text("Close the California On Tour app while pairing — its reconnects can collide with the passkey window.")
                 .font(.subheadline)
-            action("I'm on that screen", prominent: true) { search() }
+            action("I'm on that screen", id: "setup.onThatScreen", prominent: true) { search() }
         case .searching:
             Label {
                 Text(Self.headline(step))
@@ -325,6 +326,7 @@ struct PairingGuideView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(verbatim: "\(i + 1). \(unit.name), ") + Text(Self.signal(unit.rssi)))
+                .accessibilityIdentifier("setup.unit\(i + 1)")
             }
             cancelButton
         case .typeCode:
@@ -349,7 +351,7 @@ struct PairingGuideView: View {
                 ).font(.subheadline)
             }
             Text(Self.closeGeraetVerbinden).font(.subheadline)
-            action("Close", prominent: false) { guide.cancel() }
+            action("Close", id: "setup.close", prominent: false) { guide.cancel() }
         case .noUnit(let why):
             AlertCard(text: Self.headline(step))
             switch why {
@@ -368,7 +370,7 @@ struct PairingGuideView: View {
                 }
                 if why != .bluetoothOff {
                     Text("Allow Bluetooth for this app in Settings.").font(.subheadline)
-                    action("Open Settings", prominent: false) {
+                    action("Open Settings", id: "setup.openSettings", prominent: false) {
                         if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                     }
                 }
@@ -391,8 +393,8 @@ struct PairingGuideView: View {
             }
             .font(.subheadline)
             Text("A new pairing also serves the California On Tour app on this iPhone.").font(.subheadline)
-            action("Try again", prominent: true) { guide.expand() }
-            action("Cancel", prominent: false) { guide.cancel() }
+            action("Try again", id: "setup.tryAgain", prominent: true) { guide.expand() }
+            action("Cancel", id: "setup.cancel", prominent: false) { guide.cancel() }
         case .forgotten:
             Label {
                 Text(Self.headline(step))
@@ -404,24 +406,25 @@ struct PairingGuideView: View {
                 Text(verbatim: "\(i + 1). ") + Text(Self.forgetSteps[i])
             }
             .font(.subheadline)
-            action("Pair again…", prominent: true) { guide.expand() }
+            action("Pair again…", id: "setup.pairAgain", prominent: true) { guide.expand() }
         }
     }
 
     private var cancelButton: some View {
-        action("Cancel", prominent: false) { cancel() }
+        action("Cancel", id: "setup.cancel", prominent: false) { cancel() }
     }
 
     @ViewBuilder private var retryButtons: some View {
-        action("Try again", prominent: true) { search() }
-        action("Cancel", prominent: false) { guide.cancel() }
+        action("Try again", id: "setup.tryAgain", prominent: true) { search() }
+        action("Cancel", id: "setup.cancel", prominent: false) { guide.cancel() }
     }
 
-    private func action(_ title: LocalizedStringResource, prominent: Bool, _ run: @escaping () -> Void) -> some View {
+    private func action(_ title: LocalizedStringResource, id: String, prominent: Bool, _ run: @escaping () -> Void) -> some View {
         Button(action: run) {
             Text(title).frame(maxWidth: .infinity, minHeight: 32)
         }
         .buttonStyle(ActionStyle(prominent: prominent))
+        .accessibilityIdentifier(id)
     }
 
     private func search() {

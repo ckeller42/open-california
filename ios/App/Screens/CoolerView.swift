@@ -34,11 +34,14 @@ struct CoolerView: View {
             }
             Card {
                 ControlRow {
-                    SwitchRow(label: Text("Refrigerator box"), isOn: Binding(get: { on }, set: { run(Self.power($0)) }))
+                    SwitchRow(
+                        id: "cooler.power", label: Text("Refrigerator box"),
+                        isOn: Binding(get: { on }, set: { run(Self.power($0)) }))
                 }
                 ControlRow {
                     MenuPicker(
-                        label: Text("Cooling level"), value: Text(verbatim: num("level").map(String.init) ?? "—"),
+                        id: "cooler.level", label: Text("Cooling level"),
+                        value: Text(verbatim: num("level").map(String.init) ?? "—"),
                         selection: Binding(get: { num("level") ?? 0 }, set: { run(Self.level($0)) })
                     ) {
                         if num("level").map({ !(1...5).contains($0) }) ?? true { Text(verbatim: "—").tag(num("level") ?? 0) }
@@ -47,7 +50,8 @@ struct CoolerView: View {
                 }
                 ControlRow(disabledBecause: on ? nil : "Switch the refrigerator box on first") {
                     MenuPicker(
-                        label: Text("Quiet mode"), value: Text(Self.modes.first { $0.value == num("mode") }?.label ?? "Off"),
+                        id: "cooler.quietMode", label: Text("Quiet mode"),
+                        value: Text(Self.modes.first { $0.value == num("mode") }?.label ?? "Off"),
                         selection: Binding(
                             get: { Self.modes.first { $0.value == num("mode") }?.key ?? "normal" },
                             set: {

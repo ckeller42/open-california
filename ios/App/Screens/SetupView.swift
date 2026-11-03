@@ -35,7 +35,7 @@ struct TraceCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Bluetooth trace").font(.headline).accessibilityAddTraits(.isHeader)
-            SwitchRow(label: Text("Record Bluetooth trace"), isOn: $isOn)
+            SwitchRow(id: "setup.trace", label: Text("Record Bluetooth trace"), isOn: $isOn)
             Text("For a bug report: what the app and the camper unit exchanged. No location, no names.")
                 .font(.footnote)
             if exists {
@@ -43,12 +43,14 @@ struct TraceCard: View {
                     Label("Export trace", systemImage: "square.and.arrow.up")
                 }
                 .frame(minHeight: 44)
+                .accessibilityIdentifier("setup.traceExport")
                 Button(role: .destructive) {
                     confirmingDelete = true
                 } label: {
                     Label("Delete trace", systemImage: "trash")
                 }
                 .frame(minHeight: 44)
+                .accessibilityIdentifier("setup.traceDelete")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

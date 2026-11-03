@@ -105,7 +105,7 @@ struct CockpitView: View {
         return all.filter { store.installed($0.0.function) }.map { screen, title, symbol, key, tint in
             ControlButton(
                 title: title, systemImage: symbol, isOn: on(screen.function, key), tint: tint,
-                lockedBecause: store.lockReason(screen.function)
+                lockedBecause: store.lockReason(screen.function), id: "cockpit.\(screen.function)"
             ) {
                 switch Self.tap(screen, store: store) {
                 case .open(let s): open = s

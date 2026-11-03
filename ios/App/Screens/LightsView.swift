@@ -67,7 +67,7 @@ struct LightsView: View {
             Card {
                 ControlRow {
                     SwitchRow(
-                        label: Text("All lights"),
+                        id: "lighting.all", label: Text("All lights"),
                         isOn: Binding(
                             get: { store.value("lighting", "any_on")?.bool == true },
                             set: { run(Self.allLights($0)) }))
@@ -96,6 +96,7 @@ struct LightsView: View {
                         .buttonStyle(.plain)
                         .disabled(empty)
                         .accessibilityLabel(Text("Favourite \(fav.label)"))
+                        .accessibilityIdentifier("lighting.favourite\(fav.profile)")
                         .accessibilityValue(isActive ? Text("active") : empty ? Text("empty") : Text(verbatim: ""))
                         .accessibilityHint(empty ? Text("This favourite is empty on the unit") : Text(verbatim: ""))
                     }
@@ -127,7 +128,7 @@ struct LightsView: View {
         let current = real.flatMap { $0 <= 11 ? $0 : nil }
         // Two lamps share a name ("Background lighting"): VoiceOver hears the group too.
         return MenuPicker(
-            label: Text(lamp.label), spoken: Text(group) + Text(verbatim: ", ") + Text(lamp.label),
+            id: "lighting.\(lamp.what)", label: Text(lamp.label), spoken: Text(group) + Text(verbatim: ", ") + Text(lamp.label),
             value: current == 0 ? Text("Off") : current == 11 ? Text("Default") : Text(verbatim: current.map(String.init) ?? "—"),
             selection: Binding(get: { current ?? -1 }, set: { if (0...10).contains($0) { run(Self.lamp(lamp.what, $0)) } })
         ) {

@@ -226,6 +226,7 @@ private struct CloseButton: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Dismiss"))
+            .accessibilityIdentifier("banner.dismiss")
         }
     }
 }
@@ -261,6 +262,7 @@ struct RestCard: View {
         }
         .buttonStyle(.plain)
         .disabled(store.feedback != nil)
+        .accessibilityIdentifier("tapToConnect")
     }
 }
 
@@ -387,6 +389,8 @@ struct ControlRow<Control: View>: View {
 /// A label with a menu picker at the trailing edge (a menu picker outside a form shows no label).
 /// Disabled, it shows the current value as text in the muted colour that keeps its contrast.
 struct MenuPicker<Value: Hashable, Options: View>: View {
+    /// The accessibility identifier, `<screen>.<control>`, for tests and bug reports.
+    let id: String
     let label: Text
     /// What VoiceOver calls the picker, when the visible label is not unique.
     var spoken: Text?
@@ -403,10 +407,12 @@ struct MenuPicker<Value: Hashable, Options: View>: View {
                     .pickerStyle(.menu)
                     .labelsHidden()
                     .fixedSize()  // a menu picker alone takes all the height it is offered
+                    .accessibilityIdentifier(id)
             }
         } else {
             StackedRow(label: label) { value.foregroundStyle(Color.staleText) }
                 .accessibilityElement(children: .combine)
+                .accessibilityIdentifier(id)
         }
     }
 }
@@ -414,16 +420,19 @@ struct MenuPicker<Value: Hashable, Options: View>: View {
 /// A switch with its label; the label stays whole at accessibility text sizes. Disabled, it shows
 /// "On" / "Off" as text, so it does not look like an enabled switch that is off.
 struct SwitchRow: View {
+    /// The accessibility identifier, `<screen>.<control>`, for tests and bug reports.
+    let id: String
     let label: Text
     let isOn: Binding<Bool>
     @Environment(\.isEnabled) private var enabled
 
     var body: some View {
         if enabled {
-            StackedRow(label: label) { Toggle(isOn: isOn) { label }.labelsHidden() }
+            StackedRow(label: label) { Toggle(isOn: isOn) { label }.labelsHidden().accessibilityIdentifier(id) }
         } else {
             StackedRow(label: label) { Text(isOn.wrappedValue ? "On" : "Off").foregroundStyle(Color.staleText) }
                 .accessibilityElement(children: .combine)
+                .accessibilityIdentifier(id)
         }
     }
 }

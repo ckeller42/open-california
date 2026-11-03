@@ -74,7 +74,7 @@ struct AirHeaterView: View {
             Card {
                 ControlRow {
                     SwitchRow(
-                        label: Text("Immediate heating"),
+                        id: "heater.immediate", label: Text("Immediate heating"),
                         isOn: Binding(
                             get: { flag("normal") },
                             set: { on in
@@ -93,7 +93,7 @@ struct AirHeaterView: View {
                 }
                 ControlRow(disabledBecause: permanent ? nil : "Can only be started from inside the vehicle") {
                     SwitchRow(
-                        label: Text("Continuous heating"),
+                        id: "heater.continuous", label: Text("Continuous heating"),
                         isOn: Binding(
                             get: { permanent },
                             set: { on in
@@ -109,7 +109,7 @@ struct AirHeaterView: View {
                 }
                 ControlRow {
                     MenuPicker(
-                        label: Text("Heating temperature"),
+                        id: "heater.temperature", label: Text("Heating temperature"),
                         value: Self.levelText(num("level")).map { Text($0) } ?? Text(verbatim: "—"),
                         selection: Binding(get: { num("level") ?? 0 }, set: { run(Self.level($0)) })
                     ) {
@@ -121,7 +121,7 @@ struct AirHeaterView: View {
                 }
                 ControlRow(disabledBecause: permanent ? "Not available during continuous heating" : nil) {
                     MenuPicker(
-                        label: Text("Run time"),
+                        id: "heater.runTime", label: Text("Run time"),
                         value: Text(verbatim: runTimeText),
                         selection: Binding(
                             get: { num("running_time") ?? 0 },

@@ -24,7 +24,7 @@ struct EnergyModeView: View {
             Card {
                 ControlRow(disabledBecause: locked ? "The unit currently does not allow changing the energy mode" : nil) {
                     MenuPicker(
-                        label: Text("Energy mode"),
+                        id: "energy.mode", label: Text("Energy mode"),
                         value: Self.modes.first { $0.value == current }.map { Text($0.label) } ?? Text(verbatim: "—"),
                         selection: Binding(
                             get: { Self.modes.first { $0.value == current }?.key ?? "" },

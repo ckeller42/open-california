@@ -27,6 +27,8 @@ struct ControlButton: View {
     let tint: Color
     /// Why the controls are locked; nil = unlocked. The button still opens the screen.
     let lockedBecause: LocalizedStringResource?
+    /// The accessibility identifier, `<screen>.<control>`.
+    let id: String
     let action: () -> Void
 
     var body: some View {
@@ -57,6 +59,7 @@ struct ControlButton: View {
         .accessibilityLabel(Text(title))
         .accessibilityValue(Text(isOn ? "On" : "Off"))
         .accessibilityHint(lockedBecause.map { Text($0) } ?? Text(verbatim: ""))
+        .accessibilityIdentifier(id)
     }
 
     /// No dimming on press-free states: full contrast, the lock marks a locked function.
