@@ -239,7 +239,7 @@ struct ScreenSnapshotTests {
         let view = NavigationStack { DiagnosticsView(store: CamperStore.preview(.parked, now: Self.now), sink: sink) }
         check(view, "diagnostics")
         snap(view, "diagnostics-de", locale: Locale(identifier: "de_DE"))
-        snap(view, "diagnostics-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: 1600))
+        snap(view, "diagnostics-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: 2600))
     }
 
     /// The feedback banner sits above the tab bar: it hides no control and not the pill's offline or
