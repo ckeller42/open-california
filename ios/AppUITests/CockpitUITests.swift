@@ -142,14 +142,42 @@ final class ControlUITests: XCTestCase {
 
 /// The Setup tab: the unit's status and the pairing guide, over the fake transport's one unit.
 final class SetupUITests: XCTestCase {
-    /// The paired guide is collapsed; "Pair again…" opens step 1, and the guide runs to the outcome
-    /// "already paired" (the fake unit takes the pick at once, like an iPhone that shares the vendor
-    /// app's bond); "Close" collapses it again. Each step passes the audit, in light and dark.
+    /// The guide steps, in order. Each step has a test of its own, so a test that hangs or fails
+    /// names its step.
+    private enum Step: Int { case collapsed, pairPanel, unitList, alreadyPaired }
+
+    /// The paired guide is collapsed. It passes the audit, in light and dark.
     ///
-    /// - Test: T_IOS_UI_SETUP_AUDIT
+    /// - Test: T_IOS_UI_SETUP_AUDIT_COLLAPSED
     /// - Verifies: R_IOS_PAIRING, R_IOS_LOOK, R_IOS_TESTED
     @MainActor
-    func testSetupPassesAccessibilityAudit() throws {
+    func testSetupCollapsedPassesAccessibilityAudit() throws { try auditSetup(.collapsed) }
+
+    /// "Pair again…" opens step 1, "Pair the camper unit". It passes the audit, in light and dark.
+    ///
+    /// - Test: T_IOS_UI_SETUP_AUDIT_PAIR_PANEL
+    /// - Verifies: R_IOS_PAIRING, R_IOS_LOOK, R_IOS_TESTED
+    @MainActor
+    func testSetupPairPanelPassesAccessibilityAudit() throws { try auditSetup(.pairPanel) }
+
+    /// "I'm on that screen" shows the unit list. It passes the audit, in light and dark.
+    ///
+    /// - Test: T_IOS_UI_SETUP_AUDIT_UNIT_LIST
+    /// - Verifies: R_IOS_PAIRING, R_IOS_LOOK, R_IOS_TESTED
+    @MainActor
+    func testSetupUnitListPassesAccessibilityAudit() throws { try auditSetup(.unitList) }
+
+    /// The pick runs to the outcome "already paired" (the fake unit takes the pick at once, like an
+    /// iPhone that shares the vendor app's bond), which passes the audit in light and dark; "Close"
+    /// collapses the guide again.
+    ///
+    /// - Test: T_IOS_UI_SETUP_AUDIT_ALREADY_PAIRED
+    /// - Verifies: R_IOS_PAIRING, R_IOS_LOOK, R_IOS_TESTED
+    @MainActor
+    func testSetupAlreadyPairedPassesAccessibilityAudit() throws { try auditSetup(.alreadyPaired) }
+
+    @MainActor
+    private func auditSetup(_ step: Step) throws {
         for dark in [false, true] {
             let app = XCUIApplication()
             app.launchArguments = ["-UITestFixture", "parked", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -159,19 +187,27 @@ final class SetupUITests: XCTestCase {
             XCTAssertTrue(app.navigationBars["Setup"].waitForExistence(timeout: 5))
             // The fixture's launch connect pairs: the guide is collapsed.
             XCTAssertTrue(app.buttons["Pair again…"].waitForExistence(timeout: 10))
-            try app.auditScreen()
-            app.buttons["Pair again…"].tap()
-            XCTAssertTrue(app.staticTexts["Pair the camper unit"].waitForExistence(timeout: 5))
-            try app.auditScreen()
-            app.buttons["I'm on that screen"].tap()
+            if step.rawValue >= Step.pairPanel.rawValue {
+                app.buttons["Pair again…"].tap()
+                XCTAssertTrue(app.staticTexts["Pair the camper unit"].waitForExistence(timeout: 5))
+            }
             let unit = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '1. VWCAMPER'")).firstMatch
-            XCTAssertTrue(unit.waitForExistence(timeout: 10))
-            try app.auditScreen()
-            unit.tap()
-            XCTAssertTrue(app.staticTexts["This iPhone is already paired with the camper unit"].waitForExistence(timeout: 15))
-            try app.auditScreen()
-            app.buttons["Close"].tap()
-            XCTAssertTrue(app.buttons["Pair again…"].waitForExistence(timeout: 5))
+            if step.rawValue >= Step.unitList.rawValue {
+                app.buttons["I'm on that screen"].tap()
+                XCTAssertTrue(unit.waitForExistence(timeout: 10))
+            }
+            if step == .alreadyPaired {
+                unit.tap()
+                XCTAssertTrue(
+                    app.staticTexts["This iPhone is already paired with the camper unit"].waitForExistence(timeout: 15))
+            }
+            try XCTContext.runActivity(named: "Audit Setup step \(step) (\(dark ? "dark" : "light"))") { _ in
+                try app.auditScreen()
+            }
+            if step == .alreadyPaired {
+                app.buttons["Close"].tap()
+                XCTAssertTrue(app.buttons["Pair again…"].waitForExistence(timeout: 5))
+            }
             app.terminate()
         }
     }
@@ -251,11 +287,22 @@ extension XCUIApplication {
         Thread.sleep(forTimeInterval: 1)  // a launch read or a push has settled
         _ = stableFrames()
         var passes = [try settledPass(scrolled: false)]
-        // A fixed number of drags, each about 40 % of the screen: enough for the longest page (Setup
-        // with the trace card); a drag past the end only bounces back, and its pass repeats the end.
-        // (A "drag until nothing moves" rule never settled on bar: a drag at the end of a page still
-        // looked like movement.)
-        for _ in 0..<5 {
+        // Drags of about 40 % of the screen until the end of the page: the bottom edge of the lowest
+        // content element is the same before and after a drag. That drag's pass would repeat the
+        // previous one, so it is not run; a page that fits stops after one drag with no scrolled
+        // pass. Measured 2026-11-03: every page ends after one drag; 5 is the upper bound.
+        // (Not "nothing moved on the screen": a ticking label or the bounce at the end of a page
+        // moves too.)
+        let maxDrags = 5
+        var bottom = contentBottom()
+        var drags = 0
+        while true {
+            if drags == maxDrags {
+                let edge = String(describing: bottom)
+                XCTFail("The page did not end after \(maxDrags) drags (lowest content edge \(edge))", file: file, line: line)
+                break
+            }
+            drags += 1
             // A drag with a hold: the content rests where the finger stops (no momentum, no bounce).
             let area = windows.firstMatch
             // In the left margin, outside every card: a press opens or highlights nothing.
@@ -266,6 +313,11 @@ extension XCUIApplication {
             // before the top pass.
             Thread.sleep(forTimeInterval: 1)
             _ = stableFrames()
+            let now = contentBottom()
+            print("AUDIT drag \(drags): lowest content edge \(String(describing: bottom)) -> \(String(describing: now))")
+            if let now, let before = bottom, abs(now - before) < 1 { break }
+            if now == nil, bottom == nil { break }  // no scroll view: nothing scrolls
+            bottom = now
             passes.append(try settledPass(scrolled: true))
         }
         let clean = passes.reduce(into: Set<String>()) { $0.formUnion($1.clean) }
@@ -279,6 +331,23 @@ extension XCUIApplication {
         }
         // Back to the top for the caller.
         for _ in 0..<passes.count { swipeDown() }
+    }
+
+    /// The bottom edge of the lowest labelled element inside the first scroll view (or list) of the
+    /// screen; the navigation bar, the tab bar and the toolbar are outside it. `nil` without a
+    /// scroll view.
+    @MainActor
+    private func contentBottom() -> CGFloat? {
+        guard let s = try? snapshot() else { return nil }
+        func scroller(_ e: XCUIElementSnapshot) -> XCUIElementSnapshot? {
+            if [.scrollView, .collectionView, .table].contains(e.elementType) { return e }
+            return e.children.lazy.compactMap(scroller).first
+        }
+        func lowest(_ e: XCUIElementSnapshot) -> CGFloat? {
+            let own = e.label.isEmpty ? nil : e.frame.maxY
+            return (e.children.compactMap(lowest) + [own].compactMap { $0 }).max()
+        }
+        return scroller(s).flatMap(lowest)
     }
 
     /// `frames()` once the content did not scroll between two reads 0.3 s apart (at most 3 s). A text
