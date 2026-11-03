@@ -210,4 +210,7 @@ notes: |
 
   Write sites for char 1701 besides this page (DECOMPILE 5.4.0.3036): the dashboard
   heater tile (uk/g, NormalOperationRequest toggle) and the Heating & Cooling page
-  (wi/b: start time, arm with any combo, stop).
+  (wi/b: start time, arm with any combo, stop). APP-OBSERVED 2026-11-03 (odelly lab): the
+  tile writes 3d7b007f1f3f / 3c7b007f1f3f, and under continuous heating asks "Turn off
+  continuous heating?" before 0f7b007f1f3f; the Heating & Cooling page is not reachable
+  from any screen on this T7.
