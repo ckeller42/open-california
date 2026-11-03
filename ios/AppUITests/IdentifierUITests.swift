@@ -52,8 +52,12 @@ extension XCUIApplication {
             return e.children.lazy.compactMap(scroller).first
         }
         var out: [String] = []
+        // A control's own parts (the switch inside a toggle) are not controls of their own.
         func walk(_ e: XCUIElementSnapshot) {
-            if controls.contains(e.elementType), e.identifier.isEmpty { out.append("\(screen): \(e.label)") }
+            if controls.contains(e.elementType) {
+                if e.identifier.isEmpty { out.append("\(screen): \(e.label)") }
+                return
+            }
             e.children.forEach(walk)
         }
         guard let page = scroller(root) else { return ["\(screen): no scroll view"] }

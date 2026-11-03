@@ -20,10 +20,16 @@ struct SetupView: View {
             NavigationLink {
                 DiagnosticsView(store: store)
             } label: {
-                Label("Diagnostics", systemImage: "stethoscope")
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .padding(.horizontal)
-                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+                // Primary text like a Settings row (the accent blue on this card nearly fails contrast).
+                HStack {
+                    Label("Diagnostics", systemImage: "stethoscope")
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).accessibilityHidden(true)
+                }
+                .foregroundStyle(Color.primary)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.horizontal)
+                .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
             }
             .accessibilityIdentifier("setup.diagnostics")
             .padding(.bottom, 44)  // the last card clears the tab bar's blur band
