@@ -70,7 +70,13 @@ struct PairingGuide: Equatable {
         }
     }
 
-    private(set) var step: Step
+    private(set) var step: Step {
+        // The case only: `pick` carries the advertised unit names, which never go into a log.
+        didSet {
+            let name = String(String(describing: step).prefix { $0 != "(" })
+            Log.pairing.info("step \(name, privacy: .public)")
+        }
+    }
     /// The iPhone is paired: "Close" and "Cancel" return to the collapsed line.
     private var paired = false
     /// "Asks for pairing" answers to a pick: the second one shows the forget-device help.

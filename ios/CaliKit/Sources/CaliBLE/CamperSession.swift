@@ -595,6 +595,7 @@ public actor CamperSession {
 
     private func setLink(_ l: LinkState) {
         guard l != link else { return }
+        Log.session.info("link \(String(describing: l), privacy: .public)")
         link = l
         publish()
     }

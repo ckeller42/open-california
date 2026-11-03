@@ -82,6 +82,16 @@ extension CamperSession {
     /// - Parameter connectTimeout: the budget of `ensureConnected` when the link is not ready.
     /// - Requirement: R_IOS_HONEST, R_IOS_NO_ROOF, R_IOS_V2_ONLY, R_IOS_FUNCTIONS, R_IOS_POWER_SAVE
     public func run(_ cmd: Command, connectTimeout: Duration = .seconds(10)) async -> CommandResult {
+        let result = await runUnlogged(cmd, connectTimeout: connectTimeout)
+        Log.command.info(
+            """
+            \(cmd.function, privacy: .public) \(cmd.what, privacy: .public) \
+            \(cmd.value ?? "-", privacy: .public) -> \(String(describing: result), privacy: .public)
+            """)
+        return result
+    }
+
+    private func runUnlogged(_ cmd: Command, connectTimeout: Duration) async -> CommandResult {
         if cmd.function == "roof" { return .refused(.noRoof) }
         // Single flight (control_run.c CALI_CTL_BUSY). It also keeps a hang-up during the command
         // from starting the power-save rest (session.c `!cali_ctl_busy()`).
