@@ -1246,8 +1246,8 @@ regulate. Once per `period_ms`, and never while a command waits for its result, 
 demand `u = p + i + u_out` in milli-levels from the error `target - t_ref`:
 
 - `p` is `kp` times the error.
-- `i` is the integrator (`ki` per minute of error). It is frozen when a step comes more than three periods late, and while the demand is at a limit with the error pushing further (anti-windup). On a start, a switch between reference and backup, a return from degraded mode and a target change the integrator is set so that the demand equals the current level: no jump.
-- `u_out` is the outside {term}`feed-forward <outside compensation>`: `ka` per degree below the target at the outside thermometer, capped at `u_out_max`. It is zero when the switch is off or the outside reading is invalid (reason `OUTSIDE_INACTIVE` when it is switched on but not available).
+- `i` is the integrator (`ki` per minute of error). It is frozen when a step comes more than three periods late, and while the demand is below `min_level` or above level 10 with the error pushing further (anti-windup). When AUTO takes over a running heater, switches between reference and backup or returns from degraded mode, the integrator is set so that the demand equals the current level: no jump. A target change keeps the integrator, so `p` follows the new target at once.
+- `u_out` is the outside {term}`feed-forward <outside compensation>`: `ka` per degree below the target at the outside thermometer, capped at `u_out_max`. It is zero when the switch is off or the outside reading is invalid (reason `OUTSIDE_INACTIVE` when it is switched on but not available). When the outside reading appears or disappears while the level is known, its share moves into the integrator, so the demand does not jump; after that, `u_out` follows the outside temperature.
 
 The wanted level is the demand divided by 1000 and rounded, kept between `min_level` and 10. The
 level changes only when the demand is at least `500 + hyst` milli-levels away from the current level

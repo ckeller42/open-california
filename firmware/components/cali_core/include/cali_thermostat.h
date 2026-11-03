@@ -208,7 +208,7 @@ typedef struct {
     int64_t last_change_ms;  /**< Time of the last level change. */
     int64_t hot_since_ms;    /**< Start of the hot hold, or CALI_THERMO_NONE_MS. */
     int32_t u;               /**< Last demand, milli-level. */
-    int32_t u_out;           /**< Last feed-forward, milli-level. */
+    int32_t u_out;           /**< Last feed-forward, milli-level; CALI_THERMO_NONE while no outside reading is used. */
 } cali_thermo_ctl_t;
 
 /** @brief What the heater does (Python `expect` / `stop_snapshot`). */

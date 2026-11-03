@@ -28,7 +28,8 @@ OUT = ROOT / "tests" / "vectors" / "thermostat.json"
 
 D = dict(th.THERMO_DEFAULTS)
 # A second table with remainders everywhere: odd gains reach the half-away-from-zero rounding of
-# negative values, a wide overheat band lets the demand go negative before OVERHEAT.
+# negative values, a wide overheat band lets the demand go negative before OVERHEAT, and a
+# min_level above 1 moves the low anti-windup limit.
 ODD = {
     **D,
     "period_ms": 30000,
@@ -41,6 +42,7 @@ ODD = {
     "band_hi": 150,
     "hot_hold_ms": 300000,
     "overheat": 2000,
+    "min_level": 3,
     "verify_ms": 7000,
     "runtime_min": 30,
 }
@@ -661,19 +663,24 @@ def coverage():
         e = target - t_ref
         kpe = cfg["kp"] * e
         u_out = (
-            0
+            None
             if t_out is None
             else min(max(th._rdiv(cfg["ka"] * max(0, target - t_out), 100), 0), cfg["u_out_max"])
         )
-        u_old = th._rdiv(kpe, 100) + ctl["i"] + u_out
+        i = ctl["i"]
+        if cur_level is not None and (ctl["u_out"] is None) != (u_out is None):
+            tags.add("outside_found" if ctl["u_out"] is None else "outside_lost")
+            i += (ctl["u_out"] or 0) - (u_out or 0)
+        u_old = th._rdiv(kpe, 100) + i + (u_out or 0)
+        lo = cfg["min_level"] * 1000
         gap = dt_ms > 3 * cfg["period_ms"]
         if gap and e:
             tags.add("gap_frozen")
-        if not gap and u_old < 1000 and e < 0:
-            tags.add("windup_low")
+        if not gap and u_old < lo and e < 0:
+            tags.add("windup_low" if lo == 1000 else "windup_min_level")
         if not gap and u_old > 10000 and e > 0:
             tags.add("windup_high")
-        if not gap and dt_ms and ((u_old < 1000 and e > 0) or (u_old > 10000 and e < 0)):
+        if not gap and dt_ms and ((u_old < lo and e > 0) or (u_old > 10000 and e < 0)):
             tags.add("opposite_sign_integrates")
         if cur_level is None:
             tags.add("cur_level_none")

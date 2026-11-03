@@ -110,8 +110,31 @@ def test_hysteresis_and_dwell():
 def test_outside_off_contributes_zero():
     _, ctl, _ = th.control(2000, -1000, 2100, 60000, _ctl(), CFG, 3, 0)
     assert ctl["u_out"] == 3000
-    _, ctl, _ = th.control(2000, None, 2100, 60000, ctl, CFG, 3, 60000)
-    assert ctl["u_out"] == 0
+    _, ctl, _ = th.control(2000, None, 2100, 60000, ctl, CFG, None, 60000)
+    assert ctl["u_out"] is None and ctl["u"] == ctl["i"] + th._rdiv(CFG["kp"] * 100, 100)
+
+
+def test_outside_lost_or_found_is_bumpless():
+    """Losing or gaining the outside thermometer moves its share into the integrator."""
+    ctl = th.track(_ctl(u_out=2500), 4, 2100, 2100, CFG)
+    _, c1, _ = th.control(2100, -400, 2100, 0, ctl, CFG, 4, 0)
+    assert (c1["u"], c1["u_out"]) == (4000, 2500)
+    _, c2, why = th.control(2100, None, 2100, 0, c1, CFG, 4, 0)
+    assert (c2["u"], c2["u_out"], why) == (4000, None, "HOLD")  # no drop by 2.5 levels
+    _, c3, why = th.control(2100, -400, 2100, 0, c2, CFG, 4, 0)
+    assert (c3["u"], c3["u_out"], why) == (4000, 2500, "HOLD")  # and no jump back up
+    assert th.track(c2, 4, 2100, 2100, CFG)["i"] == 4000  # track reads a missing share as 0
+
+
+def test_windup_stops_at_min_level():
+    """The integrator stops at ``min_level``, not at level 1."""
+    cfg = {**CFG, "min_level": 3, "hot_hold_ms": 10**12, "overheat": 10**6}
+    ctl = th.track(_ctl(), 3, 2100, 2100, cfg)
+    for k in range(60):  # one hour 1 °C too warm at the lowest allowed level
+        lvl, ctl, why = th.control(2200, None, 2100, 60000, ctl, cfg, 3, k * 60000)
+        assert lvl is None
+    # back at the target the demand is still min_level (at most one step past the limit), not wound down
+    assert ctl["i"] >= 3000 - th._rdiv(cfg["ki"] * 100 * 60000, 100 * 60000)
 
 
 def test_outside_cold_adds_up_to_cap():

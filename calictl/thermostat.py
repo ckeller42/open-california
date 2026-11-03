@@ -155,8 +155,10 @@ def control(
        :tags: thermostat
 
        The thermostat shall compute the demand ``u = p + i + u_out`` in milli-levels from the
-       reference error (centi-°C), an integrator frozen on long step gaps and by anti-windup, and
-       an outside feed-forward capped at ``u_out_max``. It shall change the level only when the
+       reference error (centi-°C), an integrator frozen on long step gaps and by anti-windup at
+       ``min_level`` and level 10, and an outside feed-forward capped at ``u_out_max``. When the
+       outside reading appears or disappears while the level is known, the feed-forward's share
+       shall move into the integrator so that the demand does not jump. It shall change the level only when the
        demand differs from the current level by at least ``500 + hyst`` and ``min_dwell_ms`` has
        passed. It shall report ``OVERHEAT`` above ``target + overheat`` and
        ``TARGET_EXCEEDED_AT_MIN_LEVEL`` after ``hot_hold_ms`` above ``target + band_hi`` at the
@@ -167,6 +169,7 @@ def control(
     :param target: target temperature in centi-°C.
     :param dt_ms: time since the previous step in ms.
     :param ctl: controller state ``{i, last_change_ms, hot_since_ms, u, u_out}``; not modified.
+        ``u_out`` is ``None`` while no outside reading is used.
     :param cfg: settings dict (:data:`THERMO_DEFAULTS` keys).
     :param cur_level: the heater's current level 1..10, or ``None`` when unknown.
     :param now_ms: current time in ms.
@@ -177,14 +180,21 @@ def control(
     e = target - t_ref
     p = _rdiv(cfg["kp"] * e, 100)
     u_out = (
-        0 if t_out is None else min(max(_rdiv(cfg["ka"] * max(0, target - t_out), 100), 0), cfg["u_out_max"])
+        None
+        if t_out is None
+        else min(max(_rdiv(cfg["ka"] * max(0, target - t_out), 100), 0), cfg["u_out_max"])
     )
     i = ctl["i"]
-    u_old = p + i + u_out
-    frozen = dt_ms > 3 * cfg["period_ms"] or (u_old < 1000 and e < 0) or (u_old > 10000 and e > 0)
+    prev = ctl["u_out"]
+    if cur_level is not None and (prev is None) != (u_out is None):
+        i += (prev or 0) - (u_out or 0)  # bumpless: the outside share moves into the integrator
+    ff = u_out or 0
+    u_old = p + i + ff
+    lo = cfg["min_level"] * 1000
+    frozen = dt_ms > 3 * cfg["period_ms"] or (u_old < lo and e < 0) or (u_old > 10000 and e > 0)
     if not frozen:
         i += _rdiv(cfg["ki"] * e * dt_ms, 100 * 60000)
-    u = p + i + u_out
+    u = p + i + ff
     hot = cur_level == cfg["min_level"] and t_ref > target + cfg["band_hi"]
     hot_since = (ctl["hot_since_ms"] if ctl["hot_since_ms"] is not None else now_ms) if hot else None
     new = {**ctl, "i": i, "u": u, "u_out": u_out, "hot_since_ms": hot_since}
@@ -216,7 +226,7 @@ def track(ctl: dict, cur_level: int, t_ref: int, target: int, cfg: dict) -> dict
     :returns: a copy of ``ctl`` whose integrator makes ``p + i + u_out == cur_level * 1000``.
     """
     p = _rdiv(cfg["kp"] * (target - t_ref), 100)
-    return {**ctl, "i": cur_level * 1000 - p - ctl["u_out"]}
+    return {**ctl, "i": cur_level * 1000 - p - (ctl["u_out"] or 0)}
 
 
 _FAULTS = ("FAULT", "LOCKED", "BLOCKED")
@@ -231,7 +241,7 @@ def initial_state() -> dict:
     return {
         "mode": "OFF",
         "active": "ref",
-        "ctl": {"i": 0, "last_change_ms": 0, "hot_since_ms": None, "u": 0, "u_out": 0},
+        "ctl": {"i": 0, "last_change_ms": 0, "hot_since_ms": None, "u": 0, "u_out": None},
         "pending": None,
         "expect": None,
         "batt_low_since_ms": None,
