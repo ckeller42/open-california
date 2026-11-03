@@ -412,19 +412,6 @@ int cali_session_water_held(void);
  */
 uint64_t cali_session_water_good_ms(void);
 
-/**
- * @brief Whether a unit of a given car variant has a CODEC_CHARS function.
- *
- * The app's per-variant gate (isSupportedForVariant): 1004 CarVariant 0 = California T7, 1 = Grand
- * California, 2 = California Next, any other value = T7 (as the app).
- *
- * @param function Function name from CODEC_CHARS.
- * @param car_variant The 1004 CarVariant; below 0 = no 1004 frame, variant unknown.
- * @return 1 when the variant has the function; 1 for every function when car_variant is below 0
- *         (the session then subscribes and reads everything); else 0.
- */
-int cali_variant_has(const char *function, int car_variant);
-
 #ifdef __cplusplus
 }
 #endif

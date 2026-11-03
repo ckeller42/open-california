@@ -35,6 +35,9 @@ hardware
 protocol
 firmware
 ios-app
+ios-app-radio-checklist
+ios-app-siri-checklist
+ios-development-setup
 firmware-api
 screenshots
 glossary

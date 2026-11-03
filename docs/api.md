@@ -256,6 +256,7 @@ traceability is generated from the source, not maintained separately.
   :members:
 .. automodule:: tests.test_trace
 .. automodule:: tests.test_trace_compare
+.. automodule:: tests.test_ios_trace
 .. automodule:: tests.test_mock_fidelity
 .. automodule:: tools.capture_diff
 .. automodule:: tests.test_app_recordings
@@ -338,4 +339,11 @@ traceability is generated from the source, not maintained separately.
 ```{eval-rst}
 .. automodule:: tools.fake_unit_peripheral
 .. automodule:: tests.test_fake_unit_peripheral
+```
+
+## App icons (PWA and the iPhone app)
+
+```{eval-rst}
+.. automodule:: tools.make_pwa_icons
+.. automodule:: tests.test_ios_app_icon
 ```

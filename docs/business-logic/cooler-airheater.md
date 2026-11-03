@@ -489,7 +489,9 @@ Send the full 10-field frame every time (shared-send behavior above).
   ignition); −1.2…−1.7 A steady burn; after the stop −6…−8 A for ~1 min (glow-plug burn-off /
   run-on), then −0.5 A. Battery held 13.1 V.
 - **Deliberate difference:** calictl sends no neutral follow-up frame after a write (the app does,
-  500 ms later); the unit applied every calictl write without it.
+  500 ms later); the unit applied every calictl write without it. The app's neutral frame only
+  resets its own shared field model (see `protocol-alignment.md`, "Why the app writes the neutral
+  frame"); calictl keeps no such model.
 - Real phone, idle: tapping the grey "Permanent Heating" card opens "Continuous heating can be
   initiated only in the vehicle. / This feature can be disabled from the mobile app, but it can be
   activated only using the in-vehicle systems." [Got it] — no write. While running, the app greys

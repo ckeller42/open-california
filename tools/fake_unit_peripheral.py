@@ -270,6 +270,9 @@ class FakeUnit:
 
     def on_beat(self, data: bytes, conn=None) -> None:
         self.rec.write(cu("1003"), data)
+        # A central beating on a live link reaches an awake unit: undo the mock's own 15 s
+        # heartbeat-lapse drop() on a link the peripheral kept (T_FAKE_WAKE_ON_BEAT).
+        self.unit.wake()
         self.unit.beat(data)
         if conn is not None:
             self.beat_at[conn] = time.monotonic()

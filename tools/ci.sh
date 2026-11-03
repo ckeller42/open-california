@@ -127,7 +127,8 @@ docs() {   # ci.yml's `docs` job in Docker (image oc-docs = docs/Dockerfile: dox
            # doxygen firmware/Doxyfile, then the -W site build. Ends with `site -> docs/_build/site`.
   command -v docker >/dev/null || { echo "docs: needs Docker" >&2; exit 1; }
   tar -c docs/Dockerfile docs/requirements.txt | docker build -q -t oc-docs -f docs/Dockerfile - >/dev/null
-  docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/w -w /w oc-docs \
+  docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e OC_COMMIT="$(git rev-parse HEAD 2>/dev/null || true)" \
+    -v "$PWD":/w -w /w oc-docs \
     sh -c 'doxygen --version && sh docs/build_site.sh docs/_build/site'
 }
 doc_offset() { "$PY" -m pytest tests/test_doc_offset_consistency.py -q -p no:cacheprovider; }
