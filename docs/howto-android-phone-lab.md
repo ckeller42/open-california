@@ -12,7 +12,7 @@ builds. A match is {term}`evidence tier` **CAPTURE** in the
 - Decoders: [`tools/applab/phone/`](https://github.com/ckeller42/open-california/tree/main/tools/applab/phone)
   (`snoop_att.py` lists the ATT reads/writes/notifications, `snoop_links.py` the link events).
 - Sibling {term}`lab <App lab>` without a van or a phone (the app in an emulator against a {term}`fake unit <Mock unit>`):
-  [`tools/applab/README.md`](https://github.com/ckeller42/open-california/blob/main/tools/applab/README.md).
+  {doc}`howto-app-lab`.
 - Captures still owed and app-vs-calictl findings:
   [remaining captures](https://github.com/ckeller42/open-california/blob/main/docs/business-logic/remaining-captures.md),
   [protocol cross-check](https://github.com/ckeller42/open-california/blob/main/docs/business-logic/protocol-crosscheck-applab.md).

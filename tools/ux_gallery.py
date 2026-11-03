@@ -409,6 +409,7 @@ def esp_fixtures():
                 ext=EXT_SENSORS,
             ),
             "/api/wifi": dict(station_wifi, last_error=None, reverted=False, scan=[]),
+            "/api/thermostat": thermostat_fixture(),  # a firmware with the cabin thermostat, shipped disabled
         },
         "calictl": {
             "/api/state": calictl_state(_esp_fn(DEFAULT_SEED)),
@@ -484,6 +485,38 @@ _SETTINGS = {
 }
 
 
+def thermostat_fixture(**over):
+    """``GET /api/thermostat`` as the firmware answers it (R_FW_THERMOSTAT_API): shipped DISABLED, OFF."""
+    status = {
+        "enabled": False,
+        "mode": "OFF",
+        "reason": None,
+        "heater": "OFF",
+        "t_ref": None,
+        "t_out": None,
+        "target": 2100,
+        "level": None,
+        "active": None,
+        "outside_active": False,
+        "end": "none",
+    }
+    status.update(over.pop("status", {}))
+    body = {
+        "rev": 1,
+        "mode": status["mode"],
+        "target": 2100,
+        "runtime_min": 120,
+        "ref": "cabin",
+        "backup": None,
+        "out": None,
+        "outside_on": False,
+        "cfg": {},
+        "status": status,
+    }
+    body.update(over)
+    return body
+
+
 class EspStub:
     """A stdlib HTTP stub of the firmware's web endpoints: ``GET /`` = the generated page bytes,
         ``GET /api/state`` / ``/api/wifi`` = ``esp_fixtures()[mode]``. Switch pages with ``mode``.
@@ -530,6 +563,8 @@ class EspStub:
         self.ux_beacons = []  # POST /api/ux bodies, in order
         self.ux_status = 204
         self.sensor_posts = []  # POST /api/sensors bodies, in order
+        self.thermostat_posts = []  # POST /api/thermostat bodies, in order
+        self.thermostat_error = None  # (status, body) answered to the next POST /api/thermostat instead
         self.wifi_posts = []  # POST /api/wifi bodies, in order
         self.down = False  # True: every request gets no answer (the connection just closes)
         self.posts = []  # (path, body) of every POST to a _SETTINGS endpoint, in order
@@ -594,6 +629,10 @@ class EspStub:
                     self.send_response(stub.ux_status)
                     self.send_header("Content-Length", "0")
                     self.end_headers()
+                    return
+                if path == "/api/thermostat":
+                    stub.thermostat_posts.append(body)
+                    self._json(*stub._thermostat(body))
                     return
                 if path == "/api/sensors":
                     stub.sensor_posts.append(body)
@@ -696,6 +735,21 @@ class EspStub:
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.base = "http://127.0.0.1:%d" % self.server.server_address[1]
         self._thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    def _thermostat(self, body):
+        """``POST /api/thermostat``: the accepted keys land in the fixture and count ``rev``; an
+        ``AUTO`` request answers like the firmware once enabled (mode AUTO)."""
+        if self.thermostat_error:
+            err, self.thermostat_error = self.thermostat_error, None
+            return err
+        th = self.fixtures[self.mode]["/api/thermostat"]
+        for k in ("target", "runtime_min", "ref", "backup", "out", "outside_on", "mode"):
+            if k in body:
+                th[k] = body[k]
+        if "mode" in body:
+            th["status"]["mode"] = body["mode"]
+        th["rev"] += 1
+        return 200, th
 
     def _pair(self, body):
         """The compressed runner walk behind ``POST /api/pairing`` (see the class docstring)."""

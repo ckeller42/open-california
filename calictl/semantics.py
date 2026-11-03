@@ -240,7 +240,7 @@ def airheater(d: dict) -> dict:
         "mode": d.get("OperationModeAirHeater"),
         # Mode 3 = departure timer ARMED (the app's a2() writes it for "Start timer", j4() writes 0
         # for "Stop"; readback drives its "Timer: On" row + "Inactive • Timer: HH:MM" status bar —
-        # app-observed 2026-09-16). Other values (1/2 running states?) stay UNVERIFIED.
+        # app-observed 2026-09-16). The app ignores 1/2 (it reads only Mode == 3; decompile 5.4.0).
         "timer_armed": d.get("OperationModeAirHeater") == 3,
         "air_distribution": d.get("AirDistribution"),
         "running_time": d.get("RunningTime"),  # configured run duration (min)

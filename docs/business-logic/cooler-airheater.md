@@ -282,8 +282,10 @@ then reads "Timer: On").
   wire `3f0b007f1f3f`. Readback Mode 3 drives the page's "Timer: On" row and the status bar
   "Inactive • Timer: HH:MM" (gone after Stop even though TimerHour/TimerMin keep the time). Every
   other heater frame carries the sentinel `7`. calictl: `timer_start`/`timer_cancel`,
-  `semantics.airheater().timer_armed`. Values `1`/`2` are referenced in the field's bit layout
-  but no setter writes them — likely firmware-reported running states. UNVERIFIED. What the
+  `semantics.airheater().timer_armed`. Values `1`/`2` are unused by the app: it reads Mode
+  only as `Mode == 3` and writes only 0 and 3 (5.4.0 `ig/b.java:149,969`, `ig/b.B`; DECOMPILE
+  5.4.0.3036 2026-11-02); on screen 1/2 show as "timer off" (APP-OBSERVED 2026-11-02). What the
+  unit means by 1/2 is not knowable from the app. What the
   unit reports after the timer fires is also UNVERIFIED (the mock assumes Mode back to 0).
 - **ErrorCode dialogs — APP-OBSERVED 2026-09-16** ([fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit) `set airheater ErrorCode=N`, the
   app pops a toast the moment the readback changes; text verbatim):
@@ -343,12 +345,18 @@ literal copy again not recoverable from source, keys used as strong signals:
   back on [via a specific path]") — consistent with there being no direct "on" setter for that
   field.
 - `airHeaterPage_permanentHeatingTimerDialog_doYouWantToProceed_text` /
-  `..._permanentHeatingWillTurnOff_text` / `..._yesStartTimer_button` — confirms starting the
-  departure timer (`B0()`) is presented as **mutually exclusive with Permanent Heating** (starting
-  the timer turns permanent heating off).
-- `airHeaterPage_applyDialog_applyNewSettingsNow_text` / `..._runTimeWillBeReset_text` — changing
-  the combined-device selection (`a2()`) resets RunningTime; treat `a2()` as a disruptive/config
-  change, not a lightweight toggle.
+  `..._permanentHeatingWillTurnOff_text` / `..._yesStartTimer_button` — shown on **Start timer**
+  while continuous heating is on ("Continuous heating will turn off when the timer ends"). Its
+  confirm **arms** the timer (5.4.0 `ig/b.H0` + Mode 3: `OperationModeCombined` 1 +
+  `OperationModeAirHeater` 3, the same `3f3b017f1f3f` as Start timer); it does not write the start
+  time (`B0`/5.4.0 `v2`). DECOMPILE 5.4.0.3036 (2026-11-02), `bj/b.java:852-870`.
+- `airHeaterPage_applyDialog_applyNewSettingsNow_text` / `..._runTimeWillBeReset_text` — shown when
+  the **run-time slider** is released while Immediate heating is on. Apply writes OFF, waits
+  600 ms, writes `RunningTime`, waits 600 ms, writes ON; each write is followed by the 500 ms
+  neutral frame, so six frames go out (5.4.0 `i1/f0` case 21, from the smali; APP-OBSERVED
+  2026-11-02 odelly lab: OFF +0, RunningTime +600 ms, ON +1230 ms). The final ON goes through the
+  ErrorCode 5 gate. The app **never writes `RunningTime` alone while heating**. The level slider
+  writes at once with no dialog, also while heating. DECOMPILE 5.4.0.3036 (2026-11-02).
 - `airHeaterPage_timerWidget_startHeatingAt_text` / `..._heatingWillStart_text` /
   `..._startTimer_button` / `..._afterTheTimerIsActivated_text` — standard timer lifecycle copy,
   same shape as Cooler's timer widget.
@@ -365,14 +373,26 @@ Send the full 10-field frame every time (shared-send behavior above).
 
 - **Turn on Immediate/Normal Heating for N minutes**: set `RunningTime = N` (via `D4`, which
   writes the raw int unclamped — the bound lives in the UI: the app's heating info page states
-  immediate heating "is limited to 120 minutes" (`infoPage_heating_immediate_description`), and
-  the unit reports `ErrorCode 4` HEATING_TIME_EXCEEDED past it. calictl enforces **0–120** in
-  `control._airheater` (`AIRHEATER_MAX_RUNTIME_MIN`); the 8-bit width is not the valid range),
+  immediate heating "is limited to 120 minutes" (`infoPage_heating_immediate_description`).
+  `ErrorCode 4` is named HEATING_TIME_EXCEEDED in the app (text "Emission limit exceeded … switched
+  on again when moving ≥ 5 km/h"); the T7 limits per a third-party manual copy / dealer explainer
+  are ≤ 120 min per run and ≤ 180 min in total, then locked until driven. That the unit reports
+  code 4 for such a run is **not verified on this van**. The app's slider writes only
+  10–120 (index 1–12 × 10, 5.4.0 `d9/u.java:45-176`); calictl enforces the same **10–120** in
+  `control._airheater` (`AIRHEATER_MIN_RUNTIME_MIN`/`AIRHEATER_MAX_RUNTIME_MIN`); the 8-bit width
+  is not the valid range),
   then/also set `NormalOperationRequest = 1` (via `C2(true)`). `rf/b.java:198-218`.
 - **ErrorCode (1702) → app fault IDs** (`rf/b.java:461-671`): 1 `AIR_HEATER_LOW_BATTERY`,
   2 `FUEL_LOW`, 3 `SYSTEM_ERROR`, 4 `HEATING_TIME_EXCEEDED`, 5 `OPERATION_NOT_POSSIBLE`;
-  0 clears. Each drives a dialog AFTER a refused start (the app never greys the heater switch;
-  but code 5 refuses an ON with no write — app gates below). Surfaced by `semantics.airheater` as `error` (`low_battery` / `low_fuel` /
+  0 clears. The app raises the dialogs from **every 1702 decode**, not after a refused start
+  (5.4.0 `ig/b.O`, `ig/b.java:292-721`): codes 5, 6, 7 always; codes 1–4 only after the app has
+  seen a code 0 since the subscribe of the current connection (latch `e0`, gate
+  `e0 || code < 1 || code >= 5`, `ig/b.java:319`; reset per connect); each code's dialog once,
+  until the code returns to 0. The dashboard "error" flag uses the same latch. Only code 5 is tied
+  to a tap: ON under code 5 writes nothing and re-shows its dialog. DECOMPILE 5.4.0.3036 (2026-11-02); texts of all
+  seven codes APP-OBSERVED 2026-11-02 (odelly lab). Code 4 says the heater "can be switched on
+  again when the vehicle is moving at a speed of 5 km/h or more"; the app does not gate ON under
+  code 4 (APP-OBSERVED 2026-11-02: ON written). Surfaced by `semantics.airheater` as `error` (`low_battery` / `low_fuel` /
   `system_error` / `heating_time_exceeded` / `not_possible`) next to the raw `error_code`; the
   web UI shows it as a banner. Code→dialog-string pairing beyond the IDs is unresolved.
 
@@ -430,15 +450,18 @@ Send the full 10-field frame every time (shared-send behavior above).
   `rf/b.java:771-783`.
 - **Set air distribution**: `AirDistribution` via `H3`, using `we.a` enum
   (`FRONT_AND_REAR/FRONT/REAR`) mapped to wire values 1/2/3. `rf/b.java:220-242`.
-- **Arm the departure timer**: set `TimerHour`/`TimerMin` via `B0` (note the swapped slot
-  mapping vs Cooler above). This appears to be the sole trigger — no separate "start" bit
-  found. Expect this to end any active Permanent Heating per the dialog text.
+- **Set the departure start time**: `TimerHour`/`TimerMin` via `B0` (5.4.0 `v2`) — stores the
+  time only, **does not arm** (APP-OBSERVED 2026-09-27; arming is the separate Start timer below).
   `rf/b.java:164-175`.
 - **Turn off Permanent Heating**: `PermanentOperationRequest = 0` via `E3`. `rf/b.java:209-218`.
 - **Arm the departure timer ("Start timer")**: `a2(df.b.AIR_HEATER)` →
   `OperationModeAirHeater(Mode) = 3`, `OperationModeCombined = 1`, everything else at the
   sentinels: **`3f3b017f1f3f`** (APP-OBSERVED 2026-09-16 on a plain AirHeater-only California;
-  `uh/d.java` → `rf/b.java:274-308`). The other `df.b` combos (2-7) name Truma / roof-A/C
+  `uh/d.java` → `rf/b.java:274-308`). App 5.4.0 runs a **clock check first**: it waits up to 10 s
+  for the unit clock (1004) and, if it differs from the phone by more than 5 minutes, shows
+  "Different time settings." — the arm proceeds either way (5.4.0 `qg/e.Z1`,
+  `qg/e.java:199-288`; DECOMPILE 5.4.0.3036 (2026-11-02); APP-OBSERVED 2026-11-02). The unit's timer runs on the
+  unit clock. The other `df.b` combos (2-7) name Truma / roof-A/C
   equipment and are for vehicles that have it. calictl: `set airheater timer_start`.
 - **Stop the departure timer ("Stop")**: `OperationModeAirHeater(Mode) = 0` via `j4` →
   **`3f0b007f1f3f`** (APP-OBSERVED). calictl: `set airheater timer_cancel`.

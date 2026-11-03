@@ -100,6 +100,8 @@ DIAG = {
     "perf": ("esp_perf", ("route", "char", "op")),
     "evt": ("esp_evt", ("kind",)),
     "log": ("esp_log", ("lvl", "tag")),
+    # the cabin thermostat's step record (R_FW_THERMOSTAT_RUN): mode + heater state as tags
+    "thermo": ("esp_thermo", ("m", "h")),
     # the web UI's usage beacons (R_UX_TELEMETRY): calictl's own ui_ux layout + source=esp (ux_point)
     "ux": ("ui_ux", ("type", "ua_class", "origin", "standalone", "screen", "fn", "control")),
 }

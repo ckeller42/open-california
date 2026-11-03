@@ -27,6 +27,8 @@ repos:
       - id: check-added-large-files
         # 1 MB ceiling: docs carry small demo media (e.g. docs/_static/*.webm); still blocks the APK etc.
         args: ['--maxkb=1024']
+        # generated golden vectors near the ceiling (tools/gen_thermostat_vectors.py --check owns them)
+        exclude: ^tests/vectors/thermostat\.json$
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1

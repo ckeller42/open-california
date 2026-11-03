@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Record the real app walking a scripted scenario against the fake unit.
 
-    ~/esp-venv/bin/python tools/applab/walk.py cooler airheater
-    ~/esp-venv/bin/python tools/applab/walk.py --live --esp-fifo /tmp/esplab/fake_unit.in cooler
+    python3 tools/applab/walk.py cooler airheater
+    python3 tools/applab/walk.py --live --esp-fifo /tmp/esplab/fake_unit.in cooler
 
 Per scenario: SIGTERM the lab's fake unit (pid file), start a fresh one on ``android-netsim`` with
 ``FAKE_UNIT_RECORD`` set to a scratch file, run the steps of

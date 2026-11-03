@@ -95,6 +95,11 @@ extern "C" {
  * water guard's constants live with its one C implementation, csrc/ports.h.
  */
 #define CALI_SESSION_WATER_REREAD_MS 30000u
+/**
+ * Air heater (1702) re-read period (ms) while the thermostat holds the session (cali_session_hold()):
+ * continuous heating with no changing field must not go stale for the thermostat (heater_stale_ms).
+ */
+#define CALI_SESSION_HEATER_REREAD_MS 60000u
 
 /**
  * @brief What a cali_session_io_fn call reports.
@@ -261,6 +266,35 @@ int cali_session_probe(void);
  * @param ms Warm-up in ms.
  */
 void cali_session_set_warm_ms(uint32_t ms);
+
+/**
+ * @brief Hold the session for the cabin thermostat (R_FW_THERMOSTAT_RUN), while its mode is not OFF.
+ *
+ * While held the power-save rest stays away (a hang-up reconnects on the ordinary backoff and the
+ * CALI_SESSION_UNIT_COOLDOWN_MS cooldown), the BLE idle policy counts it as activity, and 1702 is
+ * re-read every CALI_SESSION_HEATER_REREAD_MS while the link is up. Holding switches the link mode
+ * to hold and leaves a rest at once. The mode is forced on that transition only; releasing the hold
+ * does not restore the previous mode.
+ *
+ * @param on 1 hold, 0 release.
+ */
+void cali_session_hold(int on);
+
+/** @brief Whether the thermostat holds the session. @return 1 or 0. */
+int cali_session_held(void);
+
+/**
+ * @brief Set the 1702 re-read period while held. Tests only (cali-host "thermo heaterms").
+ * @param ms The period in ms.
+ */
+void cali_session_set_heater_ms(uint32_t ms);
+
+/**
+ * @brief When CODEC_CHARS[i]'s stored frame arrived.
+ * @param i Index into CODEC_CHARS.
+ * @return Uptime in ms of the last read or notification stored for it, 0 when none.
+ */
+uint64_t cali_session_frame_ms(size_t i);
 
 /** @brief Whether a probe runs. @return 1 while a probe runs, else 0. */
 int cali_session_probing(void);

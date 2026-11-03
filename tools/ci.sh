@@ -121,7 +121,7 @@ linux() {   # CI's C toolchain (tools/docker/linux.Dockerfile: Linux amd64, gcc 
     python3 -m pytest -q -p no:cacheprovider)
   if [ $# -gt 0 ]; then "${run[@]}" "$@"; return; fi
   "${run[@]}" -n auto -m "not linux_only" tests/firmware tests/test_codec_parity.py tests/test_ports_parity.py
-  "${run[@]}" -m linux_only tests/firmware/test_control_parity.py   # its -m32 leg (no NimBLE needed)
+  "${run[@]}" -m linux_only tests/firmware/test_control_parity.py tests/firmware/test_thermostat_parity.py   # their -m32 legs (no NimBLE needed)
 }
 docs() {   # ci.yml's `docs` job in Docker (image oc-docs = docs/Dockerfile: doxygen + sphinx + breathe):
            # doxygen firmware/Doxyfile, then the -W site build. Ends with `site -> docs/_build/site`.

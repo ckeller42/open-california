@@ -42,7 +42,7 @@
  * - `{"ev":"diag","heap_free":...,"heap_min":...,"psram_free":...,"cpu_pct":...,"stack_min":{"owner":...},"wifi_rssi":...,"ble_rssi":...,"link_up":true,"uptime_s":...}`
  *   every 60 s (see cali_diag_health()).
  * - `{"ev":"evt","kind":"KIND",...}` with a kind of boot, link_up, link_down, wifi_up, wifi_down,
- *   net, cmd, ota, auto_camper, sd, ble_mode, probe, ble_exp, ble_phase, unit_adv, panic, touch
+ *   net, cmd, ota, auto_camper, thermo, sd, ble_mode, probe, ble_exp, ble_phase, unit_adv, panic, touch
  *   (cali_diag_touch()) or display (for example
  *   `cali_diag_evt("display", "\"state\":\"on\",\"src\":\"tap\"")`).
  * - `{"ev":"screen","lux":...,"prox":...,"motion":...}`, the screen's raw sensors, every 60 s once read.
@@ -54,6 +54,10 @@
  *   `{"ev":"log","dropped":n}` (cali_diag_log()).
  * - `{"ev":"ext","dev":"ALIAS","type":"govee","temp_c":...}`, a configured external sensor's
  *   reading (sensors.c, see cali_sensors.h), at most once a minute per sensor.
+ * - `{"ev":"thermo","r":REASON,"m":MODE,"h":HEATER,"t":...,"o":...,"g":...,"u":...,"i":...,"uo":...,"l":...,"lc":...,"rem":...}`
+ *   per cabin-thermostat step, and `{"ev":"evt","kind":"thermo","e":"mode"|"cmd",...}` per mode change
+ *   and command result (thermostat_run.c, see cali_thermostat.h), only while the feature is on or a
+ *   mode is active.
  *
  * No client MAC or IP and no user-typed value is ever recorded (for cmd: the function and control
  * name only).

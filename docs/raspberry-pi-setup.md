@@ -310,7 +310,8 @@ buspi's live data always wins and the ESP fills the hours buspi was off or out o
   `esp_diag` (heap, PSRAM, CPU, RSSI, `link_up`, `uptime_s`, `stack_min_<task>`), `esp_perf` (tag
   `route`, or `char` + `op`; fields `ms`, `bytes`, `status`), `esp_evt` (tag `kind`; its numbers and
   strings such as `reason`, `reset_reason`, `result`, `state`, `error`, `decision`), `esp_log` (tags
-  `lvl`, `tag`; `msg`, or `dropped`). The summary counts them per measurement (`diag_points`);
+  `lvl`, `tag`; `msg`, or `dropped`), `esp_thermo` (the cabin thermostat's step record: tags `m` mode,
+  `h` heater state; `r` reason, temperatures, demand, levels). The summary counts them per measurement (`diag_points`);
   `--verify` lists replayed vs stored per measurement. They feed the dashboard's **📟 ESP
   satellite** row (heap, CPU, RSSI, link timeline + reconnect time, reboots, HTTP p50/p95 per
   route, BLE op latency, warnings).

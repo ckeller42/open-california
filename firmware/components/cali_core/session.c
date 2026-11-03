@@ -70,9 +70,15 @@ static uint32_t s_rest_poll_ms = CALI_SESSION_REST_POLL_DEFAULT_MIN * 60000u;
 static uint64_t s_viewer_at, s_input_at;
 static int s_redial;
 static int s_rest_left;   /* the session left rest and has not had a link up since (a deep-sleeping unit) */
+/* The thermostat holds the session (R_FW_THERMOSTAT_RUN): no rest, and 1702 re-read every s_heater_ms */
+static int s_hold;
+static int s_heater_reading;
+static uint64_t s_heater_next;
+static uint32_t s_heater_ms = CALI_SESSION_HEATER_REREAD_MS;
 static const char *const MODE_NAME[] = {"hold", "quiet", "off"};
 
 #define WATER_CHAR 0x1302u
+#define HEATER_CHAR 0x1702u   /* air heater state: re-read while held (the thermostat, R_FW_THERMOSTAT_RUN) */
 #define VEHICLE_CHAR 0x1004u   /* vehicle state: CarVariant (the variant gate) */
 #define WATER_GOOD_KEY "water_good"   /* persisted last-plausible 1302 frame (<=15 chars, NVS) */
 
@@ -92,6 +98,7 @@ static struct {
     size_t len;
     uint8_t have;
     uint8_t live;              /* stored on the current link (cleared by link_up) */
+    uint64_t at;               /* now_ms it was stored (as s_last_update) */
 } s_fr[CODEC_NCHARS];
 /* READ completions and NOTIFYs both replace a function's frame: the last frame to arrive wins. The
  * app subscribes, then reads, and one decoder takes both (decompile 2026-10-07; calictl.device
@@ -185,7 +192,8 @@ static int stored_field(uint16_t c, const char *fn, const char *field) {
 static int rest_conditions(void) {
     int camping = stored_field(0x1202u, "campingmode", "State");
     int shore = stored_field(0x1602u, "energy", "StateLandAfs");
-    return camping == 0 && shore >= 0 && shore != 1 && shore != 2 && cali_ac_ignition() == 0 && !cali_ac_owed();
+    return camping == 0 && shore >= 0 && shore != 1 && shore != 2 && cali_ac_ignition() == 0 && !cali_ac_owed() &&
+           !s_hold;
 }
 
 /* This link's own frames show camping on (1202 State 1) or shore power active/standby (1602 StateLandAfs 1/2):
@@ -315,6 +323,7 @@ static void store(size_t i, const uint8_t *data, size_t len) {
     }
     s_fr[i].live = 1;
     s_last_update = s_now ? s_now : 1;
+    s_fr[i].at = s_last_update;
 }
 
 /* The unit the stored frames + config latch came from: its bonded identity ("" = none). */
@@ -358,6 +367,7 @@ static void link_clear(void) {
     s_reading = 0;
     s_snapped = 0;
     s_rereading = 0;
+    s_heater_reading = 0;
     s_variant_pending = 0;
     s_vehicle_pre = 0;
 }
@@ -462,6 +472,8 @@ static void link_up(void) {
     s_reading = 0;
     s_snapped = 0;
     s_rereading = 0;
+    s_heater_reading = 0;
+    s_heater_next = s_now + s_heater_ms;   /* the read pass reads 1702 */
     s_variant_pending = 0;
     s_vehicle_pre = 0;
     unit_check();
@@ -590,6 +602,12 @@ static void on_read(const cali_tevent_t *e) {
             cali_log("session: read vehicle status %d", e->status);
         }
         subscribe_and_warm();
+        return;
+    }
+    if (s_heater_reading && e->char_short == HEATER_CHAR && (w = index_of(HEATER_CHAR)) >= 0) {
+        s_heater_reading = 0;
+        if (e->status == 0) store((size_t)w, e->data, e->len);
+        else cali_log("session: read airheater status %d", e->status);
         return;
     }
     if (s_rereading && e->char_short == WATER_CHAR && (w = index_of(WATER_CHAR)) >= 0) {
@@ -748,17 +766,27 @@ void cali_session_tick(uint64_t now_ms) {
             return;
         }
     }
-    if (s_link == LINK_UP && s_warming && !s_rereading && now_ms >= s_warm_until) start_reads();
+    if (s_link == LINK_UP && s_warming && !s_rereading && !s_heater_reading && now_ms >= s_warm_until) start_reads();
     /* the planned redial ends once the link takes commands again (quiet/off: once read) */
     if (s_redial && s_link == LINK_UP && s_snapped && (s_mode != CALI_BLE_HOLD || cali_session_ready())) s_redial = 0;
     /* Re-read water on calictl's poll cadence: a latch served at connect is corrected on the link. */
-    if (s_link == LINK_UP && s_snapped && !s_reading && !s_warming && !s_rereading && now_ms >= s_water_next) {
+    if (s_link == LINK_UP && s_snapped && !s_reading && !s_warming && !s_rereading && !s_heater_reading &&
+        now_ms >= s_water_next) {
         s_water_next = now_ms + CALI_SESSION_WATER_REREAD_MS;
         int rc = s_t->read(WATER_CHAR);
         if (rc == 0)
             s_rereading = 1;
         else
             cali_log("session: read water failed %d", rc);
+    }
+    if (s_hold && s_link == LINK_UP && s_snapped && !s_reading && !s_warming && !s_rereading && !s_heater_reading &&
+        now_ms >= s_heater_next) {
+        s_heater_next = now_ms + s_heater_ms;
+        int rc = s_t->read(HEATER_CHAR);
+        if (rc == 0)
+            s_heater_reading = 1;
+        else
+            cali_log("session: read airheater failed %d", rc);
     }
     /* No verdict on the connect attempt at all — the transport's terminal event got lost (e.g. a
      * connect silently cancelled under a scan): drop and retry, never wedge in CONNECTING (#264,
@@ -857,6 +885,21 @@ int cali_session_connect(void) {
 }
 
 int cali_session_rest(void) { return s_rest; }
+
+void cali_session_hold(int on) {
+    on = on != 0;
+    if (on == s_hold) return;
+    s_hold = on;
+    if (!on) return;
+    if (s_mode != CALI_BLE_HOLD) (void)cali_session_set_mode(CALI_BLE_HOLD, "thermostat");   /* writes need hold */
+    reconnect_soon("thermostat");
+}
+
+int cali_session_held(void) { return s_hold; }
+
+void cali_session_set_heater_ms(uint32_t ms) { s_heater_ms = ms; }
+
+uint64_t cali_session_frame_ms(size_t i) { return i < CODEC_NCHARS && s_fr[i].have ? s_fr[i].at : 0; }
 
 int cali_session_redial(void) { return s_redial; }
 

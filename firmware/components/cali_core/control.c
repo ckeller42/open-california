@@ -294,7 +294,7 @@ static int b_airheater(const char *what, const char *value, cali_ctl_plan_t *p) 
         if (!int_range(value, 1, 10, &a)) return CALI_CTL_BAD_VALUE;
         put(v, "HeatingLevel", (uint32_t)a);
     } else if (strcmp(what, "runtime") == 0) {
-        if (!int_range(value, 0, CALI_AIRHEATER_MAX_RUNTIME_MIN, &a)) return CALI_CTL_BAD_VALUE;
+        if (!int_range(value, CALI_AIRHEATER_MIN_RUNTIME_MIN, CALI_AIRHEATER_MAX_RUNTIME_MIN, &a)) return CALI_CTL_BAD_VALUE;
         put(v, "RunningTime", (uint32_t)a);
     } else if (strcmp(what, "timer") == 0) {
         if (!hhmm(value, &a, &b)) return CALI_CTL_BAD_VALUE;

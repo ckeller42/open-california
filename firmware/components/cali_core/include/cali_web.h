@@ -131,6 +131,7 @@
  *            "res":{"heap_free_kb","heap_min_kb","psram_free_kb","cpu_pct"} [diag],
  *            "battery":{"pct","mv","usb","charging","runtime_min"},
  *            "auto_camper":{"enabled":<bool>,"state":"idle"|"armed"|"restoring"},
+ *            "thermostat":{"mode","target","t_ref","level","reason"} [only with a reference sensor],
  *            "pi_wake":{"enabled":<bool>,"last_s":<int>|null,
  *                       "reason":"ignition"|"manual"|null,"halt_after_min","halt_soc_pct",
  *                       "halt_in_s":<int>|null,"halted":<bool>,"halt_last_s":<int>|null,
@@ -160,6 +161,7 @@
  *   - `res`: cali_res_stats. Each member an int or null (unknown: host build, no PSRAM).
  *   - `battery`: cali_battery.h (R_FW_BATTERY). Each member null when unknown (host, QEMU, no AXP2101).
  *   - `auto_camper`: cali_auto_camper.h (R_FW_AUTO_CAMPER).
+ *   - `thermostat`: cali_thermostat.h (R_FW_THERMOSTAT_API), only while a reference thermometer is selected.
  *   - `pi_wake`: cali_pi_wake.h (R_FW_PI_WAKE, R_FW_PI_HALT). `last_s` = seconds since the last pulse.
  *   - `ble`: cali_ble_exp.h (R_FW_BLE_MODE, R_FW_BLE_EXP, R_FW_BLE_IDLE). A GET of /api/state is a
  *     viewer: it holds the experiment and the idle policy.
@@ -276,6 +278,10 @@
  * - `POST /api/auto_camper`: `{"enabled":<bool>}` (exactly that object; R_FW_AUTO_CAMPER, serve's
  *   endpoint). Calls cali_ac_set_enabled and answers 200 `{"ok":true,"auto_camper":<bool>}`.
  *   Errors: 403 `setup_mode`, 400 `bad_json`, 500 `store` (not saved), 405.
+ * - `GET /api/thermostat`, `POST /api/thermostat` (R_FW_THERMOSTAT_API): the cabin thermostat's
+ *   configuration and status, changed by cali_thermo_apply(). Body keys, ranges, `confirm` rules and
+ *   errors (400 `bad_json`/`bad_value`/`unknown_sensor`/`confirm_required`, 409 `stale_rev`, 403
+ *   `setup_mode` for POST, 500 `store`, 405): see cali_thermostat.h.
  * - `POST /api/pi_wake`: `{}` or no body (R_FW_PI_WAKE). Calls cali_pw_wake("manual"), GPIO9 low
  *   200 ms, answers 200 `{"ok":true}`. Errors: 409 `busy` (a pulse in progress), 403 `setup_mode`,
  *   400 `bad_json` (any other body), 405.

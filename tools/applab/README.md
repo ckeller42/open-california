@@ -58,69 +58,45 @@ removable volumes mid-session (`Operation not permitted` on every read while exe
 run) — grant *Files and Folders → Removable Volumes* to the terminal app, or keep the Bumble venv
 on the internal disk.
 
-## One-time setup (Linux x86_64 with KVM — thinky)
+## One-time setup (Linux x86_64 with KVM)
 
 On an x86_64 Linux host the emulator runs the `google_apis;x86_64` image natively under KVM,
-headless. The apk-pure 5.0.8 APK was universal (x86_64 libraries included); the phone's split APKs
-(5.4.0.3036, installed on thinky since 2026-10-10) carry **arm64 libraries only**, which the API 34
-image runs through its ARM translation (`ro.dalvik.vm.native.bridge=libndk_translation.so`) — see
-"Updating the app" below. `tools/applab/setup_linux.sh` installs
-everything idempotently under `~/android-lab` (SDK + emulator + image, AVD `lab34` on a `pixel_6`
-profile, `grpcio`/`protobuf` into the Bumble venv, the APK by `scp` from `pi@buspi:~/apks/`). It
-stops with the exact command when a prerequisite is missing: group `kvm`, Java 17, `unzip`, and
-`loginctl enable-linger` (netsim's `netsim.ini` lives in `$XDG_RUNTIME_DIR`, which systemd removes
-when the last ssh session ends).
+headless. The phone's split APKs carry **arm64 libraries only**; the API 34 image runs them through
+its ARM translation (`ro.dalvik.vm.native.bridge=libndk_translation.so`). `tools/applab/setup_linux.sh`
+installs everything idempotently under `~/android-lab`: the SDK, emulator and image, the AVD `lab34`
+(`pixel_6`), a Bumble venv (`venv-bumble`, pinned, with `grpcio`/`protobuf`), the split APKs of
+`APK_VERSION` from `pi@buspi:~/apks/<version>/`, and `env.sh` (which also exports `LAB_DIR`, `AVD`,
+`BUMBLE_PY`). Missing packages (Java 17, `unzip`, `Xvfb`, `rsync`) are installed with `sudo -n`; it
+stops with the exact command for what it cannot fix: group `kvm`, and `loginctl enable-linger`
+(netsim's `netsim.ini` lives in `$XDG_RUNTIME_DIR`, which systemd removes when the last ssh session
+ends).
 
 ```sh
-tools/applab/setup_linux.sh
-export LAB_DIR=~/android-lab AVD=lab34 BUMBLE_PY=~/esp-venv/bin/python
-. $LAB_DIR/env.sh
-FAKE_UNIT_VIN=$(cat $LAB_DIR/vin) tools/applab/labctl.sh up
-adb install -r "$(ls $LAB_DIR/apks/*.apk | head -1)"
+tools/applab/setup_linux.sh                    # a fresh lab: then onboard + pair the app once (below)
+LAB_FROM=thinky tools/applab/setup_linux.sh    # move a lab: copy the onboarded AVD, vin and APKs
+. ~/android-lab/env.sh
+tools/applab/labctl.sh up                      # emulator on a private Xvfb, fake unit, app
+tools/applab/labctl.sh install                 # install/update the newest APK version as an update
 ```
+
+`LAB_FROM` copies the AVD (stop the emulator on that host first), `vin`, `fake_unit_keys.json` and
+`apks/` with `rsync`, so the app keeps its onboarding and its bond with the fake unit. On Linux the
+fake's keystore lives in the lab (`env.sh` exports `FAKE_UNIT_KEYSTORE=$LAB_DIR/fake_unit_keys.json`),
+because the bond belongs to the AVD, not to a repo checkout.
+
+**GPU.** On Linux `labctl.sh` boots the emulator with `-gpu swangle_indirect` (ANGLE over SwiftShader
+Vulkan) on a private `Xvfb :120`, which it starts when it is not up (`LAB_GPU`, `LAB_DISPLAY`
+override both). Host SwiftShader/llvmpipe (`swiftshader_indirect`, and Xvfb with llvmpipe) segfaults
+qemu as soon as the app renders its home screen; `-gpu guest` falls back to host lavapipe on this image
+and dies the same way; headless `-gpu host` without an X display fails (`Failed to get EGL display`).
+`-gpu host` on a real NVIDIA X session works, but it breaks when other users' sessions share the GPU.
 
 The emulator flag that bridges netsim Bluetooth is `-packet-streamer-endpoint default`
-(`labctl.sh up` passes it); boot it by hand with
-`emulator -avd lab34 -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -packet-streamer-endpoint default`.
-
-**GPU on thinky (2026-10-05): `swiftshader_indirect` CRASHES the CaliforniaOnTour app.** The
-software renderer (SwiftShader Vulkan *and* GLES, and Xvfb+llvmpipe) segfaults qemu the moment the
-app renders its home/onboarding screens — the whole emulator dies with no log line (benign apps like
-Settings render fine; it is the app's Skia/Compose content). The emulator must render on the NVIDIA
-GPU: thinky has an xrdp Xorg session on the NVIDIA card at display `:10`
-(`/usr/lib/xorg/Xorg :10 … xorg_nvidia_auto.conf`, owner uid 1000). Boot the emulator against it:
-
-```sh
-DISPLAY=:10 XAUTHORITY=/run/xrdp/sockdir/1000/Xauthority \
-  "$ANDROID_SDK_ROOT/emulator/emulator" -avd lab34 -no-window -no-audio -no-boot-anim -no-snapshot \
-  -gpu host -packet-streamer-endpoint default >/tmp/applab/emulator.log 2>&1 &
-```
-
-The log then reads `Graphics Adapter … NVIDIA GeForce RTX 3090 Ti` and the app is stable. Needs a live
-`:10` session (check `ls /tmp/.X11-unix`; `DISPLAY=:10 glxinfo | grep renderer` must say NVIDIA).
-`labctl.sh up` still passes `swiftshader_indirect`, so on thinky launch the emulator by hand with the
-command above, then `labctl.sh fake` for the fake unit. Also: on a cold start grant location once so
-the permission sheet does not block automation — `adb shell pm grant de.volkswagen.CaliforniaOnTour
-android.permission.ACCESS_FINE_LOCATION` (+ `ACCESS_COARSE_LOCATION`).
-
-**Fallback when `:10` is unusable (2026-10-05, second session).** With other users' xrdp/NVIDIA
-sessions active, `-gpu host` on `:10` began dying right after boot (`DisplaySurfaceGlContextHelper
-context was preempted by others`, then a qemu segfault). What recorded `cooler`, `roof-hold`,
-`lighting-profile` and `lighting-wakeup`: a private `Xvfb :120` plus **`-gpu guest`** (guest-side
-rendering — the app renders fine; it is host SwiftShader/llvmpipe that crashes it). `-gpu guest`
-cannot load `clean_paired` (taken under `-gpu host`), so the AVD cold-boots on its disk state (the
-app stays onboarded). It is still flaky: qemu often segfaults silently (no crash report) within ~15 s
-of the first walk after a boot or after a failed walk, while the app starts against the fake; once a
-walk connects, later walks run fine. A loop that re-boots whenever qemu is gone and retries the walk
-landed each scenario in 2–8 attempts. Stop the Xvfb afterwards.
-
-**Better fallback (2026-10-06, A2 Task 7): `-gpu swangle_indirect` on the private `Xvfb :120`.** On this
-image `-gpu guest` silently falls back to host **lavapipe** (`emulator.log`: "Your AVD has been configured
-with an in-guest renderer, but the system image does not support guest rendering. Falling back to
-'lavapipe' mode"), and qemu then died on most cold app starts (2 of ~25 walks connected, with no `:10`
-session at all after a reboot, so not GPU contention). `swangle_indirect` (ANGLE over SwiftShader Vulkan)
-survived repeated cold app starts and every walk that session; failures left were only the pairing DHKEY
-flake. Headless `-gpu host` without an X display does not work (`Failed to get EGL display`).
+(`labctl.sh up` passes it). By hand, on Linux:
+`DISPLAY=:120 emulator -avd lab34 -no-window -no-audio -no-snapshot -gpu swangle_indirect -packet-streamer-endpoint default`
+(with `Xvfb :120` running). qemu can still die silently in the first ~15 s of a cold app start; a
+loop that re-boots when qemu is gone and retries the walk lands the scenario. `labctl.sh install`
+grants the location permission so its sheet does not block automation.
 
 **Reconnect / ghost radios (recording caveat).** After the fake restarts (every `walk.py` scenario
 does), netsimd can keep a stale radio at the fake's identity so the app reconnects to a dead link and
@@ -145,15 +121,13 @@ by hand once buspi is back (`scp pi@buspi:~/apks/*.apk ~/android-lab/apks/`), th
 ### Updating the app (from the phone's split APKs)
 
 The phone's APKs land in `buspi:~/apks/<version>/` (`base.apk`, `split_config.{arm64_v8a,de,en,mdpi,xxhdpi}.apk`,
-`version.txt`). Copy them over (buspi cannot ssh to thinky; relay through a machine that reaches both:
-`scp -3 'buspi:~/apks/5.4.0.3036/*.apk' thinky:android-lab/apks/5.4.0.3036/`) and install them as an
-**update**, so the app keeps its data (onboarding, the VIN):
+`version.txt`). Copy the version directory to the lab host (buspi cannot ssh to the lab hosts; relay
+through a machine that reaches both:
+`ssh odelly mkdir -p android-lab/apks/5.4.0.3036 && scp -3 'buspi:~/apks/5.4.0.3036/*.apk' odelly:android-lab/apks/5.4.0.3036/`;
+`APK_VERSION=<version> tools/applab/setup_linux.sh` does this itself when the lab host reaches buspi), then install it as an **update**, so the app keeps its data (onboarding, the VIN):
 
 ```sh
-cd ~/android-lab/apks/5.4.0.3036
-adb install-multiple -r base.apk split_config.arm64_v8a.apk split_config.en.apk \
-  split_config.de.apk split_config.xxhdpi.apk split_config.mdpi.apk
-adb shell dumpsys package de.volkswagen.CaliforniaOnTour | grep -E 'versionName|primaryCpuAbi'
+tools/applab/labctl.sh install        # newest version dir; APK_VERSION=<version> picks another
 ```
 
 Expect `versionName=5.4.0.3036` and `primaryCpuAbi=arm64-v8a` (ARM translation, see above). The
@@ -345,7 +319,7 @@ the XY point and run it again; nothing retries.
 
 ```sh
 . $LAB_DIR/env.sh
-~/esp-venv/bin/python tools/applab/walk.py cooler airheater
+python3 tools/applab/walk.py cooler airheater
 python3 -m tools.capture_diff tests/vectors/app/cooler.jsonl --recording    # the replay, write by write
 python3 -m tools.app_parity tests/vectors/app/session.jsonl                  # app / calictl / ESP lifecycle
 ```

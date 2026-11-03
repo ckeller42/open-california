@@ -308,3 +308,41 @@ def test_company_id_0001_needs_a_plausible_6_byte_payload(cli, tmp_path):
         ],
     )
     assert json.loads(out[-1][4:])["seen"] == []
+
+
+def test_sensors_value_getter(cli, tmp_path):
+    """cali_sensors_value: a configured alias's field as centi-units with the advert's time; -1 for an
+    unknown alias, a field the type lacks, no reading yet, or a removed sensor (the thermostat's input).
+
+    .. test:: Sensor value getter for the thermostat
+       :id: T_FW_SENSORS_VALUE
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    a = f"adv A4:C1:38:00:00:02 1 -70 GVH5074_0002 {GOVEE_H5074}"
+    out = run(cli, tmp_path, ["init", a, "api 1000"])
+    sid = json.loads(out[-1][4:])["seen"][0]["id"]
+    out = run(cli, tmp_path, ["init", a, f"add {sid} cabin -", "value cabin 0", "now 4200", a,
+                              "value cabin 0", "value cabin 1", "value cabin 3", "value other 0",
+                              f"remove {sid}", "value cabin 0"])  # fmt: skip
+    vals = [line for line in out if line.startswith("VALUE")]
+    assert vals == [
+        "VALUE -1",  # configured, no reading since the add
+        "VALUE 0 2396 4200",  # 23.96 C
+        "VALUE 0 5848 4200",  # 58.48 %
+        "VALUE -1",  # govee has 3 fields
+        "VALUE -1",  # unknown alias
+        "VALUE -1",  # removed
+    ]
+
+
+def test_sensors_centi_rejects_non_finite_and_clamps(cli, tmp_path):
+    """NaN and infinity are no value; a huge float clamps before the int32 conversion (no UB).
+
+    .. test:: Sensor value conversion is finite and bounded
+       :id: T_FW_SENSORS_CENTI
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(cli, tmp_path, ["centi nan", "centi inf", "centi -inf", "centi 1e12", "centi -1e12", "centi 23.96",
+                              "centi -0.125"])  # fmt: skip
+    assert out == ["CENTI -1", "CENTI -1", "CENTI -1", "CENTI 0 2000000000", "CENTI 0 -2000000000",
+                   "CENTI 0 2396", "CENTI 0 -13"]  # fmt: skip
