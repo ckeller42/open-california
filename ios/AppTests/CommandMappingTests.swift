@@ -28,6 +28,8 @@ struct CommandMappingTests {
         #expect(CampingView.master(true) == Command(function: "campingmode", what: "master", value: "on"))
         #expect(CampingView.master(false) == Command(function: "campingmode", what: "master", value: "off"))
         #expect(CampingView.lights(true) == Command(function: "campingmode", what: "lights", value: "on"))
+        #expect(CampingView.doorLightsOff(true) == Command(function: "campingmode", what: "lights", value: "off"))
+        #expect(CampingView.doorLightsOff(false) == Command(function: "campingmode", what: "lights", value: "on"))
         #expect(CampingView.usb(false) == Command(function: "campingmode", what: "usb", value: "off"))
     }
 

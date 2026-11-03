@@ -1446,23 +1446,6 @@
         }
       }
     },
-    "Exterior and interior lighting": {
-      "extractionState": "manual",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Außen- und Innenbeleuchtung"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Exterior and interior lighting"
-          }
-        }
-      }
-    },
     "Exterior light": {
       "extractionState": "manual",
       "localizations": {
@@ -2054,6 +2037,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lighting: sent, check the lamp"
+          }
+        }
+      }
+    },
+    "Lights off when front doors open": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licht aus, wenn vordere Türen öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lights off when front doors open"
           }
         }
       }

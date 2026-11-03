@@ -30,7 +30,7 @@ final class LabControlUITests: XCTestCase {
     /// The cockpit tile and the switch label of each switch action.
     private static let switches: [String: (screen: Screen, label: String)] = [
         "campingmode.master": (.tile("Camping mode"), "Camping mode"),
-        "campingmode.lights": (.tile("Camping mode"), "Exterior and interior lighting"),
+        "campingmode.lights": (.tile("Camping mode"), "Lights off when front doors open"),
         "campingmode.usb": (.tile("Camping mode"), "Rear USB ports"),
         "cooler.power": (.tile("Cooler"), "Refrigerator box"),
         "lighting.power": (.tile("Lighting"), "All lights"),
@@ -309,7 +309,9 @@ final class LabControlUITests: XCTestCase {
             try runMenu(app, screen, name, option)
         } else {
             let row = try XCTUnwrap(Self.switches[fn + "." + what], "no UI path for \(action)")
-            try runSwitch(app, row.screen, row.label, on: value == "on")
+            // `lights on` lets the front lights come on: the unit-worded switch then shows off.
+            let inverted = fn + "." + what == "campingmode.lights"
+            try runSwitch(app, row.screen, row.label, on: (value == "on") != inverted)
         }
         sleep(2)  // the unit's feedback notification lands in the record before the next action
         shot(app, "after")

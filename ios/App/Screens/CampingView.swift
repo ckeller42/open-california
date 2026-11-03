@@ -1,7 +1,7 @@
 import CaliBLE
 import SwiftUI
 
-/// Camping mode: the master switch and, while it is on, the exterior/interior lighting and the rear
+/// Camping mode: the master switch and, while it is on, the front-door lights setting and the rear
 /// USB ports (app.js FEATURES.campingmode, same gates and words).
 ///
 /// - Requirement: R_IOS_FUNCTIONS, R_IOS_I18N
@@ -10,6 +10,8 @@ struct CampingView: View {
 
     static func master(_ on: Bool) -> Command { .onOff("campingmode", "master", on) }
     static func lights(_ on: Bool) -> Command { .onOff("campingmode", "lights", on) }
+    /// The unit-worded switch "Lights off when front doors open": on = the front lights stay off.
+    static func doorLightsOff(_ on: Bool) -> Command { lights(!on) }
     static func usb(_ on: Bool) -> Command { .onOff("campingmode", "usb", on) }
 
     private func on(_ key: String) -> Bool { store.value("campingmode", key)?.bool == true }
@@ -27,9 +29,11 @@ struct CampingView: View {
                         isOn: Binding(get: { master }, set: { run(Self.master($0)) }))
                 }
                 ControlRow(disabledBecause: master ? nil : "Turn camping mode on first") {
+                    // The unit's own wording and direction (AD_CAMPING_DOOR_LIGHTS_UNIT_WORDING): on =
+                    // both light bits 1. The command keeps the app's sense: `lights on` = bits 0.
                     SwitchRow(
-                        id: "camping.lights", label: Text("Exterior and interior lighting"),
-                        isOn: Binding(get: { on("lights_on") }, set: { run(Self.lights($0)) }))
+                        id: "camping.lights", label: Text("Lights off when front doors open"),
+                        isOn: Binding(get: { !on("lights_on") }, set: { run(Self.doorLightsOff($0)) }))
                 }
                 ControlRow(disabledBecause: master ? nil : "Turn camping mode on first") {
                     SwitchRow(
