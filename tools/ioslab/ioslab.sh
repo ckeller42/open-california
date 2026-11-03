@@ -18,8 +18,8 @@
 #   run <action>…            one LabControlUITests action per test run (see that file for the list;
 #                            plus wait.<seconds>). Each control action first gets a "step" event in
 #                            $IOSLAB_DIR/steps.jsonl for tools/capture_diff.py. The iPhone's Auto-Lock
-#                            is read first, set to Never and restored at the end (also after a failure
-#                            or STOP); IOSLAB_KEEP_AUTOLOCK=1 skips that. A file $IOSLAB_DIR/STOP ends the
+#                            is set to Never for the run and the owner's value is restored at the end
+#                            (also after a failure or STOP; `autolock_guard`). A file $IOSLAB_DIR/STOP ends the
 #                            run before the next action.
 #   tour <variant>…          LabTourUITests screenshots per variant (light, dark, de, ax5), exported to
 #                            $IOSLAB_DIR/tour/<variant>/
@@ -49,21 +49,35 @@ act() {
         | sed -E "s/^.*(error|testLabAction\]) ?:? ?//" | head -4 | tr "\n" ";" || true
 }
 
+# The iPhone's Auto-Lock for a lab run: read it, set Never, restore the owner's value on exit (also
+# after a failure or STOP). The owner's value is kept in $DIR/autolock.original across runs, so a run
+# that finds Never (an earlier run died before its restore) still restores the owner's value, never
+# Never. IOSLAB_KEEP_AUTOLOCK=1 skips all of it.
+autolock_guard() {
+    [[ -n "${IOSLAB_KEEP_AUTOLOCK:-}" ]] && return 0
+    local r now orig=""
+    r=$(act device.autolock.read)
+    now=$(sed -nE "s/.*LAB_AUTOLOCK=([^;]*).*/\1/p" <<<"$r" | tr -d "\r" | sed -E "s/[[:space:]]+$//")
+    [[ -f "$DIR/autolock.original" ]] && orig=$(<"$DIR/autolock.original")
+    if [[ -n "$now" && "$now" != Never && "$now" != Nie ]]; then
+        orig=$now
+        printf '%s\n' "$orig" >"$DIR/autolock.original"
+        echo "device.autolock.Never | $(act device.autolock.Never)"
+    fi
+    echo "autolock: now ${now:-unknown}, restored at the end: ${orig:-unknown}"
+    if [[ -z "$orig" ]]; then
+        echo "WARNING: the owner's Auto-Lock value is not known; write it to $DIR/autolock.original" >&2
+        return 0
+    fi
+    # shellcheck disable=SC2064  # the value is fixed now, on purpose
+    trap "echo \"device.autolock.$orig | \$(act 'device.autolock.$orig')\"" EXIT
+}
+
 run() {
     touch "$DIR/steps.jsonl"
-    local n saved="" r
+    local n
     n=$(($(wc -l <"$DIR/steps.jsonl") + 1))
-    if [[ -z "${IOSLAB_KEEP_AUTOLOCK:-}" ]]; then
-        r=$(act device.autolock.read)
-        saved=$(sed -nE "s/.*LAB_AUTOLOCK=([^;]*).*/\1/p" <<<"$r" | tr -d "\r" | sed -E "s/[[:space:]]+$//")
-        echo "autolock was: ${saved:-unknown}"
-        [[ -n "$saved" ]] && printf '%s\n' "$saved" >"$DIR/autolock.saved"
-        if [[ -n "$saved" && "$saved" != Never && "$saved" != Nie ]]; then
-            echo "device.autolock.Never | $(act device.autolock.Never)"
-            # shellcheck disable=SC2064  # the value is fixed now, on purpose
-            trap "echo \"device.autolock.$saved | \$(act 'device.autolock.$saved')\"" EXIT
-        fi
-    fi
+    autolock_guard
     local a fn what val v
     for a in "$@"; do
         [[ -e "$DIR/STOP" ]] && { echo "stopped before $a"; exit 1; }
@@ -94,6 +108,7 @@ case "${1:-}" in
     run) shift; run "$@" ;;
     tour)
         shift
+        autolock_guard
         for t in "$@"; do
             rm -rf "$DIR/tour/$t.xcresult" "$DIR/tour/$t"
             r=$(TEST_RUNNER_LAB_TOUR="$t" xcodebuild test-without-building "${PROJ[@]}" "${DEST[@]}" -derivedDataPath "$DD" \
