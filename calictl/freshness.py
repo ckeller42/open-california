@@ -104,7 +104,8 @@ def settle_water(new: dict, good, pending, now: float, settle: float = WATER_SET
     Order: no fresh level -> pass through (can't judge). The not-measuring 1 L latch is held:
     vs a baseline, ``implausible_water_drop``; with NO baseline (cold start) any level <=
     ``WATER_LATCH_MAX_L`` — nothing is shown rather than a fake 1 L. A reading equal to the baseline
-    is adopted at once. Any other level is a candidate: adopted once the SAME (fresh, waste) has been
+    is adopted at once, and so is a reading with the unit's empty alarm (``measured_empty``: the
+    alarm comes only from a measurement, so it needs no second read). Any other level is a candidate: adopted once the SAME (fresh, waste) has been
     seen for ``settle`` (``now`` and ``settle`` in one unit, the caller's monotonic clock). So a
     single read of a new value — e.g. one 30 s poll landing mid-ramp — is never adopted; a second
     read of the same value ``settle`` later is. ``settle=0`` adopts at once (debounce off).
@@ -124,7 +125,8 @@ def settle_water(new: dict, good, pending, now: float, settle: float = WATER_SET
 
        The daemon shall adopt a fresh/grey water reading that differs from the baseline only after
        the same reading has been seen for ``WATER_SETTLE_S`` (the unit ramps 1 -> real value in
-       ~4 s when it starts measuring); until then it keeps the baseline, flagged stale. With no
+       ~4 s when it starts measuring); until then it keeps the baseline, flagged stale. A reading
+       with the unit's fresh-water empty alarm (``FreshWaterInfoPopUp`` 5) is adopted at once. With no
        baseline, a level <= ``WATER_LATCH_MAX_L`` without the unit's empty alarm is not a measurement
        and nothing is shown.
     """
@@ -138,6 +140,8 @@ def settle_water(new: dict, good, pending, now: float, settle: float = WATER_SET
         return False, None
     elif _key(new) == _key(good):
         return True, None
+    if measured_empty(new):
+        return True, None  # the unit's own empty alarm is a measurement: no second read needed
     key = _key(new)
     if pending is None or pending[0] != key:
         pending = (key, now)

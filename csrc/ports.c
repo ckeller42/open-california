@@ -17,7 +17,8 @@ int freshness_implausible_drop(int32_t nf, int32_t pf, int32_t ng, int32_t pg,
     return ng == pg;                 /* grey EXACTLY frozen -> latch */
 }
 
-/* Exact ladder of calictl/freshness.py:settle_water (2026-10-10 ramp debounce). */
+/* Exact ladder of calictl/freshness.py:settle_water (2026-10-10 ramp debounce;
+ * 2026-11-03: a frame with the empty alarm is adopted at once). */
 int freshness_settle(int32_t nf, int32_t pf, int32_t ng, int32_t pg, uint8_t have,
                      uint64_t now_ms, uint32_t settle_ms, fresh_pending_t *p)
 {
@@ -37,6 +38,10 @@ int freshness_settle(int32_t nf, int32_t pf, int32_t ng, int32_t pg, uint8_t hav
     } else if (nf == pf && hng == ((have & FRESH_HAVE_PG) ? 2u : 0u) && (!hng || ng == pg)) {
         p->have = 0;
         return 1;                    /* the baseline itself */
+    }
+    if (have & FRESH_NEW_EMPTY) {
+        p->have = 0;
+        return 1;                    /* the unit's empty alarm is a measurement: no second read */
     }
     if (!(p->have & 1u) || p->fresh != nf || (p->have & 2u) != hng || (hng && p->waste != ng)) {
         p->fresh = nf;

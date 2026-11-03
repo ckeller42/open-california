@@ -247,6 +247,11 @@ A poll landing mid-ramp is not a measurement either: buspi read **16 L** at 08:5
 
 - level ≤ 1 L with grey unchanged vs the baseline → not measured → hold the baseline (unchanged);
 - a reading equal to the baseline → adopted at once;
+- a reading with the unit's empty alarm (`FreshWaterInfoPopUp` 5) → adopted at once: the alarm comes
+  only from a measurement, so it needs no second read. A client that reads water once per link
+  (the iOS app) otherwise holds a full tank's last level against the unit's own empty reading, and
+  with camping off most links are too short for a second read (ESP SD log: median link 3.9 s; 10 of
+  254 links carried two water reads ≥ 5 s apart);
 - any other (fresh, grey) → adopted only once the **same** reading has been seen for
   `WATER_SETTLE_S` = 5 s (C/ESP `FRESH_SETTLE_MS`), on the caller's clock (serve:
   `time.monotonic()`, ESP: the session tick). Until then the baseline is served, flagged stale
