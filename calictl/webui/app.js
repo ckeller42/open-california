@@ -735,10 +735,27 @@ function openHelp() {
   document.body.appendChild(d);   // outside #app: survives the 2 s re-render
   d.showModal();
 }
+// Tile icons: Lucide 0.460.0 (ISC, see ICONS.md), the bodies of the 24x24 stroke icons.
+/** @type {Record<string, string>} */
+const ICONS = {
+  snowflake: '<path d="M2 12h20M12 2v20"/><path d="m20 16-4-4 4-4"/><path d="m4 8 4 4-4 4"/><path d="m16 4-4 4-4-4"/><path d="m8 20 4-4 4 4"/>',
+  tent: '<path d="M3.5 21 14 3"/><path d="M20.5 21 10 3"/><path d="M15.5 21 12 15l-3.5 6"/><path d="M2 21h20"/>',
+  lightbulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+  heater: '<path d="M11 8c2-3-2-3 0-6"/><path d="M15.5 8c2-3-2-3 0-6"/><path d="M6 10h.01"/><path d="M6 14h.01"/><path d="M10 16v-4"/><path d="M14 16v-4"/><path d="M18 16v-4"/><path d="M20 6a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3"/><path d="M5 20v2"/><path d="M19 20v2"/>',
+  droplet: '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+  battery: '<path d="M15 7h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/><path d="M6 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1"/><path d="m11 7-3 5h4l-3 5"/><path d="M22 11v2"/>',
+  caravan: '<path d="M18 19V9a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v8a2 2 0 0 0 2 2h2"/><path d="M2 9h3a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2"/><path d="M22 17v1a1 1 0 0 1-1 1H10v-9a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v9"/><circle cx="8" cy="19" r="2"/>',
+  car: '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+};
+/** A decorative tile icon: the tile's text label carries the meaning. */
+const iconSvg = (/** @type {string|undefined} */ name) => name && ICONS[name]
+  ? `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" ` +
+    `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`
+  : "";
 /** @type {Record<string, Feature>} */
 const FEATURES = {
   cooler: {
-    title: "Cooler", icon: "❄️",
+    title: "Cooler", icon: "snowflake",
     controls: [
       { what: "power", kind: "toggle", label: "Refrigerator box", state: "on" },
       { what: "level", kind: "slider", label: "Cooling level", state: "level", min: CTL_COOLER_LEVEL_RANGE[0], max: CTL_COOLER_LEVEL_RANGE[1] },
@@ -781,7 +798,7 @@ const FEATURES = {
     summary: (s) => (t(COOLER_FAULT_MSG[/** @type {string} */ (s.fault)]) || (s.on ? `${t("On")} · ${t("level")} ${s.level}` : t("Off"))),
   },
   campingmode: {
-    title: "Camping mode", icon: "🏕️",
+    title: "Camping mode", icon: "tent",
     controls: [
       // The unit sheds camping master when terminal-15 comes on and refuses it while driving
       // (camping-watch: every `ignition 0->1` pairs with `master_on 1->0`; the app gates its
@@ -806,11 +823,11 @@ const FEATURES = {
     summary: (s) => onoff(s.master_on),
   },
   lighting: {
-    title: "Lighting", icon: "💡", lighting: true,   // custom renderer (renderLighting)
+    title: "Lighting", icon: "lightbulb", lighting: true,   // custom renderer (renderLighting)
     summary: (s) => onoff(s.any_on),
   },
   airheater: {
-    title: "Air heater", icon: "🔥",
+    title: "Air heater", icon: "heater",
     // Fuel-burning: every START prompts. Turning continuous heating OFF is the one write here that
     // can't arm anything, and it has its own prompt below — no feature-level one on top.
     confirm: (w, v) => (w === "permanent" || w === "timer_cancel" ? null : tf("Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?", { w: w })),
@@ -878,7 +895,7 @@ const FEATURES = {
     },
   },
   water: {
-    title: "Water", icon: "💧",
+    title: "Water", icon: "droplet",
     readouts: [
       // Composed values: translate the suffix here (renderReadout's t() can't match a concatenation).
       { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  " + measuredText(s, /** @type {string} */ (t("🕒 last measured"))) : ""),
@@ -897,7 +914,7 @@ const FEATURES = {
     summary: (s) => (s.fresh ? `${t("Fresh")} ${s.fresh.percent}%${s.fresh.stale ? " " + measuredText(s, /** @type {string} */ (t("(last meas.)"))) : ""}` : ""),
   },
   energy: {
-    title: "Energy", icon: "🔋",
+    title: "Energy", icon: "battery",
     controls: [
       { what: "mode", kind: "select", label: "Energy mode",
         // ECO only as the app offers it: when the unit reports a solar panel (PvInstalled = 1 ->
@@ -946,7 +963,7 @@ const FEATURES = {
     summary: (s) => (s.soc2_pct != null ? `${t("Battery")} ${s.soc2_pct}%` : ""),
   },
   roof: {
-    title: "Roof", icon: "🚐", roof: true,
+    title: "Roof", icon: "caravan", roof: true,
     readouts: [
       { label: "Position", get: (s) => (s.position_name ? cap(s.position_name) : (s.position ?? "—")) },
       { label: "Safety valid", get: (s) => yn(s.safety_valid) },
@@ -958,7 +975,7 @@ const FEATURES = {
                      : (s && s.position_name ? /** @type {string} */ (t(cap(s.position_name))) : "")),
   },
   vehicle: {
-    title: "Vehicle", icon: "🚗",
+    title: "Vehicle", icon: "car",
     readouts: [
       { label: "Ignition", get: (s) => onoff(s.ignition_on) },
       // 1004 CarVariant -> the app's model name (semantics._CAR_MODEL); unknown raw -> "—"
@@ -3134,7 +3151,7 @@ function renderDashboard() {
     const alertMsg = f.warn ? f.warn(s) : null;
     tile.className = "tile" + (alertMsg ? " alert" : "");
     tile.innerHTML = (alertMsg ? `<div class="tbadge">⚠</div>` : "") +
-      `<div class="ti">${f.icon || ""}</div><div class="tt">${t(f.title)}</div>` +
+      `<div class="ti">${iconSvg(f.icon)}</div><div class="tt">${t(f.title)}</div>` +
       `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>`;
     if (alertMsg) tile.title = alertMsg;
     tile.onclick = () => goto(fn);

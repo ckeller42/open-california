@@ -286,6 +286,29 @@ def test_pair_link_shows_the_wizard_at_the_top_on_a_phone(base_url, error_gated_
         ), "the wizard card renders below the tiles"
 
 
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_tile_icons_are_decorative_svgs_beside_the_label(base_url, error_gated_page, scheme):
+    """Every dashboard tile draws one inline SVG icon (Lucide, ``calictl/webui/ICONS.md``) at phone
+    width in both colour schemes: hidden from assistive tech, so the tile's accessible name is its
+    text label, and drawn in the tile's text colour (``currentColor``), so it follows dark mode."""
+    with error_gated_page(base_url, viewport={"width": 390, "height": 844}, color_scheme=scheme) as pg:
+        tiles = pg.locator(".tilegrid .tile")
+        expect(tiles.first).to_be_visible()
+        assert tiles.count() >= 5
+        for i in range(tiles.count()):
+            tile = tiles.nth(i)
+            title = tile.locator(".tt").inner_text()
+            svg = tile.locator(".ti svg")
+            expect(svg).to_have_count(1)
+            expect(svg).to_have_attribute("aria-hidden", "true")
+            box = svg.bounding_box()
+            assert box and box["width"] >= 24 and box["height"] >= 24, (title, box)
+            assert svg.evaluate("s => getComputedStyle(s).stroke") == tile.evaluate(
+                "t => getComputedStyle(t).color"
+            ), title
+            expect(tile).to_have_accessible_name(re.compile("^" + re.escape(title)))
+
+
 def test_water_screen_shows_level_percent(page):
     page.get_by_text("Water", exact=True).first.click()
     expect(page.get_by_text("Fresh water")).to_be_visible()
