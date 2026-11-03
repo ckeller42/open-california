@@ -506,6 +506,28 @@ Send the full 10-field frame every time (shared-send behavior above).
   activated only using the in-vehicle systems." [Got it] — no write. While running, the app greys
   nothing else. The run-time slider shows 10…120 with 12 ticks.
 
+**Run through the ESP satellite (DEVICE 2026-11-03, ESP fw `0de992e`, owner at the panel, ignition
+off, camping mode off):** the ESP's own control path (`control.c` + the sequencer over NimBLE)
+drives the real heater. Each write through `POST /api/command` applied; 1702 read back after each:
+
+| Time | Command | 1702 readback | Unit panel |
+|---|---|---|---|
+| 13:43:33 | `runtime 10` | `RunningTime` 10 | "Heizdauer 10 min" |
+| 13:43:37 | `power on` | `NormalOperation` 1, `RunningTimeinAction` 10 | "Sofort heizen" on, heater icon in the status bar |
+| 13:44:14 | `level 3` | `HeatingLevel` 3 | "Heizstufe 3" |
+| 13:44:52 | `power off` | `NormalOperation` 0 | |
+| 13:45:10 | `level 8`, `runtime 30` (restore) | `HeatingLevel` 8, `RunningTime` 30 | |
+
+- `ErrorCode` 0 throughout; the thermostat stayed disabled (`enabled=false`, mode OFF).
+- After an OFF the remaining time stays latched: `RunningTimeinAction` 9 after the stop (a run that
+  ends by itself reads 0 afterwards, see above).
+- The panel greys "Heizdauer" while immediate heating runs. The heater icon left the status bar
+  within ~10 min of the OFF (run-on).
+- The panel's "Startzeit" page offers one device ("Gerät auswählen: Luftstandheizung") and shows the
+  immediate-heating values it will use ("Heizdauer 30 min, Heizstufe 8"): the departure timer has
+  no settings of its own. Its "Luftzufuhr" line is empty while 1702 `AirDistribution` is 0.
+- The panel calls the page "Heizen & Lüften"; its (i) shows only an energy note, no run-time limit.
+
 ---
 
 ## Open questions (UNVERIFIED, out of scope of these two files)
