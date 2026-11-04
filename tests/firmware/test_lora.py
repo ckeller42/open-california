@@ -414,3 +414,27 @@ def test_forget_erases_everything(cli):
               "kv lora_dev", "kv lora_tk", "kv lora_ttn", "kv lora_keys", "exp", "setupstate")
     assert out == ["LOG exp: lora on", "0", "LOG exp: lora off", "0", "lora_dev -", "lora_tk -", "lora_ttn -",
                    "lora_keys -", "0", "0"]
+
+
+def test_kv_errors_never_regenerate_the_appkey(cli):
+    """A corrupt lora_dev is an error, not "missing": setup_open returns -1 and keeps it; state is "error".
+
+    .. test:: lora setup: only a MISSING lora_dev is made; corrupt reads and failing writes return -1
+       :id: T_FW_LORA_SETUP_KV_ERR
+       :links: R_FW_LORA_SETUP
+    """
+    out = run(cli, "setupopen", "kv lora_dev", "kv lora_tk", "kvcorrupt lora_dev", "setupstate", "setupopen",
+              "kv lora_dev", "kv lora_tk", "kvcorrupt -", "setupstate")
+    assert out[0] == "0" and out[3] == "-1" and out[4] == "-1"
+    assert out[5] == out[1] and out[6] == out[2]  # AppKey and transfer key unchanged
+    assert out[7] == "1"
+    # a failing store write is -1 too, and the status names the error
+    assert run(cli, "setfail 1", "setupopen", "setupstate")[0] == "-1"
+    st = json.loads(run(cli, "stsetup -1 0", "stjson 1 0 0 7 1 2 3 4 5 100")[0])["lora"]
+    assert st["setup"] == "error" and st["has_ttn_keys"] is False
+    assert run(cli, "kvset lora_dev 00", "setupopen")[0] == "-1"  # a wrong-sized AppKey is an error as well
+
+
+def test_console_status_names_the_setup_state(cli):
+    out = run(cli, "console status", "setupopen", "console status")
+    assert "setup none" in out[0] and "setup keys_made" in out[2]

@@ -57,6 +57,8 @@ from .api_shape import (
     TIME_KEYS,
     WIFI_GET_KEYS,
 )
+from .test_lora_setup import key as lora_key
+from .test_lora_setup import plaintext as lora_plaintext
 from .test_sensors import KEY
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -2291,8 +2293,13 @@ def test_state_lora_setup_fields_no_secrets(web_cli):
        :id: T_FW_LORA_NO_SECRETS
        :links: R_FW_LORA_SETUP
     """
-    dev, tk, ttn = (bytes((b + i * 0x11) % 256 for i in range(n)) for b, n in ((1, 24), (2, 16), (3, 32)))  # dummies
-    secrets = [x.hex() for x in (dev[:16], tk, ttn)] + [x.hex().upper() for x in (dev[:16], tk, ttn)]
+    dev, tk = (bytes((b + i * 0x11) % 256 for i in range(n)) for b, n in ((1, 24), (2, 16)))  # dummies
+    ttn = lora_plaintext()  # the documented v1 layout: ver, cluster, app, dev, read key, command key
+    texts = (lora_key(3), lora_key(7))  # the NNSXS. text of the two packed keys in it
+    packed = (ttn[-116:-58], ttn[-58:])
+    secrets = [x.hex() for x in (dev[:16], tk, ttn, *packed)]
+    secrets += [x.upper() for x in secrets] + list(texts)
+    secrets += [t[i : i + 16] for t in texts for i in range(len(t) - 15)]  # any 16-char slice of a key text
     rs, other = drive(
         web_cli,
         [
@@ -2302,7 +2309,7 @@ def test_state_lora_setup_fields_no_secrets(web_cli):
             b"kvhex lora_tk " + tk.hex().encode(),
             req("GET", "/api/state"),
             b"loracon status",
-            b"kvhex lora_ttn " + ttn.hex().encode(),
+            b"kvbig lora_ttn " + ttn.hex().encode(),
             req("GET", "/api/state?diag=1"),
             b"loracon status",
         ],
@@ -2312,7 +2319,8 @@ def test_state_lora_setup_fields_no_secrets(web_cli):
         assert set(lora) == LORA_KEYS
         assert (lora["setup"], lora["has_ttn_keys"], lora["dev_eui"]) == (*want, None)
     text = rs[1].body.decode() + rs[2].body.decode() + "\n".join(other)
-    assert "lora: on" in text and "TTN keys stored" in text
+    assert "setup keys_made" in text and "setup ttn_keys (TTN keys stored)" in text
+    assert len(ttn) > 100 and len(secrets) > 100
     for sec in secrets:
         assert sec not in text
     assert "NNSXS." not in text

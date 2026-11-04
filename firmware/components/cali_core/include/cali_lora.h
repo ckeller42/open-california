@@ -82,6 +82,8 @@ extern "C" {
 /** @brief The most bytes of the `lora_ttn` value. */
 #define CALI_LORA_TTN_MAX 256
 
+/** @brief Setup state: the store could not be read (corrupt or wrong-sized value); reported as `"error"`. */
+#define CALI_LORA_SETUP_ERROR (-1)
 /** @brief Setup state: no setup keys yet. */
 #define CALI_LORA_SETUP_NONE 0
 /** @brief Setup state: the AppKey and the transfer key exist, no TTN keys yet. */
@@ -396,17 +398,19 @@ typedef void (*cali_lora_rand_fn)(void *buf, size_t n);
  * @brief Open the setup: make the AppKey and a zero JoinEUI into `lora_dev` only when it is missing, and
  *        ALWAYS a new transfer key into `lora_tk`. Local key buffers are wiped before return.
  * @param rnd The random source.
+ *        Only a MISSING `lora_dev` is made; any other read error (corrupt, wrong size) returns -1 and
+ *        leaves the stored AppKey alone.
  * @return 0, or -1 when the store failed.
  */
 int cali_lora_setup_open(cali_lora_rand_fn rnd);
 /**
  * @brief The setup state from the store.
- * @return CALI_LORA_SETUP_NONE (no `lora_dev`), CALI_LORA_SETUP_KEYS_MADE, or CALI_LORA_SETUP_TTN_KEYS
- *         (`lora_ttn` exists).
+ * @return CALI_LORA_SETUP_NONE (no `lora_dev`), CALI_LORA_SETUP_KEYS_MADE, CALI_LORA_SETUP_TTN_KEYS
+ *         (`lora_ttn` exists), or CALI_LORA_SETUP_ERROR when `lora_dev` or `lora_ttn` cannot be read.
  */
 int cali_lora_setup_state(void);
 /**
- * @brief Erase `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys`, and switch `exp_lora` off.
+ * @brief Switch `exp_lora` off, then erase `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys`.
  * @return 0, or -1 when a store call failed.
  */
 int cali_lora_forget(void);

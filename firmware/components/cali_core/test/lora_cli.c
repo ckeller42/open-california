@@ -32,6 +32,8 @@ static int s_kv_find(const char *key) {
 }
 static int s_stsetup, s_stttn;
 static char s_steui[17];
+static char s_corrupt[16];   /* kvcorrupt <key>: reads of it return CALI_KV_CORRUPT */
+static int s_setfail;
 static unsigned s_rnd_calls;
 static void fake_rand(void *buf, size_t n) {   /* a counter: every call differs, every byte differs */
     s_rnd_calls++;
@@ -54,6 +56,7 @@ uint32_t cali_time_boot(void) { return s_boot; }
 uint64_t cali_uptime_ms(void) { return 0; }
 int cali_kv_get(const char *key, void *buf, size_t *len) {
     int i = s_kv_find(key);
+    if (!strcmp(key, s_corrupt)) return CALI_KV_CORRUPT;
     if (i < 0) return CALI_KV_MISSING;
     if (*len < s_kv[i].len) return -1;
     memcpy(buf, s_kv[i].val, s_kv[i].len);
@@ -61,6 +64,7 @@ int cali_kv_get(const char *key, void *buf, size_t *len) {
     return CALI_KV_OK;
 }
 int cali_kv_set(const char *key, const void *buf, size_t len) {
+    if (s_setfail) return -1;
     int i = s_kv_find(key);
     for (int k = 0; i < 0 && k < KV_N; k++)
         if (!s_kv[k].used) i = k;
@@ -222,6 +226,11 @@ int main(void) {
         } else if (!strcmp(cmd, "kvset") && sscanf(rest, "%63s %159s", b, a) == 2) {
             uint8_t v[64];
             cali_kv_set(b, v, unhex(a, v, sizeof v));
+        } else if (!strcmp(cmd, "kvcorrupt")) {
+            s_corrupt[0] = 0;
+            sscanf(rest, "%15s", s_corrupt);
+        } else if (!strcmp(cmd, "setfail") && sscanf(rest, "%u", &u1) == 1) {
+            s_setfail = (int)u1;
         } else if (!strcmp(cmd, "setupopen")) {
             printf("%d\n", cali_lora_setup_open(fake_rand));
         } else if (!strcmp(cmd, "setupstate")) {

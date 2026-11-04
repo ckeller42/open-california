@@ -30,7 +30,8 @@
  *    keys shall live in NVS: ``lora_dev`` (AppKey 16 B + JoinEUI 8 B), ``lora_tk`` (the transfer key, a new
  *    one at every setup start) and ``lora_ttn`` (the delivered plaintext). The AppKey, the transfer key and
  *    the TTN keys shall never appear in ``/api/state``, the console, the log or any other output;
- *    ``device.lora`` shall report only ``setup`` (``none``/``keys_made``/``joined``/``ttn_keys``),
+ *    Only a missing ``lora_dev`` shall be made; a store read error shall never regenerate the AppKey.
+ *    ``device.lora`` shall report only ``setup`` (``none``/``keys_made``/``joined``/``ttn_keys``/``error``),
  *    ``has_ttn_keys`` and the DevEUI (``dev_eui``, ``null`` while unknown).
  * @endverbatim
  *
