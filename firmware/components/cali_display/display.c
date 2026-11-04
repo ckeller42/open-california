@@ -106,7 +106,10 @@ static const char *const SCR_NAMES[] = {"on", "dim", "off"};
 #define QR_SIZE 150     /* the lv_qrcode object; LVGL fits a 4-scale v4 code (132 px) in it, ~9 px margin */
 #define QR_PLATE 8      /* extra white on each side: 9 + 8 = 17 px >= 4 modules at scale 4 */
 #define QR_BOX (QR_SIZE + 2 * QR_PLATE)
-#define QR_TEXT_X (PAD + QR_BOX + 8)
+#define QR_X 4          /* the plate hugs the left edge to leave the text box room */
+#define QR_TEXT_X (QR_X + QR_BOX + 4)
+#define QR_TEXT_W (W - QR_TEXT_X - 4) /* title + qr_lines[0]; the password line is full width below the plate */
+#define QR_FOOT_Y (ROW_Y0 + QR_BOX + 2)
 #define TITLE_END_X 200 /* "calictl satellite" at 24 px ends at about x 190 */
 
 LV_FONT_DECLARE(font_latin1_16);
@@ -128,9 +131,10 @@ static cali_display_model_t s_model;
 static uint64_t s_last_paint;
 static row_ui_t s_rows[3];
 static lv_obj_t *s_footer, *s_rows_sep;
-static lv_obj_t *s_qr, *s_qr_plate, *s_qr_text;      /* the setup QR code and the text beside it (hidden outside setup) */
+static lv_obj_t *s_qr, *s_qr_plate, *s_qr_text, *s_qr_foot;      /* the setup QR code and the text beside it (hidden outside setup) */
 static char s_footer_now[3 * CALI_ROW_TEXT_MAX];
 static char s_qr_now[CALI_QR_TEXT_MAX]; /* the encoded text: it holds the hotspot password, screen only */
+static char s_qr_foot_now[CALI_ROW_TEXT_MAX];
 static char s_qr_text_now[3 * CALI_ROW_TEXT_MAX + 4];
 static int s_brightness = -1;
 static i2c_master_dev_handle_t s_ltr;   /* NULL: no light/proximity sensor */
@@ -215,20 +219,25 @@ static void build(void) {
     lv_obj_set_style_text_align(s_footer, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_pos(s_footer, PAD, ROW_Y0 + 3 * ROW_H + 4);  /* two setup lines end at 230 */
 
-    s_qr_plate = box(scr, PAD, ROW_Y0, QR_BOX, QR_BOX, 0xffffff);   /* the quiet zone on the dark screen */
+    s_qr_plate = box(scr, QR_X, ROW_Y0, QR_BOX, QR_BOX, 0xffffff);   /* the quiet zone on the dark screen */
     lv_obj_set_hidden(s_qr_plate, true);
     s_qr = lv_qrcode_create(scr);   /* dark on white */
     lv_qrcode_set_size(s_qr, QR_SIZE);
     lv_qrcode_set_quiet_zone(s_qr, true);
     lv_qrcode_set_dark_color(s_qr, lv_color_hex(0x000000));
     lv_qrcode_set_light_color(s_qr, lv_color_hex(0xffffff));
-    lv_obj_set_pos(s_qr, PAD + QR_PLATE, ROW_Y0 + QR_PLATE);
+    lv_obj_set_pos(s_qr, QR_X + QR_PLATE, ROW_Y0 + QR_PLATE);
     lv_obj_set_hidden(s_qr, true);
     s_qr_text = label(scr, &font_latin1_16, "");
-    lv_label_set_long_mode(s_qr_text, LV_LABEL_LONG_MODE_WRAP);
-    lv_obj_set_width(s_qr_text, W - PAD - QR_TEXT_X);
+    lv_label_set_long_mode(s_qr_text, LV_LABEL_LONG_MODE_DOTS);   /* wraps; ends in "..." rather than spilling */
+    lv_obj_set_size(s_qr_text, QR_TEXT_W, QR_BOX);
     lv_obj_set_pos(s_qr_text, QR_TEXT_X, ROW_Y0);
     lv_obj_set_hidden(s_qr_text, true);
+    s_qr_foot = label(scr, &font_latin1_16, "");
+    lv_obj_set_width(s_qr_foot, W);
+    lv_obj_set_style_text_align(s_qr_foot, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(s_qr_foot, 0, QR_FOOT_Y);
+    lv_obj_set_hidden(s_qr_foot, true);
 }
 
 /* The QR screen replaces the three rows and the footer. The code is re-encoded only when its text
@@ -242,6 +251,7 @@ static void paint_qr(const cali_display_view_t *v) {
     lv_obj_set_hidden(s_qr, !qr);
     lv_obj_set_hidden(s_qr_plate, !qr);
     lv_obj_set_hidden(s_qr_text, !qr);
+    lv_obj_set_hidden(s_qr_foot, !qr);
     if (!qr) return;
     if (strcmp(s_qr_now, v->qr)) {
         if (lv_qrcode_update(s_qr, v->qr, (uint32_t)strlen(v->qr)) == LV_RESULT_OK)
@@ -250,10 +260,14 @@ static void paint_qr(const cali_display_view_t *v) {
             cali_log("display: QR encode failed (%u bytes)", (unsigned)strlen(v->qr));   /* never the payload */
     }
     char txt[sizeof s_qr_text_now];
-    snprintf(txt, sizeof txt, "%s\n\n%s\n%s", v->qr_title, v->qr_lines[0], v->qr_lines[1]);
+    snprintf(txt, sizeof txt, "%s\n%s", v->qr_title, v->qr_lines[0]);
     if (strcmp(s_qr_text_now, txt)) {
         snprintf(s_qr_text_now, sizeof s_qr_text_now, "%s", txt);
         lv_label_set_text(s_qr_text, txt);
+    }
+    if (strcmp(s_qr_foot_now, v->qr_lines[1])) {   /* the password: one full-width line, never broken */
+        snprintf(s_qr_foot_now, sizeof s_qr_foot_now, "%s", v->qr_lines[1]);
+        lv_label_set_text(s_qr_foot, v->qr_lines[1]);
     }
 }
 

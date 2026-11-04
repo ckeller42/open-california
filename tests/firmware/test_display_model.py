@@ -160,10 +160,10 @@ def test_setup_mode_shows_the_join_qr(cli):
     v = view(cli, mode="setup", apssid="calictl-esp-1A2B", apqr=AP_QR)
     assert v["qr"].startswith("WIFI:T:WPA;S:calictl-esp-1A2B;")
     assert v["qr_title"] == "Mit der Handykamera scannen"
-    assert v["qr_lines"] == "WLAN calictl-esp-1A2B|Passwort\\nabcd-efgh-jkmn"
+    assert v["qr_lines"] == "WLAN\\ncalictl-esp-1A2B|Passwort abcd-efgh-jkmn"
     en = view(cli, mode="setup", lang="en", apssid="calictl-esp-1A2B", apqr=AP_QR)
     assert en["qr_title"] == "Scan with the phone camera"
-    assert en["qr_lines"] == "WiFi calictl-esp-1A2B|Password\\nabcd-efgh-jkmn"
+    assert en["qr_lines"] == "WiFi\\ncalictl-esp-1A2B|Password abcd-efgh-jkmn"
 
 
 def test_a_qr_appearing_wakes_the_screen_once(cli):
@@ -191,7 +191,7 @@ def test_setup_mode_without_a_qr_text_shows_no_qr(cli):  # identity unavailable:
 def test_station_with_setup_pending_shows_the_address_qr(cli):
     v = view(cli, mode="station", lang="en", pending=1)
     assert v["qr"] == "http://192.168.178.86/#setup" and v["qr_title"] == "Join Insel, then scan"
-    assert v["qr_lines"] == "http://192.168.178.86|http://calictl-esp.local"
+    assert v["qr_lines"] == "http://\\n192.168.178.86|http://calictl-esp.local"
     assert view(cli, mode="station", pending=1)["qr_title"] == "Insel beitreten, dann scannen"
 
 

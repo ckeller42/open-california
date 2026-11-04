@@ -160,7 +160,7 @@ typedef struct {
     char footer[CALI_ROW_TEXT_MAX];   /**< The footer text: `http://NET_HOSTNAME.local` and the battery; "" in setup mode. */
     char qr[CALI_QR_TEXT_MAX];        /**< The text to draw as a QR code; "" = no QR screen. Setup mode: the hotspot's WiFi QR (holds the password: display only); station with a setup pending: `http://<ip>/#setup`. */
     char qr_title[CALI_ROW_TEXT_MAX]; /**< The line above the QR code. */
-    char qr_lines[2][CALI_ROW_TEXT_MAX]; /**< The two lines below it (hotspot name and password, or the two addresses). */
+    char qr_lines[2][CALI_ROW_TEXT_MAX]; /**< [0] beside the code under the title ("WLAN\nname" or "http://\naddress"); [1] one full-width line below it (the password, or the .local address). */
     cali_disp_state_t state; /**< On, dim or off. */
     cali_sensor_t sensor;    /**< The light sensor's state. */
     int32_t lux;             /**< The last valid lux, -1 = none. */

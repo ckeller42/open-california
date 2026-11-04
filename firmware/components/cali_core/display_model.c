@@ -295,6 +295,12 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
     out->brightness_pct = out->state == CALI_DISP_ON ? on : out->state == CALI_DISP_DIM ? dim : 0;
 }
 
+/* "Label value" -> "Label\nvalue" (the last space becomes a line break; none: unchanged). */
+static void break_before_value(char *t) {
+    char *sp = strrchr(t, ' ');
+    if (sp) *sp = '\n';
+}
+
 /* The setup QR screens: the hotspot's join code, or the address once the phone is on the home WiFi. */
 static void qr_screen(cali_display_view_t *out, const cali_status_t *s, const char *ap_qr, int lang) {
     char tmp[2 * CALI_ROW_TEXT_MAX];
@@ -309,9 +315,9 @@ static void qr_screen(cali_display_view_t *out, const cali_status_t *s, const ch
         snprintf(out->qr, CALI_QR_TEXT_MAX, "%s", ap_qr);
         cali_display_fit_text(out->qr_title, tx(K_QR_JOIN_TITLE, lang));
         snprintf(tmp, sizeof tmp, tx(K_QR_WLAN, lang), s->ap_ssid);
+        break_before_value(tmp);   /* the SSID on its own line: the narrow text box must not break it */
         cali_display_fit_text(out->qr_lines[0], tmp);
-        snprintf(tmp, sizeof tmp, tx(K_QR_PASS, lang), psk);
-        *strrchr(tmp, ' ') = '\n';   /* the password on its own line: the screen never breaks it at a '-' */
+        snprintf(tmp, sizeof tmp, tx(K_QR_PASS, lang), psk);   /* full-width line under the code */
         cali_display_fit_text(out->qr_lines[1], tmp);
     } else if (s->wifi_mode == CALI_WIFI_MODE_STATION && s->ip != 0 && s->setup_pending) {
         char ip[16];
@@ -319,7 +325,7 @@ static void qr_screen(cali_display_view_t *out, const cali_status_t *s, const ch
         snprintf(out->qr, CALI_QR_TEXT_MAX, "http://%s/#setup", ip);
         snprintf(tmp, sizeof tmp, tx(K_QR_NEXT_TITLE, lang), s->ssid);
         cali_display_fit_text(out->qr_title, tmp);
-        snprintf(tmp, sizeof tmp, "http://%s", ip);
+        snprintf(tmp, sizeof tmp, "http://\n%s", ip);   /* the address alone on a line: it must not break */
         cali_display_fit_text(out->qr_lines[0], tmp);
         cali_display_fit_text(out->qr_lines[1], "http://" NET_HOSTNAME ".local");
     }

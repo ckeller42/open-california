@@ -161,3 +161,41 @@ def test_battery_footer_fits_two_lines(lang):
     adv = advance(16)
     for text in battery_footers(lang):
         assert lines(text, layout("W") - 2 * layout("PAD"), adv) <= 2, (lang, text)
+
+
+@pytest.mark.parametrize("lang", ["en", "de"])
+def test_qr_screen_values_fit_unbroken_and_the_text_fits_the_plate(lang):
+    """The QR screen as display.c lays it out: the title + qr_lines[0] in the QR_TEXT_W box beside the
+    plate (QR_BOX high, ellipsis on overflow), qr_lines[1] one full-width line below. Values the model
+    puts on their own line (the SSID, the IP) must fit that box without a break; the password and the
+    .local address must fit the screen width."""
+    adv = advance(16)
+    line = int(re.search(r"\.line_height = (\d+)", (FONT_DIR / "font_latin1_16.c").read_text()).group(1))
+    qr_box = layout("QR_SIZE") + 2 * layout("QR_PLATE")
+    box = layout("W") - (layout("QR_X") + qr_box + 4) - 4  # display.c QR_TEXT_W
+    s = {k: v[lang] for k, v in STRINGS.items()}
+    widest_hex = max("0123456789ABCDEF", key=lambda c: adv[ord(c)])
+    widest_sym = max(AP_ALPHABET, key=lambda c: adv[ord(c)])
+    ssid = CONSTS["NET_AP_SSID_PREFIX"] + widest_hex * 4
+    psk = "-".join([widest_sym * 4] * 3)
+    url = f"http://{CONSTS['NET_HOSTNAME']}.local"
+    ssid_label = (s["d_qr_wlan"] % "").strip()
+    cases = [  # (title, own-line values, label lines above them, foot)
+        (s["d_qr_join_title"], [ssid], [ssid_label], s["d_qr_pass"] % psk),
+        (s["d_qr_next_title"] % "Campingplatz", ["255.255.255.255"], ["http://"], url),
+        # a 32-char SSID (the model's limit) of ordinary glyphs: one unbreakable word, wrapped by char;
+        # the widest glyphs (32 x "m") need one more line and end in "..." (DOTS mode), asserted below
+        (s["d_qr_next_title"] % ("e" * 32), ["255.255.255.255"], ["http://"], url),
+    ]
+    for title, values, labels, foot in cases:
+        for v in values:
+            assert width(v, adv) <= box, (lang, v, width(v, adv), box)
+        assert width(foot, adv) <= layout("W"), (lang, foot, width(foot, adv))
+        n = max(lines(title, box, adv), -(-width(title, adv) // box)) + len(labels) + len(values)
+        assert n * line <= qr_box, (lang, title, n)
+    assert layout("ROW_Y0") + qr_box + 2 + line <= 240  # the foot line is on the screen
+    assert (
+        "lv_obj_set_size(s_qr_text, QR_TEXT_W, QR_BOX)" in DISPLAY_C
+        and "LV_LABEL_LONG_MODE_DOTS" in DISPLAY_C
+    )
+    assert layout("QR_PLATE") + 9 >= 16  # quiet zone: 4 modules at scale 4 (LVGL's own margin is ~9 px)
