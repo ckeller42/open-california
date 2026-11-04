@@ -539,7 +539,7 @@ class EspStub:
     rules (``_sensors``; bodies in ``sensor_posts``), a removed sensor is seen again on the next
     ``GET /api/sensors``. ``POST /api/wifi`` appends the body to ``wifi_posts`` and answers
     ``{"ok": true}`` (with ``joins = True`` a ``setup`` stub then turns ``station`` with ``device.setup.pending``;
-    ``POST /api/setup {"done": true}`` clears it); a POST to a settings endpoint (``_SETTINGS``: auto camper, usage data,
+    ``POST /api/setup {"done": true}`` clears it, recorded in ``posts`` too); a POST to a settings endpoint (``_SETTINGS``: auto camper, usage data,
     experimental, display, OTA, BLE) is recorded in ``posts`` as ``(path, body)``, applied to the fixture's
     ``device`` and answered ``{"ok": true}`` (``post_reply[path] = (status, body)`` answers that
     instead, changing nothing); ``down = True`` makes the stub answer nothing at all (the satellite left the
@@ -619,6 +619,7 @@ class EspStub:
                     self._json(200, {"ok": True})
                     return
                 if path == "/api/setup":  # {"done": true} ends the first-time setup, any mode
+                    stub.posts.append((path, body))
                     ok = body == {"done": True}
                     if ok:
                         for fx in stub.fixtures.values():
@@ -877,7 +878,7 @@ def capture_esp(out_dir):
             viewport={"width": 420, "height": 900},
             device_scale_factor=2,
         )
-        for path, name in (("/", "esp-setup-page.png"), ("/device", "esp-recovery-page.png")):
+        for path, name in (("/#wifisetup", "esp-setup-page.png"), ("/device", "esp-recovery-page.png")):
             pg = ctx.new_page()
             pg.goto(stub.base + path)
             pg.wait_for_selector("#ssid option", state="attached")

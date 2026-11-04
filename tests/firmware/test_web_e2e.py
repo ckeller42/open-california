@@ -781,9 +781,9 @@ def test_recovery_page_joins_over_the_hotspot(host_fw, hci_unit, tmp_path, local
     assert not any(PSK in line for line in fw.log)
 
 
-def test_captive_probe_opens_the_ui_on_wifi_setup(host_fw, hci_unit, tmp_path):
+def test_captive_probe_opens_the_ui_on_the_setup_wizard(host_fw, hci_unit, tmp_path):
     """Over the setup hotspot an OS captive-portal probe gets a 302 to ``http://<NET_AP_ADDR>/``, and /
-    (where the captive sheet lands) is the UI bundle, which opens on its WiFi-setup screen."""
+    (where the captive sheet lands) is the UI bundle, which opens on the first-time setup's welcome step."""
     sync_playwright = _require_chromium()
     wifi = _wifi_script(tmp_path, "ap minsel -55 1\n")
     fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
@@ -801,9 +801,9 @@ def test_captive_probe_opens_the_ui_on_wifi_setup(host_fw, hci_unit, tmp_path):
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto("http://127.0.0.1:%d/" % fw.http_port)
         page.wait_for_function(
-            "() => document.getElementById('title').textContent === 'WiFi setup'", timeout=15000
+            "() => document.getElementById('title').textContent === 'Set up the satellite'", timeout=15000
         )
-        assert page.evaluate("location.hash") == "#wifisetup"
+        assert page.evaluate("location.hash") == "#setup/welcome"
         browser.close()
     assert not errors, errors
 
@@ -811,8 +811,9 @@ def test_captive_probe_opens_the_ui_on_wifi_setup(host_fw, hci_unit, tmp_path):
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
 def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
     """The owner's first-flash path, clicked in Chromium (final review I2) on the web UI's WiFi setup
-    screen at /: pick a network, type a wrong password -> the screen says why (R23: the auth text); pick
-    the right one -> the ``http://<NET_HOSTNAME>.local`` link. The password field is emptied after each
+    screen (its /#wifisetup deep link; / opens the setup wizard): pick a network, type a wrong
+    password -> the screen says why (R23: the auth text); pick the right one -> the
+    ``http://<NET_HOSTNAME>.local`` link. The password field is emptied after each
     submit; any uncaught page error fails the test. Texts in the browser's language (strings.de.js)."""
     sync_playwright = _require_chromium()
     wifi = _wifi_script(
@@ -828,7 +829,7 @@ def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
         browser = p.chromium.launch()
         page = browser.new_context(locale=locale).new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto("http://127.0.0.1:%d/" % fw.http_port)
+        page.goto("http://127.0.0.1:%d/#wifisetup" % fw.http_port)
         page.wait_for_selector("#setup", state="visible", timeout=wait_ms)
         assert page.inner_text("#title") == tr("WiFi setup", lang)
         page.wait_for_selector("#ssid option[value=typo]", state="attached", timeout=wait_ms)
@@ -872,7 +873,7 @@ def test_rescan_then_connect_keeps_the_join_result_in_browser(host_fw, hci_unit,
         browser = p.chromium.launch()
         page = browser.new_context().new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto("http://127.0.0.1:%d/" % fw.http_port)
+        page.goto("http://127.0.0.1:%d/#wifisetup" % fw.http_port)
         page.wait_for_selector("#setup", state="visible", timeout=wait_ms)
         page.wait_for_selector("#ssid option[value=minsel]", state="attached", timeout=wait_ms)
 
