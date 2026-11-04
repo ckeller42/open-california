@@ -1281,8 +1281,9 @@ at each GET.
 
 In mode `WAITING` the satellite steps every 5 s (`CALI_THERMO_WAIT_STEP_MS`, or every `period_ms` when
 that is shorter), so it samples the confirm window from the last 1702 frame every few seconds. The
-unit notifies a change of 1702 at once, so a panel start is seen within a step; the regular 1702
-re-read of the held session is the fallback for a missed notification. The control law still runs
+unit sends a 1702 notification when the panel starts or ends continuous heating (the night-flow test
+in [cooler-airheater.md](business-logic/cooler-airheater.md)), so a panel start is seen within a step;
+the regular 1702 re-read of the held session is the fallback for a missed notification. The control law still runs
 only once per `period_ms`.
 
 While the satellite regulates continuous heating (night or not), it never stops the heater for being
