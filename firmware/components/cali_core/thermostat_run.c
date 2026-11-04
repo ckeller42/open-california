@@ -371,8 +371,11 @@ void cali_thermo_run_tick(uint64_t now_ms) {
     s_link_wait = 0;
     if (!s_due && now_ms < s_next) return;
     s_due = 0;
-    s_next = now_ms + (uint64_t)C.s.period_ms;
     step(now_ms);
+    /* WAITING: sample the confirm window every few seconds (the control law stays gated by last_ctl_ms) */
+    s_next = now_ms + (uint64_t)(S.mode == CALI_THERMO_WAITING && C.s.period_ms > CALI_THERMO_WAIT_STEP_MS
+                                     ? CALI_THERMO_WAIT_STEP_MS
+                                     : C.s.period_ms);
     if (s_n) submit_next();
 }
 
@@ -441,7 +444,13 @@ void cali_thermo_state_json(cali_json_t *j) {
     cali_json_key(j, "blocked");
     if (blocked) cali_json_str(j, blocked);
     else cali_json_null(j);
-    opt_num(j, "wait_left_s", st->wait_left_s);
+    if (S.mode == CALI_THERMO_WAITING && S.wait_until_ms != CALI_THERMO_NONE_MS) {
+        /* counted down at each GET from the wait's end (the step runs only every few seconds) */
+        int64_t left = S.wait_until_ms - (int64_t)s_tick_now;
+        opt_num(j, "wait_left_s", left <= 0 ? 0 : (int32_t)((left + 999) / 1000));
+    } else {
+        opt_num(j, "wait_left_s", st->wait_left_s);
+    }
     cali_json_key(j, "night");
     cali_json_bool(j, st->night);
     cali_json_obj_end(j);

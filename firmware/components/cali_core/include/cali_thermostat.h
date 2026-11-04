@@ -43,7 +43,8 @@
  *    :tags: esp32, thermostat, airheater
  *
  *    The firmware shall step the thermostat decision (``R_FW_THERMOSTAT_DECIDE``) once per
- *    ``period_ms`` and at once after an owner request or a command result, from this link's frames,
+ *    ``period_ms`` (in mode ``WAITING`` at least every ``CALI_THERMO_WAIT_STEP_MS``, 5 s) and at once
+ *    after an owner request or a command result, from this link's frames,
  *    the stored 1702 frame's age and the configured thermometers' readings by alias; send its
  *    commands through the control sequencer one at a time, stopping at the first result that is not
  *    OK and handing that result to the next step; ship with the feature off (kv ``th_on``, missing =
@@ -66,7 +67,7 @@
  *
  *    The firmware shall serve ``GET /api/thermostat`` (``rev``, ``mode``, ``target``, ``runtime_min``,
  *    the thermometer aliases, ``outside_on``, ``night``, all settings, the status with the reason,
- *    ``blocked`` (computed at each GET from the last-known frames), ``wait_left_s`` and the run's
+ *    ``blocked`` (computed at each GET from the last-known frames), ``wait_left_s`` (counted at each GET) and the run's
  *    ``night``) and
  *    ``POST /api/thermostat`` (station mode only) with any of ``enabled``, ``mode``, ``target``,
  *    ``runtime_min``, ``ref``, ``backup``, ``out`` (an alias of a configured Govee, or null),
@@ -364,6 +365,9 @@ void cali_thermo_run_tick(uint64_t now_ms);
 /** Longest wait of an AUTO request from OFF for the link it woke, ms; then the step answers it. */
 #define CALI_THERMO_LINK_WAIT_MS 30000u
 
+/** Step interval in mode WAITING, ms, when period_ms is longer: samples the night confirm window. */
+#define CALI_THERMO_WAIT_STEP_MS 5000
+
 /**
  * @brief Pass an owner request to the next step (once).
  *
@@ -401,8 +405,8 @@ int cali_thermo_cfg_set(const char *key, int32_t value);
  *
  * `reason` is the last step's reason that was not NULL (null before any); temperatures and the
  * level are null when unknown. `blocked` is cali_thermo_blocked() of the current inputs (computed
- * here, with the last-known frames); `wait_left_s` and `night` are the last step's (null and false
- * before any).
+ * here, with the last-known frames); `wait_left_s` is counted here from the end of the night wait
+ * (in mode WAITING, else null); `night` is the last step's (false before any).
  *
  * @param j  The JSON writer; the caller writes the key first.
  */

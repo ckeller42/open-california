@@ -209,3 +209,39 @@ def test_blocked_follows_the_inputs_between_steps(cli, tmp_path):
                               frame("campingmode", State=1), "state"])  # fmt: skip
     states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
     assert [st["blocked"] for st in states] == ["NO_CAMPING", None]
+
+
+CONT = frame("airheater", Installed=1, NormalOperation=1, PermanentOperation=1, HeatingLevel=6)
+NIGHT_60S = [*SETUP, "set period_ms 60000", "night 1", "auto", "tick", f"done {OK}", "tick"]
+
+
+def test_night_countdown_counts_at_each_get(cli, tmp_path):
+    """``status.wait_left_s`` is computed at each GET from the end of the wait, not only at a step: with
+    ``period_ms`` 60 s the card's countdown still falls between two steps.
+
+    .. test:: Thermostat runner: the night countdown is current at each GET
+       :id: T_FW_THERMOSTAT_RUN_WAIT_GET
+       :links: R_FW_THERMOSTAT_API
+    """
+    out = run(cli, tmp_path, [*NIGHT_60S, "state", "now 3000", "tick", "state", "now 3500", "tick", "state"])
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert [s["wait_left_s"] for s in states] == [300, 298, 298]  # rounded up: 297.5 s -> 298
+    assert all(s["mode"] == "WAITING" for s in states)
+
+
+def test_night_confirm_sampled_within_seconds(cli, tmp_path):
+    """While WAITING the runner steps every ``min(period_ms, 5000)``: Dauerbetrieb that holds
+    ``night_confirm_ms`` (30 s) is taken over within 35 s, not at the next 60 s step.
+
+    .. test:: Thermostat runner: the night confirm window is sampled every 5 s
+       :id: T_FW_THERMOSTAT_RUN_WAIT_STEP
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    lines = list(NIGHT_60S)
+    for t in range(2000, 64000, 1000):
+        lines += [f"now {t}", CONT, "tick", "state"]
+    out = run(cli, tmp_path, lines)
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    first = next(i for i, s in enumerate(states) if s["mode"] == "AUTO")
+    assert 2000 + 1000 * first <= 2000 + 35000, first
+    assert states[first]["reason"] == "ADOPT_CONTINUOUS" and submits(out) == ["level 6"]
