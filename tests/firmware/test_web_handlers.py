@@ -2980,7 +2980,7 @@ TH_DEFAULT_CFG = {
     "period_ms": 60000, "kp": 1500, "ki": 50, "ka": 100, "u_out_max": 3000, "hyst": 500,
     "min_dwell_ms": 300000, "band_hi": 200, "hot_hold_ms": 900000, "overheat": 400, "min_level": 1,
     "stale_after_ms": 600000, "heater_stale_ms": 180000, "batt_min_dv": 119, "batt_hold_ms": 300000,
-    "verify_ms": 10000, "runtime_min": 120,
+    "verify_ms": 10000, "runtime_min": 120, "night_wait_ms": 300000, "night_confirm_ms": 30000,
 }  # fmt: skip
 
 

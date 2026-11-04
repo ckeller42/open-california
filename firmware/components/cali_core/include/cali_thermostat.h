@@ -16,7 +16,8 @@
  *    :tags: esp32, thermostat, airheater
  *
  *    The firmware shall run calictl's thermostat decision (``R_THERMOSTAT_STATE``,
- *    ``R_THERMOSTAT_CONTROL``, ``R_THERMOSTAT_SESSION``) as a C99 twin with integer arithmetic
+ *    ``R_THERMOSTAT_CONTROL``, ``R_THERMOSTAT_SESSION``, ``R_THERMOSTAT_NIGHT``,
+ *    ``R_THERMOSTAT_BLOCKED``) as a C99 twin with integer arithmetic
  *    only, no allocation and no clock of its own, held equal bit for bit by vectors generated
  *    from the Python functions: the same commands, reason code, mode, status and next state for
  *    every case, on a 32-bit and a 64-bit build.
@@ -118,6 +119,8 @@ typedef struct {
     int32_t batt_hold_ms;     /**< Time below that limit before the stop, ms. */
     int32_t verify_ms;        /**< Time before an unconfirmed command is checked, ms. */
     int32_t runtime_min;      /**< Run time sent with a start from OFF, min. */
+    int32_t night_wait_ms;    /**< Night start: longest wait for Dauerbetrieb at the panel, ms. */
+    int32_t night_confirm_ms; /**< Night start: Dauerbetrieb counts after it held this long, ms. */
 } cali_thermo_cfg_t;
 
 /** @brief Initializer with the default settings (equal to Python `THERMO_DEFAULTS`). */
@@ -126,7 +129,8 @@ typedef struct {
         .period_ms = 60000, .kp = 1500, .ki = 50, .ka = 100, .u_out_max = 3000, .hyst = 500,        \
         .min_dwell_ms = 300000, .band_hi = 200, .hot_hold_ms = 900000, .overheat = 400,             \
         .min_level = 1, .stale_after_ms = 600000, .heater_stale_ms = 180000, .batt_min_dv = 119,    \
-        .batt_hold_ms = 300000, .verify_ms = 10000, .runtime_min = 120                              \
+        .batt_hold_ms = 300000, .verify_ms = 10000, .runtime_min = 120, .night_wait_ms = 300000,   \
+        .night_confirm_ms = 30000                                                                   \
     }
 
 /** @brief Heater states (Python `HEATER_STATES`, same order). */
@@ -146,7 +150,8 @@ enum cali_thermo_mode_e {
     CALI_THERMO_OFF = 0,     /**< Not controlling. */
     CALI_THERMO_AUTO,        /**< Controlling the level. */
     CALI_THERMO_DEGRADED,    /**< No valid reference: level held at the minimum. */
-    CALI_THERMO_STOPPING     /**< A stop waits for the link. */
+    CALI_THERMO_STOPPING,    /**< A stop waits for the link. */
+    CALI_THERMO_WAITING      /**< Night start: waits for Dauerbetrieb started at the panel. */
 };
 
 /** @brief The owner's request this step. */
@@ -158,8 +163,8 @@ enum cali_thermo_req_e {
 
 /** @brief Names of enum cali_thermo_heater_e ("OFF" ... "UNKNOWN"). */
 extern const char *const cali_thermo_heater_names[8];
-/** @brief Names of enum cali_thermo_mode_e ("OFF", "AUTO", "DEGRADED", "STOPPING"). */
-extern const char *const cali_thermo_mode_names[4];
+/** @brief Names of enum cali_thermo_mode_e ("OFF", "AUTO", "DEGRADED", "STOPPING", "WAITING"). */
+extern const char *const cali_thermo_mode_names[5];
 
 /** @brief The raw decoded 1702 values the thermostat reads; CALI_THERMO_NONE = key missing. */
 typedef struct {
@@ -200,6 +205,10 @@ typedef struct {
     int32_t batt2_dv;                     /**< Second battery, 0.1 V, or CALI_THERMO_NONE. */
     const char *cmd_what;                 /**< The last command of the previous batch, or NULL. */
     const char *cmd_result;               /**< Its result ("OK", "REFUSED", "BUSY", "NOT_READY" ...), or NULL. */
+    int night;                            /**< The run-time setting "Nacht" (latched at the start). */
+    int known_camping_on;                 /**< Camping mode from the last-known frames (for cali_thermo_blocked()). */
+    int known_shore_on;                   /**< Shore power from the last-known frames. */
+    int known_ignition_on;                /**< Ignition from the last-known frames: 1 on, 0 off, -1 unknown. */
 } cali_thermo_in_t;
 
 /** @brief The controller's state (Python `ctl`). */
@@ -243,6 +252,9 @@ typedef struct {
     cali_thermo_snap_t stop_snapshot;   /**< What to stop when the link is back (mode STOPPING). */
     const char *stop_why;               /**< That stop's cause (as cali_thermo_pending_t.why). */
     int64_t last_ctl_ms;                /**< Last control step, or CALI_THERMO_NONE_MS. */
+    int night;                          /**< The night setting of this run (cleared at mode OFF). */
+    int64_t wait_until_ms;              /**< End of the night wait, or CALI_THERMO_NONE_MS (only in WAITING). */
+    int64_t cont_since_ms;              /**< Start of the Dauerbetrieb seen in WAITING, or CALI_THERMO_NONE_MS. */
 } cali_thermo_state_t;
 
 /** @brief One command: `what` with an int value (a level, a run time, or 1 = on, 0 = off). */
@@ -261,6 +273,9 @@ typedef struct {
     char active_alias[CALI_THERMO_ALIAS_LEN];  /**< The active sensor's alias, "" = none. */
     int outside_active;                        /**< The feed-forward is in use. */
     const char *end;                           /**< "run" while RUNNING, else "none". */
+    const char *blocked;                       /**< cali_thermo_blocked() of this step's inputs, or NULL. */
+    int32_t wait_left_s;                       /**< Seconds left in WAITING (rounded up, not below 0), or CALI_THERMO_NONE. */
+    int night;                                 /**< The run's night setting; in mode OFF the input's. */
 } cali_thermo_status_t;
 
 /** @brief One step's output. */
@@ -289,6 +304,18 @@ void cali_thermo_init(cali_thermo_state_t *st);
  */
 int cali_thermo_heater_state(const cali_thermo_heater_t *h, int64_t age_ms, const cali_thermo_cfg_t *cfg,
                              int *level, int *code);
+
+/**
+ * @brief Why an AUTO request could not start now (Python `blocked()`), for the card before the owner taps.
+ *
+ * The first entry check that blocks, from the heater read (whatever its age) and the `known_*` inputs:
+ * "NOT_INSTALLED", "FAULT", "TIMER_ARMED", "NO_CAMPING", "IGNITION" (also unknown), "NO_REFERENCE".
+ *
+ * @param in   The step's inputs (`heater`, `known_*`, `ref`).
+ * @param cfg  The settings (`stale_after_ms`).
+ * @return A static code string, or NULL when nothing blocks a start.
+ */
+const char *cali_thermo_blocked(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg);
 
 /**
  * @brief One thermostat decision (Python `step()`).
@@ -376,7 +403,7 @@ void cali_thermo_state_json(cali_json_t *j);
 /** @brief kv key of the stored configuration (settings, target, aliases, outside_on). */
 #define CALI_THERMO_CFG_KEY "th_cfg"
 /** @brief Number of settings in cali_thermo_cfg_t (the keys of the `cfg` object). */
-#define CALI_THERMO_CFG_N 17
+#define CALI_THERMO_CFG_N 19
 /** @brief Lowest target, centi-degrees C. */
 #define CALI_THERMO_TARGET_MIN 500
 /** @brief Highest target, centi-degrees C. */

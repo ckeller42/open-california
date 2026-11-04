@@ -7,7 +7,8 @@ return the same commands, reason, mode, status and next state for every case.
 
 .. test:: The C thermostat decision reproduces every Python vector
    :id: T_FW_THERMOSTAT_PARITY
-   :links: R_FW_THERMOSTAT_DECIDE, R_THERMOSTAT_SESSION, R_THERMOSTAT_CONTROL, R_THERMOSTAT_STATE
+   :links: R_FW_THERMOSTAT_DECIDE, R_THERMOSTAT_SESSION, R_THERMOSTAT_CONTROL, R_THERMOSTAT_STATE,
+      R_THERMOSTAT_NIGHT, R_THERMOSTAT_BLOCKED
 """
 
 import json

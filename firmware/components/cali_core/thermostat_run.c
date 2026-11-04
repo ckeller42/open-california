@@ -231,7 +231,8 @@ static void step(uint64_t now) {
     X(period_ms, 1, I32) X(kp, 0, I32) X(ki, 0, I32) X(ka, 0, I32) X(u_out_max, 0, I32)         \
     X(hyst, 0, I32) X(min_dwell_ms, 1, I32) X(band_hi, 1, I32) X(hot_hold_ms, 1, I32)            \
     X(overheat, 1, I32) X(min_level, 1, 10) X(stale_after_ms, 1, I32) X(heater_stale_ms, 1, I32) \
-    X(batt_min_dv, 100, 150) X(batt_hold_ms, 1, I32) X(verify_ms, 1, I32) X(runtime_min, 10, 120)
+    X(batt_min_dv, 100, 150) X(batt_hold_ms, 1, I32) X(verify_ms, 1, I32) X(runtime_min, 10, 120)    \
+    X(night_wait_ms, 1, I32) X(night_confirm_ms, 1, I32)
 #define X(m, lo, hi) #m,
 const char *const cali_thermo_cfg_keys[CALI_THERMO_CFG_N] = {CFG_TABLE(X)};
 #undef X
@@ -240,7 +241,7 @@ static const struct { size_t off; int64_t lo, hi; } LIM[CALI_THERMO_CFG_N] = {
     CFG_TABLE(X)
 #undef X
 };
-#define CFG_RUNTIME (CALI_THERMO_CFG_N - 1)   /* runtime_min, last in the table */
+#define CFG_RUNTIME 16   /* runtime_min's place in the table */
 typedef char cfg_table_matches_struct[sizeof(cali_thermo_cfg_t) == CALI_THERMO_CFG_N * sizeof(int32_t) ? 1 : -1];
 
 static int32_t *cfg_at(cali_thermo_cfg_t *s, int i) { return (int32_t *)((char *)s + LIM[i].off); }
