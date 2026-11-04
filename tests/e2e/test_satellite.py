@@ -1851,6 +1851,36 @@ def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
         assert dict(rows)["Issues"] == "Solar charger error 2 (Victron mppt)"
 
 
+@pytest.mark.parametrize(
+    "battery,age_s,badge",
+    [
+        (19, 6, "⚠ Sensor battery low: Govee 19 %"),
+        (15, 1380, "⚠ Sensor battery low: Govee 15 % 🕒 23 min ago"),  # gone quiet: still warns, with its age
+        (20, 6, None),
+        (None, 6, None),
+    ],
+)
+def test_a_low_sensor_battery_badges_the_vehicle_tile(stub, error_gated_page, battery, age_s, badge):
+    """A Govee's own battery below 20 % puts the ⚠ badge on the Vehicle tile and a banner on its page,
+    like the unit's own faults; an old reading still warns and names its age.
+
+    .. test:: A low external-sensor battery badges the Vehicle tile
+       :id: T_SAT_UI_SENSOR_BATTERY_BADGE
+       :links: R_FW_SHARED_UI, R_FW_SENSORS
+    """
+    _ext(stub, "govee")["govee"].update(battery=battery, age_s=age_s)
+    with error_gated_page(stub.base) as pg:
+        tile = pg.locator(".tile", has_text="Vehicle").first
+        expect(tile).to_be_visible()
+        if badge is None:
+            expect(tile.locator(".tbadge")).to_have_count(0)
+            return
+        expect(tile.locator(".tbadge")).to_have_count(1)
+        expect(tile).to_have_attribute("title", badge)
+        _open(pg, "Vehicle")
+        expect(pg.locator(".warn")).to_have_text(badge)
+
+
 @pytest.mark.parametrize("locale", ["en-US", "de-DE"])
 def test_sensors_card_shows_only_unknown_types(stub, error_gated_page, locale):
     """A type this UI does not place (a future firmware's) keeps the Sensors card after the summary:

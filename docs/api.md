@@ -171,6 +171,7 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.e2e.test_satellite.test_auto_camper_toggle_on_a_firmware_that_reports_it
 .. autofunction:: tests.e2e.test_satellite.test_victron_readings_on_the_energy_screen
 .. autofunction:: tests.e2e.test_satellite.test_govee_readings_on_the_vehicle_screen_and_tile
+.. autofunction:: tests.e2e.test_satellite.test_a_low_sensor_battery_badges_the_vehicle_tile
 .. autofunction:: tests.e2e.test_satellite.test_sensors_card_shows_only_unknown_types
 .. autofunction:: tests.e2e.test_satellite.test_diagnostics_screen_polls_the_diag_state_only_while_open
 .. autofunction:: tests.e2e.test_satellite.test_an_unchanged_state_costs_a_304

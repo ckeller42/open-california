@@ -257,6 +257,7 @@ window.STRINGS_DE = {
   "Sensors": "Sensoren",
   "Solar yield today": "Solarertrag heute",
   "Battery sensor": "Batteriesensor",
+  "⚠ Sensor battery low: {list}": "⚠ Sensorbatterie schwach: {list}",
   "Temperature": "Temperatur",
   "Humidity": "Luftfeuchte",
   "Solar charger error {n}": "Solarladeregler-Fehler {n}",
