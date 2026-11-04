@@ -6,7 +6,7 @@
  * A key `NNSXS.<39 base32>.<52 base32>` packs into 25 + 33 = 58 bytes (the prefix and the dot are implied).
  * The key transfer arrives on FPort 12 as fragments `seq(1) | body`: bit 7 of `seq` marks the last
  * fragment, bits 0..2 are the index, bits 3..6 stay 0. Every fragment but the last carries exactly
- * CALI_LORA_FRAG_MAX bytes, so fragment `i` lands at offset `i * CALI_LORA_FRAG_MAX`. The reassembled
+ * CALI_LORA_FRAG_BODY bytes, so fragment `i` lands at offset `i * CALI_LORA_FRAG_BODY`. The reassembled
  * ciphertext is `nonce(12) | body | tag(16)`; AES-128-GCM with the transfer key opens it, with the DevEUI as
  * associated data. The decryption itself is passed in (`cali_lora_aead_open_fn`): no platform crypto is
  * linked here.
@@ -46,8 +46,10 @@ extern "C" {
 #define CALI_LORA_XFER_PORT 12
 /** @brief The packed size of one The Things Stack key in bytes. */
 #define CALI_LORA_KEY_PACKED 58
-/** @brief The most body bytes of one fragment. */
-#define CALI_LORA_FRAG_MAX 50
+/** @brief The most bytes of one whole fragment, the `seq` byte included. */
+#define CALI_LORA_FRAG_MAX 51
+/** @brief The most body bytes of one fragment (CALI_LORA_FRAG_MAX - 1). */
+#define CALI_LORA_FRAG_BODY 50
 /** @brief The largest reassembled ciphertext in bytes (nonce + body + tag). */
 #define CALI_LORA_XFER_MAX 320
 /** @brief The length of an unpacked key in characters, without the NUL. */
@@ -137,7 +139,8 @@ void cali_lora_xfer_reset(cali_lora_xfer_t *x);
  * @param tk The 16-byte transfer key.
  * @param deveui The 8-byte DevEUI (associated data).
  * @param open Opens the AES-128-GCM message.
- * @param plain Receives the plaintext on status 0; CALI_LORA_XFER_MAX bytes.
+ * @param plain Receives the plaintext on status 0; CALI_LORA_XFER_MAX bytes. It holds a secret: the caller
+ *        wipes it after use. On a bad tag it is zeroed.
  * @param plain_len Receives the plaintext length (0 unless status 0).
  * @param confirm Receives the confirmation payload; 6 bytes.
  * @param confirm_len Receives the confirmation length.

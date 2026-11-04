@@ -1,5 +1,5 @@
 /* lora_setup_cli.c — host driver for lora_setup.c (R_FW_LORA_SETUP), one command per stdin line:
- *   keypack <key> | keyunpack <hex> | setupqr <deveui hex> <appkey hex> <tk hex> | repairqr <plain hex> |
+ *   keypack <key> | keyunpack <hex> | setupqr <deveui hex> <appkey hex> <tk hex> | repairqr <max> <plain hex> |
  *   xfer <tk hex> <deveui hex> <fragment hex> | sha4 <hex or ->
  * Output: keypack/keyunpack/setupqr/repairqr print the result (hex or text) or "-1"/"0"; xfer prints
  *   "<rc> <confirm hex or -> <plain hex or ->" and keeps the transfer state between lines.
@@ -53,11 +53,13 @@ int main(void) {
             unhex(a, d, 8), unhex(b, k, 16), unhex(c, t, 16);
             size_t n = cali_lora_setup_qr(q, sizeof q, d, k, t);
             printf("%zu %s\n", n, q);
-        } else if (sscanf(line, "repairqr %1023s", a) == 1) {
-            char q[600];
-            size_t n = unhex(a, u, sizeof u);
-            n = cali_lora_repair_qr(q, sizeof q, u, n);
+        } else if (sscanf(line, "repairqr %1023s %1023s", c, a) == 2) {
+            /* the output buffer is exactly max bytes (heap, so the sanitizer sees an overrun) */
+            size_t mx = (size_t)atoi(c), n = unhex(a, u, sizeof u);
+            char *q = malloc(mx ? mx : 1);
+            n = cali_lora_repair_qr(q, mx, u, n);
             printf("%zu %s\n", n, n ? q : "-");
+            free(q);
         } else if (sscanf(line, "xfer %1023s %1023s %1023s", a, b, c) == 3) {
             uint8_t tk[16], de[8], pl[CALI_LORA_XFER_MAX], cf[6];
             size_t pn = 0, cn = 0;

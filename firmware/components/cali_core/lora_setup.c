@@ -119,6 +119,8 @@ size_t cali_lora_repair_qr(char *out, size_t max, const uint8_t *plain, size_t l
     o += dl;
     char rk[CALI_LORA_KEY_LEN + 1], ck[CALI_LORA_KEY_LEN + 1];
     if (cali_lora_key_unpack(plain + o, rk) || cali_lora_key_unpack(plain + o + CALI_LORA_KEY_PACKED, ck)) return 0;
+    /* the exact output length first: every write below is then inside `out` */
+    if (max < 5 + cl + 1 + al + 1 + dl + 1 + 2 * CALI_LORA_KEY_LEN + 1 + 1) return 0;
     const char *end = out + max;
     char *p = out;
     memcpy(p, "OCR1*", 5);
@@ -199,11 +201,11 @@ int cali_lora_xfer_rx(cali_lora_xfer_t *x, const uint8_t *frag, size_t n, const 
                       size_t *confirm_len) {
     *plain_len = 0;
     *confirm_len = 0;
-    if (n < 2 || n - 1 > CALI_LORA_FRAG_MAX || (frag[0] & 0x78)) return bad(x);
+    if (n < 2 || n > CALI_LORA_FRAG_MAX || (frag[0] & 0x78)) return bad(x);
     unsigned idx = frag[0] & 7, is_last = frag[0] >> 7;
-    size_t body = n - 1, off = idx * CALI_LORA_FRAG_MAX;
+    size_t body = n - 1, off = idx * CALI_LORA_FRAG_BODY;
     if (off + body > CALI_LORA_XFER_MAX) return bad(x);
-    if (!is_last && body != CALI_LORA_FRAG_MAX) return bad(x);
+    if (!is_last && body != CALI_LORA_FRAG_BODY) return bad(x);
     if (x->have & (1u << idx)) {
         /* a repeat is harmless only when it is byte-for-byte the same */
         if (x->len[idx] != body || memcmp(x->buf + off, frag + 1, body)) return bad(x);
@@ -227,7 +229,7 @@ int cali_lora_xfer_rx(cali_lora_xfer_t *x, const uint8_t *frag, size_t n, const 
         *confirm_len = 2;
         return 2;
     }
-    size_t total = (size_t)(x->last - 1) * CALI_LORA_FRAG_MAX + x->len[x->last - 1];
+    size_t total = (size_t)(x->last - 1) * CALI_LORA_FRAG_BODY + x->len[x->last - 1];
     if (total <= 12 + 16) return bad(x);
     size_t ct = total - 12 - 16;
     if (open(tk, x->buf, deveui, 8, x->buf + 12, ct, x->buf + total - 16, plain) == 0) {
@@ -236,6 +238,7 @@ int cali_lora_xfer_rx(cali_lora_xfer_t *x, const uint8_t *frag, size_t n, const 
         *confirm_len = 5;
         *plain_len = ct;
     } else {
+        memset(plain, 0, ct); /* no unauthenticated bytes leave */
         confirm[0] = 1;
         *confirm_len = 1;
     }

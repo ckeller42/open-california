@@ -30,12 +30,11 @@ def key(seed):
 def cli(tmp_path_factory):
     cc = shutil.which("cc") or pytest.skip("no C compiler")
     out = tmp_path_factory.mktemp("lora_setup") / "lora_setup_cli"
-    subprocess.run(
-        [cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-I", str(CORE / "include")]
-        + [str(CORE / f) for f in ("lora_setup.c", "test/lora_setup_cli.c")]
-        + ["-o", str(out)],
-        check=True,
-    )
+    cmd = [cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-I", str(CORE / "include")]
+    cmd += [str(CORE / f) for f in ("lora_setup.c", "test/lora_setup_cli.c")] + ["-o", str(out)]
+    # AddressSanitizer + UBSan catch an overrun the output would not show; skip them if the toolchain lacks them
+    if subprocess.run(cmd + ["-fsanitize=address,undefined"], capture_output=True).returncode:
+        subprocess.run(cmd, check=True)
     return out
 
 
@@ -105,7 +104,7 @@ def test_setup_qr_text(cli):
 
 
 def test_repair_qr_from_plaintext(cli):
-    out = run(cli, f"repairqr {plaintext().hex()}", f"repairqr {plaintext(ver=2).hex()}")
+    out = run(cli, f"repairqr 600 {plaintext().hex()}", f"repairqr 600 {plaintext(ver=2).hex()}")
     want = f"OCR1*EU1.CLOUD.THETHINGS.NETWORK*MY-VAN-APP*VAN-000001*{key(3)}*{key(7)}"
     assert out[0] == f"{len(want)} {want}"
     assert out[1] == "0 -"
@@ -114,9 +113,9 @@ def test_repair_qr_from_plaintext(cli):
     assert (
         run(
             cli,
-            f"repairqr {long}",
-            f"repairqr {plaintext().hex()}00",
-            f"repairqr {plaintext(app='a*b').hex()}",
+            f"repairqr 600 {long}",
+            f"repairqr 600 {plaintext().hex()}00",
+            f"repairqr 600 {plaintext(app='a*b').hex()}",
         )
         == ["0 -"] * 3
     )
@@ -168,3 +167,30 @@ def test_sha256_4_vector(cli):
     assert run(cli, "sha4 616263") == ["ba7816bf"]
     data = bytes(range(200))
     assert run(cli, f"sha4 {data.hex()}") == [hashlib.sha256(data).digest()[:4].hex()]
+
+
+def test_repair_qr_output_bounds(cli):
+    """A small ``max`` is refused and never written past (the sanitizer build traps an overrun)."""
+    pt = plaintext().hex()
+    want = f"OCR1*EU1.CLOUD.THETHINGS.NETWORK*MY-VAN-APP*VAN-000001*{key(3)}*{key(7)}"
+    sizes = list(range(0, 8)) + [len(want) - 1, len(want), len(want) + 1, len(want) + 2]
+    out = run(cli, *[f"repairqr {m} {pt}" for m in sizes])
+    for m, line in zip(sizes, out):
+        # max includes the NUL: the text fits from len + 1
+        assert line == (f"{len(want)} {want}" if m >= len(want) + 1 else "0 -"), m
+
+
+def test_key_unpack_rejects_padding_in_last_byte(cli):
+    raw = bytearray(bytes.fromhex(run(cli, f"keypack {key(5)}")[0]))
+    for bit in (0x10, 0x80):
+        bad = bytearray(raw)
+        bad[57] |= bit
+        assert run(cli, f"keyunpack {bad.hex()}") == ["-1"]
+    assert run(cli, f"keyunpack {raw.hex()}") == [key(5)]
+
+
+def test_xfer_reassembly_bound(cli):
+    # 7 * 50 + 50 > 320, 6 * 50 + 21 > 320: rejected; 6 * 50 + 20 ends at 320: accepted (as the last fragment)
+    assert xfer(cli, [bytes([0x07]) + bytes(50)])[0][0] == -1
+    assert xfer(cli, [bytes([0x86]) + bytes(21)])[0][0] == -1
+    assert xfer(cli, [bytes([0x86]) + bytes(20)])[0] == (2, "0240", "")
