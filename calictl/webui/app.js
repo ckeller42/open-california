@@ -3728,6 +3728,7 @@ let thermoSheet = false;    // the thermometer sheet is open (survives the 2 s r
 let thermoLoading = false;  // a GET /api/thermostat is in flight
 let thermoAsked = false;    // the first fetch of this page load went out
 let thermoChain = Promise.resolve();   // POSTs run one at a time, each with the then-current rev
+let thermoBusy = 0;         // queued or running POSTs: an AUTO start waits, its confirm reads the settings
 const THERMO_STEP = 50, THERMO_MIN = 500, THERMO_MAX = 3000;   // centi-°C
 
 // Reason code -> text (English source; the German is the strings.de.js entry of the same text).
@@ -3819,6 +3820,7 @@ function thermoAsk() {
  * rev, also with no state loaded: the firmware never blocks a stop. @param {Record<string, any>} patch */
 function thermoPost(patch) {
   const off = Object.keys(patch).length === 1 && patch.mode === "OFF";
+  thermoBusy++;
   thermoChain = thermoChain.then(async () => {
     if (!THERMO && !off) return;
     try {
@@ -3831,6 +3833,7 @@ function thermoPost(patch) {
         toast("The thermostat was changed elsewhere — reloaded, please try again", "warn");
       } else toast("Couldn't change the thermostat", "error");
     } catch (e) { toast("Couldn't change the thermostat", "error"); }
+    thermoBusy--;
     render();
   });
 }
@@ -3993,9 +3996,10 @@ function thermostatCard() {
   sw.className = "switch";
   sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", /** @type {string} */ (t("AUTO")));
   sw.setAttribute("aria-checked", st.mode === "OFF" ? "false" : "true");
-  sw.disabled = readOnly() || !!blocked;
+  sw.disabled = readOnly() || !!blocked || (st.mode === "OFF" && thermoBusy > 0);
   sw.onclick = () => {
     if (st.mode === "OFF") {
+      if (thermoBusy > 0) return;
       if (!confirm(thermoConfirmText(th))) return;
       // enable in the same POST only while the feature is off: a failed enable write turns it off again server-side
       thermoPost(st.enabled ? { mode: "AUTO", confirm: true } : { enabled: true, mode: "AUTO", confirm: true });
@@ -4039,7 +4043,10 @@ function thermostatCard() {
     sel.appendChild(night);
     sel.value = th.night ? "night" : String(th.runtime_min);
     sel.disabled = readOnly();
-    sel.onchange = () => thermoPost(sel.value === "night" ? { night: true } : { night: false, runtime_min: Number(sel.value) });
+    sel.onchange = () => {
+      thermoPost(sel.value === "night" ? { night: true } : { night: false, runtime_min: Number(sel.value) });
+      render();   // AUTO stays dimmed until the POST returned
+    };
     rt.appendChild(sel);
     card.appendChild(rt);
   }

@@ -349,6 +349,31 @@ def test_night_choice_posts_and_confirm_names_the_panel(stub, error_gated_page):
         cm.__exit__(None, None, None)
 
 
+def test_auto_waits_for_a_pending_night_post(stub, error_gated_page):
+    """AUTO waits for a pending run-time POST, so its confirmation names the chosen run."""
+    cm, pg = _open(stub, error_gated_page)
+    held = []
+    try:
+        pg.route(
+            "**/api/thermostat", lambda r: held.append(r) if r.request.method == "POST" else r.continue_()
+        )
+        _card(pg).get_by_role("combobox", name="Run time").select_option("night")
+        for _ in range(30):
+            if held:
+                break
+            pg.wait_for_timeout(100)
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_be_disabled()
+        held.pop().continue_()
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_be_enabled()
+        seen = _first_dialog(pg, lambda: _card(pg).get_by_role("switch", name="AUTO").click())
+        assert seen and "Heat for the night" in seen[0]
+    finally:
+        for r in held:
+            r.continue_()
+        pg.unroute("**/api/thermostat")
+        cm.__exit__(None, None, None)
+
+
 def test_minute_choice_clears_night(stub, error_gated_page):
     stub.fixtures["satellite"]["/api/thermostat"]["night"] = True
     cm, pg = _open(stub, error_gated_page)
