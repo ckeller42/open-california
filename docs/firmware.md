@@ -1652,6 +1652,8 @@ The CoreS3 screen is dark when nobody uses it:
   normal parked data-age sawtooth (2 s -> ~31 s) never wakes it; a lost link still does.
 - **A wake tap is swallowed:** a press that starts while the screen is dim or off only wakes it; LVGL
   sees no press until that finger lifts (`cali_display_touch_gate`, inside `display.c`'s touch read).
+  Only a successful read without a touch counts as lifting: a failed read is "released" for that tick
+  but the press, its swallow and the LoRa screen's 3 s count go on.
 - **A failed touch read never aborts** (`R_FW_TOUCH_NO_ABORT`): esp_lvgl_port's own touch read
   `ESP_ERROR_CHECK`s the FT5x06 I2C read, and the touch controller shares the board package's I2C bus
   with the LTR-553 and AXP2101 reads and the init probes, so one transient error would abort the

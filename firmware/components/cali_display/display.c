@@ -382,7 +382,7 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
     }
     pressed = data->state == LV_INDEV_STATE_PRESSED;
     if (pressed) __atomic_store_n(&s_touched, 1, __ATOMIC_RELAXED);
-    if (!cali_display_touch_gate(&s_swallow, pressed, __atomic_load_n(&s_awake, __ATOMIC_RELAXED))) {
+    if (!cali_display_touch_gate(&s_swallow, pressed, __atomic_load_n(&s_awake, __ATOMIC_RELAXED), e == ESP_OK)) {
         data->state = LV_INDEV_STATE_RELEASED;   /* a swallowed (wake) press never starts the LoRa press clock */
     } else if (pressed) {
         if (!__atomic_load_n(&s_press_start, __ATOMIC_RELAXED))

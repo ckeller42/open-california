@@ -268,13 +268,16 @@ void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_
  * @brief The touch read filter, run in LVGL's task.
  *
  * A press that starts while the screen is not on only wakes it. The whole press, until release, is swallowed.
+ * Only a successful read that reports no touch is a release: a failed read reports "released" to the
+ * widgets and leaves the flag as it is.
  *
  * @param swallow  Persistent flag between reads.
  * @param pressed  1 while the finger is down.
  * @param awake    1 when the screen is on.
+ * @param read_ok  1 when the touch controller read succeeded.
  * @return 1 to deliver the read to the widgets, 0 to report "released" instead.
  */
-int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake);
+int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake, int read_ok);
 
 /* ---- display_cfg.c: the settings in NVS and the last painted state for /api/state ---- */
 

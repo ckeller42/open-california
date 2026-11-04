@@ -422,7 +422,8 @@ void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_
     wake_and_brightness(m, now_ms, in, cfg, out);
 }
 
-int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake) {
+int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake, int read_ok) {
+    if (!read_ok) return 0;   /* a failed read: "released" for the widgets, but the press (and its swallow) goes on */
     if (!pressed) *swallow = 0;
     else if (!awake) *swallow = 1;
     return !*swallow;

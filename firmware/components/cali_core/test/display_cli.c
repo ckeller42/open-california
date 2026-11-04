@@ -6,8 +6,8 @@
  *   device=<dot>|<text> ;; wifi=<dot>|<text> ;; camper=<dot>|<text> ;; setup=<0|1> ;; footer=<text> ;;
  *   bright=<pct> ;; state=<on|dim|off> ;; sensor=<ok|absent|error> ;; motion=<mg|-1> ;; show=<0|1|2> ;;
  *   req=<0|1> ;; lhint=<text> ;; lline=<text>
- * The model state persists across lines until "reset". "gate=<pressed><awake>" (e.g. gate=10) runs
- * cali_display_touch_gate on one persistent swallow flag and prints "deliver=<0|1>". */
+ * The model state persists across lines until "reset". "gate=<pressed><awake>[<read_ok>]" (e.g. gate=10;
+ * read_ok defaults to 1) runs cali_display_touch_gate on one persistent swallow flag and prints "deliver=<0|1>". */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
             continue;
         }
         if (!strncmp(line, "gate=", 5)) {
-            printf("deliver=%d\n", cali_display_touch_gate(&swallow, line[5] == '1', line[6] == '1'));
+            printf("deliver=%d\n", cali_display_touch_gate(&swallow, line[5] == '1', line[6] == '1', line[7] != '0'));
             continue;
         }
         if (!strcmp(line, "reset")) {

@@ -58,6 +58,7 @@ static volatile bool s_on;   /* the newest snapshot's switch, set by the owner t
  * value it served only after a successful open, so a request made during an open is never lost and a
  * failed open stays pending (retried on the next pass). */
 static atomic_uint s_setup_req, s_setup_done;
+#define SETUP_FAIL_LOG_MS 60000u   /* at most one "setup: store failed" line per minute while a request is pending */
 static cali_lora_xfer_t s_xfer;     /* the key transfer in progress (ciphertext only) */
 static uint8_t s_confirm[6];        /* the pending FPort-12 confirmation */
 static size_t s_confirm_len;        /* 0 = none pending */
@@ -356,10 +357,16 @@ static int setup_open(void) {
     uint8_t before[24], after[24];
     size_t nb = sizeof before, na = sizeof after;
     int had = cali_kv_get(CALI_LORA_DEV_KEY, before, &nb) == CALI_KV_OK && nb == sizeof before;
+    static uint64_t s_fail_log_ms;   /* the last "store failed" line, 0 = none since the last good open */
     int changed = -1;
     if (cali_lora_setup_open(esp_fill_random) != 0) {
-        cali_log("lora: setup: store failed");   /* ponytail: logged on every retry pass (1 s) while NVS fails */
+        uint64_t now = cali_uptime_ms();   /* retried every pass (~1 s) while pending: one line per SETUP_FAIL_LOG_MS */
+        if (!s_fail_log_ms || now - s_fail_log_ms >= SETUP_FAIL_LOG_MS) {
+            cali_log("lora: setup: store failed");
+            s_fail_log_ms = now ? now : 1;
+        }
     } else {
+        s_fail_log_ms = 0;
         changed = !had || cali_kv_get(CALI_LORA_DEV_KEY, after, &na) != CALI_KV_OK || na != sizeof after ||
                   memcmp(before, after, 16) != 0;
         cali_log("lora: setup opened%s", changed ? " (new AppKey: join again)" : "");

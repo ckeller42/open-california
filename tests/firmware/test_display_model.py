@@ -521,6 +521,22 @@ def test_wake_tap_is_swallowed_until_release(cli, pressed_awake, want):
     assert [ln.split("=")[1] for ln in run_raw(cli, *("gate=" + g for g in pressed_awake))] == want
 
 
+def test_failed_touch_read_keeps_the_wake_swallow(cli):
+    """A failed touch read (the #346 NACKs) reads as "released" for the widgets but does not end the
+    press: the wake press stays swallowed until a good read reports no touch. Third digit = read ok."""
+    seq = ["101", "110", "000", "111", "011", "111"]  # wake press, NACK mid-press, finger still down
+    assert [ln.split("=")[1] for ln in run_raw(cli, *("gate=" + g for g in seq))] == [
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+        "1",
+    ]
+    # a failed read while a delivered press is down reports released and keeps it delivered after
+    assert [ln.split("=")[1] for ln in run_raw(cli, "gate=111", "gate=010", "gate=111")] == ["1", "0", "1"]
+
+
 def bright_at(cli, *lux, **cfg):
     extra = "".join(" %s=%s" % kv for kv in cfg.items())
     return [
