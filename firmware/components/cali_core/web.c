@@ -873,7 +873,7 @@ static void api_auto_camper(const cali_http_req_t *req, cali_http_resp_t *resp) 
 /* ---- GET/POST /api/thermostat (R_FW_THERMOSTAT_API): the body keys are the bits of cali_thermo_patch_t.has,
  * in this order. POST: station mode only. ---- */
 static const char *const K_THERMO[] = {"enabled", "mode", "target", "runtime_min", "ref", "backup",
-                                       "out", "outside_on", "cfg", "rev", "confirm"};
+                                       "out", "outside_on", "cfg", "rev", "confirm", "night"};
 
 /* A signed integer -?(0|[1-9][0-9]*), clamped to +-2^62 (the value check refuses it); a fraction or
  * exponent leaves its '.'/'e' behind, which the object parser then rejects. 0 ok, -1 not an integer. */
@@ -935,7 +935,8 @@ static int thermo_field(cursor_t *c, int i, void *ctx) {
         p->cfg_has = (unsigned)seen;
         return seen < 0 ? -1 : 0;
     case 9: return parse_i64(c, &p->rev);
-    default: return parse_bool(c, &p->confirm);
+    case 10: return parse_bool(c, &p->confirm);
+    default: return parse_bool(c, &p->night);
     }
 }
 

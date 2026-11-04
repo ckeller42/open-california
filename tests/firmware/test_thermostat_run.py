@@ -154,3 +154,38 @@ def test_auto_tap_wakes_the_link_and_waits_for_it(cli, tmp_path):
     assert states[1]["mode"] == "AUTO" and submits(out) == ["runtime 120"]  # the start batch begins
     out = run(cli, tmp_path, [*SETUP, "ready 0", "auto", "tick", "now 31000", "tick", "state"])
     assert state(out)["reason"] == "AUTO_REFUSED_NO_LINK" and submits(out) == []
+
+
+def test_night_wait_holds_the_session(cli, tmp_path):
+    """A night AUTO request with the heater off pre-sets the level alone and enters WAITING; the wait holds
+    the session like AUTO (no rest: a WAITING that loses fresh 1702 data never sees the panel's Dauerbetrieb).
+
+    .. test:: Thermostat runner: the night wait holds the session
+       :id: T_FW_THERMOSTAT_RUN_NIGHT_HOLD
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(cli, tmp_path, [*SETUP, "night 1", "auto", "tick", f"done {OK}", "state"])
+    st = state(out)
+    assert submits(out) == ["level 6"] and "HOLD 1" in out
+    assert (st["mode"], st["reason"], st["night"], st["wait_left_s"]) == (
+        "WAITING",
+        "WAITING_FOR_CONTINUOUS",
+        True,
+        300,
+    )
+
+
+def test_blocked_uses_the_last_known_frames(cli, tmp_path):
+    """``status.blocked`` reads camping mode from the last-known frames, the entry check from this link's only:
+    with the stored 1202 frame not live, nothing blocks on the card, and an AUTO request is refused.
+
+    .. test:: Thermostat runner: blocked from the last-known frames
+       :id: T_FW_THERMOSTAT_RUN_BLOCKED
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(cli, tmp_path, [*SETUP, "live 0", "tick", "state", "auto", "tick", "state"])
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert states[0]["blocked"] is None and states[0]["wait_left_s"] is None
+    assert states[1]["reason"] == "AUTO_REFUSED_NO_CAMPING"
+    out = run(cli, tmp_path, [*SETUP, "ign 1", "tick", "state"])
+    assert state(out)["blocked"] == "IGNITION"

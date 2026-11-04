@@ -26,8 +26,8 @@
  * **Run** (thermostat_run.c, owner task, like auto_camper_run.c): cali_thermo_run_tick() runs one
  * step every `period_ms`, and at once after an owner request, a switch of the feature, or the end of
  * a command batch. A step's inputs are this ESP's: the stored 1702 frame and its age (no frame, or
- * one with no fields, is no heater), 1202 State, 1602 StateLandAfs (1 or 2 = shore power),
- * UTwoBattBemAfs, cali_ac_ignition(), cali_session_ready(), and the configured thermometers'
+ * one with no fields, is no heater), 1202 State, 1602 StateLandAfs (1 or 2 = shore power) of this
+ * link (and of the last-known frames for the `known_*` inputs of cali_thermo_blocked()), UTwoBattBemAfs, cali_ac_ignition(), cali_session_ready(), and the configured thermometers'
  * `temp_c` by alias (cali_sensors_value(); an alias with no reading is an invalid sensor, never
  * another one). The step's commands go to the control sequencer as `airheater` commands with source
  * `thermostat`, one at a time (the next from the previous one's done callback); the batch stops at
@@ -46,7 +46,7 @@
  *    the stored 1702 frame's age and the configured thermometers' readings by alias; send its
  *    commands through the control sequencer one at a time, stopping at the first result that is not
  *    OK and handing that result to the next step; ship with the feature off (kv ``th_on``, missing =
- *    off) and never store the mode. While the mode is not OFF it holds the session: no power-save
+ *    off) and never store the mode. While the mode is not OFF (also ``WAITING``) it holds the session: no power-save
  *    rest, no idle demotion, and 1702 re-read every ``CALI_SESSION_HEATER_REREAD_MS``. It logs one
  *    ``thermo`` record per step and one ``evt`` ``thermo`` record per mode change and command result,
  *    only while the feature is on or a mode is active.
@@ -64,16 +64,19 @@
  *    :tags: esp32, thermostat, airheater, web
  *
  *    The firmware shall serve ``GET /api/thermostat`` (``rev``, ``mode``, ``target``, ``runtime_min``,
- *    the thermometer aliases, ``outside_on``, all settings, the status with the reason) and
+ *    the thermometer aliases, ``outside_on``, ``night``, all settings, the status with the reason,
+ *    ``blocked``, ``wait_left_s`` and the run's ``night``) and
  *    ``POST /api/thermostat`` (station mode only) with any of ``enabled``, ``mode``, ``target``,
  *    ``runtime_min``, ``ref``, ``backup``, ``out`` (an alias of a configured Govee, or null),
- *    ``outside_on``, ``cfg``, ``rev`` and ``confirm``. The switch, an AUTO request and ``cfg`` shall be
+ *    ``outside_on``, ``night``, ``cfg``, ``rev`` and ``confirm``; ``enabled`` applies before the
+ *    request of the same body. The switch, an AUTO request and ``cfg`` shall be
  *    refused without ``confirm: true``; a value outside its range (target 500..3000 in steps of 50,
  *    run time 10..120 min, ``min_level`` 1..10, ``batt_min_dv`` 100..150, periods and times above
  *    0, gains not below 0) shall be refused before anything changes; a ``rev`` other than the current
  *    one shall be refused, except for a body that is only ``mode`` ``OFF`` (a stop is never blocked);
  *    every accepted POST shall count ``rev``. The settings, the target, the
- *    aliases and ``outside_on`` shall persist in kv ``th_cfg``, the switch in ``th_on``, the mode
+ *    aliases, ``outside_on`` and ``night`` shall persist in kv ``th_cfg`` (a version-1 record of an
+ *    older firmware loads with the new members at their defaults), the switch in ``th_on``, the mode
  *    never. ``/api/state`` shall carry ``device.thermostat`` (``mode``, ``target``, ``t_ref``,
  *    ``level``, ``reason``) only while a reference thermometer is selected.
  * @endverbatim
@@ -344,6 +347,7 @@ typedef struct {
     char backup[CALI_THERMO_ALIAS_LEN];    /**< Backup thermometer alias, "" = none. */
     char out[CALI_THERMO_ALIAS_LEN];       /**< Outside thermometer alias, "" = none. */
     int outside_on;                        /**< Use the outside feed-forward. */
+    int night;                             /**< The run-time setting "Nacht" (`cali_thermo_in_t.night`). */
 } cali_thermo_run_cfg_t;
 
 /** @brief Load the feature switch and reset the session to OFF. Call on the owner task after cali_platform_init. */
@@ -391,10 +395,11 @@ cali_thermo_run_cfg_t *cali_thermo_run_cfg(void);
 int cali_thermo_cfg_set(const char *key, int32_t value);
 
 /**
- * @brief Write the status object: `{"enabled","mode","reason","heater","t_ref","t_out","target","level","active","outside_active","end"}`.
+ * @brief Write the status object: `{"enabled","mode","reason","heater","t_ref","t_out","target","level","active","outside_active","end","blocked","wait_left_s","night"}`.
  *
  * `reason` is the last step's reason that was not NULL (null before any); temperatures and the
- * level are null when unknown.
+ * level are null when unknown. `blocked`, `wait_left_s` and `night` are the last step's
+ * (`cali_thermo_status_t`; null, null and false before any).
  *
  * @param j  The JSON writer; the caller writes the key first.
  */
@@ -426,7 +431,8 @@ enum cali_thermo_patch_e {
     CALI_THERMO_P_OUTSIDE = 1 << 7,  /**< `outside_on`. */
     CALI_THERMO_P_CFG = 1 << 8,      /**< `cfg` (members in `cfg_has`). */
     CALI_THERMO_P_REV = 1 << 9,      /**< `rev`. */
-    CALI_THERMO_P_CONFIRM = 1 << 10  /**< `confirm`. */
+    CALI_THERMO_P_CONFIRM = 1 << 10, /**< `confirm`. */
+    CALI_THERMO_P_NIGHT = 1 << 11    /**< `night`. */
 };
 
 /** @brief A parsed `POST /api/thermostat` body. */
@@ -435,6 +441,7 @@ typedef struct {
     int enabled;                           /**< The feature switch. */
     int outside_on;                        /**< Use the outside feed-forward. */
     int confirm;                           /**< `confirm: true`. */
+    int night;                             /**< The night setting. */
     char mode[8];                          /**< "AUTO" or "OFF"; anything else (also a longer text) is refused. */
     int64_t target;                        /**< Target, centi-degrees C (any value; range-checked by cali_thermo_apply()). */
     int64_t runtime_min;                   /**< Run time with a start, min (range-checked likewise). */
@@ -468,7 +475,7 @@ enum cali_thermo_err_e {
 int cali_thermo_apply(const cali_thermo_patch_t *p);
 
 /**
- * @brief Write the `GET /api/thermostat` members: `"rev","mode","target","runtime_min","ref","backup","out","outside_on","cfg","status"`.
+ * @brief Write the `GET /api/thermostat` members: `"rev","mode","target","runtime_min","ref","backup","out","outside_on","night","cfg","status"`.
  * @param j  The JSON writer, just after cali_json_begin() (which writes the object's `{`).
  */
 void cali_thermo_api_json(cali_json_t *j);

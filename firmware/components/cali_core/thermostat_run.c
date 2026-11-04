@@ -151,11 +151,13 @@ static const char *num(char b[16], int32_t v) {
 }
 
 static void step(uint64_t now) {
-    static codec_kv_t h[CODEC_KV_MAX], c[CODEC_KV_MAX], e[CODEC_KV_MAX];   /* static: the 8 KB host-task stack */
+    /* static: the 8 KB host-task stack; kc/ke = the last-known frames (cali_thermo_blocked()) */
+    static codec_kv_t h[CODEC_KV_MAX], c[CODEC_KV_MAX], e[CODEC_KV_MAX], kc[CODEC_KV_MAX], ke[CODEC_KV_MAX];
     static cali_thermo_heater_t ht;
     int nh = frame_fields("airheater", 0, h), nc = frame_fields("campingmode", 1, c), ne = frame_fields("energy", 1, e);
+    int nkc = frame_fields("campingmode", 0, kc), nke = frame_fields("energy", 0, ke);
     int mode_before = S.mode;
-    int32_t shore = field(e, ne, "StateLandAfs");
+    int32_t shore = field(e, ne, "StateLandAfs"), kshore = field(ke, nke, "StateLandAfs");
     cali_thermo_in_t in;
     memset(&in, 0, sizeof in);
     in.now_ms = (int64_t)now;
@@ -185,6 +187,10 @@ static void step(uint64_t now) {
     in.camping_on = field(c, nc, "State") == 1;
     in.shore_on = shore == 1 || shore == 2;
     in.ignition_on = cali_ac_ignition();
+    in.night = C.night;
+    in.known_camping_on = field(kc, nkc, "State") == 1;
+    in.known_shore_on = kshore == 1 || kshore == 2;
+    in.known_ignition_on = in.ignition_on;
     in.batt2_dv = field(e, ne, "UTwoBattBemAfs");
     in.cmd_what = s_cmd_what;
     in.cmd_result = s_cmd_res;
@@ -241,7 +247,9 @@ static const struct { size_t off; int64_t lo, hi; } LIM[CALI_THERMO_CFG_N] = {
     CFG_TABLE(X)
 #undef X
 };
-#define CFG_RUNTIME 16   /* runtime_min's place in the table */
+#define X(m, lo, hi) CFG_##m,
+enum { CFG_TABLE(X) };   /* CFG_<member> = its place in the table */
+#undef X
 typedef char cfg_table_matches_struct[sizeof(cali_thermo_cfg_t) == CALI_THERMO_CFG_N * sizeof(int32_t) ? 1 : -1];
 
 static int32_t *cfg_at(cali_thermo_cfg_t *s, int i) { return (int32_t *)((char *)s + LIM[i].off); }
@@ -264,13 +272,24 @@ typedef struct {
     uint8_t ver, pad[3];
     cali_thermo_run_cfg_t c;
 } th_blob_t;
-#define TH_BLOB_VER 1
+#define TH_BLOB_VER 2
+/* Version 1 (no night_wait_ms, night_confirm_ms, night): loaded with those at their defaults, so the
+ * settings of an older firmware survive the update. */
+#define TH_V1_CFG_N 17   /* period_ms .. runtime_min: a prefix of cali_thermo_cfg_t */
+typedef struct {
+    uint8_t ver, pad[3];
+    int32_t s[TH_V1_CFG_N];
+    int32_t target;
+    char ref[CALI_THERMO_ALIAS_LEN], backup[CALI_THERMO_ALIAS_LEN], out[CALI_THERMO_ALIAS_LEN];
+    int outside_on;
+} th_blob_v1_t;
+typedef char th_blob_v1_size[sizeof(th_blob_v1_t) == 132 ? 1 : -1];   /* the layout on the van */
 
 static int cfg_valid(const cali_thermo_run_cfg_t *c) {
     cali_thermo_cfg_t s = c->s;
     for (int i = 0; i < CALI_THERMO_CFG_N; i++)
         if (!cfg_ok(i, *cfg_at(&s, i))) return 0;
-    return target_ok(c->target) && (c->outside_on == 0 || c->outside_on == 1) &&
+    return target_ok(c->target) && (c->outside_on == 0 || c->outside_on == 1) && (c->night == 0 || c->night == 1) &&
            alias_chars_ok(c->ref, sizeof c->ref) && alias_chars_ok(c->backup, sizeof c->backup) &&
            alias_chars_ok(c->out, sizeof c->out);
 }
@@ -285,23 +304,42 @@ static int cfg_store(const cali_thermo_run_cfg_t *c) {
 
 static unsigned s_rev;   /* counts the accepted POSTs; not stored */
 
+/* a stored version-1 record into *c (the rest at the defaults already there); 0 when it is one */
+static int cfg_from_v1(const void *raw, size_t len, cali_thermo_run_cfg_t *c) {
+    th_blob_v1_t v;
+    if (len != sizeof v) return -1;
+    memcpy(&v, raw, sizeof v);
+    if (v.ver != 1) return -1;
+    memcpy(&c->s, v.s, sizeof v.s);
+    c->target = v.target;
+    memcpy(c->ref, v.ref, sizeof c->ref);
+    memcpy(c->backup, v.backup, sizeof c->backup);
+    memcpy(c->out, v.out, sizeof c->out);
+    c->outside_on = v.outside_on;
+    return 0;
+}
+
 void cali_thermo_run_init(void) {
     uint8_t b;
     size_t n = 1;
     th_blob_t blob;
     size_t bn = sizeof blob;
+    cali_thermo_run_cfg_t v1;
     s_on = cali_kv_get(CALI_THERMO_ON_KEY, &b, &n) == CALI_KV_OK && n == 1 && b != 0;   /* missing = off */
     static const cali_thermo_run_cfg_t DEFAULTS = {.s = CALI_THERMO_DEFAULTS, .target = CALI_THERMO_TARGET_DEFAULT};
     C = DEFAULTS;
-    if (cali_kv_get(CALI_THERMO_CFG_KEY, &blob, &bn) == CALI_KV_OK && bn == sizeof blob && blob.ver == TH_BLOB_VER &&
-        cfg_valid(&blob.c))
-        C = blob.c;
+    v1 = DEFAULTS;
+    if (cali_kv_get(CALI_THERMO_CFG_KEY, &blob, &bn) == CALI_KV_OK) {
+        if (bn == sizeof blob && blob.ver == TH_BLOB_VER && cfg_valid(&blob.c)) C = blob.c;
+        else if (cfg_from_v1(&blob, bn, &v1) == 0 && cfg_valid(&v1)) C = v1;
+    }
     s_rev = 0;
     cali_thermo_init(&S);
     memset(&s_out, 0, sizeof s_out);
     s_out.status.heater = CALI_THERMO_H_UNKNOWN;
     s_out.status.t_ref = s_out.status.t_out = s_out.status.level = CALI_THERMO_NONE;
     s_out.status.end = "none";
+    s_out.status.wait_left_s = CALI_THERMO_NONE;
     cali_log("thermostat: %s", s_on ? "enabled" : "disabled");
 }
 
@@ -379,6 +417,12 @@ void cali_thermo_state_json(cali_json_t *j) {
     cali_json_bool(j, st->outside_active);
     cali_json_key(j, "end");
     cali_json_str(j, st->end ? st->end : "none");
+    cali_json_key(j, "blocked");
+    if (st->blocked) cali_json_str(j, st->blocked);
+    else cali_json_null(j);
+    opt_num(j, "wait_left_s", st->wait_left_s);
+    cali_json_key(j, "night");
+    cali_json_bool(j, st->night);
     cali_json_obj_end(j);
 }
 
@@ -403,6 +447,8 @@ void cali_thermo_api_json(cali_json_t *j) {
     alias_json(j, "out", C.out);
     cali_json_key(j, "outside_on");
     cali_json_bool(j, C.outside_on);
+    cali_json_key(j, "night");
+    cali_json_bool(j, C.night);
     cali_json_key(j, "cfg");
     cali_json_obj_begin(j);
     for (int i = 0; i < CALI_THERMO_CFG_N; i++) {
@@ -446,7 +492,7 @@ int cali_thermo_apply(const cali_thermo_patch_t *p) {
         else if (strcmp(p->mode, "OFF") != 0) return CALI_THERMO_E_VALUE;
     }
     if (((h & CALI_THERMO_P_TARGET) && !target_ok(p->target)) ||
-        ((h & CALI_THERMO_P_RUNTIME) && !cfg_ok(CFG_RUNTIME, p->runtime_min)))
+        ((h & CALI_THERMO_P_RUNTIME) && !cfg_ok(CFG_runtime_min, p->runtime_min)))
         return CALI_THERMO_E_VALUE;
     for (int i = 0; (h & CALI_THERMO_P_CFG) && i < CALI_THERMO_CFG_N; i++)
         if ((p->cfg_has >> i & 1u) && !cfg_ok(i, p->cfg[i])) return CALI_THERMO_E_VALUE;
@@ -462,6 +508,7 @@ int cali_thermo_apply(const cali_thermo_patch_t *p) {
     if (h & CALI_THERMO_P_BACKUP) snprintf(n.backup, sizeof n.backup, "%s", p->backup);
     if (h & CALI_THERMO_P_OUT) snprintf(n.out, sizeof n.out, "%s", p->out);
     if (h & CALI_THERMO_P_OUTSIDE) n.outside_on = p->outside_on != 0;
+    if (h & CALI_THERMO_P_NIGHT) n.night = p->night != 0;
     for (int i = 0; (h & CALI_THERMO_P_CFG) && i < CALI_THERMO_CFG_N; i++)
         if (p->cfg_has >> i & 1u) *cfg_at(&n.s, i) = (int32_t)p->cfg[i];
     if (memcmp(&n, &C, sizeof n) != 0) {

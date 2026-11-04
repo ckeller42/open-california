@@ -493,9 +493,12 @@ int main(void) {
             cali_sdlog_init(put_rec);
         }
         else if (strcmp(w, "kvhex") == 0) {
-            unsigned char b[32];
+            static char hex[1025];   /* the 3rd token whole: a2 holds only 63 chars (th_cfg is 144 bytes) */
+            unsigned char b[512];
             size_t k = 0;
-            while (k < sizeof b && a2[2 * k] && sscanf(a2 + 2 * k, "%2hhx", &b[k]) == 1) k++;
+            hex[0] = 0;
+            (void)sscanf(line, "%*s %*s %1024s", hex);
+            while (k < sizeof b && hex[2 * k] && sscanf(hex + 2 * k, "%2hhx", &b[k]) == 1) k++;
             (void)cali_kv_set(a1, b, k);
         }
         else if (strcmp(w, "attempts") == 0) s_pair.attempts = (uint8_t)v;
