@@ -1450,7 +1450,8 @@ state machine (`wifi_sm.c`, a C twin of `tools/wifi_sm_ref.py`) and the runner
   hotspot moves to the network's channel, so the phone may drop off for a moment.
 * **Joined.** The station gets an address: ONLINE, mDNS announces `calictl-esp.local`
   (`_http._tcp`, port 80), the next `/api/wifi` read reports station mode (the wizard shows
-  *Connected as …*), the display shows a second QR code with `http://<ip>/#setup` while the setup
+  *Join {ssid} with this phone, then scan the new QR code on the satellite's display — or open:*
+  and the address), the display shows a second QR code with `http://<ip>/#setup` while the setup
   is pending (`POST /api/setup` ends it), and the hotspot closes 30 s later so the
   phone can read the answer first. From now on `/api/state` reports `device.control.writes` true ({need}`S_SEQ_ESP_COMMAND`).
 * **Failed.** Credentials typed in *this* setup flow are cleared and the state returns to

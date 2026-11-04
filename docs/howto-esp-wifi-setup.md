@@ -111,8 +111,9 @@ camper screen's side: [How to pair your camper unit](howto-pair-your-camper.md))
    the unit) can collide with it. A Pi running calictl can stay up — the unit serves several
    Bluetooth clients at once, so the satellite pairs alongside it.
 2. Open the calictl UI — **<http://calictl-esp.local>** on your WiFi, or, still on the setup
-   hotspot, **<http://192.168.4.1>**: the setup wizard has a pairing step, and the *No camper unit
-   is paired yet* banner has **Pair…** (or open **<http://192.168.4.1/#pair>**). In the first-time setup the wizard's *Pair* step does this for you.
+   hotspot, **<http://192.168.4.1>**: over the hotspot the setup wizard has only the welcome and WiFi
+   steps. Tap **‹** to go to Home, where the *No camper unit is paired yet* banner has **Pair…**
+   (or open **<http://192.168.4.1/#pair>**). In the first-time setup the wizard's *Pair* step does this for you.
 3. The link opens the wizard; otherwise tap **Pair…** on the *No camper unit is
    paired yet* banner (or ⋮ → **Device status** → **Pair…**). The wizard opens at the top of the page. Tick *I'm on that screen*, tap **Pair now**.
 4. Type the 6-digit passcode the unit now shows and tap **Send**. *✓ Paired — …* — the satellite
