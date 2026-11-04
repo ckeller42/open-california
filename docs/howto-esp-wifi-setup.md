@@ -54,8 +54,8 @@ only: it is in no document, in no log and not in `/api/state`.
 3. **Welcome, then WiFi.** The WiFi step lists the networks the satellite can see. Pick yours, type
    the password (*Show password* shows what you typed), tap **Connect**. If your network isn't
    listed, tap **Search again**, or pick **Other network…** and type its name. This step cannot be
-   skipped: every later step needs the home WiFi. If the "network" is a **phone hotspot**, the
-   step says what to switch on; on an iPhone that is **Maximize Compatibility**, because the
+   skipped: every later step needs the home WiFi. The step also gives a tip for using a **phone hotspot**;
+   on an iPhone that is **Maximize Compatibility**, because the
    satellite has only a 2.4 GHz radio.
 
    ![The camper UI's WiFi setup screen on the satellite's hotspot: network list, password, Connect](screenshots/esp-setup-page.png)
@@ -77,7 +77,7 @@ only: it is in no document, in no log and not in `/api/state`.
 
 From now on the satellite joins your network by itself every time it starts. The setup wizard
 ends when you go **Home** (or open *Satellite settings* from the final checklist). A satellite that
-was set up before this wizard existed never shows it, and a WiFi change made later from your
+already has saved WiFi never shows the wizard, and a WiFi change made later from your
 network never starts it. A satellite that falls back to its hotspot (for example, no known
 network for 5 minutes) shows the join QR code again.
 

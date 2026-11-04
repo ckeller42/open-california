@@ -389,8 +389,8 @@ The status display draws a QR code while there is something to scan (`display_mo
 A first-time setup is *pending* when `POST /api/wifi` saved the credentials while the satellite was in
 setup mode: NVS key `setup_qr` is set and `/api/state` reports `device.setup.pending`. `POST /api/setup`
 with `{"done":true}` erases the key (the wizard sends it when you go Home, or open *Satellite settings*
-from the checklist). A WiFi change in station mode never sets it, and a satellite without the key
-never shows the wizard or the second code. `/api/state` `device.wifi.ap_ssid` names the hotspot while it runs.
+from the checklist). A WiFi change in station mode never sets it, and in station mode a satellite
+without the key never shows the wizard or the second code. `/api/state` `device.wifi.ap_ssid` names the hotspot while it runs.
 
 ### The WiFi state machine
 
