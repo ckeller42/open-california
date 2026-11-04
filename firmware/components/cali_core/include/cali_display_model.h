@@ -173,7 +173,7 @@ typedef struct {
  * @brief The wake and brightness state.
  *
  * Wake events are a touch, a hand near (rising edge, when `prox_wake`), motion (rising edge, when
- * `motion_wake`), a row turning red or amber, a QR code appearing, and the first call. The screen is on for
+ * `motion_wake`), a row turning red or amber, a QR code appearing or changing, and the first call. The screen is on for
  * DISPLAY_DIM_AFTER_MS after the last event, then dim, and off after DISPLAY_OFF_AFTER_MS. Ages,
  * uptime, the footer (battery) and green or grey changes never wake it.
  */
@@ -187,6 +187,7 @@ typedef struct {
     int32_t prox;            /**< Last valid proximity reading. */
     int32_t motion;          /**< Last motion value. */
     int32_t acc[3];          /**< The previous valid accel read (when `have_acc`). */
+    uint32_t qr_hash;        /**< Hash of the QR text last tick (0: none). */
     uint32_t cfg_sig;        /**< Signature of the settings last applied. */
     uint8_t started;         /**< The first call happened. */
     uint8_t have_lux;        /**< A valid lux was seen. */
@@ -197,7 +198,6 @@ typedef struct {
     uint8_t moving;          /**< The motion wake fired and is disarmed until the unit is still again. */
     uint8_t motion_reads;    /**< Consecutive reads above the motion threshold. */
     uint8_t dots[2];         /**< The WiFi and camper row colours last tick. */
-    uint8_t had_qr;          /**< The view carried a QR code last tick. */
 } cali_display_model_t;
 
 /**

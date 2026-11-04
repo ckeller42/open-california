@@ -17,6 +17,14 @@ static const char *dot_name(cali_dot_t d) {
     return d == CALI_DOT_GREEN ? "green" : d == CALI_DOT_AMBER ? "amber" : d == CALI_DOT_RED ? "red" : "grey";
 }
 
+/* a "\n" inside a text is printed as the two characters backslash n: one case, one output line */
+static void put_text(const char *s) {
+    for (; *s; s++) {
+        if (*s == '\n') fputs("\\n", stdout);
+        else putchar(*s);
+    }
+}
+
 static void put_row(const char *name, const cali_row_t *r) { printf("%s=%s|%s ;; ", name, dot_name(r->dot), r->text); }
 
 int main(int argc, char **argv) {
@@ -93,7 +101,11 @@ int main(int argc, char **argv) {
         put_row("device", &v.device);
         put_row("wifi", &v.wifi);
         put_row("camper", &v.camper);
-        printf("qr=%s ;; qr_title=%s ;; qr_lines=%s|%s ;; footer=%s ;; bright=%u ;; state=%s ;; sensor=%s ;; motion=%d\n", v.qr, v.qr_title, v.qr_lines[0], v.qr_lines[1], v.footer,
+        printf("qr=%s ;; qr_title=%s ;; qr_lines=", v.qr, v.qr_title);
+        put_text(v.qr_lines[0]);
+        putchar('|');
+        put_text(v.qr_lines[1]);
+        printf(" ;; footer=%s ;; bright=%u ;; state=%s ;; sensor=%s ;; motion=%d\n", v.footer,
                (unsigned)v.brightness_pct, v.state == CALI_DISP_ON ? "on" : v.state == CALI_DISP_DIM ? "dim" : "off",
                v.sensor == CALI_SENSOR_OK ? "ok" : v.sensor == CALI_SENSOR_ABSENT ? "absent" : "error", (int)v.motion);
     }

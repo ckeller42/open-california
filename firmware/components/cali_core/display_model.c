@@ -202,8 +202,16 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
     if (m->started && ((alert(out->wifi.dot) && out->wifi.dot != m->dots[0]) ||
                        (alert(out->camper.dot) && out->camper.dot != m->dots[1])))
         wake = 1;
-    if (out->qr[0] && !m->had_qr) wake = 1;   /* a QR code appearing: someone has to scan it */
-    m->had_qr = out->qr[0] != 0;
+    {   /* a QR code appearing or changing (hotspot code, then the setup page's): someone has to scan it */
+        uint32_t h = 0;   /* FNV-1a; 0 = no QR (the text holds the password, so no copy is kept) */
+        if (out->qr[0]) {
+            h = 2166136261u;
+            for (const char *q = out->qr; *q; q++) h = (h ^ (uint8_t)*q) * 16777619u;
+            if (!h) h = 1;
+        }
+        if (h && h != m->qr_hash) wake = 1;
+        m->qr_hash = h;
+    }
     m->dots[0] = (uint8_t)out->wifi.dot;
     m->dots[1] = (uint8_t)out->camper.dot;
     m->started = 1;
@@ -303,6 +311,7 @@ static void qr_screen(cali_display_view_t *out, const cali_status_t *s, const ch
         snprintf(tmp, sizeof tmp, tx(K_QR_WLAN, lang), s->ap_ssid);
         cali_display_fit_text(out->qr_lines[0], tmp);
         snprintf(tmp, sizeof tmp, tx(K_QR_PASS, lang), psk);
+        *strrchr(tmp, ' ') = '\n';   /* the password on its own line: the screen never breaks it at a '-' */
         cali_display_fit_text(out->qr_lines[1], tmp);
     } else if (s->wifi_mode == CALI_WIFI_MODE_STATION && s->ip != 0 && s->setup_pending) {
         char ip[16];

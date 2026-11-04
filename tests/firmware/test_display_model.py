@@ -160,10 +160,10 @@ def test_setup_mode_shows_the_join_qr(cli):
     v = view(cli, mode="setup", apssid="calictl-esp-1A2B", apqr=AP_QR)
     assert v["qr"].startswith("WIFI:T:WPA;S:calictl-esp-1A2B;")
     assert v["qr_title"] == "Mit der Handykamera scannen"
-    assert v["qr_lines"] == "WLAN calictl-esp-1A2B|Passwort abcd-efgh-jkmn"
+    assert v["qr_lines"] == "WLAN calictl-esp-1A2B|Passwort\\nabcd-efgh-jkmn"
     en = view(cli, mode="setup", lang="en", apssid="calictl-esp-1A2B", apqr=AP_QR)
     assert en["qr_title"] == "Scan with the phone camera"
-    assert en["qr_lines"] == "WiFi calictl-esp-1A2B|Password abcd-efgh-jkmn"
+    assert en["qr_lines"] == "WiFi calictl-esp-1A2B|Password\\nabcd-efgh-jkmn"
 
 
 def test_a_qr_appearing_wakes_the_screen_once(cli):
@@ -178,8 +178,10 @@ def test_a_qr_appearing_wakes_the_screen_once(cli):
         qr + " now=800000",  # no new wake: off again
         SETUP + " now=800200",  # the QR goes: no wake
         qr + " now=800400",  # it comes back: wake
+        qr + " now=1200000",  # off
+        BASE + " pending=1 now=1200200",  # the setup page's QR replaces the hotspot's: wake
     )
-    assert [x["state"] for x in v] == ["on", "off", "on", "on", "off", "off", "on"]
+    assert [x["state"] for x in v] == ["on", "off", "on", "on", "off", "off", "on", "off", "on"]
 
 
 def test_setup_mode_without_a_qr_text_shows_no_qr(cli):  # identity unavailable: the caller passes NULL
