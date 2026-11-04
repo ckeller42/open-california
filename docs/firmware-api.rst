@@ -144,6 +144,11 @@ LoRaWAN telemetry (experimental)
 
 .. doxygenfile:: cali_lora.h
 
+LoRa onboarding (experimental)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_lora_setup.h
+
 OTA, logging & time
 -------------------
 
