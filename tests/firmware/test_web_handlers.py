@@ -522,6 +522,14 @@ def test_pending_stays_correct_across_many_state_reads(web_cli):
     assert flags == [True] * 6 + [False] * 6
 
 
+def test_an_unreadable_flag_is_not_cached_as_not_pending(web_cli):
+    """A corrupt record reads as not pending for that call only; once it is valid the next read sees it."""
+    rs, _ = script(
+        web_cli, "kvhex setup_qr 0101", ("GET", "/api/state"), "kvhex setup_qr 01", ("GET", "/api/state")
+    )
+    assert [pending(r) for r in rs] == [False, True]
+
+
 @pytest.mark.parametrize("body", ['{"done":false}', "{}", '{"done":true,"x":1}', "nope", '{"done":1}'])
 def test_setup_other_bodies_are_400_and_keep_the_flag(web_cli, body):
     (_, bad, after), _ = script(

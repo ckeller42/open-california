@@ -68,7 +68,9 @@ int cali_setup_pending(void) {
     if (s_pending < 0) {
         uint8_t b = 0;
         size_t n = sizeof b;
-        s_pending = cali_kv_get(CALI_SETUP_QR_KEY, &b, &n) == CALI_KV_OK && n == 1 && b != 0;
+        int rc = cali_kv_get(CALI_SETUP_QR_KEY, &b, &n);
+        if (rc != CALI_KV_OK && rc != CALI_KV_MISSING) return 0;   /* unreadable now: ask again next call, cache nothing */
+        s_pending = rc == CALI_KV_OK && n == 1 && b != 0;
     }
     return s_pending;
 }
