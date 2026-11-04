@@ -141,6 +141,7 @@ def test_blocked_text_only(stub, error_gated_page, code, want):
     cm, pg = _open(stub, error_gated_page)
     try:
         expect(_card(pg).locator(".thermo-hint")).to_have_text(want)
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_be_disabled()
         assert _card(pg).locator(".thermo-hint button").count() == 0
     finally:
         cm.__exit__(None, None, None)
@@ -426,9 +427,11 @@ def test_day_auto_shows_the_end_time(stub, error_gated_page):
     cm, pg = _open(stub, error_gated_page)
     try:
         expect(_card(pg).locator(".sval").first).to_contain_text("level 4 · ends ")
+        # the card rendered before this evaluate: across a minute boundary it may show the minute before
         want = pg.evaluate(
-            "() => { const d = new Date(Date.now() + 30 * 60000); return hhmm(d.getHours(), d.getMinutes()); }"
+            "() => [0, 1].map((k) => { const d = new Date(Date.now() + (30 - k) * 60000);"
+            " return hhmm(d.getHours(), d.getMinutes()); })"
         )
-        assert _card(pg).locator(".sval").first.text_content() == "level 4 · ends " + want
+        assert _card(pg).locator(".sval").first.text_content() in ["level 4 · ends " + w for w in want]
     finally:
         cm.__exit__(None, None, None)

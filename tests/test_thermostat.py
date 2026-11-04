@@ -262,7 +262,7 @@ def test_auto_from_off_sends_runtime_level_power_in_order():
     assert out["cmds"] == [] and st["pending"] is None and out["mode"] == "AUTO"
 
 
-def test_adopt_running_sends_nothing():
+def test_adopt_running_takes_over_at_demand():
     """A takeover at the demand level sends nothing; elsewhere it sends the demand at once."""
     assert _auto({**RUN, "HeatingLevel": 1})[0]["cmds"] == [("level", 6)]
     out, st = _auto(RUN)

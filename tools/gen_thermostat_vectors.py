@@ -3,7 +3,7 @@
 
 Every case is one call of :func:`calictl.thermostat.step` (the authority):
 ``[group, cfg_index, in, st, out, st2]`` with each part flattened to a list (``None`` = null, booleans
-0/1; ``st`` null = the previous case's ``st2``, which keeps the file under the 1 MB commit limit). The C twin
+0/1; ``st`` null = the previous case's ``st2``, which keeps the file small). The C twin
 (``firmware/components/cali_core/thermostat.c``) must reproduce every case
 (``tests/firmware/test_thermostat_parity.py``). Groups: ``grid`` (each base state x one changed input),
 ``sweep`` (seeded random walks from :func:`~calictl.thermostat.initial_state`, seed 4711) and

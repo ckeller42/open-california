@@ -3073,7 +3073,12 @@ def test_enable_and_auto_in_one_post(web_cli):
 
 def test_v1_stored_config_survives_the_upgrade(web_cli):
     """A version-1 ``th_cfg`` (17 settings, no night) loads with its target, aliases and run time kept and the
-    new members at their defaults: the van's settings survive the OTA."""
+    new members at their defaults: the van's settings survive the OTA.
+
+    .. test:: Thermostat config: a version-1 record survives the upgrade
+       :id: T_FW_THERMOSTAT_CFG_V1
+       :links: R_FW_THERMOSTAT_API
+    """
     import struct
 
     s17 = [TH_DEFAULT_CFG[k] for k in list(TH_DEFAULT_CFG)[:17]]
