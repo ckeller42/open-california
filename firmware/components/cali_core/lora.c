@@ -321,6 +321,14 @@ void cali_lora_status_json(cali_json_t *j, const cali_lora_status_t *st, uint32_
     cali_json_key(j, "note");
     if (st->note) cali_json_str(j, st->note);
     else cali_json_null(j);
+    static const char *const SETUP[] = {"none", "keys_made", "joined", "ttn_keys"};
+    cali_json_key(j, "setup");
+    cali_json_str(j, SETUP[st->setup >= 0 && st->setup <= CALI_LORA_SETUP_TTN_KEYS ? st->setup : 0]);
+    cali_json_key(j, "has_ttn_keys");
+    cali_json_bool(j, st->has_ttn_keys);
+    cali_json_key(j, "dev_eui");   /* an identifier, not a secret */
+    if (st->dev_eui[0]) cali_json_str(j, st->dev_eui);
+    else cali_json_null(j);
     cali_json_obj_end(j);
 }
 
@@ -343,6 +351,52 @@ int cali_exp_lora_set(int on) {
     return 0;
 }
 
+static int kv_has(const char *key) {
+    uint8_t b[CALI_LORA_TTN_MAX];
+    size_t n = sizeof b;
+    int r = cali_kv_get(key, b, &n) == CALI_KV_OK;
+    memset(b, 0, sizeof b);
+    return r;
+}
+
+int cali_lora_setup_state(void) {
+    if (kv_has(CALI_LORA_TTN_KEY)) return CALI_LORA_SETUP_TTN_KEYS;
+    return kv_has(CALI_LORA_DEV_KEY) ? CALI_LORA_SETUP_KEYS_MADE : CALI_LORA_SETUP_NONE;
+}
+
+int cali_lora_setup_open(cali_lora_rand_fn rnd) {
+    uint8_t k[24];   /* AppKey 16 + JoinEUI 8 */
+    size_t n = sizeof k;
+    int rc = 0;
+    if (cali_kv_get(CALI_LORA_DEV_KEY, k, &n) != CALI_KV_OK || n != sizeof k) {
+        rnd(k, 16);
+        memset(k + 16, 0, 8);
+        rc = cali_kv_set(CALI_LORA_DEV_KEY, k, sizeof k) == 0 ? 0 : -1;
+    }
+    if (rc == 0) {
+        rnd(k, 16);   /* always a new transfer key */
+        rc = cali_kv_set(CALI_LORA_TK_KEY, k, 16) == 0 ? 0 : -1;
+    }
+    memset(k, 0, sizeof k);
+    return rc;
+}
+
+int cali_lora_forget(void) {
+    int rc = 0;
+    static const char *const KEYS[] = {CALI_LORA_DEV_KEY, CALI_LORA_TK_KEY, CALI_LORA_TTN_KEY, CALI_LORA_KEYS_KEY};
+    for (size_t i = 0; i < sizeof KEYS / sizeof *KEYS; i++)
+        if (cali_kv_erase(KEYS[i]) != 0) rc = -1;
+    if (cali_exp_lora_set(0) != 0) rc = -1;
+    return rc;
+}
+
+/* the store's part of the status; the module's part comes from the port */
+static void fill_setup(cali_lora_status_t *st) {
+    st->setup = cali_lora_setup_state();
+    st->has_ttn_keys = st->setup == CALI_LORA_SETUP_TTN_KEYS;
+    if (st->setup == CALI_LORA_SETUP_KEYS_MADE && st->joined) st->setup = CALI_LORA_SETUP_JOINED;
+}
+
 static cali_lora_status_t s_st = {.present = -1, .sf = 12};
 static uint64_t s_next_snap;
 static int s_was_on;
@@ -362,6 +416,7 @@ void cali_lora_tick(uint64_t now_ms) {
 void cali_lora_json(cali_json_t *j) {
     cali_lora_status_t st;
     if (cali_lora_port_status(&st)) s_st = st;   /* the newest, also before the first tick */
+    fill_setup(&s_st);
     cali_lora_status_json(j, &s_st, (uint32_t)(cali_uptime_ms() / 1000));
 }
 
@@ -381,10 +436,11 @@ int cali_lora_console(const char *args) {
     if (n >= 1 && (!strcmp(op, "on") || !strcmp(op, "off"))) {
         if (cali_exp_lora_set(!strcmp(op, "on")) != 0) cali_log("lora: store failed");
     } else if (n >= 1 && !strcmp(op, "status")) {
-        cali_log("lora: %s, module %s, %s, at_unanswered %u, airtime %lu ms confirmed / %lu ms charged",
+        fill_setup(&s_st);
+        cali_log("lora: %s, module %s, %s, at_unanswered %u, airtime %lu ms confirmed / %lu ms charged, setup %d%s",
                  cali_exp_lora() ? "on" : "off", s_st.present < 0 ? "checking" : s_st.present ? "present" : "absent",
                  s_st.joined ? "joined" : "not joined", s_st.at_unanswered, (unsigned long)s_st.airtime_ms,
-                 (unsigned long)s_st.charged_ms);
+                 (unsigned long)s_st.charged_ms, s_st.setup, s_st.has_ttn_keys ? " (TTN keys stored)" : "");
     } else if (n == 4 && !strcmp(op, "keys")) {
         uint8_t k[32];   /* DevEUI 8, JoinEUI 8, AppKey 16; never printed */
         if (unhex(a, k, 8) || unhex(b, k + 8, 8) || unhex(c, k + 16, 16)) cali_log("lora: keys: 16 + 16 + 32 hex digits");

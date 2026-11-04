@@ -289,7 +289,14 @@ def test_status_json(cli):
         "downlinks_24h": 2,
         "uplinks": [0, 0, 0],
         "note": None,
+        "setup": "none",
+        "has_ttn_keys": False,
+        "dev_eui": None,
     }
+    st = json.loads(run(cli, "stsetup 3 1 AC1F09FFFE27799A", "stjson 1 1 0 7 1 2 3 4 5 100")[0])["lora"]
+    assert (st["setup"], st["has_ttn_keys"], st["dev_eui"]) == ("ttn_keys", True, "AC1F09FFFE27799A")
+    st = json.loads(run(cli, "stsetup 2 0", "stjson 1 1 0 7 1 2 3 4 5 100")[0])["lora"]
+    assert (st["setup"], st["dev_eui"]) == ("joined", None)
     # a silent module: no confirmed uplink ever, the counter says so
     st = json.loads(run(cli, "stjson 1 1 5 12 0 0 18070 26 0 9999")[0])["lora"]
     assert st["at_unanswered"] == 5 and st["last_s"] is None and st["airtime_ms_24h"] == 0
@@ -299,7 +306,7 @@ def test_switch_and_keys_never_printed(cli):
     out = run(cli, "exp", "console on", "exp", "console off", "exp")
     assert out == ["0", "LOG exp: lora on", "1", "LOG exp: lora off", "0"]
     key = bytes(range(0, 0x100, 0x11)).hex()  # a dummy AppKey, built so no scanner takes it for a real one
-    out = run(cli, f"console keys ac1f09fffe27799a 0000000000000000 {key}", "kv")
+    out = run(cli, f"console keys ac1f09fffe27799a 0000000000000000 {key}", "kv lora_keys")
     assert out[0] == "LOG lora: keys stored (used at the next join attempt)" and key not in out[0]
     assert out[1] == f"lora_keys ac1f09fffe27799a0000000000000000{key}"
     assert run(cli, "console keys 12 34 56")[0].startswith("LOG lora: keys: 16 + 16 + 32")
@@ -378,3 +385,32 @@ def test_formatter_round_trip_gives_calictl_raw_fields(cli):
         and d4["fn"]["general"] == protocol.decode(FUNCS["general"], GENERAL)
     )
     assert formatter(3, b"\x00\x05\x01")["errors"] and formatter(9, b"\x01")["errors"]
+
+
+def test_setup_open_makes_keys_once(cli):
+    """The AppKey is made once, the transfer key anew on every open; the state follows the store.
+
+    .. test:: lora setup open: lora_dev once, lora_tk each time, the setup state
+       :id: T_FW_LORA_SETUP_OPEN
+       :links: R_FW_LORA_SETUP
+    """
+    out = run(cli, "setupstate", "setupopen", "kv lora_dev", "kv lora_tk", "setupstate", "setupopen", "kv lora_dev",
+              "kv lora_tk", "kvset lora_ttn " + bytes(range(0, 0x100, 0x11)).hex(), "setupstate")
+    assert out[:2] == ["0", "0"] and out[4] == "1" and out[5] == "0" and out[8] == "3"
+    dev1, tk1, dev2, tk2 = (out[i].split()[1] for i in (2, 3, 6, 7))
+    assert len(bytes.fromhex(dev1)) == 24 and dev1.endswith("00" * 8) and dev1 == dev2
+    assert len(bytes.fromhex(tk1)) == 16 and tk1 != tk2
+
+
+def test_forget_erases_everything(cli):
+    """forget erases the four keys and switches the LoRa switch off.
+
+    .. test:: lora forget erases lora_dev, lora_tk, lora_ttn and lora_keys, exp_lora 0
+       :id: T_FW_LORA_FORGET
+       :links: R_FW_LORA_SETUP
+    """
+    dummy = bytes(range(0, 0x100, 0x11)).hex()
+    out = run(cli, "console on", "setupopen", f"kvset lora_ttn {dummy}", f"kvset lora_keys {dummy}", "forget",
+              "kv lora_dev", "kv lora_tk", "kv lora_ttn", "kv lora_keys", "exp", "setupstate")
+    assert out == ["LOG exp: lora on", "0", "LOG exp: lora off", "0", "lora_dev -", "lora_tk -", "lora_ttn -",
+                   "lora_keys -", "0", "0"]

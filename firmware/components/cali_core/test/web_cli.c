@@ -87,6 +87,7 @@
 #include "cali_pi_wake.h"
 #include "cali_ble_exp.h"
 #include "cali_time.h"
+#include "cali_lora.h"
 #include "cali_platform.h"
 #include "cali_sdlog.h"
 #include "cali_runner.h"
@@ -511,6 +512,9 @@ int main(void) {
             (void)sscanf(line, "%*s %*s %1024s", hex);
             while (k < sizeof b && hex[2 * k] && sscanf(hex + 2 * k, "%2hhx", &b[k]) == 1) k++;
             (void)cali_kv_set(a1, b, k);
+        }
+        else if (strcmp(w, "loracon") == 0) {   /* console "lora <args>" */
+            (void)cali_lora_console(strchr(line, ' ') ? strchr(line, ' ') + 1 : "");
         }
         else if (strcmp(w, "attempts") == 0) s_pair.attempts = (uint8_t)v;
         else if (strcmp(w, "pairerr") == 0) {

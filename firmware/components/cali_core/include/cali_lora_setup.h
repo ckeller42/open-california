@@ -26,7 +26,12 @@
  *    ciphertext (12-byte nonce, 16-byte tag, the DevEUI as associated data) cut into fragments of at most
  *    50 bytes, each ``seq(1)`` (bit 7 = last, bits 0..2 = index) followed by the bytes. The confirmation
  *    uplink on FPort 12 shall be ``status(1) | sha256(plaintext)[0..3]``: status 0 ok, 1 bad tag; status 2
- *    (missing fragments) is ``02 | bitmap`` with bit ``i`` set for every received index ``i``.
+ *    (missing fragments) is ``02 | bitmap`` with bit ``i`` set for every received index ``i``. The setup
+ *    keys shall live in NVS: ``lora_dev`` (AppKey 16 B + JoinEUI 8 B), ``lora_tk`` (the transfer key, a new
+ *    one at every setup start) and ``lora_ttn`` (the delivered plaintext). The AppKey, the transfer key and
+ *    the TTN keys shall never appear in ``/api/state``, the console, the log or any other output;
+ *    ``device.lora`` shall report only ``setup`` (``none``/``keys_made``/``joined``/``ttn_keys``),
+ *    ``has_ttn_keys`` and the DevEUI (``dev_eui``, ``null`` while unknown).
  * @endverbatim
  *
  * C99, no malloc, no ESP-IDF headers. Proven by `tests/firmware/test_lora_setup.py`

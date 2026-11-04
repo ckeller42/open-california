@@ -47,7 +47,8 @@
  *    ``/api/state`` only after ``+EVT:TX_DONE``. After 3 AT commands in a row without any answer the
  *    firmware shall reset the module, report it not joined, and try again every 10 min while it stays
  *    silent. With the switch off, no LoRa pin is touched. ``/api/state`` reports ``device.lora`` only
- *    while the switch is on.
+ *    while the switch is on, with the setup state (``setup``, ``has_ttn_keys``, ``dev_eui``;
+ *    R_FW_LORA_SETUP).
  * @endverbatim
  *
  * C99, no malloc, no ESP-IDF headers. Proven by `tests/firmware/test_lora.py` (`test/lora_cli.c`).
@@ -72,6 +73,23 @@ extern "C" {
 #define CALI_EXP_LORA_KEY "exp_lora"
 /** @brief The NVS key of the 8+8+16 key bytes (DevEUI, JoinEUI, AppKey). */
 #define CALI_LORA_KEYS_KEY "lora_keys"
+/** @brief The NVS key of the setup keys: AppKey 16 B + JoinEUI 8 B (never printed). */
+#define CALI_LORA_DEV_KEY "lora_dev"
+/** @brief The NVS key of the 16-byte transfer key (never printed). */
+#define CALI_LORA_TK_KEY "lora_tk"
+/** @brief The NVS key of the TTN keys the transfer delivered (plaintext, at most 256 B; never printed). */
+#define CALI_LORA_TTN_KEY "lora_ttn"
+/** @brief The most bytes of the `lora_ttn` value. */
+#define CALI_LORA_TTN_MAX 256
+
+/** @brief Setup state: no setup keys yet. */
+#define CALI_LORA_SETUP_NONE 0
+/** @brief Setup state: the AppKey and the transfer key exist, no TTN keys yet. */
+#define CALI_LORA_SETUP_KEYS_MADE 1
+/** @brief Setup state: the module joined (the status view of KEYS_MADE; the store cannot know it). */
+#define CALI_LORA_SETUP_JOINED 2
+/** @brief Setup state: the TTN keys are stored. */
+#define CALI_LORA_SETUP_TTN_KEYS 3
 
 /** @brief energy + water + chargers + counters */
 #define CALI_LORA_PORT_ENERGY 2
@@ -358,6 +376,9 @@ typedef struct {
     unsigned downlinks;      /**< downlinks in the last 24 h */
     unsigned uplinks[3];     /**< confirmed uplinks since boot: ports 2, 3, 4 */
     const char *note;        /**< "joining", "join failed", "module silent", ... or NULL */
+    int setup;               /**< CALI_LORA_SETUP_NONE .. CALI_LORA_SETUP_TTN_KEYS; JOINED when joined and the state is KEYS_MADE */
+    int has_ttn_keys;        /**< 1 when the TTN keys are stored (the keys themselves are never reported) */
+    char dev_eui[17];        /**< the DevEUI as 16 hex digits, "" while unknown (the board task fills it) */
 } cali_lora_status_t;
 
 /**
@@ -367,6 +388,28 @@ typedef struct {
  * @param now_s Uptime s.
  */
 void cali_lora_status_json(cali_json_t *j, const cali_lora_status_t *st, uint32_t now_s);
+
+/** @brief The random-bytes source of the setup (the platform's on the device, a counting fake in tests). */
+typedef void (*cali_lora_rand_fn)(void *buf, size_t n);
+
+/**
+ * @brief Open the setup: make the AppKey and a zero JoinEUI into `lora_dev` only when it is missing, and
+ *        ALWAYS a new transfer key into `lora_tk`. Local key buffers are wiped before return.
+ * @param rnd The random source.
+ * @return 0, or -1 when the store failed.
+ */
+int cali_lora_setup_open(cali_lora_rand_fn rnd);
+/**
+ * @brief The setup state from the store.
+ * @return CALI_LORA_SETUP_NONE (no `lora_dev`), CALI_LORA_SETUP_KEYS_MADE, or CALI_LORA_SETUP_TTN_KEYS
+ *         (`lora_ttn` exists).
+ */
+int cali_lora_setup_state(void);
+/**
+ * @brief Erase `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys`, and switch `exp_lora` off.
+ * @return 0, or -1 when a store call failed.
+ */
+int cali_lora_forget(void);
 
 /**
  * @brief The switch (lazy NVS read).

@@ -24,6 +24,7 @@ from tools import gen_c_dict
 from tools.wifi_consts import CONSTS
 
 from .api_shape import (
+    LORA_KEYS,
     AP_KEYS,
     BATTERY_KEYS,
     BLE_DIAG_KEYS,
@@ -2281,6 +2282,40 @@ def test_lora_switch_persists_and_shows_the_link_in_state(web_cli):
     # a fresh process with the byte stored reads it back
     rs, _ = drive(web_cli, [b"kvhex exp_lora 01", *(s.encode() for s in STATION), req("GET", "/api/state")])
     assert json.loads(rs[0].body)["device"]["experimental"] == {"sensors": False, "lora": True}
+
+
+def test_state_lora_setup_fields_no_secrets(web_cli):
+    """device.lora reports the setup state; no key, in any form, reaches /api/state or the console.
+
+    .. test:: device.lora has setup, has_ttn_keys, dev_eui; AppKey, transfer key and TTN keys never appear
+       :id: T_FW_LORA_NO_SECRETS
+       :links: R_FW_LORA_SETUP
+    """
+    dev, tk, ttn = (bytes((b + i * 0x11) % 256 for i in range(n)) for b, n in ((1, 24), (2, 16), (3, 32)))  # dummies
+    secrets = [x.hex() for x in (dev[:16], tk, ttn)] + [x.hex().upper() for x in (dev[:16], tk, ttn)]
+    rs, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/experimental", '{"lora":true}'),
+            b"kvhex lora_dev " + dev.hex().encode(),
+            b"kvhex lora_tk " + tk.hex().encode(),
+            req("GET", "/api/state"),
+            b"loracon status",
+            b"kvhex lora_ttn " + ttn.hex().encode(),
+            req("GET", "/api/state?diag=1"),
+            b"loracon status",
+        ],
+    )
+    for r, want in ((rs[1], ("keys_made", False)), (rs[2], ("ttn_keys", True))):
+        lora = json.loads(r.body)["device"]["lora"]
+        assert set(lora) == LORA_KEYS
+        assert (lora["setup"], lora["has_ttn_keys"], lora["dev_eui"]) == (*want, None)
+    text = rs[1].body.decode() + rs[2].body.decode() + "\n".join(other)
+    assert "lora: on" in text and "TTN keys stored" in text
+    for sec in secrets:
+        assert sec not in text
+    assert "NNSXS." not in text
 
 
 @pytest.mark.parametrize(
