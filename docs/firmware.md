@@ -1806,18 +1806,30 @@ The requirement lives with the API: see {doc}`firmware-api` (`cali_lora.h`). **E
 default.** Why: the router (WiFi + LTE) and the Pi draw too much to run all the time while the van is
 parked; a RAK3172 {term}`LoRaWAN` module on the satellite sends battery, water, solar and the energy
 balance through The Things Network's gateways while they stay off, and the phone reads it from The
-Things Stack far away. This cut sends only (class A); a downlink that switches camping mode on (and
-with it the router) is a later step.
+Things Stack far away. The module runs in class C, so it listens all the time and a downlink arrives
+within seconds; a downlink that switches camping mode on (and with it the router) is a later step.
 
 - **Hardware:** M5Stack Module LoRaWAN-EU868 (RAK3172, RUI3 AT firmware) on the CoreS3's M-Bus: UART1
   TX GPIO43, RX GPIO18, RST GPIO5 (DIP 1, 7 and 12 on). GPIO43 is UART0 TX: the ROM bootloader prints
   its banner into the module at every reset; the driver resets the module before use. GPIO18 is also
   Port C. With the switch off, `cali_lora` never installs the UART or drives RST.
-- **Setup:** an application and one device per van in The Things Stack (OTAA, EU868, class A), the
+- **Setup:** an application and one device per van in The Things Stack (OTAA, EU868, class C), the
   generated formatter `firmware/components/cali_lora/ttn_formatter.js` as the uplink formatter
   (`python3 -m tools.gen_lora_dict` writes it from the dictionary; CI checks it is fresh), and the
-  {term}`Storage Integration`. On the satellite: `lora keys <deveui> <joineui> <appkey>` (the next join
-  attempt uses them), then `lora on` (or `POST /api/experimental {"lora":true}`).
+  {term}`Storage Integration`. The device uses the module's own DevEUI. Opening the setup on the satellite makes
+  the AppKey (once) and a new transfer key; the module then gets the AppKey and joins again. The setup
+  QR carries the DevEUI, the AppKey and the transfer key to the phone. Without these keys the satellite
+  does not join and notes "no keys: open the LoRa screen". For the bench, `lora keys <deveui> <joineui>
+  <appkey>` still works when no setup was opened (the next join attempt uses them). Then `lora on` (or `POST /api/experimental {"lora":true}`).
+- **Key transfer:** the phone sends the TTN keys (cluster, application and device IDs, a read key and a
+  command key) back on FPort 12, encrypted with the transfer key and cut into fragments of at most
+  51 bytes. The satellite puts the fragments together, decrypts them and stores the keys only when the
+  tag is valid. It answers on FPort 12 at its next send slot, ahead of the other ports and within the
+  airtime budget: status 0 (stored), 1 (bad tag), 2 (fragments missing, with a bitmap of the received
+  ones) or 3 (no transfer key). After the module confirms a status-0 answer with `+EVT:TX_DONE`, the
+  satellite erases the transfer key. Every fragment counts as one of the day's downlinks. From then on
+  the LoRa screen shows the repair QR (the TTN keys) instead of the setup QR. No key and no fragment
+  byte goes into a log line.
 - **Uplinks:** port 2 (50 B: the raw energy and water frames, the first Victron charger, the battery
   sense (each 0xFF when its reading is older than 60 s), the
   [energy counters](#energy-counters-r_fw_energy_counters)) at the interval the airtime budget allows:
@@ -1835,8 +1847,8 @@ with it the router) is a later step.
   row without an answer reset the module and drop `joined`; while it stays silent the task retries every
   10 min. A spike bench run showed why: a hung module that the old firmware counted as "sending"
   looked joined for three days while nothing reached the network.
-- **Not yet:** the PWA source switch and its LoRa badge, the pairing of the phone, the camping-mode
-  command (class C downlink), and a van test of antenna and coverage.
+- **Not yet:** the PWA source switch and its LoRa badge, the pairing of the phone, the camping-mode command, and a van test of
+  antenna and coverage.
 
 ## External sensors (`R_FW_SENSORS`)
 
@@ -2480,11 +2492,13 @@ collected here. `firmware/README.md` has the human-readable version of the same 
   4.2.4's colon link check, the send outcome (confirmed only with `TX_DONE`), the airtime formula against
   measured values, the 24-h budgets, the port 2/3/4 layouts and a round trip through the generated
   formatter back to `calictl.protocol.decode`, the change tracker that commits only after a good send,
-  `device.lora`, the switch and the key store that never prints a key), `T_FW_LORA_SWITCH`, `T_FW_LORA_NO_SECRETS`
+  `device.lora`, the switch and the key store that never prints a key, the display's QR text by setup
+  state, `T_FW_LORA_QR_SOURCE`), `T_FW_LORA_SWITCH`, `T_FW_LORA_NO_SECRETS`
   (`tests/firmware/test_web_handlers.py`: `POST /api/experimental {"lora":…}` and `device.lora` only
   while on) and `T_FW_LORA_FORMATTER_FRESH` (`tests/test_gen_lora_dict.py`). The UART task
   (`lora_esp.c`) runs only on the board: the bench spike (M5Stack CoreS3 + RAK3172) carried the same
-  driver and loop; not yet run in this firmware.
+  driver and loop; class C, the DevEUI read from the module, the key-transfer downlink and its
+  confirmation are compiled, not yet run on the board.
 - **`R_FW_SENSORS`** — verified by `T_FW_SENSORS_CORE` (`tests/firmware/test_sensors.py`: both Govee
   layouts, the seen table (16 rows, unknown manufacturer ids ignored, boot-local ids), add / rename /
   remove rules, the list surviving a reboot, the `ext` record and its once-a-minute limit, the

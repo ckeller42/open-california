@@ -1,5 +1,6 @@
 /* lora.c — LoRaWAN telemetry, the platform-free part (R_FW_LORA). See cali_lora.h. */
 #include "cali_lora.h"
+#include "cali_lora_setup.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -393,6 +394,26 @@ int cali_lora_forget(void) {
     for (size_t i = 0; i < sizeof KEYS / sizeof *KEYS; i++)
         if (cali_kv_erase(KEYS[i]) != 0) rc = -1;
     return rc;
+}
+
+static int unhex(const char *h, uint8_t *out, size_t n);
+
+size_t cali_lora_qr_text(char *out, size_t max, const cali_lora_status_t *st, int exp_on) {
+    uint8_t eui[8], k[CALI_LORA_TTN_MAX];   /* k: lora_dev (AppKey 16 + JoinEUI 8) + lora_tk (16), or lora_ttn */
+    size_t n = 0, got;
+    if (!exp_on || st->present != 1) return 0;
+    int state = cali_lora_setup_state();
+    if (state == CALI_LORA_SETUP_TTN_KEYS) {
+        got = sizeof k;
+        if (cali_kv_get(CALI_LORA_TTN_KEY, k, &got) == CALI_KV_OK) n = cali_lora_repair_qr(out, max, k, got);
+    } else if (state == CALI_LORA_SETUP_KEYS_MADE && unhex(st->dev_eui, eui, 8) == 0) {
+        size_t dl = 24, tl = 16;
+        if (cali_kv_get(CALI_LORA_DEV_KEY, k, &dl) == CALI_KV_OK && dl == 24 &&
+            cali_kv_get(CALI_LORA_TK_KEY, k + 24, &tl) == CALI_KV_OK && tl == 16)
+            n = cali_lora_setup_qr(out, max, eui, k, k + 24);
+    }
+    memset(k, 0, sizeof k);
+    return n;
 }
 
 static const char *setup_name(int setup) {

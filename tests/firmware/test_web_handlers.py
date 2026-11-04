@@ -24,7 +24,6 @@ from tools import gen_c_dict
 from tools.wifi_consts import CONSTS
 
 from .api_shape import (
-    LORA_KEYS,
     AP_KEYS,
     BATTERY_KEYS,
     BLE_DIAG_KEYS,
@@ -38,6 +37,7 @@ from .api_shape import (
     EXPERIMENTAL_KEYS,
     EXT_ENTRY_KEYS,
     LINK_KEYS,
+    LORA_KEYS,
     OTA_KEYS,
     PAIRING_API_KEYS,
     PAIRING_KEYS,
@@ -122,6 +122,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "sensors.c"),
             str(CORE / "energy.c"),
             str(CORE / "lora.c"),
+            str(CORE / "lora_setup.c"),
             str(CORE / "lora_port_none.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(CORE / "test" / "web_cli.c"),

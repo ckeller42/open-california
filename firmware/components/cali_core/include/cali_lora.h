@@ -39,16 +39,15 @@
  *
  *    With the experimental switch ``exp_lora`` on (default off; ``POST /api/experimental {"lora":…}``,
  *    console ``lora on|off``), the firmware shall drive a RAK3172 on UART1 (TX GPIO43, RX GPIO18, RST
- *    GPIO5): reset it, detect it by ``AT``, join by OTAA (EU868, class A, ADR) with the
- *    DevEUI/JoinEUI/AppKey stored by ``lora keys`` (NVS, never printed; written to the module before
- *    each join attempt), and send port 2 at the interval the airtime budget allows (at least 600 s),
- *    port 3 when a function changed, and port 4 daily. Uplink airtime and downlinks stay within 25 s and
- *    8 per rolling 24 h: no uplink goes out once either is used up. A send counts as airtime in
- *    ``/api/state`` only after ``+EVT:TX_DONE``. After 3 AT commands in a row without any answer the
- *    firmware shall reset the module, report it not joined, and try again every 10 min while it stays
- *    silent. With the switch off, no LoRa pin is touched. ``/api/state`` reports ``device.lora`` only
- *    while the switch is on, with the setup state (``setup``, ``has_ttn_keys``, ``dev_eui``;
- *    R_FW_LORA_SETUP).
+ *    GPIO5): reset it, detect it by ``AT``, join by OTAA (EU868, class C, ADR) with the module's own DevEUI
+ *    and the JoinEUI/AppKey of the setup (``lora_dev``; R_FW_LORA_SETUP), or else the DevEUI/JoinEUI/AppKey
+ *    stored by ``lora keys`` (NVS, never printed; written to the module before each join attempt), not join without either, and send port 2 at the interval the airtime
+ *    budget allows (at least 600 s), port 3 when a function changed, and port 4 daily. Uplink airtime and
+ *    downlinks (every downlink counts) stay within 25 s and 8 per rolling 24 h, join requests included: no uplink goes out once either is used up. A send counts as airtime in ``/api/state`` only
+ *    after ``+EVT:TX_DONE``. After 3 AT commands in a row without any answer the firmware shall reset the
+ *    module, report it not joined, and try again every 10 min while it stays silent. With the switch off,
+ *    no LoRa pin is touched. ``/api/state`` reports ``device.lora`` only while the switch is on, with the setup state
+ *    (``setup``, ``has_ttn_keys``, ``dev_eui``; R_FW_LORA_SETUP).
  * @endverbatim
  *
  * C99, no malloc, no ESP-IDF headers. Proven by `tests/firmware/test_lora.py` (`test/lora_cli.c`).
@@ -416,6 +415,19 @@ int cali_lora_setup_state(void);
 int cali_lora_forget(void);
 
 /**
+ * @brief The QR text for the LoRa screen: the setup QR (`OCS1*…`, from the module's DevEUI, `lora_dev`'s
+ *        AppKey and `lora_tk`) while the setup state is below CALI_LORA_SETUP_TTN_KEYS, then the repair QR
+ *        (`OCR1*…`, from `lora_ttn`). Reads the store itself; local key buffers are wiped before return.
+ * @param out Receives the NUL-terminated text; it holds secrets: the caller wipes it after use.
+ * @param max The size of `out` (the repair QR needs about 300 bytes).
+ * @param st The task's status: `present` and `dev_eui` are used.
+ * @param exp_on The switch `exp_lora`.
+ * @return The text length; 0 when the switch is off, the module is not present, the DevEUI is unknown,
+ *         a key is missing, a store read fails or `out` is too small.
+ */
+size_t cali_lora_qr_text(char *out, size_t max, const cali_lora_status_t *st, int exp_on);
+
+/**
  * @brief The switch (lazy NVS read).
  * @return 1 when on.
  */
@@ -457,6 +469,19 @@ void cali_lora_port_post(const cali_lora_snap_t *s);
  * @return 1 when there is one.
  */
 int cali_lora_port_status(cali_lora_status_t *out);
+/**
+ * @brief The current QR text for the display (cali_lora_qr_text() over the task's published status); any task.
+ * @param out Receives the NUL-terminated text; the caller wipes it after painting.
+ * @param max The size of `out`.
+ * @return The text length, 0 when there is none (module absent, switch off, no keys).
+ */
+int cali_lora_port_qr(char *out, size_t max);
+/**
+ * @brief Ask the LoRa task to open the setup (cali_lora_setup_open(): a new transfer key, the AppKey once);
+ *        any task. The LoRa task does it at its next pass with the module present and the switch on, and
+ *        configures the module and joins again when the AppKey is new. A no-op without a module driver.
+ */
+void cali_lora_port_setup_request(void);
 
 #ifdef __cplusplus
 }

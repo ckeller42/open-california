@@ -26,7 +26,12 @@
  *    ciphertext (12-byte nonce, 16-byte tag, the DevEUI as associated data) cut into fragments of at most
  *    50 bytes, each ``seq(1)`` (bit 7 = last, bits 0..2 = index) followed by the bytes. The confirmation
  *    uplink on FPort 12 shall be ``status(1) | sha256(plaintext)[0..3]``: status 0 ok, 1 bad tag; status 2
- *    (missing fragments) is ``02 | bitmap`` with bit ``i`` set for every received index ``i``. The setup
+ *    (missing fragments) is ``02 | bitmap`` with bit ``i`` set for every received index ``i``; status 3
+ *    (``03``) answers a fragment that arrives without a transfer key. ``lora_ttn`` shall be stored only
+ *    from a plaintext with a valid tag. The confirmation shall go out at the next send slot ahead of ports
+ *    2/3/4 within the airtime budget, and ``lora_tk`` shall be erased after a status-0 confirmation that the
+ *    module confirmed with ``+EVT:TX_DONE``. The display shall show the setup QR (the module's DevEUI) until
+ *    ``lora_ttn`` exists, then the repair QR, and none while ``exp_lora`` is off or the module is absent. The setup
  *    keys shall live in NVS: ``lora_dev`` (AppKey 16 B + JoinEUI 8 B), ``lora_tk`` (the transfer key, a new
  *    one at every setup start) and ``lora_ttn`` (the delivered plaintext). The AppKey, the transfer key and
  *    the TTN keys shall never appear in ``/api/state``, the console, the log or any other output;

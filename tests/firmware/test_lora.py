@@ -14,6 +14,8 @@ import pytest
 
 from calictl import protocol
 
+from .test_lora_setup import key, plaintext
+
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "firmware/components/cali_core"
 FUNCS = protocol.load()
@@ -42,7 +44,7 @@ def cli(tmp_path_factory):
             "-I",
             str(ROOT / "firmware/components/platform/include"),
         ]
-        + [str(CORE / f) for f in ("lora.c", "json.c", "test/lora_cli.c")]
+        + [str(CORE / f) for f in ("lora.c", "lora_setup.c", "json.c", "test/lora_cli.c")]
         + ["-lm", "-o", str(out)],
         check=True,
     )
@@ -394,8 +396,19 @@ def test_setup_open_makes_keys_once(cli):
        :id: T_FW_LORA_SETUP_OPEN
        :links: R_FW_LORA_SETUP
     """
-    out = run(cli, "setupstate", "setupopen", "kv lora_dev", "kv lora_tk", "setupstate", "setupopen", "kv lora_dev",
-              "kv lora_tk", "kvset lora_ttn " + bytes(range(0, 0x100, 0x11)).hex(), "setupstate")
+    out = run(
+        cli,
+        "setupstate",
+        "setupopen",
+        "kv lora_dev",
+        "kv lora_tk",
+        "setupstate",
+        "setupopen",
+        "kv lora_dev",
+        "kv lora_tk",
+        "kvset lora_ttn " + bytes(range(0, 0x100, 0x11)).hex(),
+        "setupstate",
+    )
     assert out[:2] == ["0", "0"] and out[4] == "1" and out[5] == "0" and out[8] == "3"
     dev1, tk1, dev2, tk2 = (out[i].split()[1] for i in (2, 3, 6, 7))
     assert len(bytes.fromhex(dev1)) == 24 and dev1.endswith("00" * 8) and dev1 == dev2
@@ -410,10 +423,32 @@ def test_forget_erases_everything(cli):
        :links: R_FW_LORA_SETUP
     """
     dummy = bytes(range(0, 0x100, 0x11)).hex()
-    out = run(cli, "console on", "setupopen", f"kvset lora_ttn {dummy}", f"kvset lora_keys {dummy}", "forget",
-              "kv lora_dev", "kv lora_tk", "kv lora_ttn", "kv lora_keys", "exp", "setupstate")
-    assert out == ["LOG exp: lora on", "0", "LOG exp: lora off", "0", "lora_dev -", "lora_tk -", "lora_ttn -",
-                   "lora_keys -", "0", "0"]
+    out = run(
+        cli,
+        "console on",
+        "setupopen",
+        f"kvset lora_ttn {dummy}",
+        f"kvset lora_keys {dummy}",
+        "forget",
+        "kv lora_dev",
+        "kv lora_tk",
+        "kv lora_ttn",
+        "kv lora_keys",
+        "exp",
+        "setupstate",
+    )
+    assert out == [
+        "LOG exp: lora on",
+        "0",
+        "LOG exp: lora off",
+        "0",
+        "lora_dev -",
+        "lora_tk -",
+        "lora_ttn -",
+        "lora_keys -",
+        "0",
+        "0",
+    ]
 
 
 def test_kv_errors_never_regenerate_the_appkey(cli):
@@ -423,8 +458,19 @@ def test_kv_errors_never_regenerate_the_appkey(cli):
        :id: T_FW_LORA_SETUP_KV_ERR
        :links: R_FW_LORA_SETUP
     """
-    out = run(cli, "setupopen", "kv lora_dev", "kv lora_tk", "kvcorrupt lora_dev", "setupstate", "setupopen",
-              "kv lora_dev", "kv lora_tk", "kvcorrupt -", "setupstate")
+    out = run(
+        cli,
+        "setupopen",
+        "kv lora_dev",
+        "kv lora_tk",
+        "kvcorrupt lora_dev",
+        "setupstate",
+        "setupopen",
+        "kv lora_dev",
+        "kv lora_tk",
+        "kvcorrupt -",
+        "setupstate",
+    )
     assert out[0] == "0" and out[3] == "-1" and out[4] == "-1"
     assert out[5] == out[1] and out[6] == out[2]  # AppKey and transfer key unchanged
     assert out[7] == "1"
@@ -438,3 +484,47 @@ def test_kv_errors_never_regenerate_the_appkey(cli):
 def test_console_status_names_the_setup_state(cli):
     out = run(cli, "console status", "setupopen", "console status")
     assert "setup none" in out[0] and "setup keys_made" in out[2]
+
+
+def test_qr_source_by_state(cli):
+    """The display's QR text: the setup QR from the module's DevEUI and the stored keys until the TTN keys
+    arrive, then the repair QR from them; nothing while the switch is off, without a module, a DevEUI or a key.
+
+    .. test:: lora QR text by setup state: OCS1 while keys_made, OCR1 with ttn_keys, none when off or incomplete
+       :id: T_FW_LORA_QR_SOURCE
+       :links: R_FW_LORA_SETUP
+    """
+    eui = "70B3D57ED0000001"
+    dummy = bytes(range(0, 0x100, 0x11)).hex()
+    out = run(
+        cli,
+        f"qr 1 1 {eui}",
+        f"kvset lora_dev {dummy}{dummy[:16]}",
+        f"qr 1 1 {eui}",
+        "setupopen",
+        "kv lora_dev",
+        "kv lora_tk",
+        f"qr 1 1 {eui}",
+        f"qr 0 1 {eui}",
+        f"qr 1 0 {eui}",
+        "qr 1 1 -",
+        "qr 1 1 70B3D57ED00000ZZ",
+    )
+    assert out[0] == "QR -"  # no lora_dev: nothing to show
+    assert out[1] == "QR -"  # an AppKey without a transfer key: nothing
+    appkey = out[3].split()[1][:32].upper()
+    tk = out[4].split()[1].upper()
+    assert out[5] == f"QR OCS1*{eui}*{appkey}*{tk}"
+    assert out[6:10] == ["QR -"] * 4  # switch off, module absent, DevEUI unknown or not hex
+    ttn = plaintext()
+    out = run(
+        cli,
+        "setupopen",
+        f"kvset lora_ttn {ttn.hex()}",
+        f"qr 1 1 {eui}",
+        f"qr 0 1 {eui}",
+        "kvcorrupt lora_ttn",
+        f"qr 1 1 {eui}",
+    )
+    want = f"OCR1*EU1.CLOUD.THETHINGS.NETWORK*MY-VAN-APP*VAN-000001*{key(3)}*{key(7)}"
+    assert out[1:] == [f"QR {want}", "QR -", "QR -"]

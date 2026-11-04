@@ -6,6 +6,7 @@
  * Budget:    up <t_s> <ms> <confirmed> | used <t> | conf <t> | room <t> | dl <t> | interval <t> <sf> <len> <share> | backoff <n>
  * Status:    stjson <module> <joined> <unanswered> <sf> <last_s> <air> <charged> <unconf> <dl> <now_s>
  * Setup:     stsetup <setup> <ttn> <eui> | setupopen | setupstate | forget | kvset <key> <hex> | kv <key>
+ *            qr <exp_on> <present> <eui|-> (prints "QR <text>" or "QR -")
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
  * Driven by tests/firmware/test_lora.py. Fakes: session frames, sensors, counters, clock, NVS, log. */
 #include <math.h>
@@ -24,7 +25,7 @@ static int s_have_mppt, s_have_bs;
 static cali_energy_ctr_t s_ctr;
 static uint32_t s_boot = 1;
 #define KV_N 8
-static struct { char key[16]; uint8_t val[64]; size_t len; int used; } s_kv[KV_N];
+static struct { char key[16]; uint8_t val[CALI_LORA_TTN_MAX]; size_t len; int used; } s_kv[KV_N];
 static int s_kv_find(const char *key) {
     for (int i = 0; i < KV_N; i++)
         if (s_kv[i].used && !strcmp(s_kv[i].key, key)) return i;
@@ -113,13 +114,13 @@ static cali_rak_kind_t kind_of(const char *name) {
 }
 
 int main(void) {
-    static char line[512];
+    static char line[1024];
     static cali_lora_snap_t snap;
     static cali_lora_tracker_t trk;
     static cali_lora_budget_t bud;
     uint32_t picked = 0;
     while (fgets(line, sizeof line, stdin)) {
-        char cmd[16], a[160], b[64];
+        char cmd[16], a[600], b[64];
         unsigned u1, u2, u3, u4;
         unsigned long long ull;
         line[strcspn(line, "\r\n")] = 0;
@@ -223,8 +224,8 @@ int main(void) {
             printf("%s ", b);
             if (i < 0) puts("-");
             else hex(s_kv[i].val, s_kv[i].len);
-        } else if (!strcmp(cmd, "kvset") && sscanf(rest, "%63s %159s", b, a) == 2) {
-            uint8_t v[64];
+        } else if (!strcmp(cmd, "kvset") && sscanf(rest, "%63s %599s", b, a) == 2) {
+            uint8_t v[CALI_LORA_TTN_MAX];
             cali_kv_set(b, v, unhex(a, v, sizeof v));
         } else if (!strcmp(cmd, "kvcorrupt")) {
             s_corrupt[0] = 0;
@@ -237,6 +238,11 @@ int main(void) {
             printf("%d\n", cali_lora_setup_state());
         } else if (!strcmp(cmd, "forget")) {
             printf("%d\n", cali_lora_forget());
+        } else if (!strcmp(cmd, "qr") && sscanf(rest, "%u %u %63s", &u1, &u2, b) == 3) {
+            cali_lora_status_t st = {.present = (int)u2};
+            snprintf(st.dev_eui, sizeof st.dev_eui, "%.16s", strcmp(b, "-") ? b : "");
+            char q[400];
+            printf("QR %s\n", cali_lora_qr_text(q, sizeof q, &st, (int)u1) ? q : "-");
         } else if (!strcmp(cmd, "tick") && sscanf(rest, "%llu", &ull) == 1) {
             cali_lora_tick(ull);
         }
