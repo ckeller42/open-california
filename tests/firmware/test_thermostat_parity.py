@@ -38,8 +38,10 @@ def test_vectors_reach_every_reason():
     assert not UNREACHABLE & seen
     assert None in seen  # an idle step in mode OFF
     adopt = [c for c in V["cases"] if (c[4][0] or "").startswith("ADOPT_")]
-    assert adopt and not [c for c in adopt if c[4][10]]  # an adopt never sends a command
-    refused = [c[4][11:] for c in V["cases"] if (c[4][0] or "").startswith("AUTO_REFUSED_")]
+    assert adopt and not [
+        c for c in adopt if c[4][13] and c[4][14] != "level"
+    ]  # an adopt never sends a command
+    refused = [c[4][14:] for c in V["cases"] if (c[4][0] or "").startswith("AUTO_REFUSED_")]
     assert any(refused)  # a refusal sends nothing new; only a kept stop is re-sent
     assert all(cmds in ([], ["power", 0], ["permanent", 0]) for cmds in refused)
 
@@ -91,6 +93,22 @@ def test_vectors_cover_the_control_branches():
         "neg_half_p",
         "neg_half_level",
         "pos_half_level",
+        "adopt_to_demand",
+        "night_preset",
+        "night_wait_adopt",
+        "night_unconfirmed",
+        "night_confirm_past_wait",
+        "night_wait_timeout",
+        "night_user_off",
+        "night_skips_warm",
+        "continuous_hold_min",
+        "continuous_hold_overheat",
+        "blocked_known_frames",
+        "wait_left_ceil",
+        *(
+            "blocked_" + c
+            for c in ("NOT_INSTALLED", "FAULT", "TIMER_ARMED", "NO_CAMPING", "IGNITION", "NO_REFERENCE")
+        ),
     } <= gen.coverage()
 
 

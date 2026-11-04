@@ -96,6 +96,7 @@ def flat_in(i):
         *_sensor(i["ref"]), *_sensor(i["backup"]), *_sensor(i["out"]), i["outside_on"],
         *_heater(i["heater"]), i["heater_age_ms"], i["link_ready"], i["camping_on"], i["shore_on"],
         i["ignition_on"], i["batt2_dv"], cmd.get("what"), cmd.get("result"),
+        i["night"], i["known"]["camping_on"], i["known"]["shore_on"], i["known"]["ignition_on"],
     ]  # fmt: skip
 
 
@@ -119,6 +120,7 @@ def flat_st(s):
         s["mode"], s["active"], c["i"], c["last_change_ms"], c["hot_since_ms"], c["u"], c["u_out"],
         *pend, *_snap(s["expect"]), s["batt_low_since_ms"], *_snap(s["stop_snapshot"]),
         (s["stop_snapshot"] or {}).get("why"), s["last_ctl_ms"],
+        s["night"], s["wait_until_ms"], s["cont_since_ms"],
     ]  # fmt: skip
 
 
@@ -127,7 +129,8 @@ def flat_out(o):
     cmds = [x for w, v in o["cmds"] for x in (w, _onoff(v))]
     return [
         o["reason"], o["mode"], st["heater"], st["t_ref"], st["t_out"], st["target"], st["level"],
-        st["active_alias"], st["outside_active"], st["end"], len(o["cmds"]), *cmds,
+        st["active_alias"], st["outside_active"], st["end"], st["blocked"], st["wait_left_s"], st["night"],
+        len(o["cmds"]), *cmds,
     ]  # fmt: skip
 
 
@@ -138,12 +141,17 @@ def sensor(value, age=0, alias="cabin"):
     return {"alias": alias, "value": value, "age_ms": age}
 
 
+#: What the last-known frames say (the live values of the van); ``base`` copies it.
+KNOWN = {"camping_on": True, "shore_on": False, "ignition_on": False}
+
+
 def base(**kw):
     i = {
         "now_ms": 0, "enabled": True, "request": None, "target": 2100, "runtime_min": 120,
         "ref": sensor(1700), "backup": None, "out": None, "outside_on": False, "heater": OFF_H,
         "heater_age_ms": 0, "link_ready": True, "camping_on": True, "shore_on": False,
-        "ignition_on": False, "batt2_dv": 128, "cmd": None,
+        "ignition_on": False, "batt2_dv": 128, "cmd": None, "night": False,
+        "known": dict(KNOWN),
     }  # fmt: skip
     i.update(kw)
     return i
@@ -157,9 +165,47 @@ class Rec:
 
     def __init__(self):
         self.cases = []
+        self.tags = set()
+
+    def _tag(self, k, inp, st, out, st2):
+        """Coverage tags of the night, takeover, hold and blocked paths (read off the structured step)."""
+        cfg, why, wait = CFGS[k], out["reason"], st["mode"] == "WAITING"
+        sent = [w for w, _ in out["cmds"]]
+        if why in ("ADOPT_RUN", "ADOPT_CONTINUOUS") and "level" in sent:
+            self.tags.add("adopt_to_demand")
+        if why == "WAITING_FOR_CONTINUOUS":
+            if not wait and "level" in sent:
+                self.tags.add("night_preset")
+            if st2["cont_since_ms"] is not None:
+                self.tags.add("night_unconfirmed")
+            if not wait and inp["ref"]["value"] > inp["target"] + cfg["band_hi"]:
+                self.tags.add("night_skips_warm")
+        if wait and why == "ADOPT_CONTINUOUS":
+            self.tags.add("night_wait_adopt")
+            if inp["now_ms"] >= st["wait_until_ms"]:
+                self.tags.add("night_confirm_past_wait")
+        if why == "NIGHT_WAIT_ENDED":
+            self.tags.add("night_wait_timeout")
+        if wait and why == "USER_OFF":
+            self.tags.add("night_user_off")
+        if why == "HOLD_AT_MIN_LEVEL":
+            hot = inp["ref"]["value"] > inp["target"] + cfg["overheat"]
+            self.tags.add("continuous_hold_overheat" if hot else "continuous_hold_min")
+        left = out["status"]["wait_left_s"]
+        if left is not None and (st2["wait_until_ms"] - inp["now_ms"]) % 1000:
+            self.tags.add("wait_left_ceil")
+        if out["status"]["blocked"]:
+            self.tags.add("blocked_" + out["status"]["blocked"])
+            if inp["known"] != {
+                "camping_on": inp["camping_on"],
+                "shore_on": inp["shore_on"],
+                "ignition_on": inp["ignition_on"],
+            }:
+                self.tags.add("blocked_known_frames")
 
     def step(self, group, k, inp, st):
         out, st2 = th.step(inp, CFGS[k], st)
+        self._tag(k, inp, st, out, st2)
         before = _ints(flat_st(st))
         if self.cases and self.cases[-1][5] == before:
             before = None
@@ -486,6 +532,158 @@ def sessions(rec):
         rec, "shore_only_entry", 1,
         [{**auto, "camping_on": False, "shore_on": True}, {"camping_on": False, "shore_on": True}],
     )  # fmt: skip
+    session(  # the integrator saturated low, then the cabin drops below the target: it integrates again
+        rec, "windup_low_then_undershoot", 0,
+        [{**auto, "heater": run_h(1), "ref": sensor(2300)}]
+        + [{"ref": sensor(2300)}] * 4
+        + [{"ref": sensor(2050)}] * 2,
+    )  # fmt: skip
+    _night_sessions(rec)
+    _hold_and_blocked_sessions(rec)
+
+
+def _night_sessions(rec):
+    P, W, C = D["period_ms"], D["night_wait_ms"], D["night_confirm_ms"]
+    auto, night = {"request": "AUTO"}, {"night": True}
+    cont = run_h(6, 1)
+    session(  # pre-set, wait; a step of 1500 ms leaves a remaining time that is no multiple of 1000
+        rec, "night_preset_then_timeout", 0,
+        [{**auto, **night}, {**night, "dt": 1500}, {**night}, {**night, "dt": W - P - 1500}, {**night, "dt": 1}],
+    )  # fmt: skip
+    session(
+        rec, "night_wait_adopt", 0,
+        [{**auto, **night}, {**night, "heater": cont}, {**night, "heater": cont, "dt": C}, {}],
+    )  # fmt: skip
+    session(  # 20 s of Dauerbetrieb, off again, then a confirmed one
+        rec, "night_unconfirmed", 0,
+        [
+            {**auto, **night},
+            {**night, "heater": cont, "dt": P},
+            {**night, "heater": cont, "dt": 20000},
+            {**night, "heater": OFF_H, "dt": 5000},
+            {**night, "heater": cont, "dt": P},
+            {**night, "heater": cont, "dt": C},
+            {},
+        ],
+    )  # fmt: skip
+    session(  # Dauerbetrieb from 4:50 on is adopted at 5:20, after the wait ended at 5:00
+        rec, "night_confirm_past_wait", 0,
+        [
+            {**auto, **night},
+            {**night, "heater": cont, "dt": W - 10000},
+            {**night, "heater": cont, "dt": 10000},
+            {**night, "heater": cont, "dt": C - 10000},
+            {},
+        ],
+    )  # fmt: skip
+    session(
+        rec, "night_user_off", 0,
+        [{**auto, **night}, {**night, "request": "OFF"}, {}],
+    )  # fmt: skip
+    session(
+        rec, "night_disabled_in_wait", 0,
+        [{**auto, **night}, {**night, "enabled": False}, {}],
+    )  # fmt: skip
+    session(
+        rec, "night_fault_in_wait", 0,
+        [{**auto, **night}, {**night, "heater": {**run_h(4), "ErrorCode": 3}}, {}],
+    )  # fmt: skip
+    session(  # the pre-set is refused; it is not retried and the wait goes on
+        rec, "night_preset_refused", 0,
+        [{**auto, **night}, {**night, "ack": "REFUSED"}, {**night}, {**night, "heater": cont, "dt": C}, {**night, "heater": cont, "dt": C}],
+    )  # fmt: skip
+    session(
+        rec, "night_skips_warm", 0,
+        [{**auto, **night, "ref": sensor(D["band_hi"] + 2101)}, {**night, "ref": sensor(D["band_hi"] + 2101)}],
+    )  # fmt: skip
+    session(  # a day start of the same warm cabin is refused
+        rec, "day_warm_refused", 0,
+        [{**auto, "ref": sensor(D["band_hi"] + 2101)}],
+    )  # fmt: skip
+    session(  # an immediate run enters the wait without a command; Dauerbetrieb then takes over
+        rec, "night_run_then_continuous", 0,
+        [{**auto, **night, "heater": run_h(5)}, {**night, "heater": run_h(5)}, {**night, "heater": cont, "dt": 1000},
+         {**night, "heater": cont, "dt": C}, {}],
+    )  # fmt: skip
+    session(  # Dauerbetrieb already on: taken over at once
+        rec, "night_continuous_at_once", 0,
+        [{**auto, **night, "heater": cont}, {}],
+    )  # fmt: skip
+    session(
+        rec, "night_odd_cfg", 1,
+        [{**auto, **night}, {**night, "heater": cont, "dt": 1000}, {**night, "heater": cont, "dt": ODD["night_confirm_ms"]}, {}],
+    )  # fmt: skip
+    session(  # the night setting is latched at the start: a later input change does not matter
+        rec, "night_latched", 0,
+        [{**auto, **night}, {"night": False}, {"night": False, "heater": cont, "dt": C}, {"night": True}, {}],
+    )  # fmt: skip
+
+
+def _hold_and_blocked_sessions(rec):
+    auto = {"request": "AUTO"}
+    cont = run_h(6, 1)
+    session(  # an owner takeover starts from the demand
+        rec, "adopt_run_to_demand", 0,
+        [{**auto, "heater": run_h(9), "ref": sensor(2000)}, {"ref": sensor(2000)}],
+    )  # fmt: skip
+    session(
+        rec, "adopt_continuous_to_demand", 0,
+        [{**auto, "heater": run_h(2, 1), "ref": sensor(1200)}, {"ref": sensor(1200)}],
+    )  # fmt: skip
+    session(
+        rec, "adopt_no_reference", 0,
+        [{**auto, "heater": run_h(5), "ref": None}, {"ref": None}],
+    )  # fmt: skip
+    session(
+        rec, "adopt_link_down", 0,
+        [{**auto, "heater": run_h(9), "ref": sensor(2000), "link_ready": False}, {"ref": sensor(2000)}],
+    )  # fmt: skip
+    session(  # continuous heating is held at min_level instead of stopped
+        rec, "continuous_overheat_holds", 0,
+        [{**auto, "heater": cont, "ref": sensor(2000)}, {"ref": sensor(2600)}, {"ref": sensor(2600)}, {"ref": sensor(2000)}],
+    )  # fmt: skip
+    session(
+        rec, "continuous_target_exceeded_holds", 0,
+        [{**auto, "heater": run_h(1, 1), "ref": sensor(2350)}] + [{"ref": sensor(2350)}] * 17,
+    )  # fmt: skip
+    session(
+        rec, "continuous_hold_link_down", 0,
+        [{**auto, "heater": cont, "ref": sensor(2000)}, {"ref": sensor(2600), "link_ready": False}],
+    )  # fmt: skip
+    session(
+        rec, "continuous_hold_odd_cfg", 1,
+        [{**auto, "heater": run_h(8, 1), "ref": sensor(2000)}, {"ref": sensor(4600)}, {"ref": sensor(4600)}],
+    )  # fmt: skip
+    # blocked: idle OFF, nothing requested; the first failing check of the list wins
+    stale = D["heater_stale_ms"] + 1
+    known = lambda **k: {**KNOWN, **k}  # noqa: E731
+    session(
+        rec, "blocked_codes", 0,
+        [
+            {},
+            {"heater": {"Installed": 0}},
+            {"heater": {"Installed": 1, "ErrorCode": 3}},
+            {"heater": {"Installed": 1, "ErrorCode": 5}},
+            {"heater": {"Installed": 1, "OperationModeAirHeater": 3}},
+            {"heater": {"Installed": 1, "OperationModeAirHeater": 3}, "heater_age_ms": stale},
+            {"heater": None, "known": known(camping_on=False)},
+            {"heater": None, "known": known(camping_on=False, shore_on=True)},
+            {"heater": None, "known": known(ignition_on=True)},
+            {"heater": None, "known": known(ignition_on=None)},
+            {"ref": None},
+            {"ref": sensor(1700, age=stale)},
+            {"heater": {"Installed": 0}, "ref": None, "known": known(camping_on=False)},
+        ],
+    )  # fmt: skip
+    session(  # the live and the last-known frames differ: the card blocks on the known ones
+        rec, "blocked_known_frames", 0,
+        [
+            {"camping_on": True, "known": known(camping_on=False)},
+            {"ignition_on": False, "known": known(ignition_on=True)},
+            {"camping_on": False, "known": known()},
+            {**auto, "camping_on": False, "known": known()},
+        ],
+    )  # fmt: skip
 
 
 REFUSALS = [
@@ -531,6 +729,9 @@ def grid(rec):
         [{"request": "AUTO", "heater": run_h(5), "backup": sensor(1800, alias="bed")}, {"heater": run_h(5), "ref": None, "backup": sensor(1800, alias="bed")}],
         [{"request": "AUTO", "heater": run_h(1), "ref": sensor(2350)}, {"heater": run_h(1), "ref": sensor(2350)}],
         [{"request": "AUTO", "heater": run_h(5)}, {"heater": run_h(5), "batt2_dv": 100}],
+        [{"request": "AUTO", "night": True}],  # WAITING, demand pre-set
+        [{"request": "AUTO", "night": True}, {"night": True, "heater": run_h(6, 1), "dt": 1000}],  # cont_since set
+        [{"request": "AUTO", "heater": run_h(6, 1)}, {"heater": run_h(6, 1), "ref": sensor(2600)}],  # held at min
     ):  # fmt: skip
         keep(session(probe, "probe", 0, steps))
     t = 2_000_000
@@ -551,6 +752,15 @@ def _variations():
     out = [{}, {"dt": P}, {"dt": D["verify_ms"]}, {"dt": D["batt_hold_ms"]}, {"dt": D["heater_stale_ms"] + 1}]
     out += REFUSALS
     out += [
+        {"night": True},
+        {"night": True, "dt": D["night_wait_ms"]},
+        {"night": True, "dt": D["night_confirm_ms"], "heater": run_h(5, 1)},
+        {"night": True, "heater": run_h(5, 1)},
+        {"night": True, "ref": sensor(3000)},
+        {"known": {**KNOWN, "camping_on": False}},
+        {"known": {**KNOWN, "ignition_on": True}},
+        {"known": {**KNOWN, "ignition_on": None}},
+        {"known": {**KNOWN, "camping_on": False, "shore_on": True}},
         {"heater": OFF_H, "dt": P},
         {"heater": run_h(2), "dt": P},
         {"heater": run_h(9), "dt": P},
@@ -578,7 +788,8 @@ def sweep(rec, n=2000):
     """Seeded random walks: the heater mostly follows the thermostat, sometimes does its own thing."""
     rnd = random.Random(4711)
     P = D["period_ms"]
-    dts = (0, 1000, D["verify_ms"], P, P, P, 2 * P, 3 * P + 1, D["min_dwell_ms"], D["heater_stale_ms"] + 1)
+    dts = (0, 1000, D["verify_ms"], P, P, P, 2 * P, 3 * P + 1, D["min_dwell_ms"], D["heater_stale_ms"] + 1,
+           D["night_confirm_ms"], D["night_wait_ms"])  # fmt: skip
     heaters = (
         OFF_H, NO_ID, run_h(1), run_h(3), run_h(5), run_h(10), run_h(0), run_h(11), run_h(4, 1),
         {"Installed": 0}, {"Installed": 1, "OperationModeAirHeater": 3},
@@ -622,6 +833,12 @@ def sweep(rec, n=2000):
                 ignition_on=rnd.choice((False,) * 12 + (True, None)),
                 batt2_dv=rnd.choice((128, 128, 128, 118, 100, None)),
                 cmd=cmd,
+                night=rnd.random() < 0.25,
+                known={
+                    "camping_on": rnd.random() < 0.9,
+                    "shore_on": rnd.random() < 0.2,
+                    "ignition_on": rnd.choice((False,) * 8 + (True, None)),
+                },
             )
             last, st = rec.step("sweep", k, inp, st)
 
@@ -651,7 +868,7 @@ def generate():
     sessions(rec)
     grid(rec)
     sweep(rec)
-    return {"cfgs": CFGS, "heater": heater_cases(), "cases": rec.cases}
+    return {"cfgs": CFGS, "heater": heater_cases(), "cases": rec.cases, "tags": rec.tags}
 
 
 def coverage():
@@ -694,7 +911,7 @@ def coverage():
 
     th.control = spy
     try:
-        generate()
+        tags |= generate()["tags"]
     finally:
         th.control = orig
     return tags
