@@ -184,6 +184,8 @@ class Rec:
             self.tags.add("night_wait_adopt")
             if inp["now_ms"] >= st["wait_until_ms"]:
                 self.tags.add("night_confirm_past_wait")
+        if (st["pending"] or {}).get("what") == "level" and why in ("RUN_ENDED", "CONTINUOUS_ENDED"):
+            self.tags.add("panel_off_during_pending")
         if why == "NIGHT_WAIT_ENDED":
             self.tags.add("night_wait_timeout")
         if wait and why == "USER_OFF":
@@ -650,6 +652,11 @@ def _hold_and_blocked_sessions(rec):
         rec, "adopt_continuous_to_demand", 0,
         [{**auto, "heater": run_h(2, 1), "ref": sensor(1200)}, {"ref": sensor(1200)}],
     )  # fmt: skip
+    for perm in (0, 1):  # switched off at the panel while the takeover's level command waits
+        session(
+            rec, "panel_off_during_pending_%d" % perm, 0,
+            [{**auto, "heater": run_h(3, perm), "ref": sensor(800)}, {"heater": OFF_H, "ref": sensor(800), "dt": 1000}],
+        )  # fmt: skip
     session(
         rec, "adopt_no_reference", 0,
         [{**auto, "heater": run_h(5), "ref": None}, {"ref": None}],

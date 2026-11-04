@@ -1321,7 +1321,7 @@ to see the continuous heating started at the panel. When AUTO is off, the sessio
 | ErrorCode 1 (low battery, the heater's own report) | A normal stop, then AUTO is off | `BATTERY_LOW` |
 | The second battery stays below `batt_min_dv` for `batt_hold_ms` | A normal stop, then AUTO is off | `BATTERY_LOW` |
 | Someone else changes the heater (the unit's panel, the phone app, the normal level slider of the satellite) | AUTO ends and leaves the heater as it is | `FOREIGN_CHANGE` |
-| The run time ends or the heater stops by itself | AUTO ends | `RUN_ENDED` / `CONTINUOUS_ENDED` |
+| The run time ends or the heater stops (also while a level command of the satellite waits for its readback) | AUTO ends | `RUN_ENDED` / `CONTINUOUS_ENDED` |
 | The 1702 reading is older than `heater_stale_ms` | No command until a fresh reading; AUTO stays on | `HEATER_UNKNOWN` |
 | A command is not applied after one retry | AUTO ends | `NOT_APPLIED` |
 | The link is down when a stop is due | Mode `STOPPING`. After the link is back, a heater that the satellite left running is stopped; a heater that changed meanwhile is left alone | `STOPPING`, then `STOP_DROPPED` / `RUN_ENDED` / `CONTINUOUS_ENDED` |

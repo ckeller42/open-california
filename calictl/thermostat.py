@@ -444,8 +444,9 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        the computed demand (integrator 0) and send that level at once when it differs from the
        heater's. It shall end AUTO without a command on a heater fault (ErrorCode 1 excepted: a
        normal stop, ``BATTERY_LOW``), a change it did not make (also during its own pending level
-       command), the end of the run, and a command not applied after one retry. A ``power on``
-       is retried at most once, only when a fresh readback shows the heater off, within
+       command), the end of the run (also a heater switched off during its own pending level
+       command: ``RUN_ENDED`` or ``CONTINUOUS_ENDED``), and a command not applied after one retry.
+       A ``power on`` is retried at most once, only when a fresh readback shows the heater off, within
        ``heater_stale_ms`` of the first send and while the entry conditions still hold; an
        unconfirmed command is never re-sent blind. A refused or unapplied stop reports
        ``NOT_APPLIED``. An owner stop, low second battery, overheat or a target exceeded
@@ -558,6 +559,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         )
         if moved:
             _end(st)
+            if snap and not (snap["normal"] or snap["permanent"]):  # switched off at the panel: the run ended
+                return out("CONTINUOUS_ENDED" if e["permanent"] else "RUN_ENDED")
             return out("FOREIGN_CHANGE")
         if snap is not None and post and _applied(p, snap):
             st["pending"], st["expect"] = None, snap

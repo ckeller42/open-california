@@ -335,6 +335,8 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
                      snap.permanent != e->permanent);
         if (moved) {
             end(st, out);
+            if (!snap.normal && !snap.permanent) /* switched off at the panel: the run ended */
+                RET(e->permanent ? "CONTINUOUS_ENDED" : "RUN_ENDED");
             RET("FOREIGN_CHANGE");
         }
         if (has_snap && post && applied(p, &snap)) {

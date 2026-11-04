@@ -112,6 +112,7 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.test_thermostat.test_continuous_hold_at_min_level_instead_of_stop
 .. autofunction:: tests.test_thermostat.test_running_still_stops_when_too_warm
 .. autofunction:: tests.test_thermostat.test_panel_off_during_night_ends_quietly
+.. autofunction:: tests.test_thermostat.test_panel_off_during_pending_level_ends_quietly
 .. autofunction:: tests.test_thermostat.test_blocked_codes
 .. autofunction:: tests.test_thermostat.test_blocked_uses_known_frames
 .. autofunction:: calictl.automation.auto_camper_restore_decide

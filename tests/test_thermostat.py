@@ -802,3 +802,21 @@ def test_blocked_uses_known_frames():
        :links: R_THERMOSTAT_BLOCKED
     """
     assert _blk(camping_on=False, known={"camping_on": True, "shore_on": False, "ignition_on": False}) is None
+
+
+def test_panel_off_during_pending_level_ends_quietly():
+    """The heater switched off at the panel while a level command waits for its readback: AUTO ends
+    with ``RUN_ENDED`` / ``CONTINUOUS_ENDED`` (quiet on the card), not ``FOREIGN_CHANGE``.
+
+    .. test:: Panel off during a pending level command
+       :id: T_THERMO_PANEL_OFF_PENDING
+       :links: R_THERMOSTAT_SESSION
+    """
+    for heater, why in (
+        ({**RUN, "HeatingLevel": 3}, "RUN_ENDED"),
+        ({**CONT, "HeatingLevel": 3}, "CONTINUOUS_ENDED"),
+    ):
+        out, st = _auto(heater, ref=_ref(800))
+        assert out["cmds"] == [("level", 10)] and st["pending"]["what"] == "level"
+        out, st = _step(st, now_ms=1000, heater=OFF_H, ref=_ref(800))
+        assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", why, [])
