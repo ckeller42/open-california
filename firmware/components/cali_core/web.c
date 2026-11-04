@@ -443,7 +443,7 @@ static int parse_obj(cursor_t *c, const char *const *keys, size_t n, field_fn fi
     if (expect(c, '{') != 0) return -1;
     if (expect(c, '}') == 0) return 0;
     for (;;) {
-        char key[16];   /* the longest key (halt_after_min) fits; a longer one is unknown */
+        char key[24];   /* the longest key (night_confirm_ms) fits; a longer one is unknown */
         size_t klen;
         int i;
         if (parse_str(c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(c, ':') != 0) return -1;

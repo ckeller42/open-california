@@ -881,9 +881,9 @@ window.STRINGS_DE = {
   "Start the air heater with the thermostat? It holds {target} °C (thermometer “{alias}”) for at most {min} min, then it stops.":
     "Die Luftstandheizung mit dem Thermostat starten? Es hält {target} °C (Thermometer „{alias}“) höchstens {min} min lang und stoppt dann.",
   "Take over the running “Dauerbetrieb” with the thermostat? It holds {target} °C (thermometer “{alias}”) until you switch it off.":
-    "Den laufenden „Dauerbetrieb“ mit dem Thermostat übernehmen? Es hält {target} °C (Thermometer „{alias}“), bis Sie es ausschalten.",
+    "Den laufenden „Dauerbetrieb“ mit dem Thermostat übernehmen? Es hält {target} °C (Thermometer „{alias}“), bis du es ausschaltest.",
   "Heat for the night? 1. Tap OK. 2. Switch on “Dauerbetrieb” on the panel in the van and confirm its question with “Yes”. The thermostat then takes over and holds {target} °C (thermometer “{alias}”) until you switch it off.":
-    "Für die Nacht heizen? 1. Tippen Sie auf „OK“. 2. Schalten Sie am Bedienteil im Fahrzeug „Dauerbetrieb“ ein und bestätigen Sie dort die Frage mit „Ja“. Das Thermostat übernimmt dann und hält {target} °C (Thermometer „{alias}“), bis Sie es ausschalten.",
+    "Für die Nacht heizen? 1. Tippe auf „OK“. 2. Schalte am Bedienteil im Fahrzeug „Dauerbetrieb“ ein und bestätige dort die Frage mit „Ja“. Das Thermostat übernimmt dann und hält {target} °C (Thermometer „{alias}“), bis du es ausschaltest.",
   "Switch on “Dauerbetrieb” on the panel now and confirm with “Yes”. Waiting {m}:{ss} min.":
     "Jetzt am Bedienteil „Dauerbetrieb“ einschalten und mit „Ja“ bestätigen. Wartet noch {m}:{ss} min.",
   "The thermostat was changed elsewhere — reloaded, please try again":

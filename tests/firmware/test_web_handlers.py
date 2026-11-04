@@ -3215,6 +3215,17 @@ def test_cfg_needs_confirm_and_persists(web_cli):
     assert [ln for ln in other if ln.startswith("KV ")] == ["KV <missing>", "KV \x02"]  # the version byte
 
 
+def test_cfg_night_keys_are_accepted(web_cli):
+    """The longest cfg keys (``night_confirm_ms``, ``night_wait_ms``) fit the POST parser's key buffer."""
+    rs, _ = drive(
+        web_cli,
+        [*(s.encode() for s in STATION),
+         req("POST", "/api/thermostat", '{"cfg":{"night_confirm_ms":45000,"night_wait_ms":600000},"confirm":true}')],
+    )  # fmt: skip
+    assert rs[0].status == 200
+    assert (rs[0].json()["cfg"]["night_confirm_ms"], rs[0].json()["cfg"]["night_wait_ms"]) == (45000, 600000)
+
+
 @pytest.mark.parametrize(
     "body",
     [
