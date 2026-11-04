@@ -15,9 +15,11 @@
 #include "cali_battery.h"
 #include "cali_display.h"
 #include "cali_diag.h"
+#include "cali_ap_identity.h"
 #include "cali_display_model.h"
 #include "cali_platform.h"
 #include "cali_status.h"
+#include "cali_wifi_run.h"
 #include "driver/i2c_master.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_touch.h"
@@ -122,7 +124,7 @@ static cali_display_model_t s_model;
 static uint64_t s_last_paint;
 static row_ui_t s_rows[3];
 static lv_obj_t *s_footer;
-static char s_footer_now[CALI_ROW_TEXT_MAX];
+static char s_footer_now[3 * CALI_ROW_TEXT_MAX];
 static int s_brightness = -1;
 static i2c_master_dev_handle_t s_ltr;   /* NULL: no light/proximity sensor */
 static i2c_master_dev_handle_t s_axp;   /* NULL: no power chip handle (battery stays unknown) */
@@ -505,16 +507,23 @@ void cali_display_tick(uint64_t now_ms) {
     }
     in.touched = (uint8_t)__atomic_exchange_n(&s_touched, 0, __ATOMIC_RELAXED);
     cali_status_get(&st, s_t, now_ms);
-    cali_display_model(&s_model, &st, now_ms, LANG, &in, cali_display_cfg(), &v);
+    char ap_qr[CALI_QR_TEXT_MAX];   /* holds the hotspot password: the screen only, never a log or /api/state */
+    if (st.wifi_mode != CALI_WIFI_MODE_SETUP || cali_ap_wifi_qr(ap_qr, sizeof ap_qr) < 0) ap_qr[0] = 0;
+    cali_display_model(&s_model, &st, now_ms, LANG, &in, cali_display_cfg(), ap_qr[0] ? ap_qr : NULL, &v);
     __atomic_store_n(&s_awake, v.state == CALI_DISP_ON, __ATOMIC_RELAXED);
     __atomic_store_n(&s_scr, (int)v.state, __ATOMIC_RELAXED);
 
     paint_row(&s_rows[0], &v.device);
     paint_row(&s_rows[1], &v.wifi);
     paint_row(&s_rows[2], &v.camper);
-    if (strcmp(s_footer_now, v.footer)) {
-        memcpy(s_footer_now, v.footer, sizeof s_footer_now);
-        lv_label_set_text(s_footer, v.footer);
+    {   /* Task 4 draws the QR code; until then its title and lines replace the footer text. */
+        char txt[3 * CALI_ROW_TEXT_MAX];
+        if (v.qr[0]) snprintf(txt, sizeof txt, "%s\n%s\n%s", v.qr_title, v.qr_lines[0], v.qr_lines[1]);
+        else snprintf(txt, sizeof txt, "%s", v.footer);
+        if (strcmp(s_footer_now, txt)) {
+            snprintf(s_footer_now, sizeof s_footer_now, "%s", txt);
+            lv_label_set_text(s_footer, txt);
+        }
     }
     bsp_display_unlock();
     cali_display_publish(&v);   /* /api/state device.display */

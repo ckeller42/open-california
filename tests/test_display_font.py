@@ -43,8 +43,9 @@ def display_texts() -> list[tuple[str, str, str]]:
         if key.startswith("d_") or key == "device":
             for lang in ("en", "de"):
                 out.append((key, lang, tr[lang].replace("%s", "")))
-    for lang in ("en", "de"):  # the setup footer as display.c renders it
-        out.append(("footer", lang, STRINGS["d_footer_setup"][lang] % (AP_SSID, AP_PSK)))
+    for lang in ("en", "de"):  # the QR screen lines as display.c renders them
+        out.append(("qr_wlan", lang, STRINGS["d_qr_wlan"][lang] % AP_SSID))
+        out.append(("qr_pass", lang, STRINGS["d_qr_pass"][lang] % AP_PSK))
         out.append(
             ("ap_chars", lang, AP_SSID_HEX + AP_ALPHABET)
         )  # every character the hotspot identity can hold
@@ -66,7 +67,7 @@ def battery_footers(lang: str) -> list[str]:
 
 def test_display_key_set_includes_failures():
     keys = {k for k, _, _ in display_texts()}
-    assert {"device", "d_fail_not_found", "d_fail_auth", "d_fail_other", "d_footer_setup"} <= keys
+    assert {"device", "d_fail_not_found", "d_fail_auth", "d_fail_other", "d_qr_join_title"} <= keys
 
 
 @pytest.mark.parametrize("size", [16, 24])

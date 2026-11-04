@@ -70,6 +70,9 @@ enum cali_lang_e {
 /** @brief Size of a row's text buffer in bytes, including the NUL. */
 #define CALI_ROW_TEXT_MAX 64
 
+/** @brief Size of the QR text buffer in the view (a `WIFI:` join code fits in 96 bytes). */
+#define CALI_QR_TEXT_MAX 96
+
 /** @brief One status row. */
 typedef struct {
     cali_dot_t dot;                  /**< The dot colour. */
@@ -154,8 +157,10 @@ typedef struct {
     cali_row_t device;       /**< The device row. */
     cali_row_t wifi;         /**< The WiFi row. */
     cali_row_t camper;       /**< The camper-unit row. */
-    int footer_setup;        /**< 1: the footer shows the hotspot name and password (cali_ap_identity); 0: `http://NET_HOSTNAME.local` and the battery. */
-    char footer[CALI_ROW_TEXT_MAX];   /**< The footer text. */
+    char footer[CALI_ROW_TEXT_MAX];   /**< The footer text: `http://NET_HOSTNAME.local` and the battery; "" in setup mode. */
+    char qr[CALI_QR_TEXT_MAX];        /**< The text to draw as a QR code; "" = no QR screen. Setup mode: the hotspot's WiFi QR (holds the password: display only); station with a setup pending: `http://<ip>/#setup`. */
+    char qr_title[CALI_ROW_TEXT_MAX]; /**< The line above the QR code. */
+    char qr_lines[2][CALI_ROW_TEXT_MAX]; /**< The two lines below it (hotspot name and password, or the two addresses). */
     cali_disp_state_t state; /**< On, dim or off. */
     cali_sensor_t sensor;    /**< The light sensor's state. */
     int32_t lux;             /**< The last valid lux, -1 = none. */
@@ -208,10 +213,12 @@ void cali_display_model_init(cali_display_model_t *m);
  * @param lang    CALI_LANG_DE or CALI_LANG_EN.
  * @param in      This tick's sensor and touch inputs.
  * @param cfg     The settings.
- * @param out     Filled with the rows, the footer, the screen state and the brightness.
+ * @param ap_qr   The hotspot's WiFi QR text (cali_ap_wifi_qr()), or NULL for none; only read in setup mode.
+ * @param out     Filled with the rows, the footer, the QR screen, the screen state and the brightness.
  */
 void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_t now_ms, int lang,
-                        const cali_display_in_t *in, const cali_display_cfg_t *cfg, cali_display_view_t *out);
+                        const cali_display_in_t *in, const cali_display_cfg_t *cfg, const char *ap_qr,
+                        cali_display_view_t *out);
 
 /**
  * @brief The touch read filter, run in LVGL's task.

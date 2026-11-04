@@ -254,7 +254,7 @@ diag.o: $(COMPONENTS)/cali_core/diag.c $(CORE_H)/cali_diag.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The pure status-display model (#154): rows, stale rule, footer, wake + brightness (R_FW_DISPLAY_WAKE).
-display_model.o: $(COMPONENTS)/cali_core/display_model.c $(CORE_H)/cali_ap_identity.h $(CORE_H)/cali_display_model.h $(CORE_H)/cali_battery.h \
+display_model.o: $(COMPONENTS)/cali_core/display_model.c $(CORE_H)/cali_display_model.h $(CORE_H)/cali_battery.h \
 		$(CORE_H)/cali_status.h $(CORE_H)/cali_wifi_run.h $(CSRC)/net_consts.h \
 		$(CSRC)/pairing_consts.h ../web/strings_gen.h
 	$(CC) -c $(CFLAGS) -o $@ $<

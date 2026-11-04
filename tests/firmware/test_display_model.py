@@ -93,7 +93,7 @@ def test_all_green_online(cli):
     assert v["device"] == "green|läuft · seit 2 h 13 min"
     assert v["wifi"] == "green|Insel · 192.168.178.86 · -58 dBm"
     assert v["camper"] == "green|verbunden · Daten vor 1 s"
-    assert v["setup"] == "0" and v["footer"] == "http://calictl-esp.local"
+    assert v["qr"] == "" and v["footer"] == "http://calictl-esp.local"
 
 
 def test_wifi_unknown_rssi_is_left_out(cli):  # rssi 0 = unknown (null in /api/state), never "0 dBm"
@@ -139,27 +139,55 @@ def test_camper_pairing_error(cli):
     assert v["camper"] == "red|Kopplung fehlgeschlagen"
 
 
-def test_wifi_setup_mode_and_footer(cli):
-    (v,) = run(
-        cli,
-        BASE.replace("wmode=2 wstate=3", "wmode=1 wstate=1")
-        .replace("ssid=Insel", "ssid=")
-        .replace("ip=3232281174", "ip=0")
-        + " now=1 lang=0",
-    )
-    assert v["wifi"] == "amber|Hotspot calictl-esp-C0FE · 192.168.4.1"  # the host fake MAC 02:00:00:00:C0:FE
-    assert v["setup"] == "1" and v["footer"] == "WLAN calictl-esp-C0FE · Passwort " + ap_psk(cli)
+SETUP = (
+    BASE.replace("wmode=2 wstate=3", "wmode=1 wstate=1")
+    .replace("ssid=Insel", "ssid=")
+    .replace("ip=3232281174", "ip=0")
+)
+AP_QR = "WIFI:T:WPA;S:calictl-esp-1A2B;P:abcd-efgh-jkmn;;"  # a made-up identity, not the host's
+
+
+def view(cli, mode, lang="de", **kw):
+    """One tick in the given wifi mode with extra CLI flags; returns the view dict."""
+    base = {"setup": SETUP, "station": BASE}[mode]
+    flags = " ".join("%s=%s" % (k, v) for k, v in kw.items())
+    (v,) = run(cli, "%s now=1 lang=%d %s" % (base, 1 if lang == "en" else 0, flags))
+    return v
+
+
+def test_wifi_setup_mode_row(cli):
+    v = view(cli, mode="setup", apssid="calictl-esp-C0FE")
+    assert v["wifi"] == "amber|Hotspot calictl-esp-C0FE · 192.168.4.1"
+    assert v["footer"] == ""  # the QR screen replaces the footer
+
+
+def test_setup_mode_shows_the_join_qr(cli):
+    v = view(cli, mode="setup", apssid="calictl-esp-1A2B", apqr=AP_QR)
+    assert v["qr"].startswith("WIFI:T:WPA;S:calictl-esp-1A2B;")
+    assert v["qr_title"] == "Mit der Handykamera scannen"
+    assert v["qr_lines"] == "WLAN calictl-esp-1A2B|Passwort abcd-efgh-jkmn"
+    en = view(cli, mode="setup", lang="en", apssid="calictl-esp-1A2B", apqr=AP_QR)
+    assert en["qr_title"] == "Scan with the phone camera"
+    assert en["qr_lines"] == "WiFi calictl-esp-1A2B|Password abcd-efgh-jkmn"
+
+
+def test_setup_mode_without_a_qr_text_shows_no_qr(cli):  # identity unavailable: the caller passes NULL
+    assert view(cli, mode="setup", apssid="calictl-esp-1A2B")["qr"] == ""
+
+
+def test_station_with_setup_pending_shows_the_address_qr(cli):
+    v = view(cli, mode="station", lang="en", pending=1)
+    assert v["qr"] == "http://192.168.178.86/#setup" and v["qr_title"] == "Join Insel, then scan"
+    assert v["qr_lines"] == "http://192.168.178.86|http://calictl-esp.local"
+    assert view(cli, mode="station", pending=1)["qr_title"] == "Insel beitreten, dann scannen"
+
+
+def test_station_without_pending_shows_no_qr(cli):
+    assert view(cli, mode="station", pending=0)["qr"] == ""
 
 
 def test_footer_english(cli):
-    s, o = run(
-        cli,
-        BASE.replace("wmode=2 wstate=3", "wmode=1 wstate=1").replace("ip=3232281174", "ip=0")
-        + " now=1 lang=1",
-        BASE + " now=1 lang=1",
-    )
-    assert s["footer"] == "WiFi calictl-esp-C0FE · password " + ap_psk(cli)
-    assert o["footer"] == "http://calictl-esp.local"
+    assert view(cli, mode="station", lang="en")["footer"] == "http://calictl-esp.local"
 
 
 def test_wifi_off_with_reason(cli):
@@ -574,7 +602,7 @@ def test_station_footer_shows_the_battery(cli, batt, de, en):
 
 def test_setup_footer_ignores_the_battery(cli):
     (v,) = run(cli, "wmode=1 now=1 lang=1 bpct=50 usb=0 chg=0 brt=90")
-    assert v["setup"] == "1" and "Batt" not in v["footer"] and "%" not in v["footer"]
+    assert v["footer"] == ""
 
 
 def test_battery_changes_never_wake_the_screen(cli):
