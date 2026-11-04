@@ -73,7 +73,7 @@ static int32_t field(const codec_kv_t *kv, int n, const char *name) {
 /* 1 when v (read at `at`) is in range and, against slot k's last accepted reading of this alias, changes
  * at most T_RATE_PER_MIN per minute, the time difference floored at one minute; an accepted reading becomes
  * the baseline. The first has no rate check. */
-static int plausible(int k, const char *alias, int32_t v, uint64_t at) {
+static int plausible(int k, const char *alias, int32_t v, uint64_t at, int commit) {
     if (v < T_MIN || v > T_MAX) return 0;
     if (strcmp(s_last[k].alias, alias) == 0 && at >= s_last[k].at) {
         int64_t dv = (int64_t)v - s_last[k].v;
@@ -82,19 +82,20 @@ static int plausible(int k, const char *alias, int32_t v, uint64_t at) {
         if (dt < 60000) dt = 60000;   /* floored at a minute: two adverts 100 ms apart in one scan window */
         if (dv * 60000 > (int64_t)T_RATE_PER_MIN * dt) return 0;
     }
+    if (!commit) return 1;   /* a GET's look: the step's baseline stays */
     snprintf(s_last[k].alias, sizeof s_last[k].alias, "%s", alias);
     s_last[k].v = v;
     s_last[k].at = at;
     return 1;
 }
 
-static void sensor(cali_thermo_sensor_t *s, int k, const char *alias, uint64_t now) {
+static void sensor(cali_thermo_sensor_t *s, int k, const char *alias, uint64_t now, int commit) {
     uint64_t at;
     memset(s, 0, sizeof *s);
     if (!alias[0]) return;   /* none selected */
     s->present = 1;          /* selected: no reading (removed, renamed, not yet seen) is an invalid one */
     snprintf(s->alias, sizeof s->alias, "%s", alias);
-    if (cali_sensors_value(alias, SENSOR_TEMP, &s->value, &at) == 0 && plausible(k, alias, s->value, at)) {
+    if (cali_sensors_value(alias, SENSOR_TEMP, &s->value, &at) == 0 && plausible(k, alias, s->value, at, commit)) {
         s->age_ms = now >= at ? (int64_t)(now - at) : 0;
     } else {
         s->value = CALI_THERMO_NONE;
@@ -150,27 +151,33 @@ static const char *num(char b[16], int32_t v) {
     return b;
 }
 
-static void step(uint64_t now) {
-    /* static: the 8 KB host-task stack; kc/ke = the last-known frames (cali_thermo_blocked()) */
-    static codec_kv_t h[CODEC_KV_MAX], c[CODEC_KV_MAX], e[CODEC_KV_MAX], kc[CODEC_KV_MAX], ke[CODEC_KV_MAX];
+static uint64_t s_tick_now;   /* the last tick's clock: the "now" of a GET (cali_thermo_state_json) */
+static codec_kv_t s_h[CODEC_KV_MAX];   /* the last inputs' 1702 fields (the step's record reads them) */
+static int s_nh;
+
+/* The step's inputs from this ESP, but the request and the cmd result. commit = 1 for a step (the
+ * readings become the plausibility baseline), 0 for a GET's cali_thermo_blocked(). */
+static void inputs(cali_thermo_in_t *in, uint64_t now, int commit) {
+    /* static: the 8 KB host-task stack; k* = the last-known frames, also of an earlier link (cali_thermo_blocked()) */
+    static codec_kv_t c[CODEC_KV_MAX], e[CODEC_KV_MAX], kc[CODEC_KV_MAX], ke[CODEC_KV_MAX], kv[CODEC_KV_MAX];
     static cali_thermo_heater_t ht;
-    int nh = frame_fields("airheater", 0, h), nc = frame_fields("campingmode", 1, c), ne = frame_fields("energy", 1, e);
-    int nkc = frame_fields("campingmode", 0, kc), nke = frame_fields("energy", 0, ke);
-    int mode_before = S.mode;
+    codec_kv_t *h = s_h;
+    int nh = s_nh = frame_fields("airheater", 0, h), nc = frame_fields("campingmode", 1, c);
+    int ne = frame_fields("energy", 1, e), nkc = frame_fields("campingmode", 0, kc);
+    int nke = frame_fields("energy", 0, ke), nkv = frame_fields("vehicle", 0, kv);
     int32_t shore = field(e, ne, "StateLandAfs"), kshore = field(ke, nke, "StateLandAfs");
-    cali_thermo_in_t in;
-    memset(&in, 0, sizeof in);
-    in.now_ms = (int64_t)now;
-    in.enabled = s_on;
-    in.request = s_req;
-    in.target = C.target;
-    in.runtime_min = C.s.runtime_min;
-    sensor(&in.ref, 0, C.ref, now);
-    sensor(&in.backup, 1, C.backup, now);
-    sensor(&in.out, 2, C.out, now);
-    in.outside_on = C.outside_on;
-    in.heater = NULL;   /* no frame, or one with no fields: no heater (a present all-NONE one would read OFF) */
-    in.heater_age_ms = CALI_THERMO_NONE_MS;
+    int32_t t15 = field(kv, nkv, "TerminalOneFive"), en = field(kc, nkc, "Enable");
+    memset(in, 0, sizeof *in);
+    in->now_ms = (int64_t)now;
+    in->enabled = s_on;
+    in->target = C.target;
+    in->runtime_min = C.s.runtime_min;
+    sensor(&in->ref, 0, C.ref, now, commit);
+    sensor(&in->backup, 1, C.backup, now, commit);
+    sensor(&in->out, 2, C.out, now, commit);
+    in->outside_on = C.outside_on;
+    in->heater = NULL;   /* no frame, or one with no fields: no heater (a present all-NONE one would read OFF) */
+    in->heater_age_ms = CALI_THERMO_NONE_MS;
     if (nh > 0) {
         uint64_t at = cali_session_frame_ms((size_t)fn_index("airheater"));
         ht.installed = field(h, nh, "Installed");
@@ -180,18 +187,28 @@ static void step(uint64_t now) {
         ht.permanent = field(h, nh, "PermanentOperation");
         ht.normal = field(h, nh, "NormalOperation");
         ht.op_mode = field(h, nh, "OperationModeAirHeater");
-        in.heater = &ht;
-        in.heater_age_ms = now >= at ? (int64_t)(now - at) : 0;
+        in->heater = &ht;
+        in->heater_age_ms = now >= at ? (int64_t)(now - at) : 0;
     }
-    in.link_ready = cali_session_ready();
-    in.camping_on = field(c, nc, "State") == 1;
-    in.shore_on = shore == 1 || shore == 2;
-    in.ignition_on = cali_ac_ignition();
-    in.night = C.night;
-    in.known_camping_on = field(kc, nkc, "State") == 1;
-    in.known_shore_on = kshore == 1 || kshore == 2;
-    in.known_ignition_on = in.ignition_on;
-    in.batt2_dv = field(e, ne, "UTwoBattBemAfs");
+    in->link_ready = cali_session_ready();
+    in->camping_on = field(c, nc, "State") == 1;
+    in->shore_on = shore == 1 || shore == 2;
+    in->ignition_on = cali_ac_ignition();
+    in->batt2_dv = field(e, ne, "UTwoBattBemAfs");
+    in->night = C.night;
+    in->known_camping_on = field(kc, nkc, "State") == 1;
+    in->known_shore_on = kshore == 1 || kshore == 2;
+    /* cali_ac_ignition()'s rule on the last-known frames: 1004 TerminalOneFive OR 1202 Enable */
+    in->known_ignition_on = t15 < 0 && en < 0 ? -1 : t15 > 0 || en > 0;
+}
+
+static void step(uint64_t now) {
+    int mode_before = S.mode;
+    cali_thermo_in_t in;
+    inputs(&in, now, 1);
+    const codec_kv_t *h = s_h;
+    int nh = s_nh;
+    in.request = s_req;
     in.cmd_what = s_cmd_what;
     in.cmd_result = s_cmd_res;
     s_req = CALI_THERMO_REQ_NONE;   /* one-shot, as the cmd input */
@@ -344,6 +361,7 @@ void cali_thermo_run_init(void) {
 }
 
 void cali_thermo_run_tick(uint64_t now_ms) {
+    s_tick_now = now_ms;
     if (s_wait || s_n) return;   /* a batch is going out: its done callback sends the next */
     /* an AUTO tap from OFF woke the link (cali_thermo_request): give it time to come up, then step */
     if (s_req == CALI_THERMO_REQ_AUTO && s_on && S.mode == CALI_THERMO_OFF && !cali_session_ready()) {
@@ -396,6 +414,9 @@ static void opt_num(cali_json_t *j, const char *key, int32_t v) {
 
 void cali_thermo_state_json(cali_json_t *j) {
     const cali_thermo_status_t *st = &s_out.status;
+    cali_thermo_in_t in;
+    inputs(&in, s_tick_now, 0);   /* blocked from the current inputs: the card polls between steps */
+    const char *blocked = cali_thermo_blocked(&in, &C.s);
     cali_json_obj_begin(j);
     cali_json_key(j, "enabled");
     cali_json_bool(j, s_on);
@@ -418,7 +439,7 @@ void cali_thermo_state_json(cali_json_t *j) {
     cali_json_key(j, "end");
     cali_json_str(j, st->end ? st->end : "none");
     cali_json_key(j, "blocked");
-    if (st->blocked) cali_json_str(j, st->blocked);
+    if (blocked) cali_json_str(j, blocked);
     else cali_json_null(j);
     opt_num(j, "wait_left_s", st->wait_left_s);
     cali_json_key(j, "night");

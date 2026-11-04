@@ -176,16 +176,36 @@ def test_night_wait_holds_the_session(cli, tmp_path):
 
 
 def test_blocked_uses_the_last_known_frames(cli, tmp_path):
-    """``status.blocked`` reads camping mode from the last-known frames, the entry check from this link's only:
-    with the stored 1202 frame not live, nothing blocks on the card, and an AUTO request is refused.
+    """``status.blocked`` reads camping mode and the ignition (1004 TerminalOneFive or 1202 Enable, the rule of
+    cali_ac_ignition) from the last-known frames, the entry check from this link's only: with the stored
+    frames not live (a rest), nothing blocks on the card, and an AUTO request is refused.
 
     .. test:: Thermostat runner: blocked from the last-known frames
        :id: T_FW_THERMOSTAT_RUN_BLOCKED
        :links: R_FW_THERMOSTAT_RUN
     """
-    out = run(cli, tmp_path, [*SETUP, "live 0", "tick", "state", "auto", "tick", "state"])
+    out = run(cli, tmp_path, [*SETUP, frame("vehicle", TerminalOneFive=0), "live 0", "ign -1", "tick", "state",
+                              "auto", "tick", "state"])  # fmt: skip
     states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
     assert states[0]["blocked"] is None and states[0]["wait_left_s"] is None
     assert states[1]["reason"] == "AUTO_REFUSED_NO_CAMPING"
-    out = run(cli, tmp_path, [*SETUP, "ign 1", "tick", "state"])
+    out = run(
+        cli, tmp_path, [*SETUP, frame("vehicle", TerminalOneFive=1), "live 0", "ign -1", "tick", "state"]
+    )
     assert state(out)["blocked"] == "IGNITION"
+    out = run(cli, tmp_path, [*SETUP, frame("campingmode", State=1, Enable=1), "live 0", "ign -1", "state"])
+    assert state(out)["blocked"] == "IGNITION"  # the 1202 mirror of terminal 15
+
+
+def test_blocked_follows_the_inputs_between_steps(cli, tmp_path):
+    """``status.blocked`` is computed at each read of the status, not only at a step: the card polls every
+    2 s and undims as soon as camping mode is on.
+
+    .. test:: Thermostat runner: blocked is current at each GET
+       :id: T_FW_THERMOSTAT_RUN_BLOCKED_GET
+       :links: R_FW_THERMOSTAT_API
+    """
+    out = run(cli, tmp_path, [*SETUP, frame("campingmode", State=0), "tick", "state",
+                              frame("campingmode", State=1), "state"])  # fmt: skip
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert [st["blocked"] for st in states] == ["NO_CAMPING", None]

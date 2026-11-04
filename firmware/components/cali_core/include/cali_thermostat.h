@@ -27,7 +27,8 @@
  * step every `period_ms`, and at once after an owner request, a switch of the feature, or the end of
  * a command batch. A step's inputs are this ESP's: the stored 1702 frame and its age (no frame, or
  * one with no fields, is no heater), 1202 State, 1602 StateLandAfs (1 or 2 = shore power) of this
- * link (and of the last-known frames for the `known_*` inputs of cali_thermo_blocked()), UTwoBattBemAfs, cali_ac_ignition(), cali_session_ready(), and the configured thermometers'
+ * link (and of the last-known frames, also 1004 TerminalOneFive and 1202 Enable, for the `known_*`
+ * inputs of cali_thermo_blocked()), UTwoBattBemAfs, cali_ac_ignition(), cali_session_ready(), and the configured thermometers'
  * `temp_c` by alias (cali_sensors_value(); an alias with no reading is an invalid sensor, never
  * another one). The step's commands go to the control sequencer as `airheater` commands with source
  * `thermostat`, one at a time (the next from the previous one's done callback); the batch stops at
@@ -65,7 +66,8 @@
  *
  *    The firmware shall serve ``GET /api/thermostat`` (``rev``, ``mode``, ``target``, ``runtime_min``,
  *    the thermometer aliases, ``outside_on``, ``night``, all settings, the status with the reason,
- *    ``blocked``, ``wait_left_s`` and the run's ``night``) and
+ *    ``blocked`` (computed at each GET from the last-known frames), ``wait_left_s`` and the run's
+ *    ``night``) and
  *    ``POST /api/thermostat`` (station mode only) with any of ``enabled``, ``mode``, ``target``,
  *    ``runtime_min``, ``ref``, ``backup``, ``out`` (an alias of a configured Govee, or null),
  *    ``outside_on``, ``night``, ``cfg``, ``rev`` and ``confirm``; ``enabled`` applies before the
@@ -398,8 +400,9 @@ int cali_thermo_cfg_set(const char *key, int32_t value);
  * @brief Write the status object: `{"enabled","mode","reason","heater","t_ref","t_out","target","level","active","outside_active","end","blocked","wait_left_s","night"}`.
  *
  * `reason` is the last step's reason that was not NULL (null before any); temperatures and the
- * level are null when unknown. `blocked`, `wait_left_s` and `night` are the last step's
- * (`cali_thermo_status_t`; null, null and false before any).
+ * level are null when unknown. `blocked` is cali_thermo_blocked() of the current inputs (computed
+ * here, with the last-known frames); `wait_left_s` and `night` are the last step's (null and false
+ * before any).
  *
  * @param j  The JSON writer; the caller writes the key first.
  */

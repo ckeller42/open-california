@@ -3029,9 +3029,8 @@ def test_thermostat_get_defaults(web_cli):
     assert b["status"]["enabled"] is False and b["status"]["mode"] == "OFF"
     assert b["night"] is False
     st = b["status"]
-    assert (st["blocked"], st["wait_left_s"], st["night"]) == (None, None, False)  # before any step
-    b, _ = th_get(web_cli, extra=["thinit", "thtick"])
-    assert b["status"]["blocked"] == "NO_CAMPING"  # no frames here: neither camping mode nor shore power
+    # blocked is computed at each GET; no frames here: neither camping mode nor shore power
+    assert (st["blocked"], st["wait_left_s"], st["night"]) == ("NO_CAMPING", None, False)
 
 
 def test_night_needs_no_confirm_and_persists(web_cli):
@@ -3055,7 +3054,12 @@ def test_night_needs_no_confirm_and_persists(web_cli):
 
 def test_enable_and_auto_in_one_post(web_cli):
     """``{"enabled":true,"mode":"AUTO","confirm":true}`` on a disabled thermostat switches it on first, so the
-    AUTO request reaches the step as an enabled one (the card's one tap)."""
+    AUTO request reaches the step as an enabled one (the card's one tap).
+
+    .. test:: POST /api/thermostat: enabled applies before the AUTO request of the same body
+       :id: T_FW_THERMOSTAT_API_ENABLE_AUTO
+       :links: R_FW_THERMOSTAT_API
+    """
     rs, _ = drive(
         web_cli,
         [*(s.encode() for s in STATION), b"ready 1",
@@ -3064,7 +3068,7 @@ def test_enable_and_auto_in_one_post(web_cli):
     )  # fmt: skip
     st = rs[1].json()["status"]
     assert st["enabled"] is True
-    assert st["reason"] not in (None, "AUTO_REFUSED_DISABLED"), st  # no heater here: refused later
+    assert st["reason"] == "AUTO_REFUSED_STALE_HEATER", st  # past the switch check; no 1702 frame here
 
 
 def test_v1_stored_config_survives_the_upgrade(web_cli):
