@@ -3,13 +3,17 @@
  *   xfer <tk hex> <deveui hex> <fragment hex> | sha4 <hex or ->
  * Output: keypack/keyunpack/setupqr/repairqr print the result (hex or text) or "-1"/"0"; xfer prints
  *   "<rc> <confirm hex or -> <plain hex or ->" and keeps the transfer state between lines.
- * The stub "open" XORs the ciphertext with the key; the tag 00..00 is valid, any other is not.
+ * The stub "open" XORs the ciphertext with the key; the tag 00..00 is valid, any other is not. With
+ * CALI_LORA_REAL_AEAD (lora_aead_cli.c) "open" is the PSA AES-GCM one instead.
  * Driven by tests/firmware/test_lora_setup.py. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "cali_lora_setup.h"
+#ifdef CALI_LORA_REAL_AEAD
+#include "cali_lora_aead.h"
+#endif
 
 static size_t unhex(const char *s, uint8_t *out, size_t max) {
     size_t n = 0;
@@ -25,6 +29,9 @@ static void hex(const uint8_t *b, size_t n) {
     for (size_t i = 0; i < n; i++) printf("%02x", b[i]);
 }
 
+#ifdef CALI_LORA_REAL_AEAD
+#define stub_open cali_lora_aead_open_psa
+#else
 static int stub_open(const uint8_t *key, const uint8_t *nonce, const uint8_t *ad, size_t ad_len, const uint8_t *ct,
                      size_t ct_len, const uint8_t *tag, uint8_t *out) {
     (void)nonce, (void)ad, (void)ad_len;
@@ -33,6 +40,7 @@ static int stub_open(const uint8_t *key, const uint8_t *nonce, const uint8_t *ad
     for (size_t i = 0; i < ct_len; i++) out[i] = ct[i] ^ key[i % 16];
     return 0;
 }
+#endif
 
 int main(void) {
     static cali_lora_xfer_t x;

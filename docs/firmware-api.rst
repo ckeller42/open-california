@@ -149,6 +149,8 @@ LoRa onboarding (experimental)
 
 .. doxygenfile:: cali_lora_setup.h
 
+.. doxygenfile:: cali_lora_aead.h
+
 OTA, logging & time
 -------------------
 

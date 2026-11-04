@@ -340,6 +340,7 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.firmware.test_energy
 .. automodule:: tests.firmware.test_lora
 .. automodule:: tests.firmware.test_lora_setup
+.. automodule:: tests.firmware.test_lora_aead
 .. automodule:: tests.test_gen_lora_dict
 .. automodule:: tests.test_lora_setup_js
 .. automodule:: calictl.esp_ingest

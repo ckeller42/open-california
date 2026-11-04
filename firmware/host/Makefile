@@ -76,7 +76,7 @@ LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
 all: cali-host store-cli
 
 clean:
-	rm -f $(NIMBLE_ALL_OBJ) *.o cali-host cali-host-jw store-cli
+	rm -f $(NIMBLE_ALL_OBJ) *.o cali-host cali-host-jw store-cli lora_aead_cli
 	-$(MAKE) -C $(MBEDTLS_ROOT)/library clean >/dev/null
 
 $(MBEDTLS_LIBS) &:
@@ -327,3 +327,12 @@ cali-host-jw: $(NIMBLE_ALL_OBJ) host_main.o $(JW_OBJ) $(CORE_OBJ) $(MBEDTLS_LIBS
 # linked against the real NimBLE host objects, no controller/transport needed.
 store-cli: $(NIMBLE_ALL_OBJ) store_cli.o $(COMPONENT_OBJ) $(MBEDTLS_LIBS)
 	$(LD) -o $@ $(NIMBLE_ALL_OBJ) store_cli.o $(COMPONENT_OBJ) $(LIBS)
+
+# Host driver for the LoRa key transfer with the real PSA AES-GCM open (tests/firmware/test_lora_aead.py).
+LORA_AEAD_INC := -I$(CORE_H) -I$(COMPONENTS)/cali_lora/include -I$(MBEDTLS_ROOT)/include
+lora_aead_cli: $(COMPONENTS)/cali_core/lora_setup.c $(COMPONENTS)/cali_core/test/lora_aead_cli.c \
+		$(COMPONENTS)/cali_core/test/lora_setup_cli.c $(COMPONENTS)/cali_lora/lora_aead.c \
+		$(COMPONENTS)/cali_lora/include/cali_lora_aead.h $(MBEDTLS_LIBS)
+	$(CC) -m32 -std=c99 -Wall -Wextra -Werror -D_GNU_SOURCE $(LORA_AEAD_INC) -I$(COMPONENTS)/cali_core/test \
+		-o $@ $(COMPONENTS)/cali_core/lora_setup.c $(COMPONENTS)/cali_core/test/lora_aead_cli.c \
+		$(COMPONENTS)/cali_lora/lora_aead.c $(MBEDTLS_LIBS)
