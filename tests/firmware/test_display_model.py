@@ -48,11 +48,6 @@ def cli(tmp_path_factory):
     return out
 
 
-def ap_psk(cli):
-    """The hotspot password the model read from (or made in) the cli's kv store: LE32 len, bytes, CRC."""
-    return (Path(cli).parent / "kv" / "ap_psk.kv").read_bytes()[4:18].decode()
-
-
 def run(cli, *lines):
     out = (
         subprocess.run(
@@ -169,6 +164,22 @@ def test_setup_mode_shows_the_join_qr(cli):
     en = view(cli, mode="setup", lang="en", apssid="calictl-esp-1A2B", apqr=AP_QR)
     assert en["qr_title"] == "Scan with the phone camera"
     assert en["qr_lines"] == "WiFi calictl-esp-1A2B|Password abcd-efgh-jkmn"
+
+
+def test_a_qr_appearing_wakes_the_screen_once(cli):
+    qr = SETUP + " apqr=" + AP_QR
+    v = run(
+        cli,
+        "reset",
+        SETUP + " now=0",
+        SETUP + " now=400000",  # off
+        qr + " now=400200",  # the QR appears: wake
+        qr + " now=400400",
+        qr + " now=800000",  # no new wake: off again
+        SETUP + " now=800200",  # the QR goes: no wake
+        qr + " now=800400",  # it comes back: wake
+    )
+    assert [x["state"] for x in v] == ["on", "off", "on", "on", "off", "off", "on"]
 
 
 def test_setup_mode_without_a_qr_text_shows_no_qr(cli):  # identity unavailable: the caller passes NULL

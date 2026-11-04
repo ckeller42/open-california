@@ -202,6 +202,8 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
     if (m->started && ((alert(out->wifi.dot) && out->wifi.dot != m->dots[0]) ||
                        (alert(out->camper.dot) && out->camper.dot != m->dots[1])))
         wake = 1;
+    if (out->qr[0] && !m->had_qr) wake = 1;   /* a QR code appearing: someone has to scan it */
+    m->had_qr = out->qr[0] != 0;
     m->dots[0] = (uint8_t)out->wifi.dot;
     m->dots[1] = (uint8_t)out->camper.dot;
     m->started = 1;

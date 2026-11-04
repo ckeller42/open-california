@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     char line[1024];
     cali_display_model_t m;
     uint8_t swallow = 0;
-    if (cali_platform_init(argc > 1 ? argv[1] : NULL) != 0) return 1;   /* the hotspot password lives in the kv store */
+    if (cali_platform_init(argc > 1 ? argv[1] : NULL) != 0) return 1;
     cali_display_model_init(&m);
     while (fgets(line, sizeof line, stdin)) {
         cali_status_t s;

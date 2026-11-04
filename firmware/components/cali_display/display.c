@@ -103,6 +103,8 @@ static const char *const SCR_NAMES[] = {"on", "dim", "off"};
 #define DOT 12
 #define LABEL_X 30
 #define VALUE_X 106 /* LABEL_X + widest label ("Camper" 65 px) + gap; tests/test_display_font.py checks */
+#define QR_SIZE 150     /* the QR code incl. its 4-module quiet zone */
+#define QR_TEXT_X (PAD + QR_SIZE + 10)
 #define TITLE_END_X 200 /* "calictl satellite" at 24 px ends at about x 190 */
 
 LV_FONT_DECLARE(font_latin1_16);
@@ -123,8 +125,11 @@ static const cali_transport_t *s_t;
 static cali_display_model_t s_model;
 static uint64_t s_last_paint;
 static row_ui_t s_rows[3];
-static lv_obj_t *s_footer;
+static lv_obj_t *s_footer, *s_rows_sep;
+static lv_obj_t *s_qr, *s_qr_text;      /* the setup QR code and the text beside it (hidden outside setup) */
 static char s_footer_now[3 * CALI_ROW_TEXT_MAX];
+static char s_qr_now[CALI_QR_TEXT_MAX]; /* the encoded text: it holds the hotspot password, screen only */
+static char s_qr_text_now[3 * CALI_ROW_TEXT_MAX + 4];
 static int s_brightness = -1;
 static i2c_master_dev_handle_t s_ltr;   /* NULL: no light/proximity sensor */
 static i2c_master_dev_handle_t s_axp;   /* NULL: no power chip handle (battery stays unknown) */
@@ -201,12 +206,48 @@ static void build(void) {
         r->dot_now = -1;
     }
 
-    box(scr, PAD, ROW_Y0 + 3 * ROW_H - 2, W - 2 * PAD, 1, 0x3a4048);
+    s_rows_sep = box(scr, PAD, ROW_Y0 + 3 * ROW_H - 2, W - 2 * PAD, 1, 0x3a4048);
     s_footer = label(scr, &font_latin1_16, "");
     lv_label_set_long_mode(s_footer, LV_LABEL_LONG_MODE_WRAP);  /* setup: SSID + password may need 2 lines */
     lv_obj_set_width(s_footer, W - 2 * PAD);
     lv_obj_set_style_text_align(s_footer, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_pos(s_footer, PAD, ROW_Y0 + 3 * ROW_H + 4);  /* two setup lines end at 230 */
+
+    s_qr = lv_qrcode_create(scr);   /* dark on white; the quiet zone is inside QR_SIZE */
+    lv_qrcode_set_size(s_qr, QR_SIZE);
+    lv_qrcode_set_quiet_zone(s_qr, true);
+    lv_qrcode_set_dark_color(s_qr, lv_color_hex(0x000000));
+    lv_qrcode_set_light_color(s_qr, lv_color_hex(0xffffff));
+    lv_obj_set_pos(s_qr, PAD, ROW_Y0);
+    lv_obj_set_hidden(s_qr, true);
+    s_qr_text = label(scr, &font_latin1_16, "");
+    lv_label_set_long_mode(s_qr_text, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_width(s_qr_text, W - PAD - QR_TEXT_X);
+    lv_obj_set_pos(s_qr_text, QR_TEXT_X, ROW_Y0);
+    lv_obj_set_hidden(s_qr_text, true);
+}
+
+/* The QR screen replaces the three rows and the footer. The code is re-encoded only when its text
+ * changes (lv_qrcode_update is not free); bsp_display_lock is held. */
+static void paint_qr(const cali_display_view_t *v) {
+    int qr = v->qr[0] != 0;
+    lv_obj_t *rows[] = {s_rows[0].dot, s_rows[0].label, s_rows[0].value, s_rows[1].dot, s_rows[1].label,
+                        s_rows[1].value, s_rows[2].dot, s_rows[2].label, s_rows[2].value, s_rows_sep, s_footer};
+    for (size_t i = 0; i < sizeof rows / sizeof *rows; i++)
+        lv_obj_set_hidden(rows[i], qr);
+    lv_obj_set_hidden(s_qr, !qr);
+    lv_obj_set_hidden(s_qr_text, !qr);
+    if (!qr) return;
+    if (strcmp(s_qr_now, v->qr)) {
+        snprintf(s_qr_now, sizeof s_qr_now, "%s", v->qr);
+        lv_qrcode_update(s_qr, s_qr_now, (uint32_t)strlen(s_qr_now));
+    }
+    char txt[sizeof s_qr_text_now];
+    snprintf(txt, sizeof txt, "%s\n\n%s\n%s", v->qr_title, v->qr_lines[0], v->qr_lines[1]);
+    if (strcmp(s_qr_text_now, txt)) {
+        snprintf(s_qr_text_now, sizeof s_qr_text_now, "%s", txt);
+        lv_label_set_text(s_qr_text, txt);
+    }
 }
 
 int cali_display_ready(void) { return s_ok; }
@@ -516,14 +557,10 @@ void cali_display_tick(uint64_t now_ms) {
     paint_row(&s_rows[0], &v.device);
     paint_row(&s_rows[1], &v.wifi);
     paint_row(&s_rows[2], &v.camper);
-    {   /* Task 4 draws the QR code; until then its title and lines replace the footer text. */
-        char txt[3 * CALI_ROW_TEXT_MAX];
-        if (v.qr[0]) snprintf(txt, sizeof txt, "%s\n%s\n%s", v.qr_title, v.qr_lines[0], v.qr_lines[1]);
-        else snprintf(txt, sizeof txt, "%s", v.footer);
-        if (strcmp(s_footer_now, txt)) {
-            snprintf(s_footer_now, sizeof s_footer_now, "%s", txt);
-            lv_label_set_text(s_footer, txt);
-        }
+    paint_qr(&v);
+    if (!v.qr[0] && strcmp(s_footer_now, v.footer)) {
+        snprintf(s_footer_now, sizeof s_footer_now, "%s", v.footer);
+        lv_label_set_text(s_footer, v.footer);
     }
     bsp_display_unlock();
     cali_display_publish(&v);   /* /api/state device.display */

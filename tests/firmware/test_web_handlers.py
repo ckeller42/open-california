@@ -552,6 +552,12 @@ def test_state_names_the_hotspot_but_never_its_password(web_cli):
     assert st.json()["device"]["wifi"]["ap_ssid"] is None
 
 
+def test_diag_state_never_carries_the_hotspot_password_either(web_cli):
+    (state,), other = script(web_cli, *_HOTSPOT, ("GET", "/api/state?diag=1"), "kv ap_psk")
+    psk = next(x[3:] for x in other if x.startswith("KV "))
+    assert psk != "<missing>" and psk not in state.body.decode()
+
+
 def test_post_wifi_validates_and_stores(web_cli):
     assert post(web_cli, "/api/wifi", '{"ssid":"minsel","psk":"test-psk-1234"}') == (200, {"ok": True})
     assert post(web_cli, "/api/wifi", '{"ssid":"","psk":"test-psk-1234"}') == (
