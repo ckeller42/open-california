@@ -188,6 +188,12 @@ class Rec:
             self.tags.add("night_wait_timeout")
         if wait and why == "USER_OFF":
             self.tags.add("night_user_off")
+        if (
+            wait
+            and why in ("USER_OFF", "DISABLED", "STOPPING")
+            and (out["cmds"] or st2["mode"] == "STOPPING")
+        ):
+            self.tags.add("night_user_off_stops_run")
         if why == "HOLD_AT_MIN_LEVEL":
             hot = inp["ref"]["value"] > inp["target"] + cfg["overheat"]
             self.tags.add("continuous_hold_overheat" if hot else "continuous_hold_min")
@@ -579,6 +585,20 @@ def _night_sessions(rec):
     session(
         rec, "night_user_off", 0,
         [{**auto, **night}, {**night, "request": "OFF"}, {}],
+    )  # fmt: skip
+    session(  # an owner OFF in the wait stops an immediate run (power off) and an unconfirmed Dauerbetrieb
+        rec, "night_user_off_stops_run", 0,
+        [{**auto, **night, "heater": run_h(5)}, {**night, "request": "OFF", "heater": run_h(5)}, {"heater": OFF_H, "dt": 1000}],
+    )  # fmt: skip
+    session(
+        rec, "night_user_off_stops_continuous", 0,
+        [{**auto, **night}, {**night, "heater": cont, "dt": 1000}, {**night, "enabled": False, "heater": cont},
+         {"heater": OFF_H, "dt": 1000}],
+    )  # fmt: skip
+    session(
+        rec, "night_user_off_link_down", 0,
+        [{**auto, **night, "heater": run_h(5)}, {**night, "request": "OFF", "heater": run_h(5), "link_ready": False},
+         {"heater": run_h(5)}, {"heater": OFF_H, "dt": 1000}],
     )  # fmt: skip
     session(
         rec, "night_disabled_in_wait", 0,

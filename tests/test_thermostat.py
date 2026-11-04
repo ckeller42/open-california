@@ -634,19 +634,30 @@ def test_night_wait_ends_quietly():
     assert not st["night"] and st["wait_until_ms"] is None
 
 
-def test_waiting_user_off_sends_nothing():
-    """Owner OFF or the feature disabled while waiting: OFF, no command.
+def test_waiting_user_off_stops_what_runs():
+    """Owner OFF or the feature disabled while waiting stops whatever heater runs: an immediate run with
+    ``power off``, a Dauerbetrieb still in its confirm window with ``permanent off``; an off heater gets
+    no command. With the link down the stop waits in ``STOPPING``.
 
     .. test:: Waiting owner off
        :id: T_THERMO_WAITING_OFF
        :links: R_THERMOSTAT_NIGHT
     """
-    for heater in (OFF_H, RUN):
-        _, st = _night(heater)
-        out, _ = _wait_step(st, 1000, heater, request="OFF")
-        assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "USER_OFF", [])
+    cont = {**CONT, "HeatingLevel": 10}
+    for heater, sent in ((OFF_H, []), (RUN, [("power", "off")]), (cont, [("permanent", "off")])):
+        _, st = _night()
+        _, st = _wait_step(st, 500, heater)
+        assert st["mode"] == "WAITING"
+        out, st2 = _wait_step(st, 1000, heater, request="OFF")
+        assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "USER_OFF", sent)
+        assert (st2["pending"] or {}).get("why") == ("USER_OFF" if sent else None)
         out, _ = _wait_step(st, 1000, heater, enabled=False)
-        assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "DISABLED", [])
+        assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "DISABLED", sent)
+    _, st = _night(RUN)
+    out, st = _wait_step(st, 1000, RUN, request="OFF", link_ready=False)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("STOPPING", "STOPPING", [])
+    out, _ = _wait_step(st, 2000, RUN)
+    assert (out["mode"], out["cmds"]) == ("OFF", [("power", "off")])
     _, st = _night()
     out, _ = _wait_step(st, 1000, {**OFF_H, "ErrorCode": 4})
     assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "LOCKED", [])

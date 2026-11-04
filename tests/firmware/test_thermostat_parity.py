@@ -101,6 +101,7 @@ def test_vectors_cover_the_control_branches():
         "night_confirm_past_wait",
         "night_wait_timeout",
         "night_user_off",
+        "night_user_off_stops_run",
         "night_skips_warm",
         "continuous_hold_min",
         "continuous_hold_overheat",

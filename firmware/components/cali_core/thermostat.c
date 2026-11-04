@@ -372,11 +372,18 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         if (out->n) reason = is_off(p) ? "STOPPING" : "AUTO_ON";
     }
 
-    /* (W) night wait: send nothing; take over Dauerbetrieb once it held night_confirm_ms */
+    /* (W) night wait: send nothing but a stop; take over Dauerbetrieb once it held night_confirm_ms */
     if (st->mode == CALI_THERMO_WAITING) {
         if (in->request == CALI_THERMO_REQ_OFF || !in->enabled) {
-            end(st, out);
-            RET(in->enabled ? "USER_OFF" : "DISABLED");
+            const char *why = in->enabled ? "USER_OFF" : "DISABLED";
+            if (!has_snap) { /* heater unknown: nothing known to stop */
+                end(st, out);
+                RET(why);
+            }
+            st->has_expect = 1; /* stop what runs now: an immediate run or an unconfirmed Dauerbetrieb */
+            st->expect = snap;
+            stop(st, link, now, why, out);
+            RET(st->mode == CALI_THERMO_STOPPING ? "STOPPING" : why);
         }
         if (faulty) {
             end(st, out);

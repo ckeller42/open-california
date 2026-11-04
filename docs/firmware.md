@@ -1273,8 +1273,10 @@ never starts it. The request skips check 7, and the setting is latched for this 
 In mode `WAITING` the satellite sends nothing. Continuous heating that holds for
 `night_confirm_ms` is taken over (`ADOPT_CONTINUOUS`, then mode `AUTO`); a shorter one keeps the
 wait with its remaining time. Without continuous heating, the wait ends after `night_wait_ms` with
-`NIGHT_WAIT_ENDED`. An owner OFF, the feature switched off or a heater fault ends the wait without a
-command. `status.wait_left_s` counts the wait down.
+`NIGHT_WAIT_ENDED`. An owner OFF or the feature switched off stops the heater that runs: an immediate
+run with `power off`, continuous heating still in its confirm window with `permanent off`; an off heater
+gets no command, and with the link down the stop waits in mode `STOPPING`. A heater fault (also
+ErrorCode 1, low battery) ends the wait without a command. `status.wait_left_s` counts the wait down.
 
 While the satellite regulates continuous heating (night or not), it never stops the heater for being
 warm: instead of `OVERHEAT` or `TARGET_EXCEEDED_AT_MIN_LEVEL` it holds `min_level`

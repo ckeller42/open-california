@@ -462,8 +462,12 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        An AUTO request with ``night`` shall skip the ``WARM`` refusal. With the heater off it
        shall send the demand level alone and enter ``WAITING``; with an immediate run it shall
        enter ``WAITING`` without a command; with continuous heating it shall take over at once.
-       In ``WAITING`` it shall send nothing more (a failed pre-set is not retried), end without a
-       command on an owner OFF, the feature disabled or a fault, take over continuous heating
+       In ``WAITING`` it shall send nothing more (a failed pre-set is not retried) except a stop: an
+       owner OFF or the feature disabled shall stop the heater that runs (``power off`` for an
+       immediate run, ``permanent off`` for continuous heating still in its confirm window, nothing
+       for an off or unknown heater; with the link down the stop waits in ``STOPPING``). A fault
+       shall end the wait without a command; ``BATTERY_LOW`` (ErrorCode 1) too, whatever the heater
+       shows. It shall take over continuous heating
        once it held ``night_confirm_ms`` (a shorter one keeps the wait with its remaining time),
        and end with ``NIGHT_WAIT_ENDED`` after ``night_wait_ms`` without continuous heating.
        While it regulates continuous heating (night or not), ``OVERHEAT`` and
@@ -584,11 +588,16 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         if cmds:
             reason = "STOPPING" if p["value"] == "off" else "AUTO_ON"
 
-    # (W) night wait: send nothing; take over Dauerbetrieb once it held night_confirm_ms
+    # (W) night wait: send nothing but a stop; take over Dauerbetrieb once it held night_confirm_ms
     if st["mode"] == "WAITING":
         if inp["request"] == "OFF" or not inp["enabled"]:
-            _end(st)
-            return out("USER_OFF" if inp["enabled"] else "DISABLED")
+            off_why = "USER_OFF" if inp["enabled"] else "DISABLED"
+            if snap is None:  # heater unknown: nothing known to stop
+                _end(st)
+                return out(off_why)
+            st["expect"] = dict(snap)  # stop what runs now: an immediate run or an unconfirmed Dauerbetrieb
+            cmds = _stop(st, link, now, off_why)
+            return out("STOPPING" if st["mode"] == "STOPPING" else off_why)
         if hs in _FAULTS:
             _end(st)
             return out("BATTERY_LOW" if code == 1 else _fault_reason(code))
