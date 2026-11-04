@@ -28,9 +28,11 @@
  *    uplink on FPort 12 shall be ``status(1) | sha256(plaintext)[0..3]``: status 0 ok, 1 bad tag; status 2
  *    (missing fragments) is ``02 | bitmap`` with bit ``i`` set for every received index ``i``; status 3
  *    (``03``) answers a fragment that arrives without a transfer key. ``lora_ttn`` shall be stored only
- *    from a plaintext with a valid tag. The confirmation shall go out at the next send slot ahead of ports
- *    2/3/4 within the airtime budget, and ``lora_tk`` shall be erased after a status-0 confirmation that the
- *    module confirmed with ``+EVT:TX_DONE``. The display shall show the setup QR (the module's DevEUI) until
+ *    from a plaintext with a valid tag that fits ``lora_ttn`` and encodes as the repair QR (else status 1).
+ *    The confirmation shall go out as soon as the 24-h airtime budget has room, ahead of ports 2/3/4; a
+ *    send without ``+EVT:TX_DONE`` is repeated after at least 60 s, at most 5 times, then dropped.
+ *    ``lora_tk`` shall be erased after a status-0 confirmation that the module confirmed with
+ *    ``+EVT:TX_DONE``, and only while it is still the key of that transfer. The display shall show the setup QR (the module's DevEUI) until
  *    ``lora_ttn`` exists, then the repair QR, and none while ``exp_lora`` is off or the module is absent. The setup
  *    keys shall live in NVS: ``lora_dev`` (AppKey 16 B + JoinEUI 8 B), ``lora_tk`` (the transfer key, a new
  *    one at every setup start) and ``lora_ttn`` (the delivered plaintext). The AppKey, the transfer key and

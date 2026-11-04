@@ -423,9 +423,17 @@ int cali_lora_forget(void);
  * @param st The task's status: `present` and `dev_eui` are used.
  * @param exp_on The switch `exp_lora`.
  * @return The text length; 0 when the switch is off, the module is not present, the DevEUI is unknown,
- *         a key is missing, a store read fails or `out` is too small.
+ *         a key is missing, a store read fails or `out` is too small (then `out` is zeroed).
  */
 size_t cali_lora_qr_text(char *out, size_t max, const cali_lora_status_t *st, int exp_on);
+/**
+ * @brief Whether a key-transfer plaintext may be stored as `lora_ttn`: at most CALI_LORA_TTN_MAX bytes and
+ *        encodable as the repair QR (the scratch text is wiped before return).
+ * @param plain The plaintext.
+ * @param len The length of `plain`.
+ * @return 1 when it may be stored, else 0.
+ */
+int cali_lora_ttn_ok(const uint8_t *plain, size_t len);
 
 /**
  * @brief The switch (lazy NVS read).

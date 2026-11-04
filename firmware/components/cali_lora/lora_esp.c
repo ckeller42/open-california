@@ -7,8 +7,8 @@
  * snapshot with the switch on.
  *
  * Class C: a downlink can arrive at any time, so every wait loop hands the module's events to handle_event().
- * An FPort-12 downlink is a key-transfer fragment (R_FW_LORA_SETUP); its confirmation goes out at the next
- * send slot ahead of ports 2/3/4, under the same airtime budget. The display asks for a setup through an
+ * An FPort-12 downlink is a key-transfer fragment (R_FW_LORA_SETUP); its confirmation goes out on the next
+ * pass with room in the airtime budget, ahead of ports 2/3/4. The display asks for a setup through an
  * atomic flag (cali_lora_port_setup_request): only this task touches the UART and opens the setup. */
 #include <ctype.h>
 #include <stdatomic.h>
@@ -40,6 +40,8 @@
 #define NO_KEYS_NOTE "no keys: open the LoRa screen"
 #define JOIN_REQUEST_LEN 23u   /* PHY bytes of a LoRaWAN 1.0.x join request */
 #define SILENT_RETRY_S 600
+#define CONFIRM_RETRY_S 60   /* the wait after a confirmation send without +EVT:TX_DONE */
+#define CONFIRM_TRIES 5      /* sends without +EVT:TX_DONE before a confirmation is dropped */
 #define TASK_STACK 8192   /* PR #492 ran with 6144; the PSA AES-GCM open under send() needs more */
 
 static QueueHandle_t s_snap_q, s_status_q, s_event_q;
@@ -56,6 +58,10 @@ static atomic_int s_setup_req;      /* set by any task, taken by this one */
 static cali_lora_xfer_t s_xfer;     /* the key transfer in progress (ciphertext only) */
 static uint8_t s_confirm[6];        /* the pending FPort-12 confirmation */
 static size_t s_confirm_len;        /* 0 = none pending */
+static uint8_t s_confirm_tk[4];     /* sha256(the transfer key it answers)[0..3]: a status 0 erases only that key */
+static unsigned s_confirm_seq;      /* +1 per queued confirmation: a send sees whether it was replaced */
+static unsigned s_confirm_tries;    /* sends without +EVT:TX_DONE */
+static uint32_t s_confirm_retry_at; /* uptime s of the next attempt */
 
 /* ---- status ---- */
 
@@ -183,6 +189,23 @@ static int unhex8(const char *h, uint8_t *out) {
     return 0;
 }
 
+static void confirm_set(const uint8_t *c, size_t n, const uint8_t *tk_id) {
+    memcpy(s_confirm, c, n);
+    s_confirm_len = n;
+    if (tk_id) memcpy(s_confirm_tk, tk_id, sizeof s_confirm_tk);
+    else memset(s_confirm_tk, 0, sizeof s_confirm_tk);
+    s_confirm_seq++;
+    s_confirm_tries = 0;
+    s_confirm_retry_at = 0;
+}
+
+static void confirm_clear(void) {
+    memset(s_confirm, 0, sizeof s_confirm);
+    memset(s_confirm_tk, 0, sizeof s_confirm_tk);
+    s_confirm_len = 0;
+    s_confirm_seq++;
+}
+
 /* One key-transfer fragment. The transfer key and the plaintext are wiped here; no payload byte is logged. */
 static void xfer_rx(const cali_rak_event_t *e) {
     static uint8_t plain[CALI_LORA_XFER_MAX];   /* static: off the stack under send() */
@@ -193,24 +216,30 @@ static void xfer_rx(const cali_rak_event_t *e) {
         return;
     }
     if (cali_kv_get(CALI_LORA_TK_KEY, tk, &tl) != CALI_KV_OK || tl != sizeof tk) {
+        static const uint8_t no_tk[1] = {3};
         cali_lora_xfer_reset(&s_xfer);
-        s_confirm[0] = 3;   /* no transfer key */
-        s_confirm_len = 1;
+        confirm_set(no_tk, 1, NULL);
         cali_log("lora: transfer fragment without a transfer key: status 3");
         memset(tk, 0, sizeof tk);
         return;
     }
+    uint8_t tk_id[4];
+    cali_lora_sha256_4(tk, sizeof tk, tk_id);
     int r = cali_lora_xfer_rx(&s_xfer, e->payload, e->payload_len, tk, eui, cali_lora_aead_open_psa, plain,
                               &plain_len, confirm, &confirm_len);
     memset(tk, 0, sizeof tk);
+    if (r == 1 && confirm[0] == 0 && !cali_lora_ttn_ok(plain, plain_len)) {
+        confirm[0] = 1;   /* authentic but not a plaintext the repair QR can show: store nothing */
+        confirm_len = 1;
+        cali_log("lora: transfer: plaintext not usable");
+    }
     if (r == 1 && confirm[0] == 0 && cali_kv_set(CALI_LORA_TTN_KEY, plain, plain_len) != 0) {
         cali_log("lora: transfer: storing the TTN keys failed");
         r = 0;   /* no confirmation: the app sends again */
     }
     memset(plain, 0, sizeof plain);
     if (r == 1 || r == 2) {
-        memcpy(s_confirm, confirm, confirm_len);
-        s_confirm_len = confirm_len;
+        confirm_set(confirm, confirm_len, tk_id);
         cali_log("lora: transfer: confirmation status %u queued", (unsigned)confirm[0]);
     } else if (r < 0) {
         cali_log("lora: transfer fragment rejected (%u bytes)", e->payload_len);
@@ -324,6 +353,7 @@ static bool setup_open(void) {
     memset(before, 0, sizeof before);
     memset(after, 0, sizeof after);
     cali_lora_xfer_reset(&s_xfer);   /* fragments sealed with the old transfer key are useless */
+    confirm_clear();                 /* and an old confirmation must never erase the new key */
     return changed;
 }
 
@@ -408,20 +438,47 @@ static int send(uint8_t port, const uint8_t *buf, size_t len) {
     return o.confirmed ? 2 : status == CALI_RAK_OK;
 }
 
-/* The pending key-transfer confirmation, ahead of ports 2/3/4 and under the same budget. It stays pending
- * until a send is confirmed by +EVT:TX_DONE; after a confirmed status 0 the transfer key is erased. */
-static void send_confirm(uint32_t now) {
-    uint8_t c[6];
-    size_t n = s_confirm_len;
-    if (!n || cali_lora_uplink_room_ms(&s_bud, now) < cali_lora_airtime_ms((unsigned)n + CALI_LORA_OVERHEAD, (unsigned)s_st.sf))
-        return;
-    memcpy(c, s_confirm, n);
-    if (send(CALI_LORA_XFER_PORT, c, n) != 2) return;
-    if (s_confirm_len == n && memcmp(c, s_confirm, n) == 0) s_confirm_len = 0;   /* not replaced meanwhile */
-    if (c[0] == 0) {
-        if (cali_kv_erase(CALI_LORA_TK_KEY) != 0) cali_log("lora: transfer: erasing the transfer key failed");
+/* Erase lora_tk only when it is still the key the confirmed transfer used (a long press may have made a new one). */
+static void erase_tk_if(const uint8_t *tk_id) {
+    uint8_t tk[16], id[4];
+    size_t tl = sizeof tk;
+    if (cali_kv_get(CALI_LORA_TK_KEY, tk, &tl) == CALI_KV_OK && tl == sizeof tk) {
+        cali_lora_sha256_4(tk, sizeof tk, id);
+        if (memcmp(id, tk_id, sizeof id) != 0) cali_log("lora: transfer done: a newer transfer key is kept");
+        else if (cali_kv_erase(CALI_LORA_TK_KEY) != 0) cali_log("lora: transfer: erasing the transfer key failed");
         else cali_log("lora: transfer done: transfer key erased");
     }
+    memset(tk, 0, sizeof tk);
+    memset(id, 0, sizeof id);
+}
+
+/* The pending key-transfer confirmation: on every pass while the 24-h airtime budget has room, ahead of
+ * ports 2/3/4. A send without +EVT:TX_DONE waits CONFIRM_RETRY_S; after CONFIRM_TRIES of them the
+ * confirmation is dropped and the transfer key kept (the app sends again). After a confirmed status 0
+ * the transfer key it answers is erased. */
+static void send_confirm(uint32_t now) {
+    uint8_t c[6], tk_id[4];
+    size_t n = s_confirm_len;
+    unsigned seq = s_confirm_seq;
+    if (!n || now < s_confirm_retry_at ||
+        cali_lora_uplink_room_ms(&s_bud, now) < cali_lora_airtime_ms((unsigned)n + CALI_LORA_OVERHEAD, (unsigned)s_st.sf))
+        return;
+    memcpy(c, s_confirm, n);
+    memcpy(tk_id, s_confirm_tk, sizeof tk_id);
+    int r = send(CALI_LORA_XFER_PORT, c, n);
+    if (seq == s_confirm_seq) {   /* not replaced by a fragment during the send */
+        if (r == 2) {
+            confirm_clear();
+            if (c[0] == 0) erase_tk_if(tk_id);
+        } else if (++s_confirm_tries >= CONFIRM_TRIES) {
+            cali_log("lora: transfer: confirmation status %u dropped after %u sends without TX_DONE", (unsigned)c[0],
+                     s_confirm_tries);
+            confirm_clear();
+        } else {
+            s_confirm_retry_at = (uint32_t)(cali_uptime_ms() / 1000) + CONFIRM_RETRY_S;
+        }
+    }
+    memset(tk_id, 0, sizeof tk_id);
 }
 
 static void lora_task(void *arg) {
@@ -434,7 +491,10 @@ static void lora_task(void *arg) {
     cali_lora_tracker_init(&s_trk);
     for (;;) {
         (void)xQueueReceive(s_snap_q, &s_snap, pdMS_TO_TICKS(1000));   /* the newest snapshot, or the last one */
-        if (!s_snap.enabled) continue;   /* off: no pin is touched, nothing is sent */
+        if (!s_snap.enabled) {   /* off: no pin is touched, nothing is sent */
+            atomic_store(&s_setup_req, 0);   /* a request made while off never rotates the key later */
+            continue;
+        }
         if (!ready || s_silent >= CALI_LORA_SILENT_MAX) {
             /* first use, or a module that stopped answering: a timed-out AT+SEND still counts as charged,
              * so without this a hung module would look joined and keep using up the budget */
@@ -470,9 +530,10 @@ static void lora_task(void *arg) {
             continue;
         }
         uint32_t now = (uint32_t)(cali_uptime_ms() / 1000);
+        send_confirm(now);
+        now = (uint32_t)(cali_uptime_ms() / 1000);
         if (now >= next_energy) {
             uint8_t buf[222];
-            send_confirm(now);
             size_t n = cali_lora_pack_energy(buf, &s_snap);
             if (send(CALI_LORA_PORT_ENERGY, buf, n) == 2) s_st.uplinks[0]++;
             /* then the changed functions; consumed only after a confirmed send */

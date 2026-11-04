@@ -6,7 +6,8 @@
  * Budget:    up <t_s> <ms> <confirmed> | used <t> | conf <t> | room <t> | dl <t> | interval <t> <sf> <len> <share> | backoff <n>
  * Status:    stjson <module> <joined> <unanswered> <sf> <last_s> <air> <charged> <unconf> <dl> <now_s>
  * Setup:     stsetup <setup> <ttn> <eui> | setupopen | setupstate | forget | kvset <key> <hex> | kv <key>
- *            qr <exp_on> <present> <eui|-> (prints "QR <text>" or "QR -")
+ *            qr <exp_on> <present> <eui|-> [max] (prints "QR <text>", "QR -" when none and the buffer is
+ *            zeroed, "QR dirty" when none and bytes stay) | ttnok <hex>
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
  * Driven by tests/firmware/test_lora.py. Fakes: session frames, sensors, counters, clock, NVS, log. */
 #include <math.h>
@@ -120,7 +121,7 @@ int main(void) {
     static cali_lora_budget_t bud;
     uint32_t picked = 0;
     while (fgets(line, sizeof line, stdin)) {
-        char cmd[16], a[600], b[64];
+        char cmd[16], a[800], b[64];
         unsigned u1, u2, u3, u4;
         unsigned long long ull;
         line[strcspn(line, "\r\n")] = 0;
@@ -224,7 +225,7 @@ int main(void) {
             printf("%s ", b);
             if (i < 0) puts("-");
             else hex(s_kv[i].val, s_kv[i].len);
-        } else if (!strcmp(cmd, "kvset") && sscanf(rest, "%63s %599s", b, a) == 2) {
+        } else if (!strcmp(cmd, "kvset") && sscanf(rest, "%63s %799s", b, a) == 2) {
             uint8_t v[CALI_LORA_TTN_MAX];
             cali_kv_set(b, v, unhex(a, v, sizeof v));
         } else if (!strcmp(cmd, "kvcorrupt")) {
@@ -242,7 +243,19 @@ int main(void) {
             cali_lora_status_t st = {.present = (int)u2};
             snprintf(st.dev_eui, sizeof st.dev_eui, "%.16s", strcmp(b, "-") ? b : "");
             char q[400];
-            printf("QR %s\n", cali_lora_qr_text(q, sizeof q, &st, (int)u1) ? q : "-");
+            unsigned max = sizeof q;
+            if (sscanf(rest, "%*u %*u %*s %u", &max) != 1 || max > sizeof q) max = sizeof q;
+            memset(q, 'X', sizeof q);
+            if (cali_lora_qr_text(q, max, &st, (int)u1)) {
+                printf("QR %s\n", q);
+            } else {
+                size_t i = 0;
+                while (i < max && !q[i]) i++;
+                puts(i == max ? "QR -" : "QR dirty");
+            }
+        } else if (!strcmp(cmd, "ttnok") && sscanf(rest, "%799s", a) == 1) {
+            uint8_t v[CALI_LORA_TTN_MAX + 8];
+            printf("%d\n", cali_lora_ttn_ok(v, unhex(a, v, sizeof v)));
         } else if (!strcmp(cmd, "tick") && sscanf(rest, "%llu", &ull) == 1) {
             cali_lora_tick(ull);
         }

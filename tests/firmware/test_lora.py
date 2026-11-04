@@ -528,3 +528,31 @@ def test_qr_source_by_state(cli):
     )
     want = f"OCR1*EU1.CLOUD.THETHINGS.NETWORK*MY-VAN-APP*VAN-000001*{key(3)}*{key(7)}"
     assert out[1:] == [f"QR {want}", "QR -", "QR -"]
+
+
+def test_qr_text_too_small_leaves_no_key_bytes(cli):
+    """A buffer too small for the QR text comes back zeroed, never with part of a key in it.
+
+    .. test:: lora QR text: a too-small buffer is zeroed
+       :id: T_FW_LORA_QR_WIPE
+       :links: R_FW_LORA_SETUP
+    """
+    eui = "70B3D57ED0000001"
+    out = run(
+        cli, "setupopen", f"qr 1 1 {eui} 40", f"kvset lora_ttn {plaintext().hex()}", f"qr 1 1 {eui} 100"
+    )
+    assert out[1:] == ["QR -", "QR -"]
+
+
+def test_ttn_plaintext_checked_before_storing(cli):
+    """Only a plaintext the repair QR can show, and that fits lora_ttn, is stored.
+
+    .. test:: lora key transfer: the plaintext must fit lora_ttn and encode as the repair QR
+       :id: T_FW_LORA_TTN_OK
+       :links: R_FW_LORA_SETUP
+    """
+    good = plaintext()
+    bad = [plaintext(ver=2), good + b"\x00", plaintext(app="a*b"), good[:20]]
+    big = plaintext(cluster="a" * 64, app="b" * 36, dev="c" * 36) + bytes(80)
+    out = run(cli, f"ttnok {good.hex()}", *(f"ttnok {b.hex()}" for b in bad), f"ttnok {big.hex()}")
+    assert out == ["1", "0", "0", "0", "0", "0"]

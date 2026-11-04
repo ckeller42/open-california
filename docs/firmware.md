@@ -1824,10 +1824,12 @@ within seconds; a downlink that switches camping mode on (and with it the router
 - **Key transfer:** the phone sends the TTN keys (cluster, application and device IDs, a read key and a
   command key) back on FPort 12, encrypted with the transfer key and cut into fragments of at most
   51 bytes. The satellite puts the fragments together, decrypts them and stores the keys only when the
-  tag is valid. It answers on FPort 12 at its next send slot, ahead of the other ports and within the
-  airtime budget: status 0 (stored), 1 (bad tag), 2 (fragments missing, with a bitmap of the received
-  ones) or 3 (no transfer key). After the module confirms a status-0 answer with `+EVT:TX_DONE`, the
-  satellite erases the transfer key. Every fragment counts as one of the day's downlinks. From then on
+  tag is valid and the keys can be shown as the repair QR. It answers on FPort 12 as soon as the daily
+  airtime budget has room, ahead of the other ports: status 0 (stored), 1 (bad tag or unusable keys),
+  2 (fragments missing, with a bitmap of the received ones) or 3 (no transfer key). When the module does
+  not confirm the answer with `+EVT:TX_DONE`, the satellite sends it again after at least a minute, and
+  gives up after five tries; the app then sends the keys again. After the module confirms a status-0
+  answer, the satellite erases the transfer key, unless a new setup has made a new one in the meantime. Every fragment counts as one of the day's downlinks. From then on
   the LoRa screen shows the repair QR (the TTN keys) instead of the setup QR. No key and no fragment
   byte goes into a log line.
 - **Uplinks:** port 2 (50 B: the raw energy and water frames, the first Victron charger, the battery
