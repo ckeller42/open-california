@@ -340,7 +340,7 @@ is awake".
 ## Network: WiFi setup and the web UI
 
 The firmware joins a WiFi network and serves on port 80, in every WiFi mode, the calictl web UI (over
-the setup hotspot it opens on its WiFi-setup screen), a JSON state API, `POST /api/command` (station
+the setup hotspot it opens on its setup wizard), a JSON state API, `POST /api/command` (station
 mode only) and a minimal WiFi recovery page (`/device`). The host tier (`cali-host --http`) and the
 device run the same C code. Owner-facing steps:
 [How to put the ESP32 satellite on your WiFi](howto-esp-wifi-setup.md).
@@ -363,11 +363,34 @@ only through the `cali_net_t` socket/WiFi table in `include/cali_net.h`):
 Platforms: `components/platform/host/net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi,
 `cali_net_host.h`) and `components/platform/esp/net_esp.c` (esp_wifi + esp_netif + lwIP sockets +
 the `espressif/mdns` component, pinned `==1.13.1`). The constants are generated into
-`csrc/net_consts.h` from `tools/wifi_consts.py` (`R_NET_CONSTS_SINGLE_SOURCE`): setup SSID
-`calictl-esp-setup`, passphrase `calictl-setup`, address `192.168.4.1`, hostname `calictl-esp`
+`csrc/net_consts.h` from `tools/wifi_consts.py` (`R_NET_CONSTS_SINGLE_SOURCE`): setup SSID prefix
+`calictl-esp-` (plus the last four hex digits of the MAC; the passphrase is random per board, see
+[The setup hotspot's identity and the display QR codes](#the-setup-hotspots-identity-and-the-display-qr-codes)), address `192.168.4.1`, hostname `calictl-esp`
 (DHCP + mDNS `calictl-esp.local`, `_http._tcp` on port 80), `NET_AP_CLOSE_MS` 30000,
 `NET_RETRY_MIN_MS` 1000 -> `NET_RETRY_MAX_MS` 60000, `NET_SETUP_AFTER_MS` 300000, page poll
 `NET_PAGE_POLL_MS` 2000, `NET_JSON_MAX` 8192, SSID 1–32 bytes, PSK 8–63 bytes.
+
+### The setup hotspot's identity and the display QR codes
+
+`ap_identity.c` (`cali_ap_identity()`) gives the hotspot its WPA2 identity. The SSID is
+`calictl-esp-XXXX`: `NET_AP_SSID_PREFIX` plus the upper-case hex of MAC bytes 4 and 5. The password
+is 14 characters `xxxx-xxxx-xxxx` from the alphabet `23456789abcdefghijkmnpqrstuvwxyz`, drawn
+from `cali_random()` on the first call and stored in NVS key `ap_psk`. It stays across OTA and
+changes only after an NVS erase (a value that is missing or malformed is replaced). It reaches the
+radio and the display, and no log, no `/api/state`, no repo file.
+
+The status display draws a QR code while there is something to scan (`display_model.c`):
+
+- **Setup mode** — a WiFi QR code `WIFI:T:WPA;S:<ssid>;P:<psk>;;`, the SSID beside it, the password on a
+  full-width line under it. This shows again whenever the satellite falls back to its hotspot.
+- **Station mode with a setup pending** — a second QR code with `http://<ip>/#setup`, the title
+  *Join `<ssid>`, then scan*, the address and `http://calictl-esp.local`.
+
+A first-time setup is *pending* when `POST /api/wifi` saved the credentials while the satellite was in
+setup mode: NVS key `setup_qr` is set and `/api/state` reports `device.setup.pending`. `POST /api/setup`
+with `{"done":true}` erases the key (the wizard sends it when you go Home, or open *Satellite settings*
+from the checklist). A WiFi change in station mode never sets it, and a satellite without the key
+never shows the wizard or the second code. `/api/state` `device.wifi.ap_ssid` names the hotspot while it runs.
 
 ### The WiFi state machine
 
@@ -424,7 +447,7 @@ Not drawn: `CREDS_FORGET` (console `wifi forget`, `DELETE /api/wifi`) goes from 
   `off` otherwise (`UNPROVISIONED` = WiFi off, and a setup-flow or replacement join in progress).
 
 Console lines (`LOG wifi: …`, exact texts from `cali_wifi_run.h`/`console.c`): `setup hotspot up
-(calictl-esp-setup)`, `setup hotspot closed`, `joining <ssid>`, `online <a.b.c.d>`, `lost`,
+(calictl-esp-XXXX)`, `setup hotspot closed`, `joining <ssid>`, `online <a.b.c.d>`, `lost`,
 `failed <not_found|auth|other>`, `credentials cleared`, `credential erase failed`, `credentials
 replaced, reconnecting`, `replacement failed, back to <ssid>`, `storing the restored credentials
 failed`, `setup hotspot failed to start`, `captive DNS unavailable`; from `wifi set`
@@ -492,7 +515,7 @@ replies for a client that sends `Accept-Encoding: gzip` (`Vary: Accept-Encoding`
 
 | Method + path | Answer |
 |---|---|
-| `GET /`, `GET /app` | 200 `text/html; charset=utf-8` in **every** WiFi mode — the calictl web UI bundle, `app_bundle_gen.h`'s `WEB_APP_HTML_GZ` with `Content-Encoding: gzip` and `Cache-Control: no-cache` (see [the satellite UI](#the-satellite-ui-r_fw_shared_ui)). In setup/off mode the app opens on its **WiFi setup** screen by itself (the captive portal lands here). `/app` is the same (the manifest's `start_url`). Every static answer here and below carries a strong `ETag` (see *HTTP caching* above). |
+| `GET /`, `GET /app` | 200 `text/html; charset=utf-8` in **every** WiFi mode — the calictl web UI bundle, `app_bundle_gen.h`'s `WEB_APP_HTML_GZ` with `Content-Encoding: gzip` and `Cache-Control: no-cache` (see [the satellite UI](#the-satellite-ui-r_fw_shared_ui)). In setup/off mode, and while a first-time setup is pending, the app opens on its **setup wizard** (`#setup/<step>`) by itself (the captive portal lands here). `/app` is the same (the manifest's `start_url`). Every static answer here and below carries a strong `ETag` (see *HTTP caching* above). |
 | `GET /device` | 200 `text/html` in every mode, `Cache-Control: no-cache` — the **WiFi recovery page**: a way back onto WiFi if the UI fails. Plain HTML with a few lines of inline JS, EN + DE inline (by `navigator.language`), no external file, ~6 KB (`NET_HTTP_BODY_MAX` 8192 is its budget, flash only, `tests/test_web_strings.py`): the WiFi mode/network (`GET /api/wifi`), a join form (the scanned networks + "Other network…" with a name field, password with *Show password*, `POST /api/wifi`), the result with the `http://calictl-esp.local/` link, and *Open the camper UI* (`/`). `strings_gen.h`'s `WEB_INDEX_HTML`, generated from `firmware/web/index.html` by `tools/gen_c_dict.py`. One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
 | `GET /manifest.webmanifest`, `/sw.js`, `/apple-touch-icon.png`, `/icon-192.png`, `/maskable-icon-192.png`, `/favicon.ico`, `/favicon-32x32.png`, `/favicon-16x16.png` | 200 in **every** WiFi mode, the manifest `Cache-Control: no-cache`, the icons `max-age=86400` (never `immutable`: their URLs never change), each with an `ETag` — the home-screen files the UI bundle links (`application/manifest+json`, `image/png`, `image/x-icon`): `firmware/web/pwa_assets_gen.h`, generated by `tools/gen_c_dict.py` (`pwa_assets`) from the same `calictl/webui/` files buspi serves. The icons are byte-for-byte; the manifest is derived — only the icons served here (no 512 px, flash) and `start_url` `/app`, the UI in every mode. About 70 KB of flash, outside the bundle's `WEB_APP_GZ_MAX`. Plus `/sw.js` (`text/javascript`, `no-cache`), the offline shell's service worker, registered only on HTTPS (`R_UI_PWA_OFFLINE`). |
 | `GET /api/pairing` | 200 calictl's `pairing_snapshot()`: `{"state","attempts","error","address","radio_busy":false}` — the console `STATE` members (one emitter, `cali_snapshot_pairing`); `address` = the bonded identity while bonded, or idle/error with a stored bond. |
@@ -546,9 +569,9 @@ camper unit is paired yet* banner's *Pair…*, Device status → *Pair…*, or t
 `/api/pairing` answers in calictl's contract, so `calictl/webui/app.js` runs it unchanged. The
 endpoint is a thin mapping onto the runner the console drives — `start` = `pair`, `passkey` =
 `passkey N`, `reset` = `forget`, plus `cancel` — so the console and the page can never disagree
-(both read one emitter). It works over the **setup hotspot** too: there the UI opens on WiFi setup,
-which shows the unpaired banner's *Pair…* (or the wizard) right there, read-only (controls stay
-station-only). Only the device-specific hints differ from buspi's: no Pi scanner, daemon or
+(both read one emitter). It works over the **setup hotspot** too: the wizard's pairing step runs in
+station mode, and the *WiFi setup* screen (`#wifisetup`) shows the unpaired banner's *Pair…* (or the
+wizard) there, read-only (controls stay station-only). Only the device-specific hints differ from buspi's: no Pi scanner, daemon or
 `CALICTL_ADDR` advice; instead *until the satellite connects*, *stop a Raspberry Pi with calictl
 near the van*, *Saved on the satellite — survives a restart*. `radio_busy` is always `false` (no
 co-resident scanner). When a flow ends without a new bond — cancelled, failed (`error`) or reset —
@@ -650,9 +673,10 @@ angeben* (`WAKEUP_UNKNOWN`, which calictl answers too).
 **Screens.** Device and WiFi details are the calictl UI's ⋮ menu "Device status"; its Satellite
 card's *Satellite settings ›* opens the **Satellite settings** screen (satellite only,
 `#satsettings`): WiFi (current network, *Change network…*), Camper unit, Restore camping, Screen,
-Firmware update, Advanced (Send usage data, Sensors). Over the setup hotspot the app
-lands on the **WiFi setup** screen (`#wifisetup`: the join form, the pairing entry, the hotspot
-explained once); once the satellite runs in station mode it shows Home, unless the join was made
+Firmware update, Advanced (Send usage data, Sensors). Over the setup hotspot, and in station mode while `device.setup.pending` is true, the app
+lands on the **setup wizard** (`#setup/<step>`: welcome, wifi, pair, victron, sensors, home, done; over the
+hotspot only welcome and wifi exist, WiFi cannot be skipped). The **WiFi setup** screen (`#wifisetup`: the join form,
+the pairing entry, the hotspot explained once) stays reachable; once the satellite runs in station mode it shows Home, unless the join was made
 there (it keeps the result and the `http://calictl-esp.local` link). Every screen is in the URL hash
 (`#devicestatus`, `#satsettings`, `#wifisetup`, `#<function>`), so a reload stays on it; `#pair`
 opens the wizard. The `/device` recovery page (Endpoints, above) is the fallback if
@@ -1869,7 +1893,7 @@ can be checked on the CoreS3 only. They are the expected behaviours; none of the
 1. **BLE + WiFi coexistence.** The S3 shares one 2.4 GHz radio (IDF's default software coex).
    With the setup hotspot up and a phone attached, the BLE link must hold, the `1003` heartbeat keep
    its period and `SNAP`s keep their cadence; the same while the station scans and joins.
-2. **Captive portal per OS.** Join `calictl-esp-setup` from iOS, macOS, Android and Windows: the
+2. **Captive portal per OS.** Join `calictl-esp-XXXX` (scan the display's QR code, or type its password) from iOS, macOS, Android and Windows: the
    sign-in sheet should open the page by itself (DNS answers everything with `192.168.4.1`, probe
    paths get a 302). Record per OS whether it pops, and that `http://192.168.4.1` always works.
 3. **mDNS.** `http://calictl-esp.local` from iOS, macOS and Android (Android's `.local` support

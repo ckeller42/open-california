@@ -5,7 +5,7 @@
  * A setup hotspot has no real internet behind it, so its DNS lies on purpose: every A-record query
  * gets answered with the hotspot's own address, so any host a client tries to resolve (including
  * the fixed probe host an OS uses right after joining a network to decide whether it is behind a
- * captive portal) lands on the web UI, on its WiFi-setup screen, instead of failing to resolve.
+ * captive portal) lands on the web UI, on its setup wizard, instead of failing to resolve.
  * Driven from the same tick as `cali_http_poll()`: each cali_captive_dns_poll() call drains the
  * datagrams already waiting on the UDP socket and never blocks.
  *

@@ -34,7 +34,7 @@
  *    firmware reports ``device.control.writes`` (station mode), posting calictl's ``/api/command``
  *    body (with the page's clock ``local_now`` on every wake-up edit), except the pop-top roof, which
  *    stays greyed with the firmware's own refusal text ("Only via buspi or the app"); without the
- *    flag every control is greyed; over the setup hotspot the UI opens on its WiFi-setup screen. A
+ *    flag every control is greyed; over the setup hotspot the UI opens on its setup wizard. A
  *    minimal WiFi recovery page stays at ``GET /device``.
  *    Every static page and asset carries a strong ``ETag`` derived from its exact bytes, and a
  *    matching ``If-None-Match`` is answered ``304 Not Modified`` without a body; the pages and the
@@ -102,8 +102,8 @@
  *
  * - `GET /`, `/app`: 200 `text/html`, `Content-Encoding: gzip`, `Cache-Control: no-cache`, in every
  *   mode. The calictl web UI (app_bundle_gen.h's WEB_APP_HTML_GZ, from tools/gen_c_dict.py), which
- *   interprets `/api/state` in the browser (calictl/webui/semantics.js). In setup or off mode it
- *   opens on its WiFi-setup screen (the captive portal lands here).
+ *   interprets `/api/state` in the browser (calictl/webui/semantics.js). In setup or off mode (and while a first-time
+ *   setup is pending) it opens on its setup wizard (the captive portal lands here).
  * - `GET /device`: 200 `text/html`, the WiFi recovery page (firmware/web/index_gen.html, rendered
  *   from index.html by tools/gen_c_dict.py; strings_gen.h's WEB_INDEX_HTML byte array), in every
  *   mode. A way back onto WiFi if the UI fails.

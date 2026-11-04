@@ -1559,7 +1559,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     (void)ctx;
     if (strcmp(req->path, "/api/command") == 0) return api_command(req, resp);
     if (strcmp(req->path, "/api/log") == 0) return api_log(req, resp);
-    /* the calictl web UI (R_FW_SHARED_UI) in every mode: over the setup hotspot it opens on WiFi setup
+    /* the calictl web UI (R_FW_SHARED_UI) in every mode: over the setup hotspot it opens on the setup wizard
      * by itself; /app = the same (the manifest's start_url, old links) */
     if (get && (strcmp(req->path, "/") == 0 || strcmp(req->path, "/app") == 0)) {
         cali_ble_exp_activity(cali_uptime_ms());   /* a viewer opens the page: reconnect now (R_FW_BLE_IDLE) */
@@ -1659,7 +1659,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (wifi_mode() == CALI_WIFI_MODE_SETUP) {
         /* captive portal: an OS probe gets the absolute setup address (its Host is some probe domain),
-         * so the OS's captive sheet opens the UI (WiFi setup); anything else goes home */
+         * so the OS's captive sheet opens the UI (the setup wizard); anything else goes home */
         resp->status = 302;
         resp->location = cali_captive_is_probe(req->path) ? PROBE_TARGET : "/";
         return 1;

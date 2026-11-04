@@ -1432,13 +1432,14 @@ tested on the scripted transport and the host tier (`T_FW_VARIANT_GATE`). See {d
 state machine (`wifi_sm.c`, a C twin of `tools/wifi_sm_ref.py`) and the runner
 (`wifi_run.c`) are platform-free C.
 
-* **Hotspot.** WPA2 `calictl-esp-setup` (passphrase `calictl-setup`), address
+* **Hotspot.** WPA2 `calictl-esp-XXXX` (the last four hex digits of the MAC) with a random
+  14-character passphrase kept in NVS and shown only on the display as a WiFi QR code, address
   `192.168.4.1`. The captive DNS answers every A query with that address. The HTTP server
   answers the OS captive-portal probe paths (`/generate_204`, `/hotspot-detect.html`,
   `/connecttest.txt` and the other known ones) with `302` to `http://192.168.4.1/`, and any
   other path in setup mode with `302` to `/`. A phone that joins is led to the web UI.
 * **Page.** `GET /` serves the calictl web UI in every mode; in setup mode it opens on its
-  WiFi-setup screen (`#wifisetup`). It reads `GET /api/wifi` (mode, why the last join failed,
+  setup wizard (`#setup/<step>`). It reads `GET /api/wifi` (mode, why the last join failed,
   the last scan's networks) when the form opens, again a moment later for the fresh scan, and
   every 2 s while it watches a join. `GET /device` is a minimal recovery page with the same join
   form, the fallback if the UI fails. A scan is deferred while a BLE pairing flow is active (`R_FW_WIFI_BLE_COEX`) and starts on the
@@ -1448,8 +1449,9 @@ state machine (`wifi_sm.c`, a C twin of `tools/wifi_sm_ref.py`) and the runner
   store (`wifi_ssid`, `wifi_psk`) and the runner joins as a station (CONNECTING). The
   hotspot moves to the network's channel, so the phone may drop off for a moment.
 * **Joined.** The station gets an address: ONLINE, mDNS announces `calictl-esp.local`
-  (`_http._tcp`, port 80), the next `/api/wifi` read reports station mode (WiFi setup shows
-  *Connected as …* with the `calictl-esp.local` link), and the hotspot closes 30 s later so the
+  (`_http._tcp`, port 80), the next `/api/wifi` read reports station mode (the wizard shows
+  *Connected as …*), the display shows a second QR code with `http://<ip>/#setup` while the setup
+  is pending (`POST /api/setup` ends it), and the hotspot closes 30 s later so the
   phone can read the answer first. From now on `/api/state` reports `device.control.writes` true ({need}`S_SEQ_ESP_COMMAND`).
 * **Failed.** Credentials typed in *this* setup flow are cleared and the state returns to
   SETUP_AP with the hotspot still up. `last_error` is `auth`, `not_found` or `other` and
@@ -1471,11 +1473,11 @@ sequenceDiagram
     participant E as Satellite (hotspot, DNS, HTTP, wifi runner)
     participant R as Home router
     Note over E: boot with no saved credentials, state SETUP_AP
-    E-->>P: hotspot calictl-esp-setup (WPA2), DNS answers every name with 192.168.4.1
+    E-->>P: hotspot calictl-esp-XXXX (WPA2, password on the display), DNS answers every name with 192.168.4.1
     P->>E: join the hotspot
     P->>E: OS probe GET /generate_204 (or hotspot-detect.html and the others)
     E-->>P: 302 to http://192.168.4.1/ so the sign-in page opens
-    P->>E: GET / (the web UI, it opens on WiFi setup)
+    P->>E: GET / (the web UI, it opens on the setup wizard)
     loop when the form opens, and every 2 s while a join is watched
         P->>E: GET /api/wifi
         E-->>P: mode, last_error, scan list (a scan waits while a BLE pairing flow is active)
