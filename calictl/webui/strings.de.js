@@ -866,8 +866,18 @@ window.STRINGS_DE = {
   "on backup": "auf Reserve",
   "degraded": "eingeschränkt",
   "stopping": "stoppt",
-  "Start the fuel-burning auxiliary air heater (AUTO)? It is not live-verified. Continue?":
-    "Kraftstoffbetriebene Luftstandheizung starten (AUTO)? Nicht live-verifiziert. Fortfahren?",
+  "waiting": "wartet",
+  "Night": "Nacht",
+  "Night · level {n} · no end": "Nacht · Stufe {n} · kein Ende",
+  "Night · no end": "Nacht · kein Ende",
+  "ends {t}": "endet {t}",
+  "Open camping mode ›": "Campingmodus öffnen ›",
+  "Start the air heater with the thermostat? It holds {target} °C (thermometer “{alias}”) for at most {min} min, then it stops.":
+    "Die Luftstandheizung mit dem Thermostat starten? Es hält {target} °C (Thermometer „{alias}“) höchstens {min} min lang und stoppt dann.",
+  "Heat for the night? 1. Tap OK. 2. Switch on “Dauerbetrieb” on the panel in the van and confirm its question with “Yes”. The thermostat then takes over and holds {target} °C (thermometer “{alias}”) until you switch it off.":
+    "Für die Nacht heizen? 1. Tippen Sie auf „OK“. 2. Schalten Sie am Bedienteil im Fahrzeug „Dauerbetrieb“ ein und bestätigen Sie dort die Frage mit „Ja“. Das Thermostat übernimmt dann und hält {target} °C (Thermometer „{alias}“), bis Sie es ausschalten.",
+  "Switch on “Dauerbetrieb” on the panel now and confirm with “Yes”. Waiting {m}:{ss} min.":
+    "Jetzt am Bedienteil „Dauerbetrieb“ einschalten und mit „Ja“ bestätigen. Wartet noch {m}:{ss} min.",
   "The thermostat was changed elsewhere — reloaded, please try again":
     "Das Thermostat wurde anderswo geändert — neu geladen, bitte noch einmal versuchen",
   "Couldn't change the thermostat": "Thermostat konnte nicht geändert werden",
@@ -880,6 +890,8 @@ window.STRINGS_DE = {
   "Choose a thermometer first": "Zuerst ein Thermometer wählen",
   "Heater state not known yet — try again in a moment": "Heizungszustand noch nicht bekannt — gleich noch einmal versuchen",
   "Already warm enough — heater not started": "Schon warm genug — Heizung nicht gestartet",
+  "Waiting for continuous heating": "Wartet auf den Dauerbetrieb",
+  "Continuous heating not switched on — AUTO off": "Dauerbetrieb nicht eingeschaltet — AUTO aus",
   "Heater started": "Heizung gestartet",
   "Taking over the running heater": "Übernimmt die laufende Heizung",
   "Taking over continuous heating": "Übernimmt den Dauerbetrieb",

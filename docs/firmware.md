@@ -1177,12 +1177,11 @@ any of them and never cuts the heater's power. It starts the burner only on the 
 ### Disabled by default
 
 The thermostat ships **disabled**. The switch is the kv key `th_on` (missing = off). While it is
-off, every AUTO request is refused with `AUTO_REFUSED_DISABLED` (while a stop caused by switching it off still runs, the answer is `STOPPING`), nothing is sent, and the card
-shows *Thermostat disabled* with no AUTO switch. The switch changes only through the API, with an
-explicit confirmation:
+off, every AUTO request is refused with `AUTO_REFUSED_DISABLED` (while a stop caused by switching it off still runs, the answer is `STOPPING`) and nothing is sent. The switch changes only with an
+explicit confirmation. The card's confirmation window, asked at every AUTO start, sends both in one body:
 
 ```text
-POST /api/thermostat {"enabled": true, "confirm": true}
+POST /api/thermostat {"enabled": true, "mode": "AUTO", "confirm": true}
 ```
 
 Switching it off while AUTO runs is a safety stop with the cause `DISABLED`: the heater is stopped
@@ -1193,12 +1192,23 @@ normally, and an AUTO request is ignored with `STOPPING` until that stop is done
 The card sits on the Air heater screen of the satellite's web UI. It shows only while at least one
 configured Govee thermometer exists ([External sensors](#external-sensors-r_fw_sensors)), which needs
 the sensor track switch (*Sensors* in Satellite settings, [Sensor switch](#sensor-switch-r_fw_experimental))
-on, and not on a display-only satellite. It holds the {term}`AUTO (thermostat)` switch with its state (*level 4 • running*, *on backup*, *degraded*,
-*stopping*, *off*; *on backup* shows in mode `AUTO` while the backup is the active thermometer, *degraded* in mode `DEGRADED`), the {term}`reference thermometer` reading, the target with
-minus and plus buttons (0.5 °C steps, 5 to 30 °C), the run time (10 to 120 min in steps of 10,
+on, and not on a display-only satellite. It holds the {term}`AUTO (thermostat)` switch with its state (*level 4 · ends 23:40*, *Night · level 4 · no end*,
+*level 4 · running*, *on backup*, *degraded*, *waiting*, *stopping*, *off*; *on backup* shows in mode `AUTO` while the backup is the active thermometer, *degraded* in mode `DEGRADED`), the {term}`reference thermometer` reading, the target with
+minus and plus buttons (0.5 °C steps, 5 to 30 °C), the run time (10 to 120 min in steps of 10, or *Night*,
 shown only while the heater is off) and the last reason (`status.reason`) in plain words, in English and German.
-Starting AUTO asks for a confirmation: it starts the fuel-burning heater. Switching AUTO off sends
-`{"mode":"OFF"}` without `rev`, so a change made elsewhere never blocks the stop.
+The end time of a timed run is the unit's remaining run time (1702 `RunningTimeinAction`) added to the
+page clock. A run that ends by itself (`RUN_ENDED`, `CONTINUOUS_ENDED`, `NIGHT_WAIT_ENDED`) and the
+owner's own `USER_OFF` show no reason: the card simply shows AUTO off.
+
+The AUTO switch is always on the card. A tap with AUTO off opens a confirmation window every time:
+by day it names the target, the thermometer and the run time; with *Night* it names the step at the
+panel (switch on {term}`Dauerbetrieb` and answer its question with *Ja*). While `status.blocked` is set
+and AUTO is off, the switch is dimmed and a hint under it names the reason: *Camping mode is off* with a
+link to the camping mode screen (the card never switches camping mode on), *Choose a thermometer first*
+that opens the thermometer sheet, *Stop the timer first*, or the plain text for `IGNITION`, `FAULT` and
+`NOT_INSTALLED`. In mode `WAITING` the card shows the panel step and the time left of the night wait
+(`wait_left_s`). Switching AUTO off sends `{"mode":"OFF"}` without `rev` and without a confirmation, so a
+change made elsewhere never blocks the stop.
 
 A tap on *Thermometer* opens the thermometer sheet with three groups of radio buttons, each showing
 alias, temperature and age of the reading (a stale reading is marked and cannot be picked):

@@ -499,6 +499,9 @@ def thermostat_fixture(**over):
         "active": None,
         "outside_active": False,
         "end": "none",
+        "blocked": None,
+        "wait_left_s": None,
+        "night": False,
     }
     status.update(over.pop("status", {}))
     body = {
@@ -510,6 +513,7 @@ def thermostat_fixture(**over):
         "backup": None,
         "out": None,
         "outside_on": False,
+        "night": False,
         "cfg": {},
         "status": status,
     }
@@ -743,11 +747,12 @@ class EspStub:
             err, self.thermostat_error = self.thermostat_error, None
             return err
         th = self.fixtures[self.mode]["/api/thermostat"]
-        for k in ("target", "runtime_min", "ref", "backup", "out", "outside_on", "mode"):
+        for k in ("target", "runtime_min", "ref", "backup", "out", "outside_on", "mode", "night"):
             if k in body:
                 th[k] = body[k]
-        if "mode" in body:
-            th["status"]["mode"] = body["mode"]
+        for k in ("mode", "enabled"):
+            if k in body:
+                th["status"][k] = body[k]
         th["rev"] += 1
         return 200, th
 
