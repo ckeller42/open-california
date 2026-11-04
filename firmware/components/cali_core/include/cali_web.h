@@ -364,6 +364,10 @@ extern "C" {
 #define CALI_UX_ON_KEY "ux_on"
 /** Cap on the POST /api/ux body (calictl web.UX_MAX_BODY). */
 #define CALI_UX_BODY_MAX 2048
+/** NVS key (namespace cali): 1 byte = a first-time setup began on the hotspot and is not done. Set only by
+ * POST /api/wifi while the unit is in setup mode; erased by POST /api/setup {"done":true}. Absent = not
+ * pending (a field unit that was set up before never sees the wizard). */
+#define CALI_SETUP_QR_KEY "setup_qr"
 /** NVS key (namespace cali): the experimental sensor track, 1 byte, absent = off (R_FW_EXPERIMENTAL). */
 #define CALI_EXP_SENSORS_KEY "exp_sensors"
 

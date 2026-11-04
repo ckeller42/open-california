@@ -23,6 +23,7 @@ DEVICE_KEYS = frozenset(
         "pairing",
         "link",
         "wifi",
+        "setup",
         "control",
         "uptime_ms",
         "fw",
@@ -78,5 +79,6 @@ PAIRING_KEYS = frozenset({"state", "address"})  # /api/state device.pairing
 PAIRING_API_KEYS = frozenset({"state", "attempts", "error", "address", "radio_busy"})
 LINK_KEYS = frozenset({"up", "ready", "rest", "redial", "rest_next_s", "last_snap_age_ms"})
 WIFI_KEYS = frozenset({"mode", "ssid", "ip", "rssi"})  # /api/state device.wifi
+STATE_WIFI_KEYS = WIFI_KEYS | {"ap_ssid"}  # device.wifi also names the setup hotspot
 WIFI_GET_KEYS = WIFI_KEYS | {"last_error", "reverted", "scan"}  # GET /api/wifi
 AP_KEYS = frozenset({"ssid", "rssi", "secure"})  # one GET /api/wifi scan entry

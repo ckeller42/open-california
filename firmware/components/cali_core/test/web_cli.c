@@ -272,6 +272,17 @@ int cali_kv_get(const char *key, void *buf, size_t *len) {
     }
     return CALI_KV_MISSING;
 }
+int cali_kv_erase(const char *key) {
+    for (size_t i = 0; i < KV_N; i++)
+        if (s_kv[i].used && strcmp(s_kv[i].key, key) == 0) s_kv[i].used = 0;
+    return 0;
+}
+int cali_mac(uint8_t mac[6]) {   /* the host fake MAC 02:00:00:00:C0:FE */
+    static const uint8_t M[6] = {0x02, 0, 0, 0, 0xC0, 0xFE};
+    memcpy(mac, M, 6);
+    return 0;
+}
+void cali_random(void *buf, size_t len) { memset(buf, 7, len); }   /* a fixed byte: the hotspot password is 14 of one letter */
 uint64_t cali_uptime_ms(void) { return s_now; }
 static int64_t s_epoch_ms;   /* "ntp": the SNTP wall clock (fixed) */
 static int64_t fake_epoch(void) { return s_epoch_ms; }

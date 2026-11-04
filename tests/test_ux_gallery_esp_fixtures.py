@@ -38,6 +38,7 @@ from tests.firmware.api_shape import (
     SENSORS_KEYS,
     STATE_DIAG_KEYS,
     STATE_KEYS,
+    STATE_WIFI_KEYS,
     TIME_DIAG_KEYS,
     TIME_KEYS,
     WIFI_GET_KEYS,
@@ -72,7 +73,9 @@ def test_state_fixture_shape(fixtures, mode):
         and set(d["display"]) == DISPLAY_KEYS | DISPLAY_DIAG_KEYS
     )
     assert set(d["control"]) == CONTROL_KEYS and d["control"]["writes"] is (mode != "setup")
-    assert set(d["wifi"]) == WIFI_KEYS and d["wifi"]["mode"] == ("station" if mode == "satellite" else mode)
+    assert set(d["wifi"]) == STATE_WIFI_KEYS and d["wifi"]["mode"] == (
+        "station" if mode == "satellite" else mode
+    )
     assert d["uptime_ms"] == state["t"]
     pairing = fixtures[mode]["/api/pairing"]  # GET /api/pairing: calictl's snapshot, as web.c
     assert set(pairing) == PAIRING_API_KEYS and pairing["radio_busy"] is False
@@ -94,7 +97,9 @@ def test_sensors_fixture_shape(fixtures):
 def test_wifi_fixture_shape(fixtures, mode):
     w = fixtures[mode]["/api/wifi"]
     assert set(w) == WIFI_GET_KEYS
-    assert {k: w[k] for k in WIFI_KEYS} == fixtures[mode]["/api/state"]["device"]["wifi"]
+    assert {k: w[k] for k in WIFI_KEYS} == {
+        k: fixtures[mode]["/api/state"]["device"]["wifi"][k] for k in WIFI_KEYS
+    }
     for ap in w["scan"]:
         assert set(ap) == AP_KEYS
 

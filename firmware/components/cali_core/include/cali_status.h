@@ -37,6 +37,8 @@ typedef struct {
     char ssid[NET_SSID_MAX + 1]; /**< Joined or configured SSID; "" = none. */
     uint32_t ip;                 /**< IPv4 address in host order; 0 = none. */
     int rssi;                    /**< Signal strength in dBm; 0 = none. */
+    char ap_ssid[NET_SSID_MAX + 1]; /**< The setup hotspot's SSID while it runs (CALI_WIFI_MODE_SETUP); "" = not running. Never its password. */
+    uint8_t setup_pending;       /**< 1 = a first-time setup began on the hotspot and is not done (kv CALI_SETUP_QR_KEY). */
     char last_fail[12];          /**< Last WiFi failure: "", "not_found", "auth" or "other". */
     uint64_t uptime_ms;          /**< Uptime in ms (the now_ms given to cali_status_get). */
     const char *fw;              /**< cali_fw_version(). */

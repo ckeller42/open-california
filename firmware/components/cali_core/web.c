@@ -283,6 +283,14 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_json_key(&j, "wifi");
     cali_json_obj_begin(&j);
     wifi_members(&j, &st);
+    cali_json_key(&j, "ap_ssid");   /* the setup hotspot's name while it runs; never its password */
+    if (st.ap_ssid[0]) cali_json_str(&j, st.ap_ssid); else cali_json_null(&j);
+    cali_json_obj_end(&j);
+
+    cali_json_key(&j, "setup");   /* a first-time setup begun on the hotspot and not done (CALI_SETUP_QR_KEY) */
+    cali_json_obj_begin(&j);
+    cali_json_key(&j, "pending");
+    cali_json_bool(&j, st.setup_pending);
     cali_json_obj_end(&j);
 
     cali_json_key(&j, "control");   /* POST /api/command is accepted: station mode only (ruling B) */
@@ -483,6 +491,7 @@ static int parse_creds(const char *body, size_t body_len, char *ssid, size_t *ss
 }
 
 static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    int from_hotspot = wifi_mode() == CALI_WIFI_MODE_SETUP;
     static char ssid[NET_SSID_MAX + 1], psk[NET_PSK_MAX + 1];
     size_t ssid_len = 0, psk_len = 0;
     if (parse_creds(req->body, req->body_len, ssid, &ssid_len, psk, &psk_len) != 0) {
@@ -496,6 +505,10 @@ static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
         cali_log("http: storing wifi credentials failed");
         SET_CONST(resp, 500, ERR_STORE);
     } else {
+        if (from_hotspot) {   /* the wizard follows only a setup begun on the hotspot (a failed mark is not fatal) */
+            uint8_t one = 1;
+            if (cali_kv_set(CALI_SETUP_QR_KEY, &one, 1) != 0) cali_log("http: marking setup pending failed");
+        }
         cali_wifi_run_set_creds(ssid, psk);
         SET_CONST(resp, 200, OK_BODY);
     }
@@ -1439,6 +1452,19 @@ static void api_ux_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
+/* ---- POST /api/setup {"done":true}: ends the first-time setup, in any WiFi mode ---- */
+static const char *const K_DONE[] = {"done"};
+static void api_setup_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    int done = 0;
+    if (parse_body(req->body, req->body_len, K_DONE, 1, bool_field, &done) != 1 || !done) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if (cali_kv_erase(CALI_SETUP_QR_KEY) != 0) {
+        SET_CONST(resp, 500, ERR_STORE);
+    } else {
+        SET_CONST(resp, 200, OK_BODY);
+    }
+}
+
 /* ---- POST /api/experimental {"sensors":<bool>}: the Satellite settings sensor-track switch, station only ---- */
 static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp) {
     int on;
@@ -1610,6 +1636,11 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/state") == 0) {
         if (get) api_state(req, resp);
+        else SET_CONST(resp, 405, ERR_METHOD);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/setup") == 0) {
+        if (strcmp(req->method, "POST") == 0) api_setup_post(req, resp);
         else SET_CONST(resp, 405, ERR_METHOD);
         return 1;
     }
