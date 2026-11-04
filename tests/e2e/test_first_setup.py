@@ -8,7 +8,7 @@ import re
 
 import pytest
 
-from tests.e2e.test_satsettings import LOCALES, PHONE, _open, _posts, tr
+from tests.e2e.test_satsettings import LOCALES, PHONE, _device_status, _open, _posts, tr
 
 sync_api = pytest.importorskip("playwright.sync_api")
 expect = sync_api.expect
@@ -215,3 +215,61 @@ def test_leaving_after_wifi_counts_as_done(station_pending):
                 break
             pg.wait_for_timeout(100)
     assert _posts(station_pending, "/api/setup") == [{"done": True}]
+
+
+def _bond(stub):
+    """The unit accepts the code (as the firmware's runner would report it)."""
+    fx = stub.fixtures["station"]
+    fx["/api/pairing"].update(state="bonded", address="C0:FF:EE:CA:11:F0")
+    fx["/api/state"]["device"]["pairing"] = {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"}
+
+
+def test_a_detour_to_device_status_does_not_end_the_setup(station_pending):
+    """Only Home ends the wizard: ⋮ → Device status and back returns to the step, nothing posted."""
+    with _page(station_pending, "/#setup/victron", "en-US") as pg:
+        _device_status(pg)
+        pg.go_back()
+        expect(pg).to_have_url(re.compile(r"#setup/victron$"))
+        expect(pg.get_by_role("button", name="Yes", exact=True)).to_be_visible()
+        pg.wait_for_timeout(500)
+    assert _posts(station_pending, "/api/setup") == []
+
+
+def test_the_pair_step_follows_the_flow_after_a_detour(station_pending):
+    with _page(station_pending, "/#setup/pair", "en-US") as pg:
+        pg.get_by_role("button", name="Pair now", exact=True).click()
+        expect(pg.locator("#pairing-passkey")).to_be_visible()
+        _device_status(pg)
+        pg.go_back()
+        _bond(station_pending)  # the code typed on another device / the unit's own answer
+        expect(pg.locator("#pairing-card")).to_contain_text("✓ Paired")
+
+
+def test_a_reload_in_the_code_window_polls_the_flow_again(station_pending):
+    with _page(station_pending, "/#setup/pair", "en-US") as pg:
+        pg.get_by_role("button", name="Pair now", exact=True).click()
+        expect(pg.locator("#pairing-passkey")).to_be_visible()
+        pg.reload()
+        expect(pg.locator("#pairing-passkey")).to_be_visible()
+        _bond(station_pending)
+        expect(pg.locator("#pairing-card")).to_contain_text("✓ Paired")
+    assert _posts(station_pending, "/api/setup") == []
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_the_countdown_ends_in_a_retry_hint(station_pending, locale, lang):
+    with _page(station_pending, "/#setup/pair", locale) as pg:
+        pg.clock.install()
+        pg.get_by_role("button", name=tr("Pair now", lang), exact=True).click()
+        expect(pg.locator("#setup-count")).to_contain_text(re.compile(tr("{n} s left", lang, n=r"\d+")))
+        pg.clock.run_for(31000)
+        expect(pg.locator("#setup-count")).to_have_text(
+            tr("The code may have expired — press Pair now again.", lang)
+        )
+
+
+def test_the_home_step_saves_the_apps_start_url(station_pending):
+    """iPhone "Add to Home Screen" saves the page's URL: the manifest's start URL, not #setup/home."""
+    with _page(station_pending, "/#setup/home", "en-US", allow=NO_MDNS) as pg:
+        expect(pg.locator("#setup-home")).to_be_visible()
+        assert pg.evaluate("location.pathname + location.hash") == "/app"

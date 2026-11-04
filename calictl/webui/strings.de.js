@@ -917,6 +917,7 @@ window.STRINGS_DE = {
   "Join {ssid} with this phone, then scan the new QR code on the satellite's display — or open:": "Verbinde dieses Handy mit {ssid}, dann scanne den neuen QR-Code auf dem Display des Satelliten — oder öffne:",
   "Close the California app. On the camper unit open Einstellungen → Bluetooth → Gerät verbinden, then press Pair now.": "Schließe die California-App. Öffne an der Camper-Einheit Einstellungen → Bluetooth → Gerät verbinden und tippe dann auf Jetzt koppeln.",
   "{n} s left": "noch {n} s",
+  "The code may have expired — press Pair now again.": "Der Code ist vielleicht abgelaufen — tippe noch einmal auf Jetzt koppeln.",
   "Do you have Victron devices (battery monitor, solar charger)?": "Hast du Victron-Geräte (Batteriewächter, Solarladeregler)?",
   "In VictronConnect: open the device → ⋮ → Product info → Instant readout details → Show — copy the encryption key.": "In VictronConnect: Öffne das Gerät → ⋮ → Product info → Instant readout details → Show und kopiere den Verschlüsselungsschlüssel.",
   "Search for sensors": "Nach Sensoren suchen",

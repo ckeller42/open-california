@@ -269,7 +269,13 @@ def test_api_state_matches_snap_after_pairing(host_fw, hci_unit, tmp_path):
     assert body["fn"] == latest["fn"] == snap["fn"]
     assert body["device"]["pairing"] == {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"}
     assert body["device"]["link"]["up"] is True
-    assert body["device"]["wifi"] == {"mode": "setup", "ssid": None, "ip": None, "rssi": None}
+    assert body["device"]["wifi"] == {
+        "mode": "setup",
+        "ssid": None,
+        "ip": None,
+        "rssi": None,
+        "ap_ssid": "calictl-esp-C0FE",  # the per-unit hotspot name while it runs (never its password)
+    }
 
 
 def test_wifi_loss_keeps_ble_link(host_fw, hci_unit, tmp_path):

@@ -1531,7 +1531,8 @@ function goto(v, step) {
 /** Render screen `v`, scroll to `y` (null: stay) and move the focus to its heading.
  * @param {string} v @param {number|null} y */
 function show(v, y) {
-  if (view === "setup" && v !== "setup") setupLeft();
+  // only Home ends the wizard (‹, "Open the app"); a detour (Device status, Help) comes back to it
+  if (view === "setup" && v === "home") setupLeft();
   view = v;
   if (v === "satdiag") refreshState(false);   // its values come only with ?diag=1: fetch them at once
   ux({ type: "view", screen: uxId(v) });
@@ -2423,7 +2424,7 @@ const SETUP_STEPS = ["welcome", "wifi", "pair", "victron", "sensors", "home", "d
 let setupAt = "welcome";   // the wizard's step (in the URL: #setup/<step>)
 let setupPairSkipped = false;
 let setupDonePosted = false;
-const PAIR_CODE_S = 30;   // the unit shows a passcode for about 30 s
+const PAIR_CODE_S = 30;   // an estimate: the unit shows a passcode for about 30 s (no start time in /api/pairing)
 /** @type {number|null} when this page first saw the passcode step */
 let pairCodeSince = null;
 /** @type {ReturnType<typeof setInterval>|null} */
@@ -2454,7 +2455,8 @@ async function setupFinish() {
   try { setupDonePosted = !!(await satFetch("/api/setup", { done: true })).body.ok; } catch (e) { /* not done */ }
   return setupDonePosted;
 }
-/** Leaving the wizard: done (after WiFi), and its pairing card does not follow onto Home. */
+/** Leaving the wizard for Home (or the checklist's Satellite settings ›): done (after WiFi, which the
+ * server cannot undo), and its pairing card does not follow onto Home. */
 function setupLeft() {
   setupFinish();
   pairingOpen = false; pairingLoading = false; stopPairingPoll();
@@ -2520,6 +2522,8 @@ function buildSetup() {
       p("", "setup-paired"), setupBtns(setupNext("Next", "victron", "primary", "setup-pair-next"),
         setupSkip("victron", () => { setupPairSkipped = true; }, "setup-pair-skip")));
     if (setupTimer === null) setupTimer = setInterval(setupTick, 1000);
+    // back from a detour or a reload in the code window: the card follows the flow again
+    if (PAIRING && !PAIRING_TERMINAL_STATES.has(PAIRING.state)) startPairingPoll();
   } else if (step === "victron") {
     const yes = satBtn(T("Yes"), "primary"), no = setupNext("No", "sensors");
     const ask = setupBtns(yes, no);
@@ -2545,6 +2549,8 @@ function buildSetup() {
       android || !ios ? p(T("Tap ⋮, then Add to Home screen.")) : null,
       ip ? h("p", null, T("Address") + ": ", satLink("http://" + ip + "/")) : null,
       h("p", { id: "setup-mdns", "aria-live": "polite" })), setupBtns(setupNext("Next", "done", "primary")));
+    // "Add to Home Screen" saves this URL: the app's start URL (the manifest's), not #setup/home
+    try { history.replaceState(history.state, "", "/app"); } catch (e) { /* no history API */ }
     setupProbe();
   } else {
     const done = satBtn(T("Done"), "primary", "setup-done");
@@ -2609,8 +2615,9 @@ function setupTick() {
   const code = !!PAIRING && PAIRING.state === "waiting_passkey";
   if (!code) pairCodeSince = null;
   else if (pairCodeSince === null) pairCodeSince = Date.now();
-  sq("setup-count").textContent = pairCodeSince === null ? ""
-    : tf("{n} s left", { n: Math.max(0, PAIR_CODE_S - Math.floor((Date.now() - pairCodeSince) / 1000)) });
+  const left = pairCodeSince === null ? null : PAIR_CODE_S - Math.floor((Date.now() - pairCodeSince) / 1000);
+  sq("setup-count").textContent = left === null ? "" : left > 0 ? tf("{n} s left", { n: left })
+    : T("The code may have expired — press Pair now again.");
 }
 
 /** Does `<hostname>.local` resolve from this phone? Yes: move there (a home-screen link that survives
@@ -2637,7 +2644,7 @@ async function setupCheck() {
   /** @param {string} label @param {string|null} ok the done text; null: not set up */
   const row = (label, ok) => {
     const r = sumRow(T(label), ok || T("not set up"));
-    if (!ok) { const b = satBtn(T("Satellite settings ›")); b.onclick = () => goto("satsettings"); r.append(b); }
+    if (!ok) { const b = satBtn(T("Satellite settings ›")); b.onclick = () => { setupLeft(); goto("satsettings"); }; r.append(b); }
     return r;
   };
   sq("setup-check").replaceChildren(row("WiFi", w && w.ssid ? w.ssid + " ✓" : null),
