@@ -150,3 +150,26 @@ def test_stub_diag_split_is_the_firmwares():
         ("device", "ble"): BLE_DIAG_KEYS,
         ("device", "display"): DISPLAY_DIAG_KEYS,
     }
+
+
+def test_espstub_first_setup_flips_to_station_pending_and_done_clears_it():
+    import json
+    import urllib.request
+
+    from tools import ux_gallery
+
+    def post(stub, path, body):
+        r = urllib.request.Request(
+            stub.base + path, json.dumps(body).encode(), {"Content-Type": "application/json"}
+        )
+        return json.load(urllib.request.urlopen(r))
+
+    def pending(stub):
+        return json.load(urllib.request.urlopen(stub.base + "/api/state"))["device"]["setup"]["pending"]
+
+    with ux_gallery.EspStub("setup") as s:
+        s.joins = True
+        assert pending(s) is False
+        post(s, "/api/wifi", {"ssid": "van", "psk": "secret123"})
+        assert s.mode == "station" and pending(s) is True
+        assert post(s, "/api/setup", {"done": True}) == {"ok": True} and pending(s) is False

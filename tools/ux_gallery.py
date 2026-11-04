@@ -538,7 +538,7 @@ class EspStub:
         a firmware without the endpoint). ``POST /api/sensors`` applies the firmware's add/remove/rename
     rules (``_sensors``; bodies in ``sensor_posts``), a removed sensor is seen again on the next
     ``GET /api/sensors``. ``POST /api/wifi`` appends the body to ``wifi_posts`` and answers
-    ``{"ok": true}`` (a ``setup`` stub then turns ``station`` with ``device.setup.pending``;
+    ``{"ok": true}`` (with ``joins = True`` a ``setup`` stub then turns ``station`` with ``device.setup.pending``;
     ``POST /api/setup {"done": true}`` clears it); a POST to a settings endpoint (``_SETTINGS``: auto camper, usage data,
     experimental, display, OTA, BLE) is recorded in ``posts`` as ``(path, body)``, applied to the fixture's
     ``device`` and answered ``{"ok": true}`` (``post_reply[path] = (status, body)`` answers that
@@ -569,6 +569,7 @@ class EspStub:
         self.thermostat_posts = []  # POST /api/thermostat bodies, in order
         self.thermostat_error = None  # (status, body) answered to the next POST /api/thermostat instead
         self.wifi_posts = []  # POST /api/wifi bodies, in order
+        self.joins = False  # True: a POST /api/wifi in "setup" joins (turns "station", setup pending)
         self.down = False  # True: every request gets no answer (the connection just closes)
         self.posts = []  # (path, body) of every POST to a _SETTINGS endpoint, in order
         self.post_reply = {}  # path -> (status, body) instead of applying the POST and {"ok": true}
@@ -610,7 +611,9 @@ class EspStub:
                     return  # no answer: the server closes the connection
                 if path == "/api/wifi":
                     stub.wifi_posts.append(body)
-                    if stub.mode == "setup":  # saved from the hotspot: joins, and the setup is pending
+                    if (
+                        stub.mode == "setup" and stub.joins
+                    ):  # saved from the hotspot: joins, and the setup is pending
                         stub.mode = "station"
                         stub.fixtures["station"]["/api/state"]["device"]["setup"] = {"pending": True}
                     self._json(200, {"ok": True})
