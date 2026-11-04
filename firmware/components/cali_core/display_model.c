@@ -91,7 +91,7 @@ static void wifi_row(cali_row_t *r, const cali_status_t *s, int lang) {
     }
     if (s->wifi_mode == CALI_WIFI_MODE_SETUP) {
         char ssid[NET_SSID_MAX + 1], psk[NET_PSK_MAX + 1];
-        if (cali_ap_identity(ssid, psk) != 0) ssid[0] = 0;
+        if (cali_ap_identity(ssid, psk) < 0) ssid[0] = 0;
         row(r, CALI_DOT_AMBER, label, K_SETUP, lang, ssid, NET_AP_ADDR);
         return;
     }
@@ -295,7 +295,7 @@ void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_
     out->footer_setup = s->wifi_mode == CALI_WIFI_MODE_SETUP;
     if (out->footer_setup) {
         char tmp[2 * CALI_ROW_TEXT_MAX], ssid[NET_SSID_MAX + 1], psk[NET_PSK_MAX + 1];
-        if (cali_ap_identity(ssid, psk) != 0) ssid[0] = psk[0] = 0;
+        if (cali_ap_identity(ssid, psk) < 0) ssid[0] = psk[0] = 0;
         snprintf(tmp, sizeof tmp, tx(K_FOOTER_SETUP, lang), ssid, psk);
         cali_display_fit_text(out->footer, tmp);
     } else {

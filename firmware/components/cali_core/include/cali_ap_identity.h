@@ -25,12 +25,21 @@ extern "C" {
 /** Length of the hotspot password, including its two dashes. */
 #define CALI_AP_PSK_LEN 14
 
+/** Return code of cali_ap_identity(): the password is stored (it survives a reboot). */
+#define CALI_AP_STORED 0
+/** Return code of cali_ap_identity(): the password is valid and in use, but the KV store refused it,
+ * so the next boot makes a new one. The hotspot still works; only its password is not lasting. */
+#define CALI_AP_UNSTORED 1
+
 /**
  * @brief Give the hotspot's name and password; make and store the password on the first call.
+ *
+ * The first successful call keeps the result in RAM; every later call returns that copy and does not
+ * touch the KV store.
  * @param ssid Receives ``calictl-esp-XXXX``.
  * @param psk Receives the 14-character password.
- * @return 0 ok; -1 when the MAC is unreadable or the new password cannot be stored (the outputs are
- *         then not valid).
+ * @return CALI_AP_STORED (0); CALI_AP_UNSTORED (1), the outputs are valid; -1 when the MAC is
+ *         unreadable (the outputs are then not valid).
  */
 int cali_ap_identity(char ssid[NET_SSID_MAX + 1], char psk[NET_PSK_MAX + 1]);
 
@@ -38,7 +47,7 @@ int cali_ap_identity(char ssid[NET_SSID_MAX + 1], char psk[NET_PSK_MAX + 1]);
  * @brief The text of the QR code that joins the hotspot: ``WIFI:T:WPA;S:<ssid>;P:<psk>;;``.
  * @param out Receives the text, NUL-terminated.
  * @param cap Size of @p out in bytes.
- * @return The text length; -1 when the identity is unavailable or the text does not fit.
+ * @return The text length (also for CALI_AP_UNSTORED); -1 when the identity is unavailable or the text does not fit.
  */
 int cali_ap_wifi_qr(char *out, size_t cap);
 

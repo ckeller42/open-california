@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
         else if (strcmp(cmd, "ap_start") == 0) {
             char id_ssid[NET_SSID_MAX + 1], id_psk[NET_PSK_MAX + 1];
             if (n >= 3) rc = net->ap_start(a, psk);
-            else rc = cali_ap_identity(id_ssid, id_psk) != 0 ? -1 : net->ap_start(id_ssid, id_psk);
+            else rc = cali_ap_identity(id_ssid, id_psk) < 0 ? -1 : net->ap_start(id_ssid, id_psk);
         }
         else if (strcmp(cmd, "ap_stop") == 0) rc = net->ap_stop();
         else if (strcmp(cmd, "poll") == 0) {

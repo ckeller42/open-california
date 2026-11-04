@@ -53,11 +53,16 @@ def cli(tmp_path_factory):
     return out
 
 
-def run(cli, kv_dir, env=None):
+def run_all(cli, kv_dir, *args, env=None):
+    """One process; one dict per printed line (``again`` prints a second line)."""
     e = {k: v for k, v in os.environ.items() if k != "CALI_HOST_MAC"}
     e.update(env or {})
-    r = subprocess.run([str(cli), str(kv_dir)], capture_output=True, text=True, env=e, check=True)
-    return dict(f.split("=", 1) for f in r.stdout.split())
+    r = subprocess.run([str(cli), str(kv_dir), *args], capture_output=True, text=True, env=e, check=True)
+    return [dict(f.split("=", 1) for f in line.split()) for line in r.stdout.splitlines()]
+
+
+def run(cli, kv_dir, env=None):
+    return run_all(cli, kv_dir, env=env)[0]
 
 
 def write_kv(kv_dir, key, value):
@@ -102,3 +107,24 @@ def test_a_valid_stored_password_is_kept(cli, tmp_path):
 def test_wifi_qr_text(cli, tmp_path):
     r = run(cli, tmp_path, env={"CALI_HOST_MAC": "020000001A2B"})
     assert r["qr"] == "WIFI:T:WPA;S:calictl-esp-1A2B;P:%s;;" % r["psk"]
+
+
+def test_a_later_call_comes_from_ram_not_the_store(cli, tmp_path):
+    """The store loses the password between two calls (a failed NVS read looks the same): the second
+    answer is still the first, and the store is not rewritten with a new one."""
+    first, second = run_all(cli, tmp_path, "again")
+    assert first["psk"] == second["psk"] and PSK.match(first["psk"])
+    assert not (tmp_path / "ap_psk.kv").exists()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores a read-only directory")
+def test_a_store_that_refuses_the_write_still_gives_a_working_password(cli, tmp_path):
+    """The host can only fail a write by a read-only store directory: rc 1 = valid, not kept."""
+    tmp_path.chmod(0o500)
+    try:
+        r = run(cli, tmp_path)
+    finally:
+        tmp_path.chmod(0o700)
+    assert r["rc"] == "1" and PSK.match(r["psk"])
+    assert r["qr"] == "WIFI:T:WPA;S:calictl-esp-C0FE;P:%s;;" % r["psk"]
+    assert run(cli, tmp_path)["rc"] == "0"  # a writable store keeps the next one

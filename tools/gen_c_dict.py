@@ -113,7 +113,6 @@ _JS_TABLES = (
 
 # The tools/wifi_consts.py names the web UI's satellite screens use (app.js), emitted into SEM_TABLES_OUT.
 _JS_NET = (
-    "NET_AP_ADDR",
     "NET_HOSTNAME",
     "NET_PAGE_POLL_MS",
     "NET_CONNECT_TIMEOUT_MS",

@@ -12,7 +12,7 @@ rule).
    :status: implemented
    :tags: esp32, wifi, protocol
 
-   The ESP32 firmware's AP SSID/PSK, hostname, address, timeouts and buffer-size limits for its
+   The ESP32 firmware's AP SSID prefix, hostname, address, timeouts and buffer-size limits for its
    WiFi setup portal shall live in exactly one place, ``tools.wifi_consts.CONSTS``, and reach the
    C firmware only through the generated, freshness-checked ``csrc/net_consts.h``
    (``tools.gen_c_dict.generate_net``) — never hand-typed a second time in C or in the Python

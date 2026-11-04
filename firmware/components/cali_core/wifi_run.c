@@ -115,7 +115,9 @@ static void run_action(const cali_wifi_action_t *a) {
          * that failed is retried by the next AP_START. */
         if (!W.ap_running) {
             char psk[NET_PSK_MAX + 1];   /* never logged; wiped after the call */
-            if (cali_ap_identity(W.ap_ssid, psk) != 0) cali_log("wifi: setup hotspot identity unavailable");
+            int idrc = cali_ap_identity(W.ap_ssid, psk);
+            if (idrc == CALI_AP_UNSTORED) cali_log("wifi: setup hotspot password not stored");
+            if (idrc < 0) cali_log("wifi: setup hotspot identity unavailable");
             else if (W.net->ap_start(W.ap_ssid, psk) != 0) cali_log("wifi: setup hotspot failed to start");
             else W.ap_running = 1;
             memset(psk, 0, sizeof psk);

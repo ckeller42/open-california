@@ -489,15 +489,16 @@ static void console_init(void) {
  * console runs on (the page's pairing address). */
 static void wifi_init(const cali_transport_t *t) {
     char ap_ssid[NET_SSID_MAX + 1], ap_psk[NET_PSK_MAX + 1];
-    int have_id = cali_ap_identity(ap_ssid, ap_psk) == 0;   /* the setup hotspot's own name + password */
+    int id_rc = cali_ap_identity(ap_ssid, ap_psk);   /* the setup hotspot's own name + password */
     esp_err_t e = esp_netif_init();
     if (e == ESP_OK) {
         e = esp_event_loop_create_default();   /* NimBLE does not create it; tolerate one anyway */
         if (e == ESP_ERR_INVALID_STATE) e = ESP_OK;
     }
     if (e != ESP_OK) cali_log("net: esp_netif/event loop: %s", esp_err_to_name(e));
-    if (!have_id) cali_log("wifi: setup hotspot identity unavailable");
-    if (e != ESP_OK || !have_id || cali_net_esp_init(ap_ssid, ap_psk) != 0) {
+    if (id_rc == CALI_AP_UNSTORED) cali_log("wifi: setup hotspot password not stored");   /* the driver still starts */
+    if (id_rc < 0) cali_log("wifi: setup hotspot identity unavailable");
+    if (e != ESP_OK || id_rc < 0 || cali_net_esp_init(ap_ssid, ap_psk) != 0) {
         cali_log("wifi: driver unavailable");   /* exact text: test_qemu_boot.py */
         memset(ap_psk, 0, sizeof ap_psk);
         return;
