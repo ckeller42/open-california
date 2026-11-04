@@ -3843,12 +3843,17 @@ function thermoStatusText(th) {
   if (st.mode === "WAITING") return /** @type {string} */ (t("waiting"));
   const lv = st.level != null ? tf("level {n}", { n: st.level }) + " · " : "";
   if (st.mode === "DEGRADED") return lv + t("degraded");
-  if (st.active && st.active === th.backup && th.backup !== th.ref) return lv + t("on backup");
-  if (st.night) return st.level != null ? tf("Night · level {n} · no end", { n: st.level }) : /** @type {string} */ (t("Night · no end"));
+  const backup = !!st.active && st.active === th.backup && th.backup !== th.ref;
+  if (st.night) {
+    if (backup) return st.level != null ? tf("Night · level {n} · on backup · no end", { n: st.level }) : /** @type {string} */ (t("Night · on backup · no end"));
+    return st.level != null ? tf("Night · level {n} · no end", { n: st.level }) : /** @type {string} */ (t("Night · no end"));
+  }
+  if (backup) return lv + t("on backup");
   // a timed run ends when the unit's remaining run time (1702 RunningTimeinAction, min) is up, on the page clock;
-  // the value counts down only while the unit reports it heating (parked it echoes the setting)
+  // the value counts down only while the unit reports it heating (parked it echoes the setting), and is
+  // shown only on live data (an old reading would name a past end)
   const ah = /** @type {FnState} */ (STATE.airheater || {}), rem = ah.running_time_remaining;
-  if (st.heater === "RUNNING" && ah.running && rem != null) {
+  if (st.heater === "RUNNING" && ah.running && rem != null && linkState() === "live") {
     const d = new Date(Date.now() + rem * 60000);
     return lv + tf("ends {t}", { t: hhmm(d.getHours(), d.getMinutes()) });
   }
@@ -3865,9 +3870,13 @@ function thermoWaitText(s) {
  * @param {Thermo} th @returns {string} */
 function thermoConfirmText(th) {
   const v = { target: (th.target / 100).toFixed(1), alias: th.ref || t("none"), min: th.runtime_min };
-  return th.night
-    ? tf("Heat for the night? 1. Tap OK. 2. Switch on “Dauerbetrieb” on the panel in the van and confirm its question with “Yes”. The thermostat then takes over and holds {target} °C (thermometer “{alias}”) until you switch it off.", v)
-    : tf("Start the air heater with the thermostat? It holds {target} °C (thermometer “{alias}”) for at most {min} min, then it stops.", v);
+  const ah = /** @type {FnState} */ (STATE.airheater || {});
+  if (th.night)
+    return tf("Heat for the night? 1. Tap OK. 2. Switch on “Dauerbetrieb” on the panel in the van and confirm its question with “Yes”. The thermostat then takes over and holds {target} °C (thermometer “{alias}”) until you switch it off.", v);
+  // Dauerbetrieb already on: AUTO takes it over, and it has no run time
+  if (th.status.heater === "CONTINUOUS" || ah.permanent)
+    return tf("Take over the running “Dauerbetrieb” with the thermostat? It holds {target} °C (thermometer “{alias}”) until you switch it off.", v);
+  return tf("Start the air heater with the thermostat? It holds {target} °C (thermometer “{alias}”) for at most {min} min, then it stops.", v);
 }
 
 /** The hint under a dimmed AUTO switch: why a start would be refused now, with a link where it can be fixed.

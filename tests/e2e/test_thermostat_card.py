@@ -435,3 +435,59 @@ def test_day_auto_shows_the_end_time(stub, error_gated_page):
         assert _card(pg).locator(".sval").first.text_content() in ["level 4 · ends " + w for w in want]
     finally:
         cm.__exit__(None, None, None)
+
+
+def test_day_auto_hides_the_end_time_on_old_data(stub, error_gated_page):
+    """With the satellite's data older than its offline limit the card names no end time."""
+    _enable(stub, mode="AUTO", heater="RUNNING", level=4, active="cabin", reason="HOLD", end="run")
+    stub.fixtures["satellite"]["/api/thermostat"]["mode"] = "AUTO"
+    state = stub.fixtures["satellite"]["/api/state"]
+    state["fn"]["airheater"].update(NormalOperation=1, HeatingLevel=4, RunningTime=60, RunningTimeinAction=30)
+    state["device"]["link"]["last_snap_age_ms"] = 600000
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).get_by_text("level 4 · running", exact=True)).to_be_visible()
+        assert "ends" not in _card(pg).locator(".sval").first.text_content()
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "lang,want",
+    [("en", "Night · level 4 · on backup · no end"), ("de", "Nacht · Stufe 4 · auf Reserve · kein Ende")],
+)
+def test_night_on_backup_keeps_the_night_label(stub, error_gated_page, lang, want):
+    _enable(stub, mode="AUTO", heater="CONTINUOUS", level=4, active="bed", reason="HOLD", night=True)
+    stub.fixtures["satellite"]["/api/thermostat"].update(mode="AUTO", night=True, backup="bed")
+    cm, pg = _open(stub, error_gated_page, lang)
+    try:
+        expect(_card(pg).get_by_text(want, exact=True)).to_be_visible()
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "lang,want,never",
+    [
+        ("en", "Take over the running “Dauerbetrieb”", "120 min"),
+        ("de", "Den laufenden „Dauerbetrieb“ mit dem Thermostat übernehmen?", "120 min"),
+    ],
+)
+def test_day_confirm_on_continuous_names_no_run_time(stub, error_gated_page, lang, want, never):
+    """With Dauerbetrieb already on, the day confirmation says the thermostat holds it until switched off."""
+    _enable(stub, heater="CONTINUOUS", level=6)
+    stub.fixtures["satellite"]["/api/state"]["fn"]["airheater"].update(
+        NormalOperation=1, PermanentOperation=1, HeatingLevel=6
+    )
+    cm, pg = _open(stub, error_gated_page, lang)
+    try:
+        seen = []
+        pg.on("dialog", lambda d: (seen.append(d.message), d.dismiss()))
+        _card(pg).get_by_role("switch", name="AUTO").click()
+        for _ in range(30):
+            if seen:
+                break
+            pg.wait_for_timeout(100)
+        assert seen and want in seen[0] and never not in seen[0] and "21.0 °C" in seen[0]
+    finally:
+        cm.__exit__(None, None, None)

@@ -1197,15 +1197,16 @@ The card sits on the Air heater screen of the satellite's web UI. It shows only 
 configured Govee thermometer exists ([External sensors](#external-sensors-r_fw_sensors)), which needs
 the sensor track switch (*Sensors* in Satellite settings, [Sensor switch](#sensor-switch-r_fw_experimental))
 on, and not on a display-only satellite. It holds the {term}`AUTO (thermostat)` switch with its state (*level 4 · ends 23:40*, *Night · level 4 · no end*,
-*level 4 · running*, *on backup*, *degraded*, *waiting*, *stopping*, *off*; *on backup* shows in mode `AUTO` while the backup is the active thermometer, *degraded* in mode `DEGRADED`), the {term}`reference thermometer` reading, the target with
+*level 4 · running*, *on backup*, *degraded*, *waiting*, *stopping*, *off*; *on backup* shows in mode `AUTO` while the backup is the active thermometer (at night as *Night · level 4 · on backup · no end*), *degraded* in mode `DEGRADED`), the {term}`reference thermometer` reading, the target with
 minus and plus buttons (0.5 °C steps, 5 to 30 °C), the run time (10 to 120 min in steps of 10, or *Night*,
 shown only while the heater is off) and the last reason (`status.reason`) in plain words, in English and German.
 The end time of a timed run is the unit's remaining run time (1702 `RunningTimeinAction`) added to the
-page clock. A run that ends by itself (`RUN_ENDED`, `CONTINUOUS_ENDED`, `NIGHT_WAIT_ENDED`) and the
+page clock; it shows only while the data is live (the link pill shows *live*), else the state reads *level 4 · running*. A run that ends by itself (`RUN_ENDED`, `CONTINUOUS_ENDED`, `NIGHT_WAIT_ENDED`) and the
 owner's own `USER_OFF` show no reason: the card simply shows AUTO off.
 
 The AUTO switch is always on the card. A tap with AUTO off opens a confirmation window every time:
-by day it names the target, the thermometer and the run time; with *Night* it names the step at the
+by day it names the target, the thermometer and the run time (with {term}`Dauerbetrieb` already on, it
+says that the thermostat takes it over and holds the target until switched off); with *Night* it names the step at the
 panel (switch on {term}`Dauerbetrieb` and answer its question with *Ja*). While `status.blocked` is set
 and AUTO is off, the switch is dimmed and a hint under it names the reason: *Camping mode is off* with a
 link to the camping mode screen (the card never switches camping mode on), *Choose a thermometer first*
