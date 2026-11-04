@@ -97,9 +97,23 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: calictl.thermostat.track
 .. autofunction:: calictl.thermostat.initial_state
 .. autofunction:: calictl.thermostat.step
+.. autofunction:: calictl.thermostat.blocked
 .. autofunction:: tests.test_thermostat.test_cold_cabin_raises_level
 .. autofunction:: tests.test_thermostat.test_heater_state_table
 .. autofunction:: tests.test_thermostat.test_auto_from_off_sends_runtime_level_power_in_order
+.. autofunction:: tests.test_thermostat.test_adopt_goes_to_demand
+.. autofunction:: tests.test_thermostat.test_night_start_presets_level_and_waits
+.. autofunction:: tests.test_thermostat.test_night_waits_30s_of_continuous_then_adopts
+.. autofunction:: tests.test_thermostat.test_night_unconfirmed_panel_start_keeps_waiting
+.. autofunction:: tests.test_thermostat.test_night_wait_ends_quietly
+.. autofunction:: tests.test_thermostat.test_waiting_user_off_sends_nothing
+.. autofunction:: tests.test_thermostat.test_waiting_target_change_no_second_preset
+.. autofunction:: tests.test_thermostat.test_night_skips_warm_refusal
+.. autofunction:: tests.test_thermostat.test_continuous_hold_at_min_level_instead_of_stop
+.. autofunction:: tests.test_thermostat.test_running_still_stops_when_too_warm
+.. autofunction:: tests.test_thermostat.test_panel_off_during_night_ends_quietly
+.. autofunction:: tests.test_thermostat.test_blocked_codes
+.. autofunction:: tests.test_thermostat.test_blocked_uses_known_frames
 .. autofunction:: calictl.automation.auto_camper_restore_decide
 .. autoclass:: calictl.automation.AutoCamper
   :members: step, set_enabled, snapshot, to_state_dict, load

@@ -41,6 +41,8 @@ THERMO_DEFAULTS: dict[str, int] = {
     "batt_hold_ms": 300000,  # ms
     "verify_ms": 10000,  # ms
     "runtime_min": 120,  # min (AUTO from OFF; owner-settable 10-120)
+    "night_wait_ms": 300000,  # ms (night start: wait for Dauerbetrieb at the panel)
+    "night_confirm_ms": 30000,  # ms (Dauerbetrieb counts after it held this long)
 }
 
 #: Target range in centi-°C.
@@ -88,6 +90,9 @@ REASONS = (
     "USER_OFF",
     "STOPPING",
     "STOP_DROPPED",
+    "WAITING_FOR_CONTINUOUS",
+    "NIGHT_WAIT_ENDED",
+    "HOLD_AT_MIN_LEVEL",
 )
 
 
@@ -247,6 +252,9 @@ def initial_state() -> dict:
         "batt_low_since_ms": None,
         "stop_snapshot": None,
         "last_ctl_ms": None,
+        "night": False,
+        "wait_until_ms": None,
+        "cont_since_ms": None,
     }
 
 
@@ -329,6 +337,69 @@ def _end(st: dict) -> list:
     return []
 
 
+def _fault_reason(code: int) -> str:
+    return "LOCKED" if code == 4 else "FAULT_%d" % code if 1 <= code <= 15 else "HEATER_UNKNOWN"
+
+
+def _takeover(
+    st: dict, snap: dict | None, level: int | None, t_ref: int | None, t_out: int | None, inp: dict, cfg: dict
+) -> list:
+    """Start the controller from its demand (integrator 0) and send that level at once if it differs.
+
+    ``t_ref`` ``None`` (no valid reference): take the heater as it is; rule (7) acts next step.
+    """
+    assert snap is not None  # only called with a fresh OFF, RUNNING or CONTINUOUS heater
+    now = inp["now_ms"]
+    st["pending"], st["expect"], st["last_ctl_ms"] = None, dict(snap), now
+    if t_ref is None:
+        return []
+    ctl0 = {"i": 0, "last_change_ms": now, "hot_since_ms": None, "u": 0, "u_out": 0}
+    lvl, st["ctl"], _ = control(t_ref, t_out, inp["target"], 0, ctl0, cfg, None, now)
+    lvl = lvl or cfg["min_level"]  # overheat: the lowest level
+    if lvl == level or not inp["link_ready"]:
+        return []
+    st["pending"] = _pend("level", lvl, now, level)
+    st["expect"]["level"] = lvl
+    return [("level", lvl)]
+
+
+def blocked(inp: dict, cfg: dict) -> str | None:
+    """Why an AUTO request could not start right now, for the card before the owner taps.
+
+    .. req:: Thermostat blocked start
+       :id: R_THERMOSTAT_BLOCKED
+       :status: implemented
+       :tags: thermostat
+
+       The thermostat shall report, with every step, the first entry check that blocks a start,
+       without the ``AUTO_REFUSED_`` prefix, in this order: ``NOT_INSTALLED``, ``FAULT``,
+       ``TIMER_ARMED`` (from the last 1702 frame, whatever its age), ``NO_CAMPING`` and
+       ``IGNITION`` (from the last-known frames, not only this link's), ``NO_REFERENCE``. It shall
+       never report ``DISABLED``, ``NO_LINK``, ``STALE_HEATER`` or ``WARM``: the confirmation
+       enables, the request wakes the link and checks live data again, and warm is no fault.
+
+    :param inp: the :func:`step` inputs (``heater``, ``known``, ``ref``).
+    :param cfg: settings dict.
+    :returns: the code, or ``None`` when nothing blocks a start.
+    """
+    if inp["heater"]:
+        hs, _, code = heater_state(inp["heater"], 0, cfg)
+        if code == -1:
+            return "NOT_INSTALLED"
+        if hs in _FAULTS:
+            return "FAULT"
+        if hs == "TIMER_ARMED":
+            return "TIMER_ARMED"
+    k = inp["known"]
+    if not (k["camping_on"] or k["shore_on"]):
+        return "NO_CAMPING"
+    if k["ignition_on"] is not False:
+        return "IGNITION"
+    if not _valid(inp["ref"], cfg):
+        return "NO_REFERENCE"
+    return None
+
+
 def _refusal(inp: dict, cfg: dict, hs: str, code: int) -> str | None:
     if not inp["enabled"]:
         return "AUTO_REFUSED_DISABLED"
@@ -348,7 +419,7 @@ def _refusal(inp: dict, cfg: dict, hs: str, code: int) -> str | None:
         return "AUTO_REFUSED_IGNITION"
     if not _valid(inp["ref"], cfg):
         return "AUTO_REFUSED_NO_REFERENCE"
-    if hs == "OFF" and inp["ref"]["value"] > inp["target"] + cfg["band_hi"]:
+    if not inp["night"] and hs == "OFF" and inp["ref"]["value"] > inp["target"] + cfg["band_hi"]:
         return "AUTO_REFUSED_WARM"  # a start would soon stop again: a burner short cycle
     return None
 
@@ -369,8 +440,9 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        owner's own pending stop (the last owner request wins); a refused one keeps it. While a
        safety stop (overheat, target exceeded, battery low, feature disabled) is pending or waits
        in ``STOPPING``, an AUTO request is ignored with ``STOPPING``. From OFF it shall send ``runtime``, ``level`` and
-       one ``power on`` in that order; a running or continuous heater it shall adopt without a
-       command. It shall end AUTO without a command on a heater fault (ErrorCode 1 excepted: a
+       one ``power on`` in that order; a running or continuous heater it shall take over from
+       the computed demand (integrator 0) and send that level at once when it differs from the
+       heater's. It shall end AUTO without a command on a heater fault (ErrorCode 1 excepted: a
        normal stop, ``BATTERY_LOW``), a change it did not make (also during its own pending level
        command), the end of the run, and a command not applied after one retry. A ``power on``
        is retried at most once, only when a fresh readback shows the heater off, within
@@ -382,20 +454,41 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        A lost reference switches to a valid backup, a lost active backup back to a valid
        reference, else the level goes to ``min_level``.
 
+    .. req:: Thermostat night mode
+       :id: R_THERMOSTAT_NIGHT
+       :status: implemented
+       :tags: thermostat, airheater
+
+       An AUTO request with ``night`` shall skip the ``WARM`` refusal. With the heater off it
+       shall send the demand level alone and enter ``WAITING``; with an immediate run it shall
+       enter ``WAITING`` without a command; with continuous heating it shall take over at once.
+       In ``WAITING`` it shall send nothing more (a failed pre-set is not retried), end without a
+       command on an owner OFF, the feature disabled or a fault, take over continuous heating
+       once it held ``night_confirm_ms`` (a shorter one keeps the wait with its remaining time),
+       and end with ``NIGHT_WAIT_ENDED`` after ``night_wait_ms`` without continuous heating.
+       While it regulates continuous heating (night or not), ``OVERHEAT`` and
+       ``TARGET_EXCEEDED_AT_MIN_LEVEL`` shall not stop the heater: it holds ``min_level`` with
+       ``HOLD_AT_MIN_LEVEL``. The night setting is latched at the start and cleared at mode OFF.
+
     Evaluation order per call (the first rule that ends AUTO wins): pending-command bookkeeping,
-    owner request, ``STOPPING``, faults, heater unknown, foreign change, battery, heater ended,
-    reference validity, control (at most once per ``period_ms``, never while a command is pending).
+    ``WAITING`` (owner OFF, fault, confirmed continuous heating, wait end), owner request,
+    ``STOPPING``, faults, heater unknown, foreign change, battery, heater ended, reference
+    validity, control (at most once per ``period_ms``, never while a command is pending; holds
+    ``min_level`` instead of a stop on continuous heating).
 
     :param inp: inputs ``now_ms``, ``enabled``, ``request`` (``None``/``"AUTO"``/``"OFF"``),
         ``target``, ``runtime_min``, ``ref``/``backup``/``out`` (``{"alias", "value", "age_ms"}``
         or ``None``), ``outside_on``, ``heater`` (raw 1702 dict or ``None``), ``heater_age_ms``,
-        ``link_ready``, ``camping_on``, ``shore_on``, ``ignition_on``, ``batt2_dv`` and ``cmd``
+        ``link_ready``, ``camping_on``, ``shore_on``, ``ignition_on``, ``batt2_dv``, ``cmd``
         (``None`` or ``{"what", "result"}``: the last command of the previous batch the runner
-        attempted; the runner stops a batch at the first result that is not ``OK``).
+        attempted; the runner stops a batch at the first result that is not ``OK``), ``night``
+        (the run-time setting "Nacht") and ``known`` (``{"camping_on", "shore_on",
+        "ignition_on"}`` from the last-known frames, for :func:`blocked`).
     :param cfg: settings dict (:data:`THERMO_DEFAULTS` keys).
     :param st: session state (:func:`initial_state`); not modified.
     :returns: ``(out, new_st)``; ``out`` = ``{"cmds": [(what, value)...], "reason", "mode",
-        "status"}``. ``reason`` is ``None`` for an idle step in mode ``OFF``.
+        "status"}``. ``reason`` is ``None`` for an idle step in mode ``OFF``. Modes: ``OFF``,
+        ``AUTO``, ``DEGRADED``, ``STOPPING``, ``WAITING``.
     """
     st = copy.deepcopy(st)
     now, link, target = inp["now_ms"], inp["link_ready"], inp["target"]
@@ -408,6 +501,10 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
     reason = None
 
     def out(why):
+        if st["mode"] == "OFF":
+            st["night"] = False
+        if st["mode"] != "WAITING":
+            st["wait_until_ms"] = st["cont_since_ms"] = None
         r = sensors[st["active"]]
         status = {
             "heater": hs,
@@ -418,11 +515,26 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             "active_alias": r["alias"] if r else None,
             "outside_active": t_out is not None,
             "end": "run" if hs == "RUNNING" else "none",
+            "blocked": blocked(inp, cfg),
+            "wait_left_s": None
+            if st["wait_until_ms"] is None
+            else max(0, -((now - st["wait_until_ms"]) // 1000)),
+            "night": st["night"] if st["mode"] != "OFF" else inp["night"],
         }
         return {"cmds": cmds, "reason": why, "mode": st["mode"], "status": status}, st
 
     # (1) pending command: readback, result, verify window
     p = st["pending"]
+    if p and st["mode"] == "WAITING":  # the night pre-set: never retried, never ends the wait
+        res = (inp["cmd"] or {}).get("result")
+        post = snap is not None and now - inp["heater_age_ms"] >= p["since_ms"]
+        if (
+            (snap is not None and post and _applied(p, snap))
+            or res not in (None, "OK")
+            or now - p["since_ms"] >= cfg["verify_ms"]
+        ):
+            st["pending"] = None
+        p = None
     if p:
         res = (inp["cmd"] or {}).get("result")
         start = p["what"] == "power" and p["value"] == "on"
@@ -472,6 +584,29 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         if cmds:
             reason = "STOPPING" if p["value"] == "off" else "AUTO_ON"
 
+    # (W) night wait: send nothing; take over Dauerbetrieb once it held night_confirm_ms
+    if st["mode"] == "WAITING":
+        if inp["request"] == "OFF" or not inp["enabled"]:
+            _end(st)
+            return out("USER_OFF" if inp["enabled"] else "DISABLED")
+        if hs in _FAULTS:
+            _end(st)
+            return out("BATTERY_LOW" if code == 1 else _fault_reason(code))
+        if hs != "CONTINUOUS":
+            st["cont_since_ms"] = None
+            if now >= st["wait_until_ms"]:
+                _end(st)
+                return out("NIGHT_WAIT_ENDED")
+            return out("WAITING_FOR_CONTINUOUS")
+        if st["cont_since_ms"] is None:
+            st["cont_since_ms"] = now
+        if now - st["cont_since_ms"] < cfg["night_confirm_ms"]:
+            return out("WAITING_FOR_CONTINUOUS")
+        st["mode"] = "AUTO"
+        t_ref = inp["ref"]["value"] if _valid(inp["ref"], cfg) else None
+        cmds = _takeover(st, snap, level, t_ref, t_out, inp, cfg)
+        return out("ADOPT_CONTINUOUS")
+
     # (2) owner request (feature disabled while on = owner OFF)
     on = st["mode"] in ("AUTO", "DEGRADED")
     req = "OFF" if on and not inp["enabled"] else inp["request"]
@@ -498,6 +633,12 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             stop_snapshot=None,
             last_ctl_ms=now,
         )
+        st["night"] = inp["night"]
+        if inp["night"] and hs != "CONTINUOUS":
+            st.update(mode="WAITING", wait_until_ms=now + cfg["night_wait_ms"], cont_since_ms=None)
+            if hs == "OFF":  # pre-set the demand: the panel starts Dauerbetrieb at the stored level
+                cmds = _takeover(st, snap, level, t_ref, t_out, inp, cfg)
+            return out("WAITING_FOR_CONTINUOUS")
         if hs == "OFF":
             lvl, st["ctl"], _ = control(t_ref, t_out, target, 0, ctl0, cfg, None, now)
             lvl = lvl or cfg["min_level"]  # overheat at entry: start low, the next step stops
@@ -505,9 +646,7 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             st["expect"] = {"normal": 1, "permanent": 0, "level": lvl}
             cmds = [("runtime", inp["runtime_min"]), ("level", lvl), ("power", "on")]
             return out("START")
-        _, ctl, _ = control(t_ref, t_out, target, 0, ctl0, cfg, level, now)
-        st["ctl"] = track(ctl, level, t_ref, target, cfg) if level is not None else ctl
-        st["expect"] = snap
+        cmds = _takeover(st, snap, level, t_ref, t_out, inp, cfg)
         return out("ADOPT_CONTINUOUS" if hs == "CONTINUOUS" else "ADOPT_RUN")
     if req == "AUTO" and on and st["active"] == "backup" and _valid(inp["ref"], cfg):
         st["active"] = "ref"  # back to the reference only by the owner
@@ -536,7 +675,7 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         return out("BATTERY_LOW")
     if hs in _FAULTS:
         cmds = _end(st)
-        return out("LOCKED" if code == 4 else "FAULT_%d" % code if 1 <= code <= 15 else "HEATER_UNKNOWN")
+        return out(_fault_reason(code))
     if snap is None:
         cmds = []  # no writes until fresh; AUTO stays on
         return out("HEATER_UNKNOWN")
@@ -598,6 +737,14 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
     old_change = st["ctl"]["last_change_ms"]
     lvl, ctl, why = control(t_ref, t_out, target, now - st["last_ctl_ms"], st["ctl"], cfg, level, now)
     st["ctl"], st["last_ctl_ms"] = ctl, now
+    if why in ("OVERHEAT", "TARGET_EXCEEDED_AT_MIN_LEVEL") and hs == "CONTINUOUS":
+        lo = cfg["min_level"]  # the ESP cannot restart Dauerbetrieb: hold, never stop
+        if level != lo and link:
+            cmds = [("level", lo)]
+            st["pending"] = _pend("level", lo, now, level)
+            st["expect"]["level"] = lo
+            ctl["last_change_ms"] = now
+        return out("HOLD_AT_MIN_LEVEL")
     if why in ("OVERHEAT", "TARGET_EXCEEDED_AT_MIN_LEVEL"):
         cmds = _stop(st, link, now, why)
         return out(why)
