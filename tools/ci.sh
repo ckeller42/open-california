@@ -164,7 +164,7 @@ webcheck() {   # hard gate: the web UIs are un-built JS, so this is their only s
   command -v node >/dev/null || { echo "webcheck: node not found (install Node 22+)"; exit 1; }
   # typescript is pinned (bump deliberately; the 0-error baseline is per compiler version).
   npx --yes -p typescript@7.0.2 tsc --noEmit -p calictl/webui/jsconfig.json
-  node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js && node --check calictl/webui/semantics_tables.js && node --check calictl/webui/semantics.js
+  node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js && node --check calictl/webui/semantics_tables.js && node --check calictl/webui/semantics.js && node --check calictl/webui/lora_setup.js
   _d="$(mktemp -d)"   # the recovery page's script as served (constants substituted, comment lines stripped)
   "$PY" -c 'import re, sys; from tools import gen_c_dict; sys.stdout.write(re.search(r"<script>(.*?)</script>", gen_c_dict.render_web_page(), re.S).group(1))' > "$_d/recovery.js"
   node --check "$_d/recovery.js"
