@@ -3857,7 +3857,8 @@ function thermoStatusText(th) {
   // shown only on live data (an old reading would name a past end)
   const ah = /** @type {FnState} */ (STATE.airheater || {}), rem = ah.running_time_remaining;
   if (st.heater === "RUNNING" && ah.running && rem != null && linkState() === "live") {
-    const d = new Date(Date.now() + rem * 60000);
+    // anchored to the poll's reading time (stateAt - _meta.age_s, as the unit clock), so it does not drift later
+    const d = new Date(stateAt - (STATE._meta && STATE._meta.age_s ? STATE._meta.age_s * 1000 : 0) + rem * 60000);
     return lv + tf("ends {t}", { t: hhmm(d.getHours(), d.getMinutes()) });
   }
   return lv + (st.heater === "CONTINUOUS" ? t("continuous") : t("running"));

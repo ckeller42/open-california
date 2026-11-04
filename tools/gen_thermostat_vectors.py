@@ -199,7 +199,7 @@ class Rec:
             if inp["heater_age_ms"] > cfg["heater_stale_ms"] and st2["mode"] == "STOPPING":
                 self.tags.add("night_user_off_stale_stops_later")
         if why == "HOLD_AT_MIN_LEVEL":
-            hot = inp["ref"]["value"] > inp["target"] + cfg["overheat"]
+            hot = out["status"]["t_ref"] > inp["target"] + cfg["overheat"]
             self.tags.add("continuous_hold_overheat" if hot else "continuous_hold_min")
         left = out["status"]["wait_left_s"]
         if left is not None and (st2["wait_until_ms"] - inp["now_ms"]) % 1000:

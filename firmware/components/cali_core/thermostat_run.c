@@ -151,6 +151,7 @@ static const char *num(char b[16], int32_t v) {
     return b;
 }
 
+static int s_stepped;         /* a step has filled s_out since init (status.night in OFF is the stored one only then) */
 static uint64_t s_tick_now;   /* the last tick's clock: the "now" of a GET (cali_thermo_state_json) */
 static codec_kv_t s_h[CODEC_KV_MAX];   /* the last inputs' 1702 fields (the step's record reads them) */
 static int s_nh;
@@ -215,6 +216,7 @@ static void step(uint64_t now) {
     s_cmd_what = s_cmd_res = NULL;
 
     cali_thermo_step(&in, &C.s, &S, &s_out);
+    s_stepped = 1;
 
     if (s_out.reason && (!s_reason || strcmp(s_out.reason, s_reason) != 0 || S.mode != mode_before))
         cali_log("thermostat: %s (mode %s, heater %s)", s_out.reason, cali_thermo_mode_names[S.mode],
@@ -353,6 +355,7 @@ void cali_thermo_run_init(void) {
     s_rev = 0;
     cali_thermo_init(&S);
     memset(&s_out, 0, sizeof s_out);
+    s_stepped = 0;
     s_out.status.heater = CALI_THERMO_H_UNKNOWN;
     s_out.status.t_ref = s_out.status.t_out = s_out.status.level = CALI_THERMO_NONE;
     s_out.status.end = "none";
@@ -452,7 +455,7 @@ void cali_thermo_state_json(cali_json_t *j) {
         opt_num(j, "wait_left_s", st->wait_left_s);
     }
     cali_json_key(j, "night");
-    cali_json_bool(j, st->night);
+    cali_json_bool(j, S.mode == CALI_THERMO_OFF && s_stepped ? C.night : st->night);   /* in OFF the stored one, at each GET */
     cali_json_obj_end(j);
 }
 

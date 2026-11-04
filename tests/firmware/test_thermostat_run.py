@@ -211,6 +211,18 @@ def test_blocked_follows_the_inputs_between_steps(cli, tmp_path):
     assert [st["blocked"] for st in states] == ["NO_CAMPING", None]
 
 
+def test_night_in_off_is_the_stored_setting_at_each_get(cli, tmp_path):
+    """``status.night`` in mode OFF is the stored night setting, current at each GET (not the last step's).
+
+    .. test:: Thermostat runner: the night in OFF is current at each GET
+       :id: T_FW_THERMOSTAT_RUN_NIGHT_OFF_GET
+       :links: R_FW_THERMOSTAT_API
+    """
+    out = run(cli, tmp_path, [*SETUP, "tick", "state", "night 1", "state"])
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert [st["night"] for st in states] == [False, True]
+
+
 CONT = frame("airheater", Installed=1, NormalOperation=1, PermanentOperation=1, HeatingLevel=6)
 NIGHT_60S = [*SETUP, "set period_ms 60000", "night 1", "auto", "tick", f"done {OK}", "tick"]
 
