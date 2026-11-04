@@ -4045,7 +4045,7 @@ function thermostatCard() {
     sel.disabled = readOnly();
     sel.onchange = () => {
       thermoPost(sel.value === "night" ? { night: true } : { night: false, runtime_min: Number(sel.value) });
-      render();   // AUTO stays dimmed until the POST returned
+      if (st.mode === "OFF") sw.disabled = true;   // AUTO stays dimmed until the POST returned (no re-render: it would reset the select)
     };
     rt.appendChild(sel);
     card.appendChild(rt);
