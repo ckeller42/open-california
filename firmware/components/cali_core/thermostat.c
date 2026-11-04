@@ -376,15 +376,15 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
 
     /* (W) night wait: send nothing but a stop; take over Dauerbetrieb once it held night_confirm_ms */
     if (st->mode == CALI_THERMO_WAITING) {
+        if (has_snap) { /* the last fresh heater: what an owner OFF stops */
+            st->has_expect = 1;
+            st->expect = snap;
+        }
         if (in->request == CALI_THERMO_REQ_OFF || !in->enabled) {
             const char *why = in->enabled ? "USER_OFF" : "DISABLED";
-            if (!has_snap) { /* heater unknown: nothing known to stop */
-                end(st, out);
-                RET(why);
-            }
-            st->has_expect = 1; /* stop what runs now: an immediate run or an unconfirmed Dauerbetrieb */
-            st->expect = snap;
-            stop(st, link, now, why, out);
+            /* stop what runs: an immediate run or an unconfirmed Dauerbetrieb; with the heater stale
+               or the link down the stop of the last fresh reading waits in STOPPING */
+            stop(st, link && has_snap, now, why, out);
             RET(st->mode == CALI_THERMO_STOPPING ? "STOPPING" : why);
         }
         if (faulty) {
@@ -447,6 +447,8 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             st->mode = CALI_THERMO_WAITING;
             st->wait_until_ms = now + cfg->night_wait_ms;
             st->cont_since_ms = NONE_MS;
+            st->has_expect = 1;
+            st->expect = snap;
             /* pre-set the demand: the panel starts Dauerbetrieb at the stored level */
             if (hs == CALI_THERMO_H_OFF) takeover(st, &snap, level, t_ref, t_out, in, cfg, out);
             RET("WAITING_FOR_CONTINUOUS");

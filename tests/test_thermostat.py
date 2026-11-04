@@ -663,6 +663,38 @@ def test_waiting_user_off_stops_what_runs():
     assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "LOCKED", [])
 
 
+def test_waiting_user_off_stale_heater_stops_later():
+    """Owner OFF in the wait with a stale heater reading: when the last fresh reading showed a run or an
+    unconfirmed Dauerbetrieb, the stop waits in ``STOPPING`` and goes out on the next fresh reading if
+    the heater is unchanged; a last fresh reading of an off heater ends with no command.
+
+    .. test:: Waiting owner off, heater stale
+       :id: T_THERMO_WAITING_OFF_STALE
+       :links: R_THERMOSTAT_NIGHT
+    """
+    cont = {**CONT, "HeatingLevel": 10}
+    stale = CFG["heater_stale_ms"] + 1
+    for heater, what in ((RUN, "power"), (cont, "permanent")):
+        for kw, why in (({"request": "OFF"}, "USER_OFF"), ({"enabled": False}, "DISABLED")):
+            _, st = _night()
+            _, st = _wait_step(st, 500, heater)
+            out, st = _wait_step(st, 1000, heater, heater_age_ms=stale, **kw)
+            assert (out["mode"], out["reason"], out["cmds"]) == ("STOPPING", "STOPPING", [])
+            assert st["stop_snapshot"]["why"] == why
+            out, st2 = _wait_step(st, 2000, heater)
+            assert (out["mode"], out["cmds"]) == ("OFF", [(what, "off")])
+            out, _ = _wait_step(st, 2000, OFF_H)  # ended meanwhile: nothing to stop
+            assert (out["mode"], out["cmds"]) == ("OFF", [])
+    # a run at the night start, never re-read before the stale OFF: the entry reading counts
+    _, st = _night(RUN)
+    out, _ = _wait_step(st, 1000, RUN, heater_age_ms=stale, request="OFF")
+    assert out["mode"] == "STOPPING"
+    _, st = _night()
+    _, st = _wait_step(st, 500, OFF_H)
+    out, _ = _wait_step(st, 1000, OFF_H, heater_age_ms=stale, request="OFF")
+    assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "USER_OFF", [])
+
+
 def test_waiting_target_change_no_second_preset():
     """A new target (or AUTO request) while waiting sends nothing; the adopt uses the new target.
 

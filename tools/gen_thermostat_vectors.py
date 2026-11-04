@@ -196,6 +196,8 @@ class Rec:
             and (out["cmds"] or st2["mode"] == "STOPPING")
         ):
             self.tags.add("night_user_off_stops_run")
+            if inp["heater_age_ms"] > cfg["heater_stale_ms"] and st2["mode"] == "STOPPING":
+                self.tags.add("night_user_off_stale_stops_later")
         if why == "HOLD_AT_MIN_LEVEL":
             hot = inp["ref"]["value"] > inp["target"] + cfg["overheat"]
             self.tags.add("continuous_hold_overheat" if hot else "continuous_hold_min")
@@ -601,6 +603,16 @@ def _night_sessions(rec):
         rec, "night_user_off_link_down", 0,
         [{**auto, **night, "heater": run_h(5)}, {**night, "request": "OFF", "heater": run_h(5), "link_ready": False},
          {"heater": run_h(5)}, {"heater": OFF_H, "dt": 1000}],
+    )  # fmt: skip
+    stale = D["heater_stale_ms"] + 1
+    session(  # owner OFF with the heater stale: the last fresh reading (Dauerbetrieb) is stopped on the next one
+        rec, "night_user_off_stale_stops_later", 0,
+        [{**auto, **night}, {**night, "heater": cont, "dt": 1000},
+         {**night, "request": "OFF", "heater": cont, "heater_age_ms": stale}, {"heater": cont}, {"heater": OFF_H, "dt": 1000}],
+    )  # fmt: skip
+    session(  # the same with an off heater at the last fresh reading: no command
+        rec, "night_user_off_stale_off", 0,
+        [{**auto, **night}, {**night, "heater": OFF_H}, {**night, "request": "OFF", "heater": OFF_H, "heater_age_ms": stale}, {}],
     )  # fmt: skip
     session(
         rec, "night_disabled_in_wait", 0,

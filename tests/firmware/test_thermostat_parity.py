@@ -39,9 +39,8 @@ def test_vectors_reach_every_reason():
     assert not UNREACHABLE & seen
     assert None in seen  # an idle step in mode OFF
     adopt = [c for c in V["cases"] if (c[4][0] or "").startswith("ADOPT_")]
-    assert adopt and not [
-        c for c in adopt if c[4][13] and c[4][14] != "level"
-    ]  # an adopt never sends a command
+    # an adopt sends at most one command, and only ``level`` (flat out: [13] = count, then what/value pairs)
+    assert adopt and all(c[4][13:] == [0] or (c[4][13] == 1 and c[4][14] == "level") for c in adopt)
     refused = [c[4][14:] for c in V["cases"] if (c[4][0] or "").startswith("AUTO_REFUSED_")]
     assert any(refused)  # a refusal sends nothing new; only a kept stop is re-sent
     assert all(cmds in ([], ["power", 0], ["permanent", 0]) for cmds in refused)
@@ -102,6 +101,7 @@ def test_vectors_cover_the_control_branches():
         "night_wait_timeout",
         "night_user_off",
         "night_user_off_stops_run",
+        "night_user_off_stale_stops_later",
         "panel_off_during_pending",
         "night_skips_warm",
         "continuous_hold_min",

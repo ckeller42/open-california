@@ -466,7 +466,9 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        In ``WAITING`` it shall send nothing more (a failed pre-set is not retried) except a stop: an
        owner OFF or the feature disabled shall stop the heater that runs (``power off`` for an
        immediate run, ``permanent off`` for continuous heating still in its confirm window, nothing
-       for an off or unknown heater; with the link down the stop waits in ``STOPPING``). A fault
+       for an off heater). With the link down or the heater reading stale it shall stop what the
+       last fresh reading in the wait showed: the stop waits in ``STOPPING`` and goes out on the
+       next fresh reading only if the heater is unchanged. A fault
        shall end the wait without a command; ``BATTERY_LOW`` (ErrorCode 1) too, whatever the heater
        shows. It shall take over continuous heating
        once it held ``night_confirm_ms`` (a shorter one keeps the wait with its remaining time),
@@ -593,13 +595,13 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
 
     # (W) night wait: send nothing but a stop; take over Dauerbetrieb once it held night_confirm_ms
     if st["mode"] == "WAITING":
+        if snap is not None:
+            st["expect"] = dict(snap)  # the last fresh heater: what an owner OFF stops
         if inp["request"] == "OFF" or not inp["enabled"]:
             off_why = "USER_OFF" if inp["enabled"] else "DISABLED"
-            if snap is None:  # heater unknown: nothing known to stop
-                _end(st)
-                return out(off_why)
-            st["expect"] = dict(snap)  # stop what runs now: an immediate run or an unconfirmed Dauerbetrieb
-            cmds = _stop(st, link, now, off_why)
+            # stop what runs: an immediate run or an unconfirmed Dauerbetrieb; with the heater stale
+            # or the link down the stop of the last fresh reading waits in STOPPING
+            cmds = _stop(st, link and snap is not None, now, off_why)
             return out("STOPPING" if st["mode"] == "STOPPING" else off_why)
         if hs in _FAULTS:
             _end(st)
@@ -648,6 +650,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         st["night"] = inp["night"]
         if inp["night"] and hs != "CONTINUOUS":
             st.update(mode="WAITING", wait_until_ms=now + cfg["night_wait_ms"], cont_since_ms=None)
+            assert snap is not None  # _refusal passed: the heater reading is fresh
+            st["expect"] = dict(snap)
             if hs == "OFF":  # pre-set the demand: the panel starts Dauerbetrieb at the stored level
                 cmds = _takeover(st, snap, level, t_ref, t_out, inp, cfg)
             return out("WAITING_FOR_CONTINUOUS")

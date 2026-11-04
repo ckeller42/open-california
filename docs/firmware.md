@@ -865,6 +865,10 @@ stores it at once; the next check reads that release's manifest and an install d
 same release (the channel is read once per request, so a change mid-download cannot mix releases).
 Satellite settings' *Firmware update* box has a *Channel* select.
 
+After a downgrade, an older build uses its defaults for a stored record that it cannot read. The
+thermostat settings (kv `th_cfg`) are one such record: a build from before the night settings starts
+with the default thermostat settings, target and thermometer choices.
+
 | Partition | Offset | Size |
 |---|---|---|
 | `nvs` (bonds, WiFi, water baseline) | 0x9000 | 0x6000 |
@@ -1218,7 +1222,9 @@ alias, temperature and age of the reading (a stale reading is marked and cannot 
 - **Outside**: optional. An outside thermometer for the outside compensation. The reference is not offered here.
 
 The sheet also holds the **Outside compensation** switch. The choices, the target, the run time, the
-night setting and the switch persist (kv `th_cfg`); the mode never does.
+night setting and the switch persist (kv `th_cfg`); the mode never does. A firmware older than the
+night settings does not read this record: after a downgrade (for example to `esp-stable`) it starts
+with the default settings, target and thermometer choices.
 
 ### Entering AUTO
 
@@ -1275,7 +1281,9 @@ In mode `WAITING` the satellite sends nothing. Continuous heating that holds for
 wait with its remaining time. Without continuous heating, the wait ends after `night_wait_ms` with
 `NIGHT_WAIT_ENDED`. An owner OFF or the feature switched off stops the heater that runs: an immediate
 run with `power off`, continuous heating still in its confirm window with `permanent off`; an off heater
-gets no command, and with the link down the stop waits in mode `STOPPING`. A heater fault (also
+gets no command. With the link down or the 1702 reading stale, the satellite stops what the last
+fresh reading of the wait showed: the stop waits in mode `STOPPING` and goes out on the next fresh
+reading only if the heater is unchanged. A heater fault (also
 ErrorCode 1, low battery) ends the wait without a command. `status.wait_left_s` counts the wait down
 at each GET.
 
