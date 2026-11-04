@@ -491,3 +491,54 @@ def test_day_confirm_on_continuous_names_no_run_time(stub, error_gated_page, lan
         assert seen and want in seen[0] and never not in seen[0] and "21.0 °C" in seen[0]
     finally:
         cm.__exit__(None, None, None)
+
+
+def test_night_degraded_keeps_the_night_label(stub, error_gated_page):
+    _enable(stub, mode="DEGRADED", heater="CONTINUOUS", level=4, reason="DEGRADED", night=True)
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).get_by_text("Night · level 4 · degraded · no end", exact=True)).to_be_visible()
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def _first_dialog(pg, switch_click):
+    seen = []
+    pg.on("dialog", lambda d: (seen.append(d.message), d.dismiss()))
+    switch_click()
+    for _ in range(30):
+        if seen:
+            break
+        pg.wait_for_timeout(100)
+    return seen
+
+
+def test_confirm_on_continuous_wins_over_night(stub, error_gated_page):
+    _enable(stub, heater="CONTINUOUS", level=6)
+    stub.fixtures["satellite"]["/api/thermostat"]["night"] = True
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        seen = _first_dialog(pg, lambda: _card(pg).get_by_role("switch", name="AUTO").click())
+        assert (
+            seen and "Take over the running “Dauerbetrieb”" in seen[0] and "Heat for the night" not in seen[0]
+        )
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_confirm_on_running_heater_names_no_duration_and_skips_enabled(stub, error_gated_page):
+    """A timed run keeps its timer (no runtime is sent), and an enabled feature is not re-enabled."""
+    _enable(stub, heater="RUNNING", level=4)
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        pg.on("dialog", lambda d: d.accept())
+        _card(pg).get_by_role("switch", name="AUTO").click()
+        for _ in range(50):
+            if stub.thermostat_posts:
+                break
+            pg.wait_for_timeout(100)
+        assert stub.thermostat_posts == [{"mode": "AUTO", "confirm": True, "rev": 1}]
+        assert "at most" not in pg.evaluate("() => thermoConfirmText(THERMO)")
+        assert "Take over the running air heater" in pg.evaluate("() => thermoConfirmText(THERMO)")
+    finally:
+        cm.__exit__(None, None, None)

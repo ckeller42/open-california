@@ -1253,8 +1253,8 @@ dropped by a valid AUTO request: the last request of the owner wins.
 What happens next depends on the heater:
 
 - **Heater off**: the satellite sends `runtime` (the run time of the card), `level` (the demand's first level) and `power on`, in this order. The reason is `START`. The `power on` is checked against the next fresh reading of 1702 and retried at most once, and only while the entry conditions still hold. If the heater does not start, the reason is `START_NOT_CONFIRMED` and AUTO ends.
-- **Heater running** (normal operation): AUTO takes it over without any command (`ADOPT_RUN`). The run time already set stays; the controller starts at the heater's current level without a jump.
-- **Continuous heating** already on: AUTO takes it over without any command (`ADOPT_CONTINUOUS`) and regulates the level only. The satellite never starts continuous heating.
+- **Heater running** (normal operation): AUTO takes it over (`ADOPT_RUN`). The run time already set stays, and no `runtime` is sent. The controller starts from the demand; with a valid reference and a demand that differs from the heater's current level, the satellite sends `level` at once.
+- **Continuous heating** already on: AUTO takes it over (`ADOPT_CONTINUOUS`) and regulates the level only. The controller starts from the demand; with a valid reference and a demand that differs from the heater's current level, the satellite sends `level` at once. The satellite never starts continuous heating.
 
 `status.blocked` tells the card before the tap whether a start is possible now. Each
 `GET /api/thermostat` runs the checks 3 to 6 on the last heater reading (whatever its age) and on

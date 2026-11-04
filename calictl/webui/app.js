@@ -3842,7 +3842,10 @@ function thermoStatusText(th) {
   if (st.mode === "STOPPING") return /** @type {string} */ (t("stopping"));
   if (st.mode === "WAITING") return /** @type {string} */ (t("waiting"));
   const lv = st.level != null ? tf("level {n}", { n: st.level }) + " · " : "";
-  if (st.mode === "DEGRADED") return lv + t("degraded");
+  if (st.mode === "DEGRADED") {
+    if (st.night) return st.level != null ? tf("Night · level {n} · degraded · no end", { n: st.level }) : /** @type {string} */ (t("Night · degraded · no end"));
+    return lv + t("degraded");
+  }
   const backup = !!st.active && st.active === th.backup && th.backup !== th.ref;
   if (st.night) {
     if (backup) return st.level != null ? tf("Night · level {n} · on backup · no end", { n: st.level }) : /** @type {string} */ (t("Night · on backup · no end"));
@@ -3871,11 +3874,14 @@ function thermoWaitText(s) {
 function thermoConfirmText(th) {
   const v = { target: (th.target / 100).toFixed(1), alias: th.ref || t("none"), min: th.runtime_min };
   const ah = /** @type {FnState} */ (STATE.airheater || {});
-  if (th.night)
-    return tf("Heat for the night? 1. Tap OK. 2. Switch on “Dauerbetrieb” on the panel in the van and confirm its question with “Yes”. The thermostat then takes over and holds {target} °C (thermometer “{alias}”) until you switch it off.", v);
   // Dauerbetrieb already on: AUTO takes it over, and it has no run time
   if (th.status.heater === "CONTINUOUS" || ah.permanent)
     return tf("Take over the running “Dauerbetrieb” with the thermostat? It holds {target} °C (thermometer “{alias}”) until you switch it off.", v);
+  if (th.night)
+    return tf("Heat for the night? 1. Tap OK. 2. Switch on “Dauerbetrieb” on the panel in the van and confirm its question with “Yes”. The thermostat then takes over and holds {target} °C (thermometer “{alias}”) until you switch it off.", v);
+  // a timed run already going: AUTO adopts its timer and sends no runtime, so no duration is promised
+  if (th.status.heater === "RUNNING")
+    return tf("Take over the running air heater with the thermostat? It holds {target} °C (thermometer “{alias}”); the run time already set stays.", v);
   return tf("Start the air heater with the thermostat? It holds {target} °C (thermometer “{alias}”) for at most {min} min, then it stops.", v);
 }
 
@@ -3990,7 +3996,8 @@ function thermostatCard() {
   sw.onclick = () => {
     if (st.mode === "OFF") {
       if (!confirm(thermoConfirmText(th))) return;
-      thermoPost({ enabled: true, mode: "AUTO", confirm: true });
+      // enable in the same POST only while the feature is off: a failed enable write turns it off again server-side
+      thermoPost(st.enabled ? { mode: "AUTO", confirm: true } : { enabled: true, mode: "AUTO", confirm: true });
     } else thermoPost({ mode: "OFF" });
   };
   auto.appendChild(sw);
