@@ -1277,10 +1277,11 @@ never starts it. The request skips check 7, and the setting is latched for this 
 - **Heater running** (an immediate run): mode `WAITING` without any command.
 - **Continuous heating** already on: AUTO takes it over at once (`ADOPT_CONTINUOUS`).
 
-In mode `WAITING` the satellite sends nothing. Continuous heating that holds for
-`night_confirm_ms` is taken over (`ADOPT_CONTINUOUS`, then mode `AUTO`); a shorter one keeps the
-wait with its remaining time. Without continuous heating, the wait ends after `night_wait_ms` with
-`NIGHT_WAIT_ENDED`. An owner OFF or the feature switched off stops the heater that runs: an immediate
+In mode `WAITING` the satellite sends nothing. Continuous heating that is first seen in the wait and
+that a 1702 reading taken `night_confirm_ms` later still shows is taken over (`ADOPT_CONTINUOUS`,
+then mode `AUTO`); a shorter one keeps the wait with its remaining time. Without continuous heating,
+the wait ends after `night_wait_ms` with `NIGHT_WAIT_ENDED`; continuous heating first seen after
+that time is not taken over. An owner OFF or the feature switched off stops the heater that runs: an immediate
 run with `power off`, continuous heating still in its confirm window with `permanent off`; an off heater
 gets no command. With the link down or the 1702 reading stale, the satellite stops what the last
 fresh reading of the wait showed: the stop waits in mode `STOPPING` and goes out on the next fresh
@@ -1342,7 +1343,7 @@ to see the continuous heating started at the panel. When AUTO is off, the sessio
 | The 1702 reading is older than `heater_stale_ms` | No command until a fresh reading; AUTO stays on | `HEATER_UNKNOWN` |
 | A command is not applied after one retry | AUTO ends | `NOT_APPLIED` |
 | The link is down when a stop is due | Mode `STOPPING`. After the link is back, a heater that the satellite left running is stopped; a heater that changed meanwhile is left alone | `STOPPING`, then `STOP_DROPPED` / `RUN_ENDED` / `CONTINUOUS_ENDED` |
-| The owner taps AUTO off | A normal stop of what the satellite left running | `USER_OFF` |
+| The owner taps AUTO off | A normal stop of what the satellite left running, also when a level command fails in the same step | `USER_OFF` |
 | The satellite reboots | Mode `OFF`, and no blind resume: the mode is never stored. An immediate run ends by itself; continuous heating continues at its last level | none |
 
 A level command is never sent when the link is down. A command that returned `BUSY` or

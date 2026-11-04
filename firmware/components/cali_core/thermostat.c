@@ -203,18 +203,21 @@ static void takeover(cali_thermo_state_t *st, const cali_thermo_snap_t *snap, in
     st->expect = *snap;
     st->last_ctl_ms = now;
     o->n = 0;
-    if (t_ref == NONE) return;
+    /* integrator 0; the dwell restarts only with a level sent */
     ctl0.i = 0;
-    ctl0.last_change_ms = now;
+    ctl0.last_change_ms = st->ctl.last_change_ms;
     ctl0.hot_since_ms = NONE_MS;
     ctl0.u = 0;
     ctl0.u_out = 0;
+    st->ctl = ctl0;
+    if (t_ref == NONE) return;
     lvl = control(t_ref, t_out, in->target, 0, &ctl0, cfg, NONE, now, &w);
     st->ctl = ctl0;
     if (lvl == NONE || lvl == 0) lvl = cfg->min_level; /* overheat: the lowest level */
     if (lvl == level || !in->link_ready) return;
     pend(st, "level", lvl, now, level, NULL);
     st->expect.level = lvl;
+    st->ctl.last_change_ms = now;
     add(o, "level", lvl);
 }
 
@@ -298,7 +301,7 @@ void cali_thermo_init(cali_thermo_state_t *st) {
 void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, cali_thermo_state_t *st,
                       cali_thermo_out_t *out) {
     int64_t now = in->now_ms;
-    int link = in->link_ready, hs, level, code, has_snap, on, req, faulty, heating;
+    int link = in->link_ready, hs, level, code, has_snap, on, req, faulty, heating, owner_off;
     int32_t target = in->target, t_out;
     const char *reason = NULL;
     cali_thermo_snap_t snap = {0, 0, NONE};
@@ -315,6 +318,9 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
     t_out = in->outside_on && valid(&in->out, cfg) ? in->out.value : NONE;
     faulty = hs == CALI_THERMO_H_FAULT || hs == CALI_THERMO_H_LOCKED || hs == CALI_THERMO_H_BLOCKED;
     heating = hs == CALI_THERMO_H_RUNNING || hs == CALI_THERMO_H_CONTINUOUS;
+    /* an owner OFF (or the feature disabled) while on: a failed level command must not end AUTO first */
+    owner_off = (st->mode == CALI_THERMO_AUTO || st->mode == CALI_THERMO_DEGRADED) &&
+                (in->request == CALI_THERMO_REQ_OFF || !in->enabled);
 
     /* (1) pending command: readback, result, verify window */
     if (st->has_pending && st->mode == CALI_THERMO_WAITING) { /* the night pre-set: never retried, never ends the wait */
@@ -345,6 +351,8 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             st->expect = snap;
         } else if (faulty) {
             /* rule (3) ends AUTO with the fault's reason */
+        } else if (is(p->what, "level") && is(res, "REFUSED") && owner_off) {
+            /* rule (2) stops the heater: a refused level must not end AUTO and drop the owner's OFF */
         } else if (is(res, "REFUSED")) {
             int off = is_off(p);
             st->has_pending = 0;
@@ -363,13 +371,16 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
                 RET("STOP_DROPPED");
             }
             if (p->tries >= 2 || (start && !start_retry_ok(p, in, cfg))) {
-                if (!is_off(p)) end(st, out);
-                st->has_pending = 0;
-                RET(fail);
+                if (!(is(p->what, "level") && owner_off)) { /* an owner OFF: rule (2) stops the heater */
+                    if (!is_off(p)) end(st, out);
+                    st->has_pending = 0;
+                    RET(fail);
+                }
+            } else {
+                resend(p, st, in, 0, out);
+                p->since_ms = now;
+                p->tries = 2;
             }
-            resend(p, st, in, 0, out);
-            p->since_ms = now;
-            p->tries = 2;
         }
         if (out->n) reason = is_off(p) ? "STOPPING" : "AUTO_ON";
     }
@@ -399,8 +410,15 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             }
             RET("WAITING_FOR_CONTINUOUS");
         }
-        if (st->cont_since_ms == NONE_MS) st->cont_since_ms = now;
-        if (now - st->cont_since_ms < cfg->night_confirm_ms) RET("WAITING_FOR_CONTINUOUS");
+        if (st->cont_since_ms == NONE_MS) { /* a Dauerbetrieb first seen after the wait is not taken over */
+            if (now >= st->wait_until_ms) {
+                end(st, out);
+                RET("NIGHT_WAIT_ENDED");
+            }
+            st->cont_since_ms = now;
+        }
+        /* confirmed by a heater frame read night_confirm_ms after the first one, not by a cached frame */
+        if (now - in->heater_age_ms - st->cont_since_ms < cfg->night_confirm_ms) RET("WAITING_FOR_CONTINUOUS");
         st->mode = CALI_THERMO_AUTO;
         takeover(st, &snap, level, valid(&in->ref, cfg) ? in->ref.value : NONE, t_out, in, cfg, out);
         RET("ADOPT_CONTINUOUS");

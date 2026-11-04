@@ -351,15 +351,18 @@ def _takeover(
     assert snap is not None  # only called with a fresh OFF, RUNNING or CONTINUOUS heater
     now = inp["now_ms"]
     st["pending"], st["expect"], st["last_ctl_ms"] = None, dict(snap), now
+    # integrator 0; the dwell restarts only with a level sent
+    ctl0 = {"i": 0, "last_change_ms": st["ctl"]["last_change_ms"], "hot_since_ms": None, "u": 0, "u_out": 0}
+    st["ctl"] = ctl0
     if t_ref is None:
         return []
-    ctl0 = {"i": 0, "last_change_ms": now, "hot_since_ms": None, "u": 0, "u_out": 0}
     lvl, st["ctl"], _ = control(t_ref, t_out, inp["target"], 0, ctl0, cfg, None, now)
     lvl = lvl or cfg["min_level"]  # overheat: the lowest level
     if lvl == level or not inp["link_ready"]:
         return []
     st["pending"] = _pend("level", lvl, now, level)
     st["expect"]["level"] = lvl
+    st["ctl"]["last_change_ms"] = now
     return [("level", lvl)]
 
 
@@ -445,7 +448,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        heater's. It shall end AUTO without a command on a heater fault (ErrorCode 1 excepted: a
        normal stop, ``BATTERY_LOW``), a change it did not make (also during its own pending level
        command), the end of the run (also a heater switched off during its own pending level
-       command: ``RUN_ENDED`` or ``CONTINUOUS_ENDED``), and a command not applied after one retry.
+       command: ``RUN_ENDED`` or ``CONTINUOUS_ENDED``), and a command not applied after one retry (an
+       owner stop in the step of a refused or unapplied level command stops the heater instead).
        A ``power on`` is retried at most once, only when a fresh readback shows the heater off, within
        ``heater_stale_ms`` of the first send and while the entry conditions still hold; an
        unconfirmed command is never re-sent blind. A refused or unapplied stop reports
@@ -471,8 +475,10 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        next fresh reading only if the heater is unchanged. A fault
        shall end the wait without a command; ``BATTERY_LOW`` (ErrorCode 1) too, whatever the heater
        shows. It shall take over continuous heating
-       once it held ``night_confirm_ms`` (a shorter one keeps the wait with its remaining time),
-       and end with ``NIGHT_WAIT_ENDED`` after ``night_wait_ms`` without continuous heating.
+       first seen in the wait once a heater reading taken ``night_confirm_ms`` later still shows it
+       (a shorter one keeps the wait with its remaining time), and end with ``NIGHT_WAIT_ENDED``
+       after ``night_wait_ms`` without continuous heating or with continuous heating first seen
+       after that time.
        While it regulates continuous heating (night or not), ``OVERHEAT`` and
        ``TARGET_EXCEEDED_AT_MIN_LEVEL`` shall not stop the heater: it holds ``min_level`` with
        ``HOLD_AT_MIN_LEVEL``. The night setting is latched at the start and cleared at mode OFF.
@@ -506,6 +512,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
     t_out = inp["out"]["value"] if inp["outside_on"] and _valid(inp["out"], cfg) else None
     cmds: list = []
     reason = None
+    # an owner OFF (or the feature disabled) while on: a failed level command must not end AUTO first
+    owner_off = st["mode"] in ("AUTO", "DEGRADED") and (inp["request"] == "OFF" or not inp["enabled"])
 
     def out(why):
         if st["mode"] == "OFF":
@@ -568,6 +576,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             st["pending"], st["expect"] = None, snap
         elif hs in _FAULTS:
             pass  # rule (3) ends AUTO with the fault's reason
+        elif p["what"] == "level" and res == "REFUSED" and owner_off:
+            pass  # rule (2) stops the heater: a refused level must not end AUTO and drop the owner's OFF
         elif res == "REFUSED":
             st["pending"] = None
             if p["value"] != "off":
@@ -584,12 +594,14 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
                 st["pending"] = None
                 return out("STOP_DROPPED")
             if p["tries"] >= 2 or (start and not _start_retry_ok(p, inp, cfg)):
-                if p["value"] != "off":
-                    _end(st)
-                st["pending"] = None
-                return out(fail)
-            cmds = _resend(p, st, inp, full=False)
-            p["since_ms"], p["tries"] = now, 2
+                if not (p["what"] == "level" and owner_off):  # an owner OFF: rule (2) stops the heater
+                    if p["value"] != "off":
+                        _end(st)
+                    st["pending"] = None
+                    return out(fail)
+            else:
+                cmds = _resend(p, st, inp, full=False)
+                p["since_ms"], p["tries"] = now, 2
         if cmds:
             reason = "STOPPING" if p["value"] == "off" else "AUTO_ON"
 
@@ -612,9 +624,13 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
                 _end(st)
                 return out("NIGHT_WAIT_ENDED")
             return out("WAITING_FOR_CONTINUOUS")
-        if st["cont_since_ms"] is None:
+        if st["cont_since_ms"] is None:  # a Dauerbetrieb first seen after the wait is not taken over
+            if now >= st["wait_until_ms"]:
+                _end(st)
+                return out("NIGHT_WAIT_ENDED")
             st["cont_since_ms"] = now
-        if now - st["cont_since_ms"] < cfg["night_confirm_ms"]:
+        # confirmed by a heater frame read night_confirm_ms after the first one, not by a cached frame
+        if now - inp["heater_age_ms"] - st["cont_since_ms"] < cfg["night_confirm_ms"]:
             return out("WAITING_FOR_CONTINUOUS")
         st["mode"] = "AUTO"
         t_ref = inp["ref"]["value"] if _valid(inp["ref"], cfg) else None

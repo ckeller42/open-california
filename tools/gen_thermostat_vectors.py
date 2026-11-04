@@ -188,6 +188,20 @@ class Rec:
             self.tags.add("panel_off_during_pending")
         if why == "NIGHT_WAIT_ENDED":
             self.tags.add("night_wait_timeout")
+            if (inp["heater"] or {}).get("PermanentOperation"):
+                self.tags.add("night_continuous_after_wait")
+        if wait and why == "WAITING_FOR_CONTINUOUS" and st["cont_since_ms"] is not None:
+            if inp["now_ms"] - st["cont_since_ms"] >= cfg["night_confirm_ms"]:
+                self.tags.add("night_confirm_cached_frame")
+        p = st["pending"] or {}
+        if (
+            st["mode"] in ("AUTO", "DEGRADED")
+            and p.get("what") == "level"
+            and why == "USER_OFF"
+            and out["cmds"]
+        ):
+            if (inp["cmd"] or {}).get("result") == "REFUSED" or p["tries"] >= 2:
+                self.tags.add("owner_off_failed_level")
         if wait and why == "USER_OFF":
             self.tags.add("night_user_off")
         if (
@@ -647,6 +661,27 @@ def _night_sessions(rec):
         rec, "night_odd_cfg", 1,
         [{**auto, **night}, {**night, "heater": cont, "dt": 1000}, {**night, "heater": cont, "dt": ODD["night_confirm_ms"]}, {}],
     )  # fmt: skip
+    session(  # Dauerbetrieb first seen after the wait ended: not taken over
+        rec, "night_continuous_after_wait", 0,
+        [{**auto, **night}, {**night, "heater": cont, "dt": W}],
+    )  # fmt: skip
+    session(  # a cached frame (5 s old) does not confirm; a fresh one does
+        rec, "night_confirm_cached_frame", 0,
+        [{**auto, **night}, {**night, "heater": cont}, {**night, "heater": cont, "dt": C, "heater_age_ms": 5000},
+         {**night, "heater": cont, "dt": 5000}, {}],
+    )  # fmt: skip
+    session(  # the takeover with the link down sends nothing and keeps the dwell start
+        rec, "night_takeover_link_down", 0,
+        [{**auto, **night}, {**night, "heater": cont, "dt": 1000}, {**night, "heater": cont, "dt": C, "link_ready": False}, {}],
+    )  # fmt: skip
+    st0 = th.initial_state()
+    st0["ctl"].update(i=4000, last_change_ms=1)  # a previous run's controller
+    session(  # the takeover without a reference still starts from integrator 0
+        rec, "night_takeover_no_ref", 0,
+        [{**auto, **night, "heater": run_h(5)}, {**night, "heater": cont, "dt": 1000, "ref": None},
+         {**night, "heater": cont, "dt": C, "ref": None}, {}],
+        st=st0,
+    )  # fmt: skip
     session(  # the night setting is latched at the start: a later input change does not matter
         rec, "night_latched", 0,
         [{**auto, **night}, {"night": False}, {"night": False, "heater": cont, "dt": C}, {"night": True}, {}],
@@ -656,6 +691,15 @@ def _night_sessions(rec):
 def _hold_and_blocked_sessions(rec):
     auto = {"request": "AUTO"}
     cont = run_h(6, 1)
+    session(  # an owner OFF in the step of a refused level stops the heater
+        rec, "owner_off_refused_level", 0,
+        [{**auto, "heater": run_h(1)}, {"request": "OFF", "ack": "REFUSED", "heater": run_h(1), "dt": 1}, {"heater": OFF_H}],
+    )  # fmt: skip
+    session(  # the same for a level not applied after its retry
+        rec, "owner_off_unapplied_level", 0,
+        [{**auto, "heater": run_h(1)}, {"heater": run_h(1), "dt": D["verify_ms"]},
+         {"request": "OFF", "heater": run_h(1), "dt": D["verify_ms"]}, {"heater": OFF_H}],
+    )  # fmt: skip
     session(  # an owner takeover starts from the demand
         rec, "adopt_run_to_demand", 0,
         [{**auto, "heater": run_h(9), "ref": sensor(2000)}, {"ref": sensor(2000)}],

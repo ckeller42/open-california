@@ -353,6 +353,42 @@ def test_not_applied_after_one_retry():
     assert (out["cmds"], out["mode"], out["reason"]) == ([], "OFF", "NOT_APPLIED")
 
 
+def test_owner_off_with_a_failed_level_stops_the_heater():
+    """An owner OFF in the step of a refused or unapplied level command stops the heater."""
+    for refused in (True, False):
+        out, st = _auto({**RUN, "HeatingLevel": 1})
+        assert out["cmds"] == [("level", 6)]
+        low = {**RUN, "HeatingLevel": 1}
+        if refused:
+            res = {"what": "level", "result": "REFUSED"}
+            out, st = _step(st, now_ms=1, heater=low, cmd=res, request="OFF")
+        else:
+            _, st = _step(st, now_ms=V, heater=low, cmd={"what": "level", "result": "OK"})
+            out, st = _step(st, now_ms=2 * V, heater=low, request="OFF")
+        assert (out["cmds"], out["mode"], out["reason"]) == ([("power", "off")], "OFF", "USER_OFF")
+    # the same failure without an OFF still ends AUTO with no command
+    _, st = _auto({**RUN, "HeatingLevel": 1})
+    out, _ = _step(
+        st, now_ms=1, heater={**RUN, "HeatingLevel": 1}, cmd={"what": "level", "result": "REFUSED"}
+    )
+    assert (out["cmds"], out["mode"], out["reason"]) == ([], "OFF", "NOT_APPLIED")
+
+
+def test_takeover_without_a_send_keeps_the_dwell_and_resets_the_integrator():
+    """A takeover that sends nothing keeps the dwell start; with no reference it still zeroes the integrator."""
+    _, st = _night()
+    cont = {**CONT, "HeatingLevel": 10}
+    st["ctl"].update(i=4000, last_change_ms=-1)
+    _, st = _wait_step(st, 60000, cont)
+    out, st = _wait_step(st, 90000, cont, link_ready=False)
+    assert (out["reason"], out["cmds"], st["ctl"]["last_change_ms"]) == ("ADOPT_CONTINUOUS", [], -1)
+    _, st = _night()
+    st["ctl"].update(i=4000, last_change_ms=-1)
+    _, st = _wait_step(st, 60000, cont, ref=None)
+    out, st = _wait_step(st, 90000, cont, ref=None)
+    assert (out["reason"], st["ctl"]["i"], st["ctl"]["last_change_ms"]) == ("ADOPT_CONTINUOUS", 0, -1)
+
+
 def test_user_off_while_link_down_goes_stopping_then_drops_on_change():
     _, st = _auto(RUN)
     out, st1 = _step(st, now_ms=1000, request="OFF")
@@ -632,6 +668,28 @@ def test_night_wait_ends_quietly():
     out, st = _wait_step(st, 300000, OFF_H)
     assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "NIGHT_WAIT_ENDED", [])
     assert not st["night"] and st["wait_until_ms"] is None
+
+
+def test_night_continuous_first_seen_after_the_wait_is_not_taken_over():
+    """A Dauerbetrieb first seen after ``night_wait_ms`` ends the wait; one seen before is still confirmed."""
+    _, st = _night()
+    cont = {**CONT, "HeatingLevel": 10}
+    out, _ = _wait_step(st, 300000, cont)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "NIGHT_WAIT_ENDED", [])
+    _, st = _wait_step(st, 299999, cont)
+    out, _ = _wait_step(st, 329999, cont)
+    assert (out["mode"], out["reason"]) == ("AUTO", "ADOPT_CONTINUOUS")
+
+
+def test_night_confirm_needs_a_frame_read_after_the_window():
+    """A cached Dauerbetrieb frame does not confirm: the frame must be read ``night_confirm_ms`` after the first."""
+    _, st = _night()
+    cont = {**CONT, "HeatingLevel": 10}
+    _, st = _wait_step(st, 60000, cont)
+    out, st = _wait_step(st, 90000, cont, heater_age_ms=5000)
+    assert (out["mode"], out["reason"]) == ("WAITING", "WAITING_FOR_CONTINUOUS")
+    out, _ = _wait_step(st, 91000, cont)
+    assert (out["mode"], out["reason"]) == ("AUTO", "ADOPT_CONTINUOUS")
 
 
 def test_waiting_user_off_stops_what_runs():
