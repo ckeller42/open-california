@@ -8,8 +8,7 @@
 from tools import wifi_consts
 
 WANT = {
-    "NET_AP_SSID": "calictl-esp-setup",
-    "NET_AP_PSK": "calictl-setup",
+    "NET_AP_SSID_PREFIX": "calictl-esp-",
     "NET_HOSTNAME": "calictl-esp",
     "NET_AP_ADDR": "192.168.4.1",
     "NET_AP_ADDR_U32": 0xC0A80401,

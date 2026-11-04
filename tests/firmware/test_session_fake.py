@@ -162,6 +162,7 @@ def fake(tmp_path_factory):
             str(ROOT / "csrc" / "codec.c"),
             str(ROOT / "csrc" / "ports.c"),
             str(CORE / "wifi_run.c"),
+            str(CORE / "ap_identity.c"),
             str(CORE / "wifi_sm.c"),
             str(CORE / "captive_dns.c"),
             str(CORE / "test" / "session_fake.c"),
@@ -1392,8 +1393,10 @@ def test_snap_line_bytes_are_pinned(fake):
 
 # ---- the WiFi runner (wifi_run.c) on the same tick as the session ----------------------------
 
-AP = "NET ap_start %s %s" % (CONSTS["NET_AP_SSID"], CONSTS["NET_AP_PSK"])
-AP_UP = "LOG wifi: setup hotspot up (%s)" % CONSTS["NET_AP_SSID"]
+# session_fake.c fakes the platform: MAC 02:00:00:00:C0:FE, "random" bytes 0, 1, 2 ... (-> this password)
+AP_SSID, AP_PSK = CONSTS["NET_AP_SSID_PREFIX"] + "C0FE", "2345-789a-cdef"
+AP = "NET ap_start %s %s" % (AP_SSID, AP_PSK)
+AP_UP = "LOG wifi: setup hotspot up (%s)" % AP_SSID
 PSK = "test-psk-1234"
 
 

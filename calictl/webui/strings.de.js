@@ -699,7 +699,7 @@ window.STRINGS_DE = {
   "Could not save the WiFi settings.": "Die WLAN-Einstellungen konnten nicht gespeichert werden.",
   "The satellite rejected the request.": "Der Satellit hat die Anfrage abgelehnt.",
   "Add": "Hinzufügen",
-  "Back on {old} within a minute if the new password was wrong; otherwise join the setup hotspot {ap} (password {appsk}) and open:": "Bei falschem Passwort ist er binnen einer Minute zurück in {old}; sonst verbinde dich mit dem Einrichtungs-Hotspot {ap} (Passwort {appsk}) und öffne:",
+  "Back on {old} within a minute if the new password was wrong; otherwise the satellite opens its setup hotspot: scan the QR code on its display.": "Innerhalb einer Minute zurück in {old}, falls das neue Passwort falsch war; sonst öffnet der Satellit seinen Einrichtungs-Hotspot: den QR-Code auf seinem Display scannen.",
   "Battery sense (Victron)": "Batteriesensor (Victron)",
   "Brighter": "Heller",
   "Brightness from room light": "Helligkeit nach Raumlicht",

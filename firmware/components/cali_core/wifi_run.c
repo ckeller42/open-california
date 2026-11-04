@@ -12,6 +12,7 @@
 
 #include <string.h>
 
+#include "cali_ap_identity.h"
 #include "cali_captive.h"
 #include "cali_diag.h"
 #include "cali_platform.h"
@@ -46,6 +47,7 @@ static struct {
     uint64_t now;                    /* the last tick's now_ms */
     int join_failed;                 /* a STA_START that could not start: FAILED(OTHER) next tick */
     int ap_running;                  /* ap_start() succeeded and no WACT_AP_STOP since */
+    char ap_ssid[NET_SSID_MAX + 1];  /* the hotspot's name, set when it starts (the "up" log line) */
     uint32_t last_fail;              /* the last WACT_LOG_REASON's reason; NONE after CREDS_SET/GOT_IP */
     uint32_t last_ip;                /* the previous lease (wifi_up's ip_changed; the address is never logged) */
     uint64_t up_at;                  /* now of the last GOT_IP (wifi_down's dur_ms) */
@@ -112,8 +114,11 @@ static void run_action(const cali_wifi_action_t *a) {
          * CREDS_FORGET) keeps it — no second ap_start, DNS re-bind or "setup hotspot up". A start
          * that failed is retried by the next AP_START. */
         if (!W.ap_running) {
-            if (W.net->ap_start(NET_AP_SSID, NET_AP_PSK) != 0) cali_log("wifi: setup hotspot failed to start");
+            char psk[NET_PSK_MAX + 1];   /* never logged; wiped after the call */
+            if (cali_ap_identity(W.ap_ssid, psk) != 0) cali_log("wifi: setup hotspot identity unavailable");
+            else if (W.net->ap_start(W.ap_ssid, psk) != 0) cali_log("wifi: setup hotspot failed to start");
             else W.ap_running = 1;
+            memset(psk, 0, sizeof psk);
             if (cali_captive_dns_start(W.net, NET_AP_ADDR_U32) != 0) cali_log("wifi: captive DNS unavailable");
         }
         start_scan();                      /* the setup page lists networks from the first GET */
@@ -220,7 +225,7 @@ static void on_net(const cali_net_event_t *e, void *ctx) {
         break;
     case CALI_NET_EV_AP_STARTED:
         feed(WEV_AP_STARTED, 0);
-        cali_log("wifi: setup hotspot up (%s)", NET_AP_SSID);
+        cali_log("wifi: setup hotspot up (%s)", W.ap_ssid);
         break;
     case CALI_NET_EV_SCAN_DONE: {
         int n = e->scan && e->nscan > 0 ? e->nscan : 0;

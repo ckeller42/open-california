@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "cali_display_model.h"
+#include "cali_platform.h"
 
 static const char *dot_name(cali_dot_t d) {
     return d == CALI_DOT_GREEN ? "green" : d == CALI_DOT_AMBER ? "amber" : d == CALI_DOT_RED ? "red" : "grey";
@@ -18,10 +19,11 @@ static const char *dot_name(cali_dot_t d) {
 
 static void put_row(const char *name, const cali_row_t *r) { printf("%s=%s|%s ;; ", name, dot_name(r->dot), r->text); }
 
-int main(void) {
+int main(int argc, char **argv) {
     char line[1024];
     cali_display_model_t m;
     uint8_t swallow = 0;
+    if (cali_platform_init(argc > 1 ? argv[1] : NULL) != 0) return 1;   /* the hotspot password lives in the kv store */
     cali_display_model_init(&m);
     while (fgets(line, sizeof line, stdin)) {
         cali_status_t s;

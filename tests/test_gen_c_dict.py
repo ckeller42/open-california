@@ -141,7 +141,7 @@ def test_net_consts_header_is_fresh():
 
     text = gen_c_dict.generate_net()
     assert text == (ROOT / "csrc" / "net_consts.h").read_text()
-    assert '#define NET_AP_SSID "calictl-esp-setup"' in text
+    assert '#define NET_AP_SSID_PREFIX "calictl-esp-"' in text
     assert "#define NET_SETUP_AFTER_MS 300000" in text
 
 

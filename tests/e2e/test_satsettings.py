@@ -617,15 +617,12 @@ def test_change_network_switches_and_comes_back(station, locale, lang):
         expect(panel).to_contain_text(tr("Join {ssid} with this phone, then open:", lang, ssid="minsel"))
         expect(panel).to_contain_text(
             tr(
-                "Back on {old} within a minute if the new password was wrong; otherwise join the setup hotspot {ap} (password {appsk}) and open:",
+                "Back on {old} within a minute if the new password was wrong; otherwise the satellite opens its setup hotspot: scan the QR code on its display.",
                 lang,
                 old="HomeNet",
-                ap=CONSTS["NET_AP_SSID"],
-                appsk=CONSTS["NET_AP_PSK"],
             )
         )
         expect(panel.locator('a[href="%s"]' % host).first).to_be_visible()
-        expect(panel.locator('a[href="http://%s"]' % CONSTS["NET_AP_ADDR"])).to_be_visible()
         held[0].continue_()
         _wait(pg, lambda: station.wifi_posts, "the join POST")
         assert station.wifi_posts == [{"ssid": "minsel", "psk": "test-psk-1234"}]

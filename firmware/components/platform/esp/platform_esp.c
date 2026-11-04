@@ -15,6 +15,8 @@
 
 #include "driver/gpio.h"
 #include "esp_app_desc.h"
+#include "esp_mac.h"
+#include "esp_random.h"
 #include "esp_timer.h"
 #include "nvs.h"
 #if CONFIG_PM_ENABLE
@@ -47,6 +49,10 @@ void cali_log(const char *fmt, ...) {
 const char *cali_fw_version(void) {
     return esp_app_get_description()->version;
 }
+
+void cali_random(void *buf, size_t len) { esp_fill_random(buf, len); }
+
+int cali_mac(uint8_t mac[6]) { return esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK ? 0 : -1; }
 
 /* The live esp_pm config, never a flag of our own: device.display.dfs must say whether DFS is really
  * active in this boot (#346: two "DFS on" boots differed 45x in touch NACKs). */

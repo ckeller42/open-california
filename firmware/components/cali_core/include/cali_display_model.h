@@ -154,7 +154,7 @@ typedef struct {
     cali_row_t device;       /**< The device row. */
     cali_row_t wifi;         /**< The WiFi row. */
     cali_row_t camper;       /**< The camper-unit row. */
-    int footer_setup;        /**< 1: the footer shows NET_AP_SSID and NET_AP_PSK; 0: `http://NET_HOSTNAME.local` and the battery. */
+    int footer_setup;        /**< 1: the footer shows the hotspot name and password (cali_ap_identity); 0: `http://NET_HOSTNAME.local` and the battery. */
     char footer[CALI_ROW_TEXT_MAX];   /**< The footer text. */
     cali_disp_state_t state; /**< On, dim or off. */
     cali_sensor_t sensor;    /**< The light sensor's state. */

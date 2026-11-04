@@ -67,7 +67,7 @@ COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o
 	sensors.o json.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o thermostat_run.o pi_wake.o ble_exp.o ble_exp_run.o
+CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o ap_identity.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o thermostat_run.o pi_wake.o ble_exp.o ble_exp_run.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
@@ -169,9 +169,14 @@ wifi_sm.o: $(COMPONENTS)/cali_core/wifi_sm.c $(CORE_H)/cali_wifi_sm.h $(CSRC)/ne
 
 # The WiFi runtime (#154 Task 7): the SM over cali_net + kv + captive DNS. tests/firmware/test_session_fake.py
 # (fake net) and test_web_e2e.py (cali-host --http).
-wifi_run.o: $(COMPONENTS)/cali_core/wifi_run.c $(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h \
+wifi_run.o: $(COMPONENTS)/cali_core/wifi_run.c $(CORE_H)/cali_ap_identity.h $(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h \
 		$(CORE_H)/cali_net.h $(CORE_H)/cali_captive.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_pairing_sm.h \
 		$(CORE_H)/cali_transport.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The per-unit setup hotspot identity (name from the MAC, random stored password): tests/firmware/test_ap_identity.py.
+ap_identity.o: $(COMPONENTS)/cali_core/ap_identity.c $(CORE_H)/cali_ap_identity.h $(CSRC)/net_consts.h \
 		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
@@ -249,7 +254,7 @@ diag.o: $(COMPONENTS)/cali_core/diag.c $(CORE_H)/cali_diag.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The pure status-display model (#154): rows, stale rule, footer, wake + brightness (R_FW_DISPLAY_WAKE).
-display_model.o: $(COMPONENTS)/cali_core/display_model.c $(CORE_H)/cali_display_model.h $(CORE_H)/cali_battery.h \
+display_model.o: $(COMPONENTS)/cali_core/display_model.c $(CORE_H)/cali_ap_identity.h $(CORE_H)/cali_display_model.h $(CORE_H)/cali_battery.h \
 		$(CORE_H)/cali_status.h $(CORE_H)/cali_wifi_run.h $(CSRC)/net_consts.h \
 		$(CSRC)/pairing_consts.h ../web/strings_gen.h
 	$(CC) -c $(CFLAGS) -o $@ $<

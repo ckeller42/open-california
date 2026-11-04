@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cali_ap_identity.h"
 #include "cali_wifi_run.h"
 #include "net_consts.h"
 #include "pairing_consts.h"
@@ -89,7 +90,9 @@ static void wifi_row(cali_row_t *r, const cali_status_t *s, int lang) {
         return;
     }
     if (s->wifi_mode == CALI_WIFI_MODE_SETUP) {
-        row(r, CALI_DOT_AMBER, label, K_SETUP, lang, NET_AP_SSID, NET_AP_ADDR);
+        char ssid[NET_SSID_MAX + 1], psk[NET_PSK_MAX + 1];
+        if (cali_ap_identity(ssid, psk) != 0) ssid[0] = 0;
+        row(r, CALI_DOT_AMBER, label, K_SETUP, lang, ssid, NET_AP_ADDR);
         return;
     }
     if (s->wifi_state == WIFI_CONNECTING) {
@@ -291,8 +294,9 @@ void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_
     row(&out->device, CALI_DOT_GREEN, tx(K_DEVICE, lang), K_RUNNING, lang, up, NULL);
     out->footer_setup = s->wifi_mode == CALI_WIFI_MODE_SETUP;
     if (out->footer_setup) {
-        char tmp[2 * CALI_ROW_TEXT_MAX];
-        snprintf(tmp, sizeof tmp, tx(K_FOOTER_SETUP, lang), NET_AP_SSID, NET_AP_PSK);
+        char tmp[2 * CALI_ROW_TEXT_MAX], ssid[NET_SSID_MAX + 1], psk[NET_PSK_MAX + 1];
+        if (cali_ap_identity(ssid, psk) != 0) ssid[0] = psk[0] = 0;
+        snprintf(tmp, sizeof tmp, tx(K_FOOTER_SETUP, lang), ssid, psk);
         cali_display_fit_text(out->footer, tmp);
     } else {
         station_footer(out->footer, &in->batt, lang);

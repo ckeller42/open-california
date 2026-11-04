@@ -325,6 +325,7 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.test_wifi_sm_ref
 .. automodule:: tests.test_web_strings
 .. automodule:: tests.test_ux_gallery_esp_fixtures
+.. automodule:: tests.firmware.test_ap_identity
 .. automodule:: tests.firmware.test_display_model
 .. automodule:: tests.test_display_font
 .. automodule:: tests.test_display_touch

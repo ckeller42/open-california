@@ -30,6 +30,13 @@ def glyphs(size: int) -> set[int]:
     return {int(h, 16) for h in re.findall(r"/\* U\+([0-9A-F]{4,5}) ", src)}
 
 
+# The per-unit hotspot (ap_identity.c): calictl-esp-XXXX and a xxxx-xxxx-xxxx password.
+AP_SSID = CONSTS["NET_AP_SSID_PREFIX"] + "C0FE"
+AP_PSK = "wwww-wwww-wwww"  # the widest letter
+AP_SSID_HEX = "0123456789ABCDEF-"
+AP_ALPHABET = "23456789abcdefghijkmnpqrstuvwxyz"
+
+
 def display_texts() -> list[tuple[str, str, str]]:
     out = []
     for key, tr in STRINGS.items():
@@ -37,9 +44,10 @@ def display_texts() -> list[tuple[str, str, str]]:
             for lang in ("en", "de"):
                 out.append((key, lang, tr[lang].replace("%s", "")))
     for lang in ("en", "de"):  # the setup footer as display.c renders it
+        out.append(("footer", lang, STRINGS["d_footer_setup"][lang] % (AP_SSID, AP_PSK)))
         out.append(
-            ("footer", lang, STRINGS["d_footer_setup"][lang] % (CONSTS["NET_AP_SSID"], CONSTS["NET_AP_PSK"]))
-        )
+            ("ap_chars", lang, AP_SSID_HEX + AP_ALPHABET)
+        )  # every character the hotspot identity can hold
         out.append(("url", lang, f"http://{CONSTS['NET_HOSTNAME']}.local"))
         out += [("batt_footer", lang, t) for t in battery_footers(lang)]
     out.append(("title", "-", "calictl satellite fw 0123456789abcdef-dirty"))
@@ -114,7 +122,7 @@ def spec_row_texts(lang: str) -> list[str]:
     ssid = "Campingplatz"
     texts = [
         s["d_running"] % "23 h 59 min",
-        s["d_setup"] % (CONSTS["NET_AP_SSID"], CONSTS["NET_AP_ADDR"]),
+        s["d_setup"] % (AP_SSID, CONSTS["NET_AP_ADDR"]),
         f"{ssid} · 192.168.178.186 · -100 dBm",
         s["d_joining"] % ssid,
         s["d_retrying"] % ssid,

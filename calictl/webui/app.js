@@ -2715,11 +2715,11 @@ function satConnect() {
   satAsk(sq("wifi-acts"), [h("span", null, tf("The satellite leaves {ssid} now. If the new password is wrong, it returns to {ssid} by itself.", { ssid: old }))],
     T("Switch network"), "danger", (close) => {
       close();
-      const p = sq("wifi-switch"), url = "http://" + NET_HOSTNAME + ".local", ap = "http://" + NET_AP_ADDR;
+      const p = sq("wifi-switch"), url = "http://" + NET_HOSTNAME + ".local";
       p.replaceChildren(h("h3", null, T("Switching networks")),
         h("p", null, (ssid === old ? T("Reload this page in ~30 s, or open:") : tf("Join {ssid} with this phone, then open:", { ssid: ssid })) + " ", satLink(url)),
-        h("p", null, tf("Back on {old} within a minute if the new password was wrong; otherwise join the setup hotspot {ap} (password {appsk}) and open:",
-          { old: old, ap: NET_AP_SSID, appsk: NET_AP_PSK }) + " ", satLink(ap)));
+        h("p", null, tf("Back on {old} within a minute if the new password was wrong; otherwise the satellite opens its setup hotspot: scan the QR code on its display.",
+          { old: old })));
       p.hidden = false;
       sq("wifi-now").textContent = "";   // it is leaving that network
       sq("wifi-form").hidden = true;

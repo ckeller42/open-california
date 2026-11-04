@@ -13,6 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "firmware/components/cali_core"
+PLATFORM = ROOT / "firmware/components/platform"
 
 
 @pytest.fixture(scope="module")
@@ -29,10 +30,14 @@ def cli(tmp_path_factory):
             "-I",
             str(CORE / "include"),
             "-I",
+            str(PLATFORM / "include"),
+            "-I",
             str(ROOT / "csrc"),
             "-I",
             str(ROOT / "firmware/web"),
             str(CORE / "display_model.c"),
+            str(CORE / "ap_identity.c"),
+            str(PLATFORM / "host/platform_host.c"),
             str(CORE / "test/display_cli.c"),
             "-o",
             str(out),
@@ -43,9 +48,20 @@ def cli(tmp_path_factory):
     return out
 
 
+def ap_psk(cli):
+    """The hotspot password the model read from (or made in) the cli's kv store: LE32 len, bytes, CRC."""
+    return (Path(cli).parent / "kv" / "ap_psk.kv").read_bytes()[4:18].decode()
+
+
 def run(cli, *lines):
     out = (
-        subprocess.run([str(cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True)
+        subprocess.run(
+            [str(cli), str(Path(cli).parent / "kv")],
+            input="\n".join(lines) + "\n",
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         .stdout.strip()
         .splitlines()
     )
@@ -54,7 +70,13 @@ def run(cli, *lines):
 
 def run_raw(cli, *lines):
     return (
-        subprocess.run([str(cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True)
+        subprocess.run(
+            [str(cli), str(Path(cli).parent / "kv")],
+            input="\n".join(lines) + "\n",
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         .stdout.strip()
         .splitlines()
     )
@@ -125,8 +147,8 @@ def test_wifi_setup_mode_and_footer(cli):
         .replace("ip=3232281174", "ip=0")
         + " now=1 lang=0",
     )
-    assert v["wifi"] == "amber|Hotspot calictl-esp-setup · 192.168.4.1"
-    assert v["setup"] == "1" and v["footer"] == "WLAN calictl-esp-setup · Passwort calictl-setup"
+    assert v["wifi"] == "amber|Hotspot calictl-esp-C0FE · 192.168.4.1"  # the host fake MAC 02:00:00:00:C0:FE
+    assert v["setup"] == "1" and v["footer"] == "WLAN calictl-esp-C0FE · Passwort " + ap_psk(cli)
 
 
 def test_footer_english(cli):
@@ -136,7 +158,7 @@ def test_footer_english(cli):
         + " now=1 lang=1",
         BASE + " now=1 lang=1",
     )
-    assert s["footer"] == "WiFi calictl-esp-setup · password calictl-setup"
+    assert s["footer"] == "WiFi calictl-esp-C0FE · password " + ap_psk(cli)
     assert o["footer"] == "http://calictl-esp.local"
 
 

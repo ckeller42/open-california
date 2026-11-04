@@ -47,7 +47,7 @@ pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-bui
 
 PSK = "test-psk-1234"
 PAGE = Path(__file__).resolve().parents[2] / "firmware" / "web" / "index_gen.html"
-AP_UP = "wifi: setup hotspot up (%s)" % CONSTS["NET_AP_SSID"]
+AP_UP = "wifi: setup hotspot up (%s)" % (CONSTS["NET_AP_SSID_PREFIX"] + "C0FE")  # conftest pins the MAC
 _DE_SRC = (Path(__file__).resolve().parents[2] / "calictl/webui/strings.de.js").read_text(encoding="utf-8")
 _DE = {
     json.loads('"%s"' % k): json.loads('"%s"' % v)
@@ -765,7 +765,7 @@ def test_recovery_page_joins_over_the_hotspot(host_fw, hci_unit, tmp_path, local
         assert page.inner_text("h1") == title and page.title() == title
         assert page.inner_text("#app") == app and page.get_attribute("#app", "href") == "/"
         page.wait_for_selector("#ssid option[value=minsel]", state="attached", timeout=wait_ms)
-        assert CONSTS["NET_AP_SSID"] in page.inner_text("#now")
+        assert page.inner_text("#now").startswith(("Setup hotspot", "Einrichtungs-Hotspot"))
         page.select_option("#ssid", "minsel")
         page.fill("#psk", PSK)
         page.click("#go")
