@@ -54,7 +54,10 @@ static cali_lora_tracker_t s_trk;
 static unsigned s_silent;
 static bool s_uart_up, s_in_send, s_have_keys;
 static volatile bool s_on;   /* the newest snapshot's switch, set by the owner task: a send or a join wait stops at once */
-static atomic_int s_setup_req;      /* set by any task, taken by this one */
+/* Setup requests as a counter: any task increments s_setup_req, this task sets s_setup_done to the
+ * value it served only after a successful open, so a request made during an open is never lost and a
+ * failed open stays pending (retried on the next pass). */
+static atomic_uint s_setup_req, s_setup_done;
 static cali_lora_xfer_t s_xfer;     /* the key transfer in progress (ciphertext only) */
 static uint8_t s_confirm[6];        /* the pending FPort-12 confirmation */
 static size_t s_confirm_len;        /* 0 = none pending */
@@ -101,10 +104,12 @@ int cali_lora_port_setup_qr(char *out, size_t max) {
     return (int)cali_lora_setup_qr_text(out, max, &st, cali_exp_lora());
 }
 
-int cali_lora_port_setup_pending(void) { return atomic_load(&s_setup_req); }
+static bool setup_pending(void) { return atomic_load(&s_setup_req) != atomic_load(&s_setup_done); }
+
+int cali_lora_port_setup_pending(void) { return setup_pending(); }
 
 void cali_lora_port_setup_request(void) {
-    atomic_store(&s_setup_req, 1);
+    atomic_fetch_add(&s_setup_req, 1);
 }
 
 /* ---- the AT driver ---- */
@@ -345,14 +350,15 @@ static bool module_setup(void) {
 }
 
 /* The display's long press: a new transfer key (and the AppKey the first time). The module needs a new
- * AppKey and a new join only when the AppKey changed. */
-static bool setup_open(void) {
+ * AppKey and a new join only when the AppKey changed. -1 = the store failed, 0 = opened, 1 = opened with
+ * a new AppKey. */
+static int setup_open(void) {
     uint8_t before[24], after[24];
     size_t nb = sizeof before, na = sizeof after;
     int had = cali_kv_get(CALI_LORA_DEV_KEY, before, &nb) == CALI_KV_OK && nb == sizeof before;
-    bool changed = false;
+    int changed = -1;
     if (cali_lora_setup_open(esp_fill_random) != 0) {
-        cali_log("lora: setup: store failed");
+        cali_log("lora: setup: store failed");   /* ponytail: logged on every retry pass (1 s) while NVS fails */
     } else {
         changed = !had || cali_kv_get(CALI_LORA_DEV_KEY, after, &na) != CALI_KV_OK || na != sizeof after ||
                   memcmp(before, after, 16) != 0;
@@ -367,7 +373,7 @@ static bool setup_open(void) {
 
 static void join(void) {
     unsigned attempt = 0;
-    while (!s_st.joined && s_on && s_silent < CALI_LORA_SILENT_MAX && !atomic_load(&s_setup_req)) {
+    while (!s_st.joined && s_on && s_silent < CALI_LORA_SILENT_MAX && !setup_pending()) {
         s_st.note = "joining";
         publish();
         bool keys = apply_keys();
@@ -397,7 +403,7 @@ static void join(void) {
         /* the backoff: one second at a time, taking each new snapshot (the 1-deep queue is always full,
          * so a peek would return at once and spin) */
         uint32_t wait = cali_lora_join_backoff_s(attempt++);
-        for (uint32_t t = 0; t < wait && s_on && !atomic_load(&s_setup_req); t++) {
+        for (uint32_t t = 0; t < wait && s_on && !setup_pending(); t++) {
             vTaskDelay(pdMS_TO_TICKS(1000));
             (void)xQueueReceive(s_snap_q, &s_snap, 0);
         }
@@ -500,7 +506,7 @@ static void lora_task(void *arg) {
     for (;;) {
         (void)xQueueReceive(s_snap_q, &s_snap, pdMS_TO_TICKS(1000));   /* the newest snapshot, or the last one */
         if (!s_snap.enabled) {   /* off: no pin is touched, nothing is sent */
-            atomic_store(&s_setup_req, 0);   /* a request made while off never rotates the key later */
+            atomic_store(&s_setup_done, atomic_load(&s_setup_req));   /* a request made while off never rotates the key later */
             continue;
         }
         if (!ready || s_silent >= CALI_LORA_SILENT_MAX) {
@@ -524,10 +530,11 @@ static void lora_task(void *arg) {
                 continue;
             }
         }
-        if (atomic_load(&s_setup_req)) {   /* cleared only once the new transfer key is stored (the display waits on it) */
-            bool fresh = setup_open();
-            atomic_store(&s_setup_req, 0);
-            if (fresh) {
+        unsigned want = atomic_load(&s_setup_req);
+        if (want != atomic_load(&s_setup_done)) {   /* done only once the new transfer key is stored (the display waits on it) */
+            int fresh = setup_open();
+            if (fresh >= 0) atomic_store(&s_setup_done, want);   /* a newer request stays pending */
+            if (fresh == 1) {
                 ready = false;   /* a new AppKey: reset, set up and join like the first use */
                 continue;
             }

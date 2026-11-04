@@ -802,3 +802,17 @@ def test_lora_screen_texts(cli, inp, lang, hint, line):
     assert v[-1]["show"] == "1"
     assert (v[-1]["lhint"], v[-1]["lline"]) == (hint, line)
     assert v[0]["lhint"] == "" and v[0]["lline"] == ""  # closed: no text
+
+
+def test_press_held_across_the_close_never_reopens(cli):
+    """A press that is still held when the 120 s limit or the module going away closes the LoRa screen is
+    spent: it never reopens the screen nor asks for another transfer key."""
+    opened = ["reset", LORA + " now=0", *held(200, 3000), LORA + " now=4200"]  # open at 4000
+    v = run(cli, *opened, *held(200, 6000, now0=122_000))  # the timer closes at 124000, the press goes on
+    assert [x["show"] for x in v[-6:]] == ["0"] * 6 and [x["req"] for x in v[-20:]] == ["0"] * 20
+    back = [
+        x.replace(" lora=1", " lora=0") if 1400 <= int(x.split("press=")[1]) < 2000 else x
+        for x in held(200, 5000, now0=10_000)
+    ]
+    v = run(cli, *opened, *back)  # the module goes away during the press and comes back while it is held
+    assert v[-1]["show"] == "0" and {x["req"] for x in v[17:]} == {"0"}

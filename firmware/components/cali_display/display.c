@@ -347,12 +347,13 @@ static esp_lcd_touch_handle_t port_touch_handle(lv_indev_t *in) {
  * swallow a wake tap (cali_display_touch_gate). */
 static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
     int pressed;
+    esp_err_t e = ESP_OK;
     (void)indev;
     data->state = LV_INDEV_STATE_RELEASED;
     if (s_tp) {
         esp_lcd_touch_point_data_t p[CONFIG_ESP_LCD_TOUCH_MAX_POINTS];
         uint8_t n = 0;
-        esp_err_t e = esp_lcd_touch_read_data(s_tp);
+        e = esp_lcd_touch_read_data(s_tp);
         if (e == ESP_OK) e = esp_lcd_touch_get_data(s_tp, p, &n, CONFIG_ESP_LCD_TOUCH_MAX_POINTS);
         if (e != ESP_OK) {
             uint8_t pm = 0;
@@ -387,7 +388,9 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
         if (!__atomic_load_n(&s_press_start, __ATOMIC_RELAXED))
             __atomic_store_n(&s_press_start, (uint32_t)cali_uptime_ms() | 1u, __ATOMIC_RELAXED);
     }
-    if (!pressed) __atomic_store_n(&s_press_start, 0, __ATOMIC_RELAXED);
+    /* only a good read that reports no touch ends the press: a failed read (#346 NACKs) is "released"
+     * for LVGL but must not restart the 3 s count or close the LoRa screen mid-press */
+    if (!pressed && e == ESP_OK) __atomic_store_n(&s_press_start, 0, __ATOMIC_RELAXED);
 }
 
 static void bus_mark(int dev) {   /* owner task: an I2C transfer on dev just finished */
@@ -671,9 +674,16 @@ static void lora_paint(const cali_display_view_t *v, uint64_t now_ms) {
         int n = 0;
         uint32_t sig;
         s_qr_poll = now_ms;
-        if (!cali_lora_port_setup_pending())
-            n = v->show_lora == 2 ? cali_lora_port_setup_qr(text, sizeof text) : cali_lora_port_qr(text, sizeof text);
-        if (n <= 0) text[0] = 0;
+        if (!cali_lora_port_setup_pending()) {
+            n = v->show_lora == 2 ? cali_lora_port_setup_qr(text, sizeof text) : 0;
+            /* the selector; also after a finished rotation (its transfer key erased): the repair QR */
+            if (n <= 0) n = cali_lora_port_qr(text, sizeof text);
+        }
+        if (n > 0 && !qrcodegen_isAlphanumeric(text)) {   /* never byte mode: the length only, nothing shown */
+            cali_log("display: lora qr: %d chars not alphanumeric, not shown", n);
+            n = 0;
+        }
+        if (n <= 0) memset(text, 0, sizeof text);
         sig = n > 0 ? fnv1a(text) : 0;
         if (sig != s_qr_sig || v->show_lora != s_lora_show) {
             s_qr_ok = qr_paint(text);
@@ -711,7 +721,9 @@ static void lora_inputs(cali_display_in_t *in, uint64_t now_ms) {
     in->lora_joined = ls.joined && !ls.at_unanswered;
     if (ls.last_confirmed_s) in->lora_confirmed_age_s = (int32_t)(now_ms / 1000 - ls.last_confirmed_s);
     if (in->pressed_ms || s_lora_show) in->lora_has_ttn_keys = cali_lora_setup_state() == CALI_LORA_SETUP_TTN_KEYS;
-    in->lora_qr_ready = (uint8_t)s_qr_ok;   /* last poll's result */
+    /* last poll's result: the hint ("Preparing…" / scan) is one tick (DISPLAY_REFRESH_MS) behind the QR
+     * itself, which the poll paints after the model ran — harmless, the next tick catches up */
+    in->lora_qr_ready = (uint8_t)s_qr_ok;
 }
 
 void cali_display_tick(uint64_t now_ms) {

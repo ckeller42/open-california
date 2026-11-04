@@ -213,7 +213,8 @@ static void lora_screen(cali_display_model_t *m, uint64_t now_ms, const cali_dis
     int ended = m->press_ms && (!p || new_press);
     out->lora_request = 0;
     if (m->show_lora && ((ended && !m->press_spent) || (in->touched && !p && !m->press_ms))) m->show_lora = 0;
-    if (new_press) m->press_spent = m->started && now_ms - m->last_wake_ms >= DISPLAY_DIM_AFTER_MS;   /* dim or off */
+    if (new_press)   /* dim or off; the open LoRa screen is lit whatever the last tick was */
+        m->press_spent = !m->show_lora && m->started && now_ms - m->last_wake_ms >= DISPLAY_DIM_AFTER_MS;
     if (p >= DISPLAY_LORA_PRESS_MS && !m->press_spent) {
         m->press_spent = 1;
         if (!m->show_lora && in->lora_available) {   /* open: the selector; a new transfer key before the TTN keys */
@@ -227,7 +228,10 @@ static void lora_screen(cali_display_model_t *m, uint64_t now_ms, const cali_dis
         }
     }
     m->press_ms = p;
-    if (m->show_lora && (!in->lora_available || now_ms - m->lora_since >= DISPLAY_LORA_SHOW_MS)) m->show_lora = 0;
+    if (m->show_lora && (!in->lora_available || now_ms - m->lora_since >= DISPLAY_LORA_SHOW_MS)) {
+        m->show_lora = 0;
+        m->press_spent = 1;   /* a press held across the close never reopens it (nor makes a new key) */
+    }
     out->show_lora = m->show_lora;
 }
 
