@@ -61,3 +61,21 @@ int cali_ap_wifi_qr(char *out, size_t cap) {
     n = snprintf(out, cap, "WIFI:T:WPA;S:%s;P:%s;;", ssid, psk);
     return n < 0 || (size_t)n >= cap ? -1 : n;
 }
+
+static int s_pending = -1;   /* -1: not read yet */
+
+int cali_setup_pending(void) {
+    if (s_pending < 0) {
+        uint8_t b = 0;
+        size_t n = sizeof b;
+        s_pending = cali_kv_get(CALI_SETUP_QR_KEY, &b, &n) == CALI_KV_OK && n == 1 && b != 0;
+    }
+    return s_pending;
+}
+
+int cali_setup_pending_set(int on) {
+    uint8_t one = 1;
+    if ((on ? cali_kv_set(CALI_SETUP_QR_KEY, &one, 1) : cali_kv_erase(CALI_SETUP_QR_KEY)) != 0) return -1;
+    s_pending = on != 0;
+    return 0;
+}

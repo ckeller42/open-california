@@ -507,6 +507,21 @@ def test_setup_done_clears_it_in_any_mode(web_cli, mode):
     assert done.status == 200 and done.json() == {"ok": True} and pending(after) is False
 
 
+def test_pending_stays_correct_across_many_state_reads(web_cli):
+    """The flag is kept in RAM (the display reads it every 200 ms): right after a set, after /api/setup."""
+    gets = [("GET", "/api/state")] * 6
+    rs, _ = script(
+        web_cli,
+        *_HOTSPOT,
+        ("POST", "/api/wifi", _CREDS),
+        *gets,
+        ("POST", "/api/setup", '{"done":true}'),
+        *gets,
+    )
+    flags = [pending(r) for r in rs[1:7] + rs[8:]]
+    assert flags == [True] * 6 + [False] * 6
+
+
 @pytest.mark.parametrize("body", ['{"done":false}', "{}", '{"done":true,"x":1}', "nope", '{"done":1}'])
 def test_setup_other_bodies_are_400_and_keep_the_flag(web_cli, body):
     (_, bad, after), _ = script(

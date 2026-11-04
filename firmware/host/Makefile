@@ -156,7 +156,7 @@ snapshot.o: $(COMPONENTS)/cali_core/snapshot.c $(CORE_H)/cali_snapshot.h $(CORE_
 status.o: $(COMPONENTS)/cali_core/status.c $(CORE_H)/cali_status.h $(CORE_H)/cali_snapshot.h \
 		$(CORE_H)/cali_session.h $(CORE_H)/cali_control.h $(CSRC)/codec.h $(CORE_H)/cali_runner.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_transport.h $(CSRC)/net_consts.h \
-		$(COMPONENTS)/platform/include/cali_platform.h $(CORE_H)/cali_ap_identity.h $(CORE_H)/cali_web.h
+		$(COMPONENTS)/platform/include/cali_platform.h $(CORE_H)/cali_ap_identity.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The bounded JSON writer shared by console.c (STATE/SNAP) and, from Task 2 on, the web setup page.

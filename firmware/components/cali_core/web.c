@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cali_ap_identity.h"
 #include "cali_auto_camper.h"
 #include "cali_battery.h"
 #include "cali_ble_exp.h"
@@ -506,8 +507,7 @@ static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
         SET_CONST(resp, 500, ERR_STORE);
     } else {
         if (from_hotspot) {   /* the wizard follows only a setup begun on the hotspot (a failed mark is not fatal) */
-            uint8_t one = 1;
-            if (cali_kv_set(CALI_SETUP_QR_KEY, &one, 1) != 0) cali_log("http: marking setup pending failed");
+            if (cali_setup_pending_set(1) != 0) cali_log("http: marking setup pending failed");
         }
         cali_wifi_run_set_creds(ssid, psk);
         SET_CONST(resp, 200, OK_BODY);
@@ -1458,7 +1458,7 @@ static void api_setup_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
     int done = 0;
     if (parse_body(req->body, req->body_len, K_DONE, 1, bool_field, &done) != 1 || !done) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
-    } else if (cali_kv_erase(CALI_SETUP_QR_KEY) != 0) {
+    } else if (cali_setup_pending_set(0) != 0) {
         SET_CONST(resp, 500, ERR_STORE);
     } else {
         SET_CONST(resp, 200, OK_BODY);

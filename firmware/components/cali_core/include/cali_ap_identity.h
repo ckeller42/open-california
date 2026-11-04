@@ -25,6 +25,11 @@ extern "C" {
 /** Length of the hotspot password, including its two dashes. */
 #define CALI_AP_PSK_LEN 14
 
+/** KV key (namespace cali): 1 byte = a first-time setup began on the hotspot and is not done. Set only by
+ * POST /api/wifi while the unit is in setup mode; erased by POST /api/setup {"done":true}. Absent = not
+ * pending (a field unit that was set up before never sees the wizard). */
+#define CALI_SETUP_QR_KEY "setup_qr"
+
 /** Return code of cali_ap_identity(): the password is stored (it survives a reboot). */
 #define CALI_AP_STORED 0
 /** Return code of cali_ap_identity(): the password is valid and in use, but the KV store refused it,
@@ -50,6 +55,22 @@ int cali_ap_identity(char ssid[NET_SSID_MAX + 1], char psk[NET_PSK_MAX + 1]);
  * @return The text length (also for CALI_AP_UNSTORED); -1 when the identity is unavailable or the text does not fit.
  */
 int cali_ap_wifi_qr(char *out, size_t cap);
+
+/**
+ * @brief Whether a first-time setup began on the hotspot and is not done (kv CALI_SETUP_QR_KEY).
+ *
+ * Read from the KV store once and kept in RAM; only cali_setup_pending_set() writes the key, so the
+ * copy is exact. Cheap enough for the 200 ms display refresh.
+ * @return 1 pending, 0 not.
+ */
+int cali_setup_pending(void);
+
+/**
+ * @brief Mark the first-time setup begun (1) or done (0): writes or erases CALI_SETUP_QR_KEY.
+ * @param on Nonzero = pending.
+ * @return 0; -1 when the KV store refused (the RAM copy then stays as it was).
+ */
+int cali_setup_pending_set(int on);
 
 #ifdef __cplusplus
 }
