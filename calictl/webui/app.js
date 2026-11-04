@@ -2454,7 +2454,11 @@ async function setupFinish() {
   try { setupDonePosted = !!(await satFetch("/api/setup", { done: true })).body.ok; } catch (e) { /* not done */ }
   return setupDonePosted;
 }
-function setupLeft() { setupFinish(); }
+/** Leaving the wizard: done (after WiFi), and its pairing card does not follow onto Home. */
+function setupLeft() {
+  setupFinish();
+  pairingOpen = false; pairingLoading = false; stopPairingPoll();
+}
 
 /** A step's button row. @param {...HTMLElement} btns */
 const setupBtns = (...btns) => h("div", { class: "btnrow" }, ...btns);
@@ -2502,9 +2506,9 @@ function buildSetup() {
     card.append(p(T("This page sets up your satellite in about 5 minutes. You need the camper unit's screen and, if you have Victron devices, VictronConnect on this phone."), "setup-welcome"),
       setupBtns(setupNext("Next", "wifi", "primary")));
   } else if (step === "wifi") {
-    root.append(satWifiBox());
-    card.append(p(T("No router in the van? Use your phone's hotspot. iPhone: Settings → Personal Hotspot → Maximize Compatibility on.")),
-      h("p", { id: "setup-next-addr", "aria-live": "polite", hidden: "" }));
+    card.append(p(T("No router in the van? Use your phone's hotspot. iPhone: Settings → Personal Hotspot → Maximize Compatibility on.")));
+    // the join's result under the box, where Connect was tapped
+    root.append(satWifiBox(), h("p", { class: "card dcard", id: "setup-next-addr", "aria-live": "polite", hidden: "" }));
   } else if (step === "pair") {
     pairingOpen = true;
     const start = satBtn(T("Pair now"), "primary", "setup-pair-start");

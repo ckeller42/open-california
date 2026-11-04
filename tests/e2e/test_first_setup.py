@@ -196,6 +196,10 @@ def test_done_posts_setup_done_and_shows_skipped_rows(station_pending, locale, l
         expect(pg.locator("#setup-done-msg")).to_contain_text(tr("✓ Setup done", lang))
         assert {"done": True} in _posts(station_pending, "/api/setup")
         expect(check).to_contain_text(tr("not set up", lang))
+        pg.get_by_role("button", name=tr("Open the app", lang)).click()
+        expect(pg.locator(".tilegrid")).to_be_visible()
+        expect(pg.locator("#pairing-card")).to_have_count(0)  # the wizard's pairing card stays in the wizard
+        pg.go_back()
         check.get_by_role("button", name=tr("Satellite settings ›", lang)).first.click()
         expect(pg.locator("#title")).to_have_text(tr("Satellite settings", lang))
 
@@ -205,6 +209,7 @@ def test_leaving_after_wifi_counts_as_done(station_pending):
     with _page(station_pending, "/#setup/pair", "en-US") as pg:
         pg.click("#back")
         expect(pg.locator(".tilegrid")).to_be_visible()
+        expect(pg.locator("#pairing-card")).to_have_count(0)
         for _ in range(30):
             if _posts(station_pending, "/api/setup"):
                 break
