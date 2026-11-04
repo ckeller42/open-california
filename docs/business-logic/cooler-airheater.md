@@ -575,10 +575,10 @@ enabled with target 18.0 °C (13:29:36).
   adopted at 13:30:08 (`ADOPT_CONTINUOUS`) and ended at 13:31:08 (`CONTINUOUS_ENDED`).
 - **The panel starts at the stored level.** Here level 1, the thermostat's own last step on
   2026-11-03 at 23:01:25 (`LEVEL_DOWN` 3 → 1, three seconds before the owner's OFF).
-- **Second start, confirmed.** Seen 13:32:07, `ADOPT_CONTINUOUS` at level 1 at 13:32:08. The bumpless
+- **Second start, confirmed with „Ja“ on the panel.** Seen 13:32:07, `ADOPT_CONTINUOUS` at level 1 at 13:32:08. The bumpless
   adopt set the integrator to −14 620. The level climbed 1 → 3 (13:37) → 4 (13:43) and stayed at 4
   until 13:52, with the cabin still 6.6 K below the target: the integrator's rise (about
-  0.35 level/min) was cancelled by the falling proportional share (`kp` × about 0.25 K/min). This is
+  0.35 level/min, computed from the ESP thermo records, fields `i` and `u`, not measured) was cancelled by the falling proportional share (`kp` × about 0.25 K/min, computed from the same records). This is
   the reason for the rule that an owner-requested takeover starts from the computed demand.
 
 | Time | Level | `unten` °C | Battery 2 current |
@@ -587,6 +587,7 @@ enabled with target 18.0 °C (13:29:36).
 | 13:33–13:34 | 1 | 8.3–8.4 | −9.4 A (start phase, glow plug) |
 | 13:37 | 3 | 8.6 | −2.8 A |
 | 13:43 | 4 | 9.5 | −2.3 A |
+| 13:47 | 4 | 10.4 | −2.1 A |
 | 13:52 | 4 | 11.4 | −1.6 A |
 
 - `govee` (cupboard) rose +0.5 K and `dach` (closed roof) +0.3 K in 20 min.
