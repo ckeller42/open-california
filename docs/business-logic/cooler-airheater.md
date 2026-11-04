@@ -565,6 +565,38 @@ compensation on).
 - `GET /api/thermostat` `status.heater` shows the heater state of the last step: it reads `RUNNING`
   for up to one period (60 s) after the stop, then `OFF`.
 
+**Night-flow test (DEVICE 2026-11-04 13:29–13:52, ESP fw `e276eab`, owner at the panel, ignition off,
+roof closed, outdoor 8.7–8.9 °C, reference `unten`, placeholder gains):** camping mode on, thermostat
+enabled with target 18.0 °C (13:29:36).
+
+- **Unanswered panel question.** The owner started Dauerbetrieb on the panel and did not answer
+  "Möchten Sie die Luftstandheizung dauerhaft aktivieren?". 1702 byte 0 went `10` (13:29:33) →
+  `12`, then `14` (13:30:06) → `10` (13:30:26), `ErrorCode` 0. The ESP sent no command. AUTO
+  adopted at 13:30:08 (`ADOPT_CONTINUOUS`) and ended at 13:31:08 (`CONTINUOUS_ENDED`).
+- **The panel starts at the stored level.** Here level 1, the thermostat's own last step on
+  2026-11-03 at 23:01:25 (`LEVEL_DOWN` 3 → 1, three seconds before the owner's OFF).
+- **Second start, confirmed.** Seen 13:32:07, `ADOPT_CONTINUOUS` at level 1 at 13:32:08. The bumpless
+  adopt set the integrator to −14 620. The level climbed 1 → 3 (13:37) → 4 (13:43) and stayed at 4
+  until 13:52, with the cabin still 6.6 K below the target: the integrator's rise (about
+  0.35 level/min) was cancelled by the falling proportional share (`kp` × about 0.25 K/min). This is
+  the reason for the rule that an owner-requested takeover starts from the computed demand.
+
+| Time | Level | `unten` °C | Battery 2 current |
+|---|---|---|---|
+| 13:32 | 1 | 8.3 | −1.7 A |
+| 13:33–13:34 | 1 | 8.3–8.4 | −9.4 A (start phase, glow plug) |
+| 13:37 | 3 | 8.6 | −2.8 A |
+| 13:43 | 4 | 9.5 | −2.3 A |
+| 13:52 | 4 | 11.4 | −1.6 A |
+
+- `govee` (cupboard) rose +0.5 K and `dach` (closed roof) +0.3 K in 20 min.
+- Solar charging of about 7 W was active, so the current does not follow the level (L3 −2.8 A,
+  L4 −2.1 A).
+- The response delay is about 4 min. Level 4 warmed `unten` 0.22–0.30 K/min, about as fast as level 10
+  on 2026-11-03 (outdoor 6.7 °C, night).
+- 13:52: thermostat OFF (`USER_OFF`) → `permanent off`, heater off, `ErrorCode` 0. Thermostat
+  disabled, camping mode off.
+
 ---
 
 ## Open questions (UNVERIFIED, out of scope of these two files)
