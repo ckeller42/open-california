@@ -25,5 +25,11 @@
   "d_qr_wlan": {"en": "WiFi %s", "de": "WLAN %s"},
   "d_qr_pass": {"en": "Password %s", "de": "Passwort %s"},
   "d_batt": {"en": "Batt", "de": "Akku"},
-  "d_charging": {"en": "charging", "de": "lädt"}
+  "d_charging": {"en": "charging", "de": "lädt"},
+  "d_lora_scan": {"en": "Scan with the Open California remote app", "de": "Mit der Open-California-Fern-App scannen"},
+  "d_lora_wait": {"en": "Preparing…", "de": "Wird vorbereitet…"},
+  "d_lora_joined": {"en": "joined", "de": "im Netz"},
+  "d_lora_not_joined": {"en": "not joined", "de": "nicht im Netz"},
+  "d_lora_confirmed": {"en": "last uplink confirmed %s ago", "de": "letzte Sendung bestätigt vor %s"},
+  "d_lora_none": {"en": "no uplink confirmed yet", "de": "noch keine Sendung bestätigt"}
 }

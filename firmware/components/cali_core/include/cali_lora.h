@@ -427,6 +427,18 @@ int cali_lora_forget(void);
  */
 size_t cali_lora_qr_text(char *out, size_t max, const cali_lora_status_t *st, int exp_on);
 /**
+ * @brief The setup QR text (`OCS1*…`) whatever the setup state: the LoRa screen's rotation (spec 5.3) shows
+ *        it after the TTN keys arrived, when cali_lora_qr_text() shows the repair QR. Reads the store
+ *        itself; local key buffers are wiped before return.
+ * @param out Receives the NUL-terminated text; it holds secrets: the caller wipes it after use.
+ * @param max The size of `out` (88 bytes are enough).
+ * @param st The task's status: `present` and `dev_eui` are used.
+ * @param exp_on The switch `exp_lora`.
+ * @return The text length; 0 when the switch is off, the module is not present, the DevEUI is unknown,
+ *         `lora_dev` or `lora_tk` is missing or unreadable, or `out` is too small (then `out` is zeroed).
+ */
+size_t cali_lora_setup_qr_text(char *out, size_t max, const cali_lora_status_t *st, int exp_on);
+/**
  * @brief Whether a key-transfer plaintext may be stored as `lora_ttn`: at most CALI_LORA_TTN_MAX bytes and
  *        encodable as the repair QR (the scratch text is wiped before return).
  * @param plain The plaintext.
@@ -484,6 +496,20 @@ int cali_lora_port_status(cali_lora_status_t *out);
  * @return The text length, 0 when there is none (module absent, switch off, no keys).
  */
 int cali_lora_port_qr(char *out, size_t max);
+/**
+ * @brief The current setup QR text for the display (cali_lora_setup_qr_text() over the task's published
+ *        status); any task.
+ * @param out Receives the NUL-terminated text; the caller wipes it after painting.
+ * @param max The size of `out`.
+ * @return The text length, 0 when there is none (module absent, switch off, no transfer key).
+ */
+int cali_lora_port_setup_qr(char *out, size_t max);
+/**
+ * @brief Whether a setup request (cali_lora_port_setup_request()) is not done yet; any task. Until it is,
+ *        the stored transfer key may be the old one, so the display shows no QR.
+ * @return 1 while a request waits or runs, else 0.
+ */
+int cali_lora_port_setup_pending(void);
 /**
  * @brief Ask the LoRa task to open the setup (cali_lora_setup_open(): a new transfer key, the AppKey once);
  *        any task. The LoRa task does it at its next pass with the module present and the switch on, and

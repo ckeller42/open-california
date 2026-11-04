@@ -1744,6 +1744,32 @@ At init, `i2c_master_bus_reset` clocks the bus free before the probes: a reset i
 transfer does not reset the I2C chips, and a chip that still holds SDA makes the probes fail
 (`display: unavailable (axp2101)`).
 
+## LoRa screen (`R_FW_LORA_SCREEN`)
+
+The status screen has one hidden second screen, for the LoRa setup ([LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora)):
+
+- **Open:** press the lit screen for 3 s (`DISPLAY_LORA_PRESS_MS`) without lifting the finger. It
+  opens only while `exp_lora` is on and the module answers. The press that wakes a dim or dark screen
+  never counts, however long it is held (it is swallowed as before); lift and press again.
+- **What it shows:** before the van has the TTN keys, the ESP makes a new transfer key (and the AppKey
+  on the first open) and shows the **setup QR**; after, it shows the **repair QR**. Until the QR text
+  exists, and while a new transfer key is still being made, it shows "Preparing…" instead of a QR, so an
+  old transfer key is never shown. Beside the QR: "Scan with the Open California remote app" and one
+  status line — joined or not, and how long ago the module confirmed the last uplink with `TX_DONE`
+  (never a send without that confirmation). German or English as the status rows.
+- **Rotation** (a lost phone or a leaked key): while the repair QR shows, press 3 s again. The ESP makes
+  a new transfer key (the AppKey stays) and shows the setup QR.
+- **Close:** a tap, 120 s after it opened or rotated (`DISPLAY_LORA_SHOW_MS`), or the module going away.
+  The backlight is at 100 % while it is up.
+- **The QR:** alphanumeric mode, error correction L, whole pixels per module (`240 / (modules + 8)`), at
+  least a 4-module white quiet zone, black on white, in a 240 × 240 box on the left. `display.c` calls
+  LVGL's bundled `qrcodegen` itself (`CONFIG_LV_USE_QRCODE=y` compiles it): the `lv_qrcode` widget of
+  LVGL 9.6.0 encodes in byte mode at error correction M and keeps a copy of the text on the heap.
+- **Keys stay off the wire:** the QR text exists only for the paint (polled once a second, repainted
+  only when it changes, wiped at once; a 32-bit hash tells a change). The bitmap is cleared when the
+  screen closes. While it is up, the console `screenshot` sends no frame
+  (`LOG display: screenshot failed (lora screen)`), and no log line carries any part of the text.
+
 ## Battery (`R_FW_BATTERY`)
 
 The {term}`CoreS3` has a 500 mAh cell. With WiFi + BLE linked it drains about 0.33 %/min (~100 mA),
@@ -2501,6 +2527,14 @@ collected here. `firmware/README.md` has the human-readable version of the same 
   (`lora_esp.c`) runs only on the board: the bench spike (M5Stack CoreS3 + RAK3172) carried the same
   driver and loop; class C, the DevEUI read from the module, the key-transfer downlink and its
   confirmation are compiled, not yet run on the board.
+- **`R_FW_LORA_SCREEN`** — verified by `T_FW_DISPLAY_LORA_SCREEN` (`tests/firmware/test_display_model.py`:
+  the 3 s press opens it at 100 % and asks for the setup only without TTN keys, 2999 ms does not, the
+  wake press never counts on a dim or dark screen, a tap, the 120 s limit or the module going away
+  closes it, the rotation press, nothing without the module, the texts in EN + DE) and
+  `T_FW_LORA_SETUP_QR` (`tests/firmware/test_lora.py`: the setup QR text also after the TTN keys
+  arrived, none and a zeroed buffer without a transfer key or on a store error). The LVGL view (the
+  press clock in the touch read, the QR canvas, the poll, the screenshot refusal) is compiled, not yet
+  run on the board.
 - **`R_FW_SENSORS`** — verified by `T_FW_SENSORS_CORE` (`tests/firmware/test_sensors.py`: both Govee
   layouts, the seen table (16 rows, unknown manufacturer ids ignored, boot-local ids), add / rename /
   remove rules, the list surviving a reboot, the `ext` record and its once-a-minute limit, the

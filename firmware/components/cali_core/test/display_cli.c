@@ -1,9 +1,11 @@
 /* display_cli.c — host driver for display_model.c: one stdin line per case ("key=value ..." for the
  * cali_status_t fields plus now= and lang=, the inputs lux= prox= (default -1) als= (sensor present,
- * default 0) touch=, the accelerometer acc=<x>,<y>,<z> (mg; default: no reading), the battery bpct= usb= chg= brt= (runtime min; default -1), the settings auto= pw= min= max= off= mw= (default CALI_DISPLAY_CFG_DEFAULT); "reset"
+ * default 0) touch=, the accelerometer acc=<x>,<y>,<z> (mg; default: no reading), the battery bpct= usb= chg= brt= (runtime min; default -1), the settings auto= pw= min= max= off= mw= (default CALI_DISPLAY_CFG_DEFAULT), the LoRa
+ * screen's lora= (available) ttn= joined= qrok= conf= (confirmed age s, default -1) press= (ms); "reset"
  * restarts the model), one stdout line per case:
  *   device=<dot>|<text> ;; wifi=<dot>|<text> ;; camper=<dot>|<text> ;; setup=<0|1> ;; footer=<text> ;;
- *   bright=<pct> ;; state=<on|dim|off> ;; sensor=<ok|absent|error> ;; motion=<mg|-1>
+ *   bright=<pct> ;; state=<on|dim|off> ;; sensor=<ok|absent|error> ;; motion=<mg|-1> ;; show=<0|1|2> ;;
+ *   req=<0|1> ;; lhint=<text> ;; lline=<text>
  * The model state persists across lines until "reset". "gate=<pressed><awake>" (e.g. gate=10) runs
  * cali_display_touch_gate on one persistent swallow flag and prints "deliver=<0|1>". */
 #include <stdio.h>
@@ -38,7 +40,7 @@ int main(int argc, char **argv) {
         cali_display_view_t v;
         uint64_t now = 0;
         int lang = CALI_LANG_DE;
-        cali_display_in_t in = {-1, -1, 0, 0, CALI_BATT_UNKNOWN, 0, {0, 0, 0}};
+        cali_display_in_t in = {.lux = -1, .prox = -1, .batt = CALI_BATT_UNKNOWN, .lora_confirmed_age_s = -1};
         cali_display_cfg_t cfg = CALI_DISPLAY_CFG_DEFAULT;
         char *tok;
         char apqr[CALI_QR_TEXT_MAX] = "";
@@ -97,6 +99,12 @@ int main(int argc, char **argv) {
             else if (!strcmp(tok, "max")) cfg.max_pct = (uint8_t)atoi(val);
             else if (!strcmp(tok, "off")) cfg.offset = (int8_t)atoi(val);
             else if (!strcmp(tok, "mw")) cfg.motion_wake = (uint8_t)atoi(val);
+            else if (!strcmp(tok, "lora")) in.lora_available = (uint8_t)atoi(val);
+            else if (!strcmp(tok, "ttn")) in.lora_has_ttn_keys = (uint8_t)atoi(val);
+            else if (!strcmp(tok, "joined")) in.lora_joined = (uint8_t)atoi(val);
+            else if (!strcmp(tok, "qrok")) in.lora_qr_ready = (uint8_t)atoi(val);
+            else if (!strcmp(tok, "conf")) in.lora_confirmed_age_s = atoi(val);
+            else if (!strcmp(tok, "press")) in.pressed_ms = (uint32_t)strtoul(val, NULL, 10);
         }
         cali_display_model(&m, &s, now, lang, &in, &cfg, apqr[0] ? apqr : NULL, &v);
         put_row("device", &v.device);
@@ -106,9 +114,11 @@ int main(int argc, char **argv) {
         put_text(v.qr_lines[0]);
         putchar('|');
         put_text(v.qr_lines[1]);
-        printf(" ;; footer=%s ;; bright=%u ;; state=%s ;; sensor=%s ;; motion=%d\n", v.footer,
+        printf(" ;; footer=%s ;; bright=%u ;; state=%s ;; sensor=%s ;; motion=%d ;; show=%d ;; req=%d ;; "
+               "lhint=%s ;; lline=%s\n", v.footer,
                (unsigned)v.brightness_pct, v.state == CALI_DISP_ON ? "on" : v.state == CALI_DISP_DIM ? "dim" : "off",
-               v.sensor == CALI_SENSOR_OK ? "ok" : v.sensor == CALI_SENSOR_ABSENT ? "absent" : "error", (int)v.motion);
+               v.sensor == CALI_SENSOR_OK ? "ok" : v.sensor == CALI_SENSOR_ABSENT ? "absent" : "error", (int)v.motion,
+               v.show_lora, v.lora_request, v.lora_hint, v.lora_line);
     }
     return 0;
 }

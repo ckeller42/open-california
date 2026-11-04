@@ -544,6 +544,47 @@ def test_qr_text_too_small_leaves_no_key_bytes(cli):
     assert out[1:] == ["QR -", "QR -"]
 
 
+def test_setup_qr_text_regardless_of_state(cli):
+    """The rotation's setup QR: OCS1 from the DevEUI, the AppKey and the transfer key even after the TTN
+    keys arrived (the selector then shows the repair QR); nothing without a transfer key or on a store
+    error, and the buffer comes back zeroed.
+
+    .. test:: lora setup QR text: OCS1 also with ttn_keys, none (zeroed) without a transfer key or on a kv error
+       :id: T_FW_LORA_SETUP_QR
+       :links: R_FW_LORA_SETUP, R_FW_LORA_SCREEN
+    """
+    eui = "70B3D57ED0000001"
+    dummy = bytes(range(0, 0x100, 0x11)).hex()
+    out = run(
+        cli,
+        f"sqr 1 1 {eui}",
+        f"kvset lora_dev {dummy}{dummy[:16]}",
+        f"sqr 1 1 {eui}",
+        "setupopen",
+        "kv lora_dev",
+        "kv lora_tk",
+        f"sqr 1 1 {eui}",
+        f"kvset lora_ttn {plaintext().hex()}",
+        f"qr 1 1 {eui}",
+        f"sqr 1 1 {eui}",
+        f"sqr 0 1 {eui}",
+        f"sqr 1 0 {eui}",
+        "sqr 1 1 -",
+        f"sqr 1 1 {eui} 40",
+        "kvcorrupt lora_tk",
+        f"sqr 1 1 {eui}",
+    )
+    assert out[0:2] == ["QR -", "QR -"]  # no AppKey; an AppKey without a transfer key
+    appkey = out[3].split()[1][:32].upper()
+    tk = out[4].split()[1].upper()
+    setup = f"QR OCS1*{eui}*{appkey}*{tk}"
+    assert out[5] == setup
+    assert out[6].startswith("QR OCR1*")  # the selector: repair QR once the TTN keys are stored
+    assert out[7] == setup  # the setup QR regardless of the state
+    assert out[8:12] == ["QR -"] * 4  # switch off, module absent, DevEUI unknown, buffer too small
+    assert out[12] == "QR -"  # transfer key unreadable
+
+
 def test_ttn_plaintext_checked_before_storing(cli):
     """Only a plaintext the repair QR can show, and that fits lora_ttn, is stored.
 

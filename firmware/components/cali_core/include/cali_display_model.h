@@ -39,6 +39,25 @@
  *    Diagnostic aid: ``POST /api/display {"dfs"}`` switches dynamic frequency scaling at
  *    once without storing it; ``device.display.dfs``/``pm`` (``/api/state?diag=1``) report the live PM config.
  * @endverbatim
+ *
+ * @verbatim embed:rst:leading-asterisk
+ * .. req:: A 3 s press opens the LoRa screen with the setup or repair QR code
+ *    :id: R_FW_LORA_SCREEN
+ *    :status: implemented
+ *    :tags: esp32, display, lora
+ *
+ *    While ``exp_lora`` is on and the LoRa module is present, a continuous press of
+ *    ``DISPLAY_LORA_PRESS_MS`` (3 s) on the lit screen shall open the LoRa screen: before the van has
+ *    the TTN keys it asks the LoRa task for a new transfer key and shows the setup QR, after it shows
+ *    the repair QR (``cali_lora_qr_text``); a further 3 s press while the repair QR shows asks for a
+ *    new transfer key and shows the setup QR (rotation). A tap or ``DISPLAY_LORA_SHOW_MS`` (120 s)
+ *    closes it, and so does the module going away. The press that wakes a dark (dim or off) screen
+ *    never counts and is still swallowed. While the screen is up the backlight is at 100 %; the QR
+ *    (alphanumeric mode, error correction L, whole pixels per module, a 4-module quiet zone, black on
+ *    white) waits behind "Preparing…" until the QR text exists and no setup request is pending, under
+ *    the scan hint, beside one status line (joined or not, the age of the last uplink the module
+ *    confirmed with ``TX_DONE``), EN + DE. No screenshot frame is sent while it is up.
+ * @endverbatim
  */
 #ifndef CALI_DISPLAY_MODEL_H
 #define CALI_DISPLAY_MODEL_H
@@ -143,6 +162,13 @@ typedef struct {
 /** @brief Initializer for the default settings. The fallback levels (sensor absent or in error) ignore the offset. */
 #define CALI_DISPLAY_CFG_DEFAULT {1, 1, 8, 100, 0, 1}
 
+/** @brief A continuous press this long (ms) on the lit screen opens the LoRa screen (R_FW_LORA_SCREEN). */
+#define DISPLAY_LORA_PRESS_MS 3000
+/** @brief The LoRa screen closes this many ms after it opened (or rotated). */
+#define DISPLAY_LORA_SHOW_MS 120000
+/** @brief The LoRa screen's backlight percent ("full brightness while shown"). */
+#define DISPLAY_LORA_BRIGHT_PCT 100
+
 /** @brief One tick's sensor and touch inputs. */
 typedef struct {
     int32_t lux;       /**< Ambient light in lux, -1 = no valid reading this tick. */
@@ -152,6 +178,12 @@ typedef struct {
     cali_batt_t batt;  /**< The station footer's battery (R_FW_BATTERY); never wakes the screen. */
     uint8_t acc_ok;    /**< `acc` holds a reading this tick (0: no IMU, or the read failed). */
     int32_t acc[3];    /**< BMI270 acceleration x, y, z in mg. */
+    uint8_t lora_available;     /**< `exp_lora` is on and the LoRa module is present: the 3 s press may open the LoRa screen. */
+    uint8_t lora_has_ttn_keys;  /**< The van has the TTN keys (the selector shows the repair QR). */
+    uint8_t lora_joined;        /**< The module reports joined. */
+    uint8_t lora_qr_ready;      /**< The QR text exists and no setup request is pending. */
+    int32_t lora_confirmed_age_s;  /**< Seconds since the last uplink confirmed by TX_DONE, -1 = none. */
+    uint32_t pressed_ms;        /**< How long the current press has lasted, 0 = not pressed. */
 } cali_display_in_t;
 
 /** @brief What the painter draws. */
@@ -169,6 +201,10 @@ typedef struct {
     int32_t prox;            /**< The last valid proximity reading, -1 = none. */
     int32_t motion;          /**< This tick's accel change in mg; -1 = none (no IMU, a failed read, the first read). */
     uint8_t brightness_pct;  /**< Backlight percent, 0 when off. */
+    int show_lora;           /**< The LoRa screen: 0 closed, 1 the QR selector (setup or repair QR), 2 the setup QR (rotation). */
+    int lora_request;        /**< 1 on the one tick the painter must call cali_lora_port_setup_request(). */
+    const char *lora_hint;   /**< Over the QR: "Preparing…" or the scan hint; "" while closed. */
+    char lora_line[CALI_ROW_TEXT_MAX];   /**< The status line: joined or not, the last confirmed uplink; "" while closed. */
 } cali_display_view_t;
 
 /**
@@ -201,6 +237,10 @@ typedef struct {
     uint8_t moving;          /**< The motion wake fired and is disarmed until the unit is still again. */
     uint8_t motion_reads;    /**< Consecutive reads above the motion threshold. */
     uint8_t dots[2];         /**< The WiFi and camper row colours last tick. */
+    uint8_t press_spent;     /**< The current press counts for nothing more (a wake press, or it already opened or rotated). */
+    uint32_t press_ms;       /**< The press duration seen last tick, 0 = none. */
+    int show_lora;           /**< The LoRa screen, as cali_display_view_t::show_lora. */
+    uint64_t lora_since;     /**< When the LoRa screen opened or rotated. */
 } cali_display_model_t;
 
 /**

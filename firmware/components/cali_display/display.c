@@ -6,7 +6,11 @@
  * decides on / dim / off and the level. Motion wake: reads the BMI270 accelerometer every tick too.
  * Battery (R_FW_BATTERY): reads the AXP2101 every CALI_BATT_READ_MS into cali_battery_update.
  * Touch (R_FW_TOUCH_NO_ABORT, #346): the touch controller is read here, not by esp_lvgl_port, whose read
- * ESP_ERROR_CHECKs it — one failed I2C read on the shared bus aborted the whole firmware. */
+ * ESP_ERROR_CHECKs it — one failed I2C read on the shared bus aborted the whole firmware.
+ * LoRa screen (R_FW_LORA_SCREEN): the LVGL task measures the press (a swallowed wake press never starts
+ * the clock); the model decides open / rotate / close; this file polls the QR text once a second and
+ * paints it with LVGL's bundled qrcodegen (alphanumeric, ECC L) into a 1-bit canvas. Not lv_qrcode: it
+ * encodes byte mode at ECC M and keeps an unwiped heap copy of the text (LVGL 9.6.0). */
 #include <stdio.h>
 #include <string.h>
 
@@ -17,6 +21,7 @@
 #include "cali_diag.h"
 #include "cali_ap_identity.h"
 #include "cali_display_model.h"
+#include "cali_lora.h"
 #include "cali_platform.h"
 #include "cali_status.h"
 #include "cali_wifi_run.h"
@@ -28,6 +33,8 @@
 #include "freertos/task.h"
 #include "lvgl.h"
 #include "net_consts.h"
+#include "src/libs/qrcode/qrcodegen.h"
+#include "src/misc/cache/instance/lv_image_cache.h"   /* lv_image_cache_drop: a repainted canvas, as lv_qrcode does */
 
 #define AXP2101_ADDR 0x34 /* power chip: BSP 4.1.0 src/bsp_feature_en.c BSP_AXP2101_ADDR */
 #define AW9523_ADDR 0x58  /* IO expander: ESP_IO_EXPANDER_I2C_AW9523_ADDRESS_00 (BSP_IO_EXPANDER_ADDRESS) */
@@ -115,6 +122,13 @@ static const char *const SCR_NAMES[] = {"on", "dim", "off"};
 #define QR_FOOT_Y (ROW_Y0 + QR_BOX + 2)
 #define TITLE_END_X 200 /* "calictl satellite" at 24 px ends at about x 190 */
 
+/* the LoRa screen: the QR box (white, the quiet zone inside) on the left, the texts in the column right of it */
+#define LQR_BOX 240
+#define QR_VMAX 10   /* 57 modules: the longest repair QR (341 chars) in alphanumeric mode at ECC L */
+#define QR_TEXT_MAX 400
+#define QR_POLL_MS 1000
+#define LORA_COL_X (LQR_BOX + 4)
+
 LV_FONT_DECLARE(font_latin1_16);
 LV_FONT_DECLARE(font_latin1_24);
 
@@ -163,6 +177,18 @@ static uint32_t s_bus_done_ms;
 struct touch_ctx { int mhz, usb, chg, scr, bus, pmode; long bus_ms; };
 static struct touch_ctx s_touch_ctx;                      /* LVGL task writes, owner task reads: s_touch_mux */
 static portMUX_TYPE s_touch_mux = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t s_press_start;          /* LVGL task -> owner task, __atomic: uptime ms (| 1) of the delivered press, 0 = none */
+static int s_lora_shown;                /* owner task -> shot.c, __atomic: the LoRa screen is up */
+/* the LoRa screen, owner task only (under the LVGL lock) */
+static lv_obj_t *s_lora, *s_lqr, *s_lora_hint, *s_lora_line;
+static lv_draw_buf_t *s_qr_buf;         /* LQR_BOX x LQR_BOX, I1: palette 0 white, 1 black */
+static int s_lora_show;                 /* the painted show_lora */
+static uint64_t s_qr_poll;
+static uint32_t s_qr_sig;               /* FNV-1a of the painted QR text (the text itself is wiped), 0 = none */
+static int s_qr_ok;                     /* a QR is painted */
+static const char *s_lora_hint_now;
+static char s_lora_line_now[CALI_ROW_TEXT_MAX];
+static uint8_t s_qr_tmp[qrcodegen_BUFFER_LEN_FOR_VERSION(QR_VMAX)], s_qr_mod[qrcodegen_BUFFER_LEN_FOR_VERSION(QR_VMAX)];
 
 static lv_obj_t *box(lv_obj_t *parent, int x, int y, int w, int h, uint32_t rgb) {
     lv_obj_t *o = lv_obj_create(parent);
@@ -241,6 +267,27 @@ static void build(void) {
     lv_obj_set_style_text_align(s_qr_foot, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_pos(s_qr_foot, 0, QR_FOOT_Y);
     lv_obj_set_hidden(s_qr_foot, true);
+    /* the LoRa screen: last, so it covers the rows; hidden until the model opens it */
+    s_lora = box(scr, 0, 0, W, 240, 0x101418);
+    lv_obj_set_scrollable(s_lora, false);
+    lv_obj_set_hidden(s_lora, true);
+    s_qr_buf = lv_draw_buf_create(LQR_BOX, LQR_BOX, LV_COLOR_FORMAT_I1, LV_STRIDE_AUTO);
+    if (s_qr_buf) {
+        lv_draw_buf_set_palette(s_qr_buf, 0, lv_color_to_32(lv_color_white(), LV_OPA_COVER));
+        lv_draw_buf_set_palette(s_qr_buf, 1, lv_color_to_32(lv_color_black(), LV_OPA_COVER));
+        memset(s_qr_buf->data + 8, 0, (size_t)s_qr_buf->header.stride * LQR_BOX);   /* +8: the palette */
+        s_lqr = lv_canvas_create(s_lora);
+        lv_canvas_set_draw_buf(s_lqr, s_qr_buf);
+        lv_obj_set_pos(s_lqr, 0, 0);
+    }
+    s_lora_hint = label(s_lora, &font_latin1_16, "");
+    lv_label_set_long_mode(s_lora_hint, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_width(s_lora_hint, W - LORA_COL_X - 2);
+    lv_obj_set_pos(s_lora_hint, LORA_COL_X, PAD);
+    s_lora_line = label(s_lora, &font_latin1_16, "");
+    lv_label_set_long_mode(s_lora_line, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_width(s_lora_line, W - LORA_COL_X - 2);
+    lv_obj_align(s_lora_line, LV_ALIGN_BOTTOM_RIGHT, -2, -PAD);
 }
 
 /* The QR screen replaces the three rows and the footer. The code is re-encoded only when its text
@@ -275,6 +322,8 @@ static void paint_qr(const cali_display_view_t *v) {
 }
 
 int cali_display_ready(void) { return s_ok; }
+
+int cali_display_lora_shown(void) { return __atomic_load_n(&s_lora_shown, __ATOMIC_RELAXED); }
 
 #if CONFIG_LV_USE_GESTURE_RECOGNITION
 #error "touch_read replaces esp_lvgl_port's read, which also feeds LVGL's gesture recognizers"
@@ -332,8 +381,13 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
     }
     pressed = data->state == LV_INDEV_STATE_PRESSED;
     if (pressed) __atomic_store_n(&s_touched, 1, __ATOMIC_RELAXED);
-    if (!cali_display_touch_gate(&s_swallow, pressed, __atomic_load_n(&s_awake, __ATOMIC_RELAXED)))
-        data->state = LV_INDEV_STATE_RELEASED;
+    if (!cali_display_touch_gate(&s_swallow, pressed, __atomic_load_n(&s_awake, __ATOMIC_RELAXED))) {
+        data->state = LV_INDEV_STATE_RELEASED;   /* a swallowed (wake) press never starts the LoRa press clock */
+    } else if (pressed) {
+        if (!__atomic_load_n(&s_press_start, __ATOMIC_RELAXED))
+            __atomic_store_n(&s_press_start, (uint32_t)cali_uptime_ms() | 1u, __ATOMIC_RELAXED);
+    }
+    if (!pressed) __atomic_store_n(&s_press_start, 0, __ATOMIC_RELAXED);
 }
 
 static void bus_mark(int dev) {   /* owner task: an I2C transfer on dev just finished */
@@ -567,10 +621,103 @@ static void touch_errors_evt(uint64_t now_ms) {
     s_touch_log_ms = now_ms;
 }
 
+/* Paint the QR text into the canvas (white when it does not encode): ECC L, the version qrcodegen picks
+ * (alphanumeric mode for the upper-case texts), whole pixels per module, px = LQR_BOX / (modules + 8), so
+ * at least a 4-module white quiet zone. The encoder buffers are wiped; the caller wipes the text.
+ * Returns 1 when a QR was painted. */
+static int qr_paint(const char *text) {
+    uint8_t *bits = s_qr_buf->data + 8;   /* +8: the I1 palette */
+    uint32_t stride = s_qr_buf->header.stride;
+    int ok = text[0] && qrcodegen_encodeText(text, s_qr_tmp, s_qr_mod, qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, QR_VMAX,
+                                             qrcodegen_Mask_AUTO, false);
+    memset(bits, 0, (size_t)stride * LQR_BOX);
+    if (ok) {
+        int n = qrcodegen_getSize(s_qr_mod), px = LQR_BOX / (n + 8), off = (LQR_BOX - px * n) / 2;
+        for (int y = 0; y < n * px; y++)
+            for (int x = 0; x < n * px; x++)
+                if (qrcodegen_getModule(s_qr_mod, x / px, y / px))
+                    bits[(uint32_t)(off + y) * stride + (uint32_t)(off + x) / 8] |= (uint8_t)(0x80u >> ((off + x) % 8));
+    }
+    memset(s_qr_tmp, 0, sizeof s_qr_tmp);
+    memset(s_qr_mod, 0, sizeof s_qr_mod);
+    lv_image_cache_drop(s_qr_buf);
+    lv_obj_invalidate(s_lqr);
+    return ok;
+}
+
+static uint32_t fnv1a(const char *t) {
+    uint32_t h = 2166136261u;
+    while (*t) h = (h ^ (uint8_t)*t++) * 16777619u;
+    return h ? h : 1u;
+}
+
+/* Owner task, under the LVGL lock: show, refresh (once per QR_POLL_MS, repaint only on a new text) or
+ * hide the LoRa screen. The QR text lives only on this stack and is wiped before return. */
+static void lora_paint(const cali_display_view_t *v, uint64_t now_ms) {
+    if (!s_qr_buf) return;
+    if (!v->show_lora) {
+        if (s_lora_show) {
+            lv_obj_set_hidden(s_lora, true);
+            qr_paint("");   /* the bitmap is the secret in another shape */
+            s_lora_show = 0;
+            s_qr_sig = 0;
+            s_qr_ok = 0;
+            __atomic_store_n(&s_lora_shown, 0, __ATOMIC_RELAXED);
+        }
+        return;
+    }
+    if (v->show_lora != s_lora_show || now_ms - s_qr_poll >= QR_POLL_MS) {
+        char text[QR_TEXT_MAX];
+        int n = 0;
+        uint32_t sig;
+        s_qr_poll = now_ms;
+        if (!cali_lora_port_setup_pending())
+            n = v->show_lora == 2 ? cali_lora_port_setup_qr(text, sizeof text) : cali_lora_port_qr(text, sizeof text);
+        if (n <= 0) text[0] = 0;
+        sig = n > 0 ? fnv1a(text) : 0;
+        if (sig != s_qr_sig || v->show_lora != s_lora_show) {
+            s_qr_ok = qr_paint(text);
+            if (n > 0 && !s_qr_ok) cali_log("display: lora qr: %d chars do not encode", n);   /* the length only */
+            s_qr_sig = s_qr_ok ? sig : 0;
+        }
+        memset(text, 0, sizeof text);
+    }
+    if (!s_lora_show) {
+        __atomic_store_n(&s_lora_shown, 1, __ATOMIC_RELAXED);   /* before it becomes visible: shot.c refuses */
+        lv_obj_set_hidden(s_lora, false);
+    }
+    s_lora_show = v->show_lora;
+    if (s_lora_hint_now != v->lora_hint) {
+        s_lora_hint_now = v->lora_hint;
+        lv_label_set_text(s_lora_hint, v->lora_hint);
+    }
+    if (strcmp(s_lora_line_now, v->lora_line)) {
+        memcpy(s_lora_line_now, v->lora_line, sizeof s_lora_line_now);
+        lv_label_set_text(s_lora_line, v->lora_line);
+    }
+}
+
+/* The model's LoRa inputs: the switch, the module, the setup state (read only while it can matter). */
+static void lora_inputs(cali_display_in_t *in, uint64_t now_ms) {
+    cali_lora_status_t ls;
+    uint32_t start = __atomic_load_n(&s_press_start, __ATOMIC_RELAXED);
+    if (start) {   /* signed: a press that began after now_ms was taken (the tick's I2C reads) is 1, never a wrap to ~49 days */
+        int32_t d = (int32_t)((uint32_t)now_ms - start);
+        in->pressed_ms = d < 1 ? 1u : (uint32_t)d;   /* 0 means "not pressed" */
+    }
+    in->lora_confirmed_age_s = -1;
+    if (!cali_exp_lora() || !cali_lora_port_status(&ls) || ls.present != 1) return;
+    in->lora_available = 1;
+    in->lora_joined = ls.joined && !ls.at_unanswered;
+    if (ls.last_confirmed_s) in->lora_confirmed_age_s = (int32_t)(now_ms / 1000 - ls.last_confirmed_s);
+    if (in->pressed_ms || s_lora_show) in->lora_has_ttn_keys = cali_lora_setup_state() == CALI_LORA_SETUP_TTN_KEYS;
+    in->lora_qr_ready = (uint8_t)s_qr_ok;   /* last poll's result */
+}
+
 void cali_display_tick(uint64_t now_ms) {
     cali_status_t st;
     cali_display_view_t v;
-    cali_display_in_t in = {-1, -1, s_ltr != NULL, 0, CALI_BATT_UNKNOWN, 0, {0, 0, 0}};
+    cali_display_in_t in = {.lux = -1, .prox = -1, .present = s_ltr != NULL, .batt = CALI_BATT_UNKNOWN};
     if (!s_ok || now_ms - s_last_paint < DISPLAY_REFRESH_MS) return;
     s_last_paint = now_ms;
     if (!s_batt_read || now_ms - s_last_batt >= CALI_BATT_READ_MS) {   /* off the paint's lock; ~5 short reads */
@@ -598,9 +745,11 @@ void cali_display_tick(uint64_t now_ms) {
     }
     in.touched = (uint8_t)__atomic_exchange_n(&s_touched, 0, __ATOMIC_RELAXED);
     cali_status_get(&st, s_t, now_ms);
+    lora_inputs(&in, now_ms);
     char ap_qr[CALI_QR_TEXT_MAX];   /* holds the hotspot password: the screen only, never a log or /api/state */
     if (st.wifi_mode != CALI_WIFI_MODE_SETUP || cali_ap_wifi_qr(ap_qr, sizeof ap_qr) < 0) ap_qr[0] = 0;
     cali_display_model(&s_model, &st, now_ms, LANG, &in, cali_display_cfg(), ap_qr[0] ? ap_qr : NULL, &v);
+    if (v.lora_request) cali_lora_port_setup_request();   /* before the poll: the QR waits for the new transfer key */
     __atomic_store_n(&s_awake, v.state == CALI_DISP_ON, __ATOMIC_RELAXED);
     __atomic_store_n(&s_scr, (int)v.state, __ATOMIC_RELAXED);
 
@@ -612,6 +761,7 @@ void cali_display_tick(uint64_t now_ms) {
         snprintf(s_footer_now, sizeof s_footer_now, "%s", v.footer);
         lv_label_set_text(s_footer, v.footer);
     }
+    lora_paint(&v, now_ms);
     bsp_display_unlock();
     cali_display_publish(&v);   /* /api/state device.display */
     touch_errors_evt(now_ms);

@@ -95,6 +95,14 @@ int cali_lora_port_qr(char *out, size_t max) {
     return (int)cali_lora_qr_text(out, max, &st, cali_exp_lora());
 }
 
+int cali_lora_port_setup_qr(char *out, size_t max) {
+    cali_lora_status_t st;
+    if (!cali_lora_port_status(&st)) return 0;
+    return (int)cali_lora_setup_qr_text(out, max, &st, cali_exp_lora());
+}
+
+int cali_lora_port_setup_pending(void) { return atomic_load(&s_setup_req); }
+
 void cali_lora_port_setup_request(void) {
     atomic_store(&s_setup_req, 1);
 }
@@ -516,9 +524,13 @@ static void lora_task(void *arg) {
                 continue;
             }
         }
-        if (atomic_exchange(&s_setup_req, 0) && setup_open()) {
-            ready = false;   /* a new AppKey: reset, set up and join like the first use */
-            continue;
+        if (atomic_load(&s_setup_req)) {   /* cleared only once the new transfer key is stored (the display waits on it) */
+            bool fresh = setup_open();
+            atomic_store(&s_setup_req, 0);
+            if (fresh) {
+                ready = false;   /* a new AppKey: reset, set up and join like the first use */
+                continue;
+            }
         }
         if (!s_st.joined) {
             if (!s_have_keys) {   /* nothing to join with until the LoRa screen opens the setup */

@@ -7,7 +7,7 @@
  * Status:    stjson <module> <joined> <unanswered> <sf> <last_s> <air> <charged> <unconf> <dl> <now_s>
  * Setup:     stsetup <setup> <ttn> <eui> | setupopen | setupstate | forget | kvset <key> <hex> | kv <key>
  *            qr <exp_on> <present> <eui|-> [max] (prints "QR <text>", "QR -" when none and the buffer is
- *            zeroed, "QR dirty" when none and bytes stay) | ttnok <hex>
+ *            zeroed, "QR dirty" when none and bytes stay) | sqr ... (the same for cali_lora_setup_qr_text) | ttnok <hex>
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
  * Driven by tests/firmware/test_lora.py. Fakes: session frames, sensors, counters, clock, NVS, log. */
 #include <math.h>
@@ -239,14 +239,14 @@ int main(void) {
             printf("%d\n", cali_lora_setup_state());
         } else if (!strcmp(cmd, "forget")) {
             printf("%d\n", cali_lora_forget());
-        } else if (!strcmp(cmd, "qr") && sscanf(rest, "%u %u %63s", &u1, &u2, b) == 3) {
+        } else if ((!strcmp(cmd, "qr") || !strcmp(cmd, "sqr")) && sscanf(rest, "%u %u %63s", &u1, &u2, b) == 3) {
             cali_lora_status_t st = {.present = (int)u2};
             snprintf(st.dev_eui, sizeof st.dev_eui, "%.16s", strcmp(b, "-") ? b : "");
             char q[400];
             unsigned max = sizeof q;
             if (sscanf(rest, "%*u %*u %*s %u", &max) != 1 || max > sizeof q) max = sizeof q;
             memset(q, 'X', sizeof q);
-            if (cali_lora_qr_text(q, max, &st, (int)u1)) {
+            if ((cmd[0] == 's' ? cali_lora_setup_qr_text : cali_lora_qr_text)(q, max, &st, (int)u1)) {
                 printf("QR %s\n", q);
             } else {
                 size_t i = 0;
