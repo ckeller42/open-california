@@ -2224,6 +2224,13 @@ collected here. `firmware/README.md` has the human-readable version of the same 
    ``/api/state`` in ``localStorage`` and shows it at start, read-only behind the neutral
    "Connecting…" banner with its age, until the first live poll answers.
 
+.. req:: The public remote app talks only to The Things Stack
+   :id: R_UI_REMOTE_APP
+   :status: open
+   :tags: web, lora
+
+   The public remote app talks only to The Things Stack, never to the owner's router, Pi or satellite; it sets a van up for LoRa from a full-rights application key that it deletes afterwards, and reads the van's uplinks with a read key.
+
 .. req:: The web UI tells a sleeping van from an unreachable backend
    :id: R_UI_LINK_STATE
    :status: implemented
@@ -2382,6 +2389,8 @@ collected here. `firmware/README.md` has the human-readable version of the same 
 - **`R_UI_PWA_OFFLINE`** — verified by `T_UI_PWA_OFFLINE`, `T_UI_PWA_UPDATE`, `T_UI_PWA_INSECURE`,
   `T_UI_PWA_SATELLITE` (`tests/e2e/test_pwa.py`, Chromium on 127.0.0.1, a secure context) and
   `T_FW_SW_SERVED` (`tests/firmware/test_web_handlers.py`).
+- **`R_UI_REMOTE_APP`** — verified so far by `T_UI_TTN_CLIENT` (`tests/test_ttn_js.py`, `ttn.js` against the fake TTN
+  `tests/e2e/fake_ttn.py`).
 - **`R_UI_LINK_STATE`** — verified by `T_UI_LINK_ASLEEP`, `T_UI_LINK_UNREACHABLE`,
   `T_UI_LINK_UNPAIRED` (`tests/e2e/test_link_state.py`, page.clock over a fixed calictl state: blip, hung poll, hidden
   tab, asleep-then-unreachable, DE copy + the quiet live region) and `T_UI_LINK_RESTORED`
