@@ -3729,6 +3729,8 @@ let thermoLoading = false;  // a GET /api/thermostat is in flight
 let thermoAsked = false;    // the first fetch of this page load went out
 let thermoChain = Promise.resolve();   // POSTs run one at a time, each with the then-current rev
 let thermoBusy = 0;         // queued or running POSTs: an AUTO start waits, its confirm reads the settings
+/** @type {?number} */
+let thermoWant = null;      // the target the owner tapped: shown until every queued POST returned (a reply or poll is older)
 const THERMO_STEP = 50, THERMO_MIN = 500, THERMO_MAX = 3000;   // centi-°C
 
 // Reason code -> text (English source; the German is the strings.de.js entry of the same text).
@@ -3833,7 +3835,7 @@ function thermoPost(patch) {
         toast("The thermostat was changed elsewhere — reloaded, please try again", "warn");
       } else toast("Couldn't change the thermostat", "error");
     } catch (e) { toast("Couldn't change the thermostat", "error"); }
-    thermoBusy--;
+    if (--thermoBusy === 0) thermoWant = null;
     render();
   });
 }
@@ -4013,18 +4015,19 @@ function thermostatCard() {
   tr.className = "row";
   tr.appendChild(thermoEl("big", st.t_ref != null ? (st.t_ref / 100).toFixed(1) + " °C" : "—"));
   tr.appendChild(thermoEl("lbl", "→"));
+  const want = thermoWant ?? th.target;
   /** @param {string} label @param {string} sym @param {number} d */
   const step = (label, sym, d) => {
     const b = document.createElement("button");
     b.className = "btn thermo-step"; b.textContent = sym;
     b.setAttribute("aria-label", /** @type {string} */ (t(label)));
-    const nt = th.target + d;
+    const nt = want + d;
     b.disabled = readOnly() || nt < THERMO_MIN || nt > THERMO_MAX;
-    b.onclick = () => { th.target = nt; thermoPost({ target: nt }); render(); };
+    b.onclick = () => { thermoWant = nt; thermoPost({ target: nt }); render(); };
     return b;
   };
   tr.appendChild(step("Colder", "−", -THERMO_STEP));
-  tr.appendChild(thermoEl("sval", (th.target / 100).toFixed(1) + " °C"));
+  tr.appendChild(thermoEl("sval", (want / 100).toFixed(1) + " °C"));
   tr.appendChild(step("Warmer", "+", THERMO_STEP));
   card.appendChild(tr);
   if (st.heater === "OFF" && st.mode === "OFF") {   // the AUTO start run time: only while the heater is off

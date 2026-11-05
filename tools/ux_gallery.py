@@ -569,6 +569,9 @@ class EspStub:
         self.sensor_posts = []  # POST /api/sensors bodies, in order
         self.thermostat_posts = []  # POST /api/thermostat bodies, in order
         self.thermostat_error = None  # (status, body) answered to the next POST /api/thermostat instead
+        self.thermostat_delay_s = (
+            0  # each POST /api/thermostat answers this late (the satellite takes a few 100 ms)
+        )
         self.wifi_posts = []  # POST /api/wifi bodies, in order
         self.down = False  # True: every request gets no answer (the connection just closes)
         self.posts = []  # (path, body) of every POST to a _SETTINGS endpoint, in order
@@ -743,6 +746,7 @@ class EspStub:
     def _thermostat(self, body):
         """``POST /api/thermostat``: the accepted keys land in the fixture and count ``rev``; an
         ``AUTO`` request answers like the firmware once enabled (mode AUTO)."""
+        time.sleep(self.thermostat_delay_s)
         if self.thermostat_error:
             err, self.thermostat_error = self.thermostat_error, None
             return err
