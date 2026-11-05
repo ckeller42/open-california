@@ -231,7 +231,7 @@ def test_start_while_a_command_runs_is_busy(host_fw, rec_unit, tmp_path):
 )
 def test_wizard_in_browser(host_fw, hci_unit, tmp_path, locale, hotspot, words):
     """The shared wizard clicked in Chromium against the real firmware: over the setup hotspot at
-    ``/app`` (EN) and at ``/`` in station mode (DE) — banner button, ready checkbox, Connect, the
+    ``/app#wifisetup`` (EN) and at ``/`` in station mode (DE) — banner button, ready checkbox, Connect, the
     code the fake unit shows, ✓ Paired; no uncaught page error.
 
     .. test:: The shared wizard pairs the real host firmware from Chromium, EN + DE
@@ -246,7 +246,9 @@ def test_wizard_in_browser(host_fw, hci_unit, tmp_path, locale, hotspot, words):
         browser = p.chromium.launch()
         page = browser.new_context(locale=locale).new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto("http://127.0.0.1:%d%s" % (fw.http_port, "/app" if hotspot else "/"))
+        # Over the hotspot, "/app" lands on the first-time setup (order A: WiFi first); WiFi
+        # setup keeps the banner, and the pairing wizard still works there.
+        page.goto("http://127.0.0.1:%d%s" % (fw.http_port, "/app#wifisetup" if hotspot else "/"))
         page.locator("#unpaired-banner").get_by_role("button", name=go).click(timeout=15000)
         page.get_by_label(ready).check()
         page.get_by_role("button", name=connect).click()
