@@ -176,6 +176,26 @@ def test_auto_tap_waits_for_a_fresh_heater_read(cli, tmp_path):
     assert out.index("HOLD 0") > out.index("HOLD 1")
 
 
+def test_a_short_fault_between_steps_still_ends_auto_with_it(cli, tmp_path):
+    """A new 1702 frame with a fault steps at once: on the van the unit stopped the heater with ErrorCode 4
+    (heating time exceeded) and cleared the code 36 s later, between two 60 s steps, so the next step saw a
+    heater off without a fault and logged RUN_ENDED instead of LOCKED.
+
+    .. test:: Thermostat runner: a fault frame steps at once
+       :id: T_FW_THERMOSTAT_RUN_FAULT_STEP
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    locked = frame(
+        "airheater", Installed=1, NormalOperation=0, FaultTriggerBit=1, ErrorCode=4, HeatingLevel=6
+    )
+    cleared = frame("airheater", Installed=1, NormalOperation=0, HeatingLevel=6)
+    out = run(cli, tmp_path, [*STARTED, "set period_ms 60000", "now 2600", RUNNING, "tick",
+                              "now 10000", locked, "tick", "now 46000", cleared, "tick", "state"])  # fmt: skip
+    st = state(out)
+    assert (st["mode"], st["reason"]) == ("OFF", "LOCKED"), st
+    assert submits(out) == ["runtime 120", "level 6", "power on"]  # nothing sent to a locked heater
+
+
 def test_night_wait_holds_the_session(cli, tmp_path):
     """A night AUTO request with the heater off pre-sets the level alone and enters WAITING; the wait holds
     the session like AUTO (no rest: a WAITING that loses fresh 1702 data never sees the panel's Dauerbetrieb).

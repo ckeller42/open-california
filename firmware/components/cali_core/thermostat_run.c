@@ -1,8 +1,8 @@
 /* thermostat_run.c — the cabin thermostat on the satellite (R_FW_THERMOSTAT_RUN). Contract: the "Run"
  * part of include/cali_thermostat.h. Proven end to end by tests/firmware/test_thermostat_e2e.py.
  *
- * One cali_thermo_step() per period_ms (and at once after a request, a switch of the feature or a
- * finished command batch), fed from this ESP: the stored 1702 frame + its age, this link's 1202/1602/
+ * One cali_thermo_step() per period_ms (and at once after a request, a switch of the feature, a
+ * finished command batch or a new 1702 frame with a fault), fed from this ESP: the stored 1702 frame + its age, this link's 1202/1602/
  * 1004 frames, the configured Govees by alias. Its commands go out one at a time through the control
  * sequencer (the next from the done callback); the last result goes into the next step's cmd input.
  */
@@ -35,6 +35,7 @@ static const char *s_reason;        /* the last reason that was not NULL */
 static int s_on, s_req, s_due;
 static uint64_t s_next;
 static uint64_t s_link_wait;        /* an AUTO tap waits for the link it woke until this uptime; 0 = not yet */
+static uint64_t s_heater_seen;      /* the time of the last 1702 frame the tick looked at */
 /* the batch going out: s_cmds[s_i] is in flight while s_wait */
 static cali_thermo_cmd_t s_cmds[CALI_THERMO_MAX_CMDS];
 static int s_n, s_i, s_wait;
@@ -365,6 +366,15 @@ void cali_thermo_run_init(void) {
 
 void cali_thermo_run_tick(uint64_t now_ms) {
     s_tick_now = now_ms;
+    /* a new 1702 frame with a fault steps at once: the unit can clear the code (ErrorCode 4 after 36 s on the
+     * van) before the next period, and the step would then see a heater off without a fault (RUN_ENDED) */
+    uint64_t hat = cali_session_frame_ms((size_t)fn_index("airheater"));
+    if (hat != s_heater_seen) {
+        static codec_kv_t kv[CODEC_KV_MAX];   /* static as in inputs(): the owner task's stack is small */
+        int n = frame_fields("airheater", 1, kv);
+        s_heater_seen = hat;
+        if (field(kv, n, "FaultTriggerBit") > 0 || field(kv, n, "ErrorCode") > 0) s_due = 1;
+    }
     if (s_wait || s_n) return;   /* a batch is going out: its done callback sends the next */
     /* an AUTO tap from OFF woke the link (cali_thermo_request): give it time to come up and, in OFF the session
      * does not re-read 1702, to read the heater (the hold reads it at once), then step */
