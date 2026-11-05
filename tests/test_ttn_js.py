@@ -28,7 +28,7 @@ DEV = {"devId": "van-000001", "devEui": DEVEUI, "appKey": APPKEY}
 
 _HARNESS = (
     'const fs=require("fs"),vm=require("vm");'
-    "const ctx=vm.createContext({fetch,Uint8Array,atob,btoa,URL});"
+    "const ctx=vm.createContext({fetch,Uint8Array,atob,btoa,URL,AbortSignal});"
     'vm.runInContext(fs.readFileSync(process.argv[1],"utf8"),ctx,{filename:process.argv[1]});'
     "ctx.B=process.argv[3];ctx.APP=process.argv[4];"
     "ctx.err=e=>({err:e.name,kind:e.kind,status:e.status,msg:e.message});"
@@ -161,6 +161,17 @@ def test_read_uplinks(fake):
         f"readUplinks(B,{json.dumps(read)},APP,'van-000001',{{after:{ms + 60000}}}).then(a=>a.map(u=>u.port))",
     )
     assert r == [3]
+
+
+def test_stalled_read_ends_as_timeout(fake):
+    """A storage read that TTS never answers ends as TtnError kind ``timeout`` (the caller's signal, here 300 ms,
+    replaces the 20 s default), so the app's poll goes on; the next read is answered."""
+    _, read = fake.make_key("read")
+    fake.add_uplink("van-000001", 2, b"\x01")
+    fake.stall_reads = 1
+    r = js(fake, f"readUplinks(B,{json.dumps(read)},APP,'van-000001',{{signal:AbortSignal.timeout(300)}}).catch(err)")
+    assert (r["err"], r["kind"], r["status"]) == ("TtnError", "timeout", 0)
+    assert js(fake, f"readUplinks(B,{json.dumps(read)},APP,'van-000001').then(a=>a.length)") == 1
 
 
 def test_cursor_is_nanosecond_exact(fake):

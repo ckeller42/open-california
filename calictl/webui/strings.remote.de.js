@@ -46,5 +46,6 @@ Object.assign(window.STRINGS_DE, {
   "Registered. Waiting for the van's first uplink since {clock} ({ago}).": "Registriert. Warte auf die erste Nachricht des Fahrzeugs seit {clock} ({ago}).",
   "Keys sent to the van. Waiting for its confirmation since {clock} ({ago}).": "Schlüssel an das Fahrzeug gesendet. Warte auf seine Bestätigung seit {clock} ({ago}).",
   "The van has the keys.": "Das Fahrzeug hat die Schlüssel.",
+  "The van's daily downlink limit is reached. The setup continues tomorrow.": "Das Fahrzeug hat sein Tageslimit für Downlinks erreicht. Die Einrichtung geht morgen weiter.",
   "The van did not confirm. Hold its screen for 3 seconds and scan the setup code again.": "Das Fahrzeug hat nicht bestätigt. Halten Sie seinen Bildschirm 3 Sekunden lang gedrückt und scannen Sie den Einrichtungscode noch einmal.",
 });

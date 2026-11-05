@@ -16,6 +16,14 @@ else. The QR images are made here with ``segno``; every key is a dummy built in 
 .. test:: A confirmation with missing fragments sends only those again; a repair QR configures an empty phone
    :id: T_UI_REMOTE_SETUP_REPAIR
    :links: R_UI_REMOTE_APP
+
+.. test:: A lost status-0 confirmation ends the setup: the timeout probe gets 00 again, or the rescan takes the van's repair QR
+   :id: T_UI_REMOTE_SETUP_LOST_CONFIRM
+   :links: R_UI_REMOTE_APP, R_FW_LORA_SETUP
+
+.. test:: The setup pushes at most 8 downlinks in 24 h and continues after the day; a repeated uplink is acted on once
+   :id: T_UI_REMOTE_SETUP_BUDGET
+   :links: R_UI_REMOTE_APP
 """
 
 import contextlib
@@ -386,9 +394,10 @@ def test_reload_during_registration_warns_about_the_key(site, ttn, error_gated_p
 
 
 def test_resend_after_10_min_without_confirmation(site, ttn, error_gated_page):  # noqa: F811
-    """A reload between storing "sent" and the push: no confirmation 10 min after ``sentAt`` -> the stored fragments
-    are pushed again, once, byte-identical (same nonce, same TK); never sooner (fair use). After 3 resends without a
-    confirmation the app asks for a new scan."""
+    """A reload between storing "sent" and the push: no confirmation 10 min after ``sentAt`` -> the LAST fragment is
+    pushed again as a probe, once, byte-identical (same nonce, same TK); never sooner (fair use). The van answers a
+    probe with the bitmap of what it has (status 2) or 00. After 3 probes without an answer the app asks for a new
+    scan."""
     tx = TEXT["en-US"]
     with _page(error_gated_page, site, ttn) as pg:
         _setup(pg, ttn, tx)
@@ -410,7 +419,8 @@ def test_resend_after_10_min_without_confirmation(site, ttn, error_gated_page): 
                  const fr = await sealTransfer(packPlain(remoteCfg()), loraUnhex(st.tk), st.devEui, loraUnhex(st.nonce));
                  return fr.map((f) => Array.from(f)); }"""
         )
-        assert frags == [bytes(f) for f in expected]
+        assert frags == [bytes(expected[-1])], "the probe: only the last fragment, byte for byte"
+        assert frags[0][0] & 0x80
         _wait_pushes(pg, ttn, 1)
         for n in (2, 3):  # two more resends, 10 min apart
             pg.clock.fast_forward("10:30")
@@ -430,3 +440,110 @@ def test_resend_after_10_min_without_confirmation(site, ttn, error_gated_page): 
         _wait_pushes(pg, ttn, 5)  # exactly one resend
         pg.wait_for_timeout(500)
         _wait_pushes(pg, ttn, 5)
+
+
+def _repair_text(pg):
+    """The repair QR the van shows once it has the keys: the stored configuration's cluster, IDs and keys."""
+    cfg = json.loads(pg.evaluate("localStorage.getItem('oc.remote.cfg')"))
+    ids = [cfg[k].upper() for k in ("cluster", "appId", "devId")]
+    return "*".join(["OCR1", *ids, cfg["readKey"], cfg["cmdKey"]])
+
+
+def test_lost_confirmation_probe_gets_00_again(site, ttn, error_gated_page):  # noqa: F811
+    """The van stored the keys, erased its transfer key and confirmed with 00, but that uplink never reached TTN.
+    10 min later the app probes with the last fragment; the van (no transfer key, lora_ttn stored) answers
+    00|sha256(lora_ttn) again (R_FW_LORA_SETUP, T_FW_LORA_NO_TK) instead of 03, so the setup ends as a success
+    without a new scan. The van's answer is simulated here; the firmware side is the host test."""
+    tx = TEXT["en-US"]
+    with _page(error_gated_page, site, ttn) as pg:
+        _setup(pg, ttn, tx)
+        frags = [f for _, _, f, _ in _join(pg, ttn)]
+        n = len(ttn.downlinks)
+        pg.clock.fast_forward("10:30")  # the confirmation is lost: nothing at TTN
+        probe = [f for _, _, f, _ in _pushed(pg, ttn, n)]
+        assert probe == [frags[-1]]
+        _confirm(pg, ttn, b"\x00" + hashlib.sha256(_plain(frags)).digest()[:4])
+        pg.get_by_text(tx["done"]).wait_for()
+        assert pg.evaluate("localStorage.getItem('oc.remote.setup')") is None
+
+
+def test_rescan_takes_the_repair_qr_of_this_van(site, ttn, error_gated_page):  # noqa: F811
+    """While the app asks for a new scan, the van may already have the keys (its confirmation was lost) and then
+    shows the repair QR: with the stored keys it ends the setup as a success; another van's code is refused."""
+    tx = TEXT["en-US"]
+    with _page(error_gated_page, site, ttn) as pg:
+        _setup(pg, ttn, tx)
+        _join(pg, ttn)
+        _confirm(pg, ttn, b"\x03")
+        pg.get_by_text(tx["rescan"]).wait_for()
+        good = _repair_text(pg)
+        other = good.replace(DEV.upper(), "VAN-999999")
+        n = len(ttn.downlinks)
+        _photo(pg, other)
+        pg.get_by_text("This code belongs to another van.").wait_for()
+        assert json.loads(pg.evaluate("localStorage.getItem('oc.remote.setup')"))["step"] == "rescan"
+        _photo(pg, good)
+        pg.get_by_text(tx["done"]).wait_for()
+        assert pg.evaluate("localStorage.getItem('oc.remote.setup')") is None
+        assert len(ttn.downlinks) == n, "no downlink for a van that has the keys"
+
+
+def test_repair_qr_ends_a_waiting_setup(site, ttn, error_gated_page):  # noqa: F811
+    """"Scan the van's code" during a setup that waits for a confirmation: the repair QR configures the phone and
+    clears the setup, so the next start does not reopen it."""
+    tx = TEXT["en-US"]
+    with _page(error_gated_page, site, ttn) as pg:
+        _setup(pg, ttn, tx)
+        _join(pg, ttn)
+        text = _repair_text(pg)
+        _menu(pg, tx["scan"])
+        _photo(pg, text)
+        pg.wait_for_function("() => localStorage.getItem('oc.remote.setup') === null")
+        pg.reload()
+        pg.locator("#status").get_by_text("LoRa").wait_for()
+        assert pg.get_by_text(tx["sent"]).count() == 0
+
+
+def test_setup_downlinks_stay_within_8_a_day(site, ttn, error_gated_page):  # noqa: F811
+    """4 fragments + 3 probes = 7 downlinks; a status 2 that asks for 3 more would make 10: the app holds them, says
+    so, and pushes them once the first downlinks are 24 h old (TTN fair use: 10 a day; the van's budget: 8)."""
+    tx = TEXT["en-US"]
+    with _page(error_gated_page, site, ttn) as pg:
+        _setup(pg, ttn, tx)
+        frags = [f for _, _, f, _ in _join(pg, ttn)]
+        for n in (5, 6, 7):  # three probes, 10 min apart
+            pg.clock.fast_forward("10:30")
+            for _ in range(100):
+                if len(ttn.downlinks) >= n:
+                    break
+                pg.wait_for_timeout(50)
+            assert len(ttn.downlinks) == n
+        _confirm(pg, ttn, bytes([0x02, 0x08]))  # only fragment 3: 0, 1, 2 missing
+        pg.get_by_text("daily downlink limit is reached").wait_for()
+        pg.wait_for_timeout(300)
+        assert len(ttn.downlinks) == 7, "nothing above 8 a day"
+        assert json.loads(pg.evaluate("localStorage.getItem('oc.remote.setup')"))["held"] == [0, 1, 2]
+        _poll(pg)
+        pg.wait_for_timeout(300)
+        assert len(ttn.downlinks) == 7
+        pg.clock.fast_forward("24:00:00")
+        again = [f for _, _, f, _ in _pushed(pg, ttn, 7)]
+        assert again == frags[:3]
+        pg.get_by_text(tx["sent"]).wait_for()
+
+
+def test_inclusive_after_does_not_repeat_a_resend(site, ttn, error_gated_page):  # noqa: F811
+    """A storage API whose ``after`` also returns the uplink at the cursor: the status-2 confirmation is acted on
+    once (one resend of the missing fragment), not on every poll."""
+    tx = TEXT["en-US"]
+    ttn.after_inclusive = True
+    with _page(error_gated_page, site, ttn) as pg:
+        _setup(pg, ttn, tx)
+        first = [f for _, _, f, _ in _join(pg, ttn)]
+        n = len(ttn.downlinks)
+        _confirm(pg, ttn, bytes([0x02, 0x0D]))
+        assert [f for _, _, f, _ in _pushed(pg, ttn, n)] == [first[1]]
+        for _ in range(3):
+            _poll(pg)
+            pg.wait_for_timeout(300)
+        assert len(ttn.downlinks) == n + 1

@@ -25,8 +25,11 @@ function remoteSave(key, v) {
   try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* storage blocked/full: the next read starts over */ }
 }
 
-/** A TTS cluster host (`eu1.cloud.thethings.network`, `<tenant>.eu1.cloud.thethings.industries`): never a URL. @param {any} h */
-const remoteHostOk = (h) => typeof h === "string" && h.length <= 64 && LORA_ID_RE.test(h);
+/** A TTS cluster host (`eu1.cloud.thethings.network`, `<tenant>.eu1.cloud.thethings.industries`): never a URL, and
+ * only under the two domains the page's connect-src allows (tools/build_remote.py CSP), so a typed router or LAN
+ * host never gets a key. @param {any} h */
+const remoteHostOk = (h) => typeof h === "string" && h.length <= 64 && LORA_ID_RE.test(h)
+  && /^([a-z0-9-]+\.)+thethings\.(network|industries)$/.test(h);
 
 /** @returns {{cluster: string, appId: string, devId: string, readKey: string, cmdKey: string, base?: string} | null}
  * null without a usable configuration (a cluster that is not a plain host is refused) */
@@ -63,6 +66,7 @@ async function remoteState(cfg, now) {
   /** @type {Array<{at: number, boot: number, solar_wh: number, load_wh: number, batt_net_wh: number}>} */
   const points = remoteLoad(REMOTE_ENERGY_KEY) || [];
   for (const u of ups.slice().reverse()) {   // oldest first: a newer frame always wins
+    if (u.receivedAt === last.cursor) continue;   // `after` may be inclusive: the cursor's own uplink again
     last.cursor = u.receivedAt;
     const d = loraDecodeUplink(u.port, u.bytes);
     if (d.error || d.port === 12) continue;
@@ -116,7 +120,8 @@ async function remoteState(cfg, now) {
 // a log. It is dropped right after deleteOwnKey, which runs as soon as the phone's two keys exist and the
 // configuration is stored, before the join wait and the transfer. What a reload must survive is in
 // oc.remote.setup: {step: "join"|"sent"|"rescan", cluster, appId, devId, devEui, tk, nonce, queued, total,
-// startedAt, sentAt, resends, cursor}; tk (the van's transfer key, hex) is wiped by deleting the entry on status 0.
+// startedAt, sentAt, resends, cursor, pushes, held}; tk (the van's transfer key, hex) is wiped by deleting the entry
+// on status 0. pushes: the times (ms) of the downlinks pushed in the last 24 h; held: fragments that wait for room.
 // oc.remote.keyleft lists the full-rights keys (id and application only, never the secret) from a passed check
 // until their delete answered: a closed page, an abandoned flow or a failed delete leaves the owner a warning.
 
@@ -124,9 +129,14 @@ const REMOTE_SETUP_KEY = "oc.remote.setup";
 const REMOTE_KEYLEFT_KEY = "oc.remote.keyleft";   // [{keyId, appId}]
 const REMOTE_SETUP_POLL_MS = 15000;   // setup only; the cockpit reads every REMOTE_POLL_MS
 const REMOTE_JOIN_HINT_MS = 600000;
-// no confirmation this long after a push: push the same fragments again (fair use: never sooner), at most 3 times
+// no confirmation this long after a push: push the last fragment again as a probe (fair use: never sooner), at most 3
+// times; the van answers it with status 2 and the bitmap of what it has, or 00 when it already has the keys
 const REMOTE_RESEND_MS = 600000;
 const REMOTE_RESENDS = 3;
+// at most this many setup downlinks per 24 h (TTN fair use 10 a day; the van's own budget is 8)
+const REMOTE_DOWNLINKS = 8;
+const REMOTE_DAY_MS = 86400000;
+const REMOTE_LIMIT_MSG = "The van's daily downlink limit is reached. The setup continues tomorrow.";
 const REMOTE_JOIN_SKEW_MS = 120000;   // an uplink counts as the join from 2 min before the wait (phone vs TTS clock)
 const REMOTE_CLUSTERS = ["eu1.cloud.thethings.network"];   // EU868 only (registerDevice); "other": a TTS Cloud host
 const REMOTE_OTHER = "other";
@@ -189,6 +199,7 @@ function rsErrText(e) {
   if (k === "auth") return "TTN does not accept this key.";
   if (k === "forbidden") return "The key lacks a right for this step.";
   if (k === "setup") return "Enter the cluster's host name, for example eu1.cloud.thethings.network.";
+  if (k === "timeout") return "TTN does not answer. Check the cluster and the connection.";
   return e instanceof TtnError ? "TTN refused this step. Try again." : "TTN does not answer. Check the cluster and the connection.";
 }
 
@@ -240,11 +251,21 @@ async function rsCheck(cluster, key) {
 }
 
 /** A scanned setup QR: steps 5 (register, keys, delete the full-rights key) or, after status 1/3, a new transfer
- * key for the same van. @param {string} text */
+ * key for the same van. While a new scan is asked for, the van's repair QR with the stored keys also ends the
+ * setup: the van has the keys and only its confirmation was lost. @param {string} text */
 async function rsSetupQr(text) {
+  const st = remoteLoad(REMOTE_SETUP_KEY);
+  const r = st && st.step === "rescan" ? parseRepairQr(text.trim()) : null;
+  if (r) {
+    const cfg = remoteCfg();
+    const same = cfg && cfg.cluster === r.cluster && cfg.appId === r.appId && cfg.devId === r.devId
+      && cfg.readKey === r.readKey && cfg.cmdKey === r.cmdKey;
+    if (!same) { rsMsg = "This code belongs to another van."; rsRefresh(); return; }
+    rsDone();
+    return;
+  }
   const q = parseSetupQr(text.trim());
   if (!q) { rsMsg = "This is not the van's setup code."; rsRefresh(); return; }
-  const st = remoteLoad(REMOTE_SETUP_KEY);
   if (st && st.step === "rescan") {
     if (q.devEui !== st.devEui) { rsMsg = "This code belongs to another van."; rsRefresh(); return; }
     // a new transfer: new TK and nonce, a fresh resend budget (rsSend stores queued, total and sentAt anew)
@@ -282,9 +303,20 @@ async function rsSetupQr(text) {
   rsPoll();
 }
 
+/** The setup is done (the van's confirmation, or its repair QR with the stored keys): the transfer key is wiped. */
+function rsDone() {
+  try { localStorage.removeItem(REMOTE_SETUP_KEY); } catch (e) { /* storage blocked */ }
+  rsPhase = "done"; rsMsg = "";
+  rsRefresh();
+}
+
+/** The setup downlinks pushed in the last 24 h. @param {any} st @param {number} now @returns {number[]} */
+const rsPushes = (st, now) => (st.pushes || []).filter((/** @type {number} */ t) => now - t < REMOTE_DAY_MS);
+
 /** Step 7: seal the transfer (the stored nonce: a resend is byte-identical) and queue `which` fragments (null =
  * all). `st` (with the cursor past the uplink that asked for it) is stored only when the push went through, so a
- * failed push is tried again on the next read. @param {any} st @param {number[]|null} which */
+ * failed push is tried again on the next read. Fragments that would pass REMOTE_DOWNLINKS in 24 h are held
+ * (`held`) and pushed by a later read once there is room. @param {any} st @param {number[]|null} which */
 async function rsSend(st, which) {
   const cfg = remoteCfg();
   if (!cfg) return;
@@ -292,8 +324,16 @@ async function rsSend(st, which) {
   try {
     const frags = await sealTransfer(/** @type {Uint8Array<ArrayBuffer>} */ (packPlain(cfg)), loraUnhex(st.tk), st.devEui, loraUnhex(st.nonce));
     const idx = (which || frags.map((_, i) => i)).filter((i) => i < frags.length);
+    const now = Date.now(), pushes = rsPushes(st, now);
+    if (pushes.length + idx.length > REMOTE_DOWNLINKS) {
+      rsSave({ ...st, step: "sent", held: idx, total: frags.length, pushes });
+      rsMsg = REMOTE_LIMIT_MSG;
+      rsPoll();
+      return;
+    }
     // stored BEFORE the push: a reload between push and save never queues the fragments twice (10 downlinks a day)
-    rsSave({ ...st, step: "sent", queued: idx, total: frags.length, sentAt: Date.now() });
+    rsSave({ ...st, step: "sent", queued: idx, held: null, total: frags.length, sentAt: now,
+      pushes: [...pushes, ...idx.map(() => now)] });
     await pushDownlinks(remoteBase(cfg), cfg.cmdKey, cfg.appId, cfg.devId, idx.map((i) => frags[i]), 12);
     rsMsg = "";
   } catch (e) {
@@ -320,7 +360,8 @@ async function rsStep() {
   /** @type {Awaited<ReturnType<typeof readUplinks>>} */
   let ups;
   try {
-    ups = await readUplinks(remoteBase(cfg), cfg.readKey, cfg.appId, cfg.devId, st.cursor ? { after: st.cursor } : {});
+    ups = (await readUplinks(remoteBase(cfg), cfg.readKey, cfg.appId, cfg.devId, st.cursor ? { after: st.cursor } : {}))
+      .filter((u) => u.receivedAt !== st.cursor);   // `after` may be inclusive: never act on the same uplink twice
     rsMsg = "";
   } catch (e) { rsMsg = rsErrText(e); rsPoll(); return; }
   if (st.step === "join") {   // newest first
@@ -335,21 +376,21 @@ async function rsStep() {
       st.cursor = u.receivedAt;
       const ok = c && c.status === 0 && c.hash4
         && rsHex(c.hash4) === rsHex(await plainHash4(/** @type {Uint8Array<ArrayBuffer>} */ (packPlain(cfg))));
-      if (ok) {
-        try { localStorage.removeItem(REMOTE_SETUP_KEY); } catch (e) { /* storage blocked */ }
-        rsPhase = "done"; rsMsg = "";
-        rsRefresh();
-        return;
-      }
+      if (ok) { rsDone(); return; }
       // 1 bad tag, 3 no transfer key, another plaintext: the van needs a new transfer key (a new screen open)
       delete st.tk;
       st.step = "rescan";
       rsSave(st);
       rsMsg = "";
+    } else if (st.held && st.held.length) {
+      // over the day's downlinks: push once there is room again
+      if (rsPushes(st, Date.now()).length + st.held.length <= REMOTE_DOWNLINKS) { await rsSend(st, st.held); return; }
+      rsMsg = REMOTE_LIMIT_MSG;
     } else if (Date.now() - (st.sentAt || 0) >= REMOTE_RESEND_MS) {
-      // no answer (also: a page closed between storing "sent" and the push): the same fragments again
-      // (same TK and nonce: the van takes identical duplicates), or after REMOTE_RESENDS a new scan
-      if ((st.resends || 0) < REMOTE_RESENDS) { await rsSend({ ...st, resends: (st.resends || 0) + 1 }, st.queued); return; }
+      // no answer (also: a page closed between storing "sent" and the push): the last fragment again as a probe
+      // (same TK and nonce: the van takes identical duplicates) -- the van answers with the bitmap of what it has
+      // (status 2), or 00 when the keys are already there; after REMOTE_RESENDS a new scan
+      if ((st.resends || 0) < REMOTE_RESENDS) { await rsSend({ ...st, resends: (st.resends || 0) + 1 }, [st.total - 1]); return; }
       delete st.tk;
       st.step = "rescan";
       rsSave(st);
@@ -368,6 +409,8 @@ function rsRepairQr(text) {
   const seam = rsSeam();
   if (seam) cfg.base = seam;
   remoteSave(REMOTE_CFG_KEY, cfg);
+  // the van shows this code once it has the keys: a setup still waiting here (a lost confirmation) is over
+  try { localStorage.removeItem(REMOTE_SETUP_KEY); } catch (e) { /* storage blocked */ }
   rsMsg = "";
   goto("home");
   refreshState(true);
@@ -489,7 +532,7 @@ function rsPaint() {
   const phase = rsPhaseNow(rsDom.view);
   status.textContent = phase === "work" ? T("Talking to TTN …")
     : phase === "join" ? tf("Registered. Waiting for the van's first uplink since {clock} ({ago}).", vars)
-    : phase === "sent" ? tf("Keys sent to the van. Waiting for its confirmation since {clock} ({ago}).", vars)
+    : phase === "sent" ? (st && st.held && st.held.length ? "" : tf("Keys sent to the van. Waiting for its confirmation since {clock} ({ago}).", vars))
     : phase === "done" ? (rsKeysLeft().length ? "" : T("The van has the keys.")) : "";   // a live key: no success
   if (hint) hint.hidden = !(phase === "join" && st && Date.now() - st.startedAt >= REMOTE_JOIN_HINT_MS);
 }

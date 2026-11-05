@@ -10,6 +10,7 @@ const TTN_CMD_RIGHTS = [...TTN_READ_RIGHTS, "RIGHT_APPLICATION_TRAFFIC_DOWN_WRIT
 const TTN_READ_NAME = "oc-remote-read";
 const TTN_CMD_NAME = "oc-remote-cmd";
 const TTN_ID_PATHS = ["ids.device_id", "ids.dev_eui", "ids.join_eui"];
+const TTN_TIMEOUT_MS = 20000;   // a call (and its body) that takes longer ends as TtnError kind "timeout"
 
 class TtnError extends Error {
   /** @param {number} status HTTP status (0 = refused before any call) @param {string} message @param {string} [kind] */
@@ -21,18 +22,28 @@ class TtnError extends Error {
   }
 }
 
+/** A stalled call or body read (the signal fired) as TtnError kind `timeout`; any other error unchanged. @param {any} e */
+function ttnAbortErr(e) {
+  return e && (e.name === "TimeoutError" || e.name === "AbortError") ? new TtnError(0, "TTN did not answer in time", "timeout") : e;
+}
+
 /**
- * One API call. Throws TtnError for a status that is not 2xx or in `allow`; returns the Response.
+ * One API call. Throws TtnError for a status that is not 2xx or in `allow` (kind `timeout` when `signal` fires,
+ * by default after TTN_TIMEOUT_MS); returns the Response, whose body read the same signal still ends.
  * @param {string} base @param {string} key @param {string} method @param {string} path
- * @param {any} [body] @param {number[]} [allow]
+ * @param {any} [body] @param {number[]} [allow] @param {AbortSignal} [signal]
  */
-async function ttnCall(base, key, method, path, body, allow) {
+async function ttnCall(base, key, method, path, body, allow, signal) {
   /** @type {Record<string, string>} */
   const headers = { Authorization: "Bearer " + key };
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const res = await fetch(base + "/api/v3" + path, {
-    method, headers, body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res;
+  try {
+    res = await fetch(base + "/api/v3" + path, {
+      method, headers, body: body === undefined ? undefined : JSON.stringify(body),
+      signal: signal || AbortSignal.timeout(TTN_TIMEOUT_MS),
+    });
+  } catch (e) { throw ttnAbortErr(e); }
   if (!res.ok && !(allow || []).includes(res.status)) throw new TtnError(res.status, `TTN ${res.status} ${method} ${path}`);
   return res;
 }
@@ -120,20 +131,23 @@ async function deleteOwnKey(base, key, appId, keyId) {
 /**
  * Reads stored uplinks, newest first (Storage API, newline-delimited JSON).
  * @param {string} base @param {string} readKey @param {string} appId @param {string} devId
- * @param {{after?: number | string, limit?: number}} [opt] `after` = ms since epoch, or a raw RFC3339(Nano) string passed through unchanged
+ * @param {{after?: number | string, limit?: number, signal?: AbortSignal}} [opt] `after` = ms since epoch, or a raw
+ *   RFC3339(Nano) string passed through unchanged; `signal` replaces the default timeout
  * @returns {Promise<Array<{port: number, bytes: Uint8Array, at: number, receivedAt: string}>>} `receivedAt` is the raw
  *   timestamp: pass the newest one as `after` (unchanged) for the next read; `at` is its ms value
  */
 async function readUplinks(base, readKey, appId, devId, opt) {
-  const { after, limit } = opt || {};
+  const { after, limit, signal } = opt || {};
   let q = "?order=-received_at";
   if (limit) q += "&limit=" + limit;
   if (after !== undefined) q += "&after=" + encodeURIComponent(typeof after === "number" ? new Date(after).toISOString() : after);
-  const res = await ttnCall(base, readKey, "GET", `/as/applications/${appId}/devices/${devId}/packages/storage/uplink_message${q}`);
+  const res = await ttnCall(base, readKey, "GET", `/as/applications/${appId}/devices/${devId}/packages/storage/uplink_message${q}`, undefined, undefined, signal);
   const bad = (/** @type {string} */ why) => new TtnError(res.status, "TTN storage stream: " + why, "stream");
   /** @type {Array<{port: number, bytes: Uint8Array, at: number, receivedAt: string}>} */
   const out = [];
-  for (const line of (await res.text()).split("\n")) {
+  let text;
+  try { text = await res.text(); } catch (e) { throw ttnAbortErr(e); }
+  for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     let o;
     try { o = JSON.parse(line); } catch (e) { throw bad("unparsable line"); }

@@ -75,6 +75,9 @@ class FakeTtn:
         self.storage_body = None  # test hook: bytes to answer every storage read with
         self.refuse_key_delete = False  # test hook: deleting a full-rights ("all") key answers 500
         self.create_gate = None  # test hook: a threading.Event the device create waits for (max 15 s)
+        self.stall_reads = 0  # test hook: this many next storage reads wait for ``release`` (max 30 s)
+        self.release = threading.Event()
+        self.after_inclusive = False  # test hook: ``after`` also returns the uplink AT that time
         self.calls = []  # (method, path, key id)
         self.lock = threading.Lock()
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _make_handler(self))
@@ -88,7 +91,8 @@ class FakeTtn:
         return self
 
     def stop(self):
-        """Stop serving."""
+        """Stop serving (a stalled read ends first: the server joins its threads)."""
+        self.release.set()
         self.httpd.shutdown()
         self.httpd.server_close()
 
@@ -249,12 +253,21 @@ def _make_handler(fake):
             if m and method == "GET":
                 if err := self._need(key, m[1], "RIGHT_APPLICATION_TRAFFIC_READ"):
                     return err
+                with fake.lock:
+                    stall = fake.stall_reads > 0
+                    fake.stall_reads -= stall
+                if stall:
+                    fake.release.wait(30)
                 if fake.storage_body is not None:
                     return 200, fake.storage_body
                 recs = sorted(fake.uplinks.get(m[2], []), key=lambda r: _tkey(r["received_at"]))
                 if "after" in q:
                     cut = _tkey(q["after"][0])
-                    recs = [r for r in recs if _tkey(r["received_at"]) > cut]
+                    recs = [
+                        r
+                        for r in recs
+                        if _tkey(r["received_at"]) > cut or (fake.after_inclusive and _tkey(r["received_at"]) == cut)
+                    ]
                 if q.get("order") == ["-received_at"]:
                     recs.reverse()
                 recs = recs[: int(q["limit"][0])] if "limit" in q else recs

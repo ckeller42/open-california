@@ -217,6 +217,11 @@ def test_remote_refuses_an_unknown_version(site, ttn, error_gated_page):
         {"cluster": "evil.example/x"},
         {"base": "https://evil.example"},  # the seam only ever points at 127.0.0.1
         {"base": "http://127.0.0.1.evil.example:80"},
+        # router-like hosts: not under the page's connect-src domains, so never a key's destination
+        {"cluster": "192.168.1.1", "base": None},
+        {"cluster": "fritz.box", "base": None},
+        {"cluster": "calictl-esp.local", "base": None},
+        {"cluster": "thethings.network.evil.example", "base": None},
     ],
 )
 def test_remote_config_cannot_point_the_keys_elsewhere(site, ttn, error_gated_page, over):
@@ -229,7 +234,9 @@ def test_remote_config_cannot_point_the_keys_elsewhere(site, ttn, error_gated_pa
         base = pg.evaluate("() => { const c = remoteCfg(); return c && remoteBase(c); }")
         expect(pg.locator("#status")).to_contain_text("LoRa")
     assert base in (None, "https://" + CLUSTER), base
-    assert not any("evil" in u for u in reqs), reqs
+    if over.get("cluster"):
+        assert base is None, base
+    assert not any(h in u for u in reqs for h in ("evil", "192.168.", "fritz.box", ".local")), reqs
 
 
 def test_remote_energy_points_are_spaced(site, ttn, error_gated_page):
@@ -244,3 +251,21 @@ def test_remote_energy_points_are_spaced(site, ttn, error_gated_page):
         expect(pg.locator("#status")).to_contain_text("LoRa ·")
         energy = json.loads(pg.evaluate("localStorage.getItem('oc.remote.energy')"))
     assert len(energy) == 1, energy
+
+
+def test_stalled_read_times_out_and_polling_goes_on(site, ttn, error_gated_page):
+    """TTS accepts the storage read and never answers: the read ends as a timeout (ttn.js, 20 s; shortened here
+    through AbortSignal.timeout) and the next poll is answered, instead of one stalled request blocking every
+    later poll."""
+    _, secret = ttn.make_key("read")
+    ttn.add_uplink(DEV, 2, port2(), datetime.now(UTC) - timedelta(minutes=5))
+    ttn.stall_reads = 1
+    short = "const _to = AbortSignal.timeout.bind(AbortSignal); AbortSignal.timeout = (ms) => _to(Math.min(ms, 500));"
+    with error_gated_page(
+        site, init_script=short + _init(ttn, secret), service_workers="block"
+    ) as pg:
+        pg.clock.install()
+        pg.wait_for_timeout(1500)  # the first read stalled, then timed out (real time)
+        expect(pg.locator("#status")).not_to_contain_text("5 min ago")
+        pg.clock.fast_forward("05:30")  # the next poll (REMOTE_POLL_MS)
+        expect(pg.locator(".summary")).to_contain_text("11 / 29 l")
