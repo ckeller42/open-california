@@ -116,7 +116,7 @@ async function remoteState(cfg, now) {
 // a log. It is dropped right after deleteOwnKey, which runs as soon as the phone's two keys exist and the
 // configuration is stored, before the join wait and the transfer. What a reload must survive is in
 // oc.remote.setup: {step: "join"|"sent"|"rescan", cluster, appId, devId, devEui, tk, nonce, queued, total,
-// startedAt, sentAt, cursor}; tk (the van's transfer key, hex) is wiped by deleting the entry on status 0.
+// startedAt, sentAt, resends, cursor}; tk (the van's transfer key, hex) is wiped by deleting the entry on status 0.
 // oc.remote.keyleft lists the full-rights keys (id and application only, never the secret) from a passed check
 // until their delete answered: a closed page, an abandoned flow or a failed delete leaves the owner a warning.
 
@@ -124,6 +124,9 @@ const REMOTE_SETUP_KEY = "oc.remote.setup";
 const REMOTE_KEYLEFT_KEY = "oc.remote.keyleft";   // [{keyId, appId}]
 const REMOTE_SETUP_POLL_MS = 15000;   // setup only; the cockpit reads every REMOTE_POLL_MS
 const REMOTE_JOIN_HINT_MS = 600000;
+// no confirmation this long after a push: push the same fragments again (fair use: never sooner), at most 3 times
+const REMOTE_RESEND_MS = 600000;
+const REMOTE_RESENDS = 3;
 const REMOTE_JOIN_SKEW_MS = 120000;   // an uplink counts as the join from 2 min before the wait (phone vs TTS clock)
 const REMOTE_CLUSTERS = ["eu1.cloud.thethings.network"];   // EU868 only (registerDevice); "other": a TTS Cloud host
 const REMOTE_OTHER = "other";
@@ -321,13 +324,13 @@ async function rsStep() {
   } catch (e) { rsMsg = rsErrText(e); rsPoll(); return; }
   if (st.step === "join") {   // newest first
     const j = ups.find((u) => [2, 3, 4].includes(u.port) && u.at >= st.startedAt - REMOTE_JOIN_SKEW_MS);
-    if (j) { await rsSend({ ...st, cursor: j.receivedAt }, null); return; }
+    if (j) { await rsSend({ ...st, cursor: j.receivedAt, resends: 0 }, null); return; }
   } else {
     const u = ups.find((x) => x.port === 12);
     if (u) {
       const d = loraDecodeUplink(12, u.bytes);
       const c = d.confirm ? parseConfirm(Uint8Array.from(d.confirm), st.total) : null;
-      if (c && c.status === 2 && c.missing && c.missing.length) { await rsSend({ ...st, cursor: u.receivedAt }, c.missing); return; }
+      if (c && c.status === 2 && c.missing && c.missing.length) { await rsSend({ ...st, cursor: u.receivedAt, resends: 0 }, c.missing); return; }
       st.cursor = u.receivedAt;
       const ok = c && c.status === 0 && c.hash4
         && rsHex(c.hash4) === rsHex(await plainHash4(/** @type {Uint8Array<ArrayBuffer>} */ (packPlain(cfg))));
@@ -342,6 +345,14 @@ async function rsStep() {
       st.step = "rescan";
       rsSave(st);
       rsMsg = "";
+    } else if (Date.now() - (st.sentAt || 0) >= REMOTE_RESEND_MS) {
+      // no answer (also: a page closed between storing "sent" and the push): the same fragments again
+      // (same TK and nonce: the van takes identical duplicates), or after REMOTE_RESENDS a new scan
+      if ((st.resends || 0) < REMOTE_RESENDS) { await rsSend({ ...st, resends: (st.resends || 0) + 1 }, st.queued); return; }
+      delete st.tk;
+      st.step = "rescan";
+      rsSave(st);
+      rsMsg = "The van did not confirm. Hold its screen for 3 seconds and scan the setup code again.";
     }
   }
   rsPoll();

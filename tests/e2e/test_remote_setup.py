@@ -372,3 +372,42 @@ def test_reload_during_registration_warns_about_the_key(site, ttn, error_gated_p
             assert pg.evaluate("localStorage.getItem('oc.remote.keyleft')") is None
     finally:
         ttn.create_gate.set()
+
+
+def test_resend_after_10_min_without_confirmation(site, ttn, error_gated_page):  # noqa: F811
+    """A reload between storing "sent" and the push: no confirmation 10 min after ``sentAt`` -> the stored fragments
+    are pushed again, once, byte-identical (same nonce, same TK); never sooner (fair use). After 3 resends without a
+    confirmation the app asks for a new scan."""
+    tx = TEXT["en-US"]
+    with _page(error_gated_page, site, ttn) as pg:
+        _setup(pg, ttn, tx)
+        # "sent" stored, the push never made (the page closed in between)
+        pg.evaluate(
+            """() => { const st = JSON.parse(localStorage.getItem('oc.remote.setup'));
+                       localStorage.setItem('oc.remote.setup', JSON.stringify({...st, step: 'sent',
+                         queued: [0, 1, 2, 3], total: 4, sentAt: Date.now()})); }"""
+        )
+        pg.reload()
+        pg.get_by_text(tx["sent"]).wait_for()
+        pg.clock.fast_forward("09:00")
+        pg.wait_for_timeout(500)
+        assert not ttn.downlinks, "no resend before 10 min"
+        pg.clock.fast_forward("01:30")
+        frags = [f for _, _, f, _ in _pushed(pg, ttn, 0)]
+        expected = pg.evaluate(
+            """async () => { const st = JSON.parse(localStorage.getItem('oc.remote.setup'));
+                 const fr = await sealTransfer(packPlain(remoteCfg()), loraUnhex(st.tk), st.devEui, loraUnhex(st.nonce));
+                 return fr.map((f) => Array.from(f)); }"""
+        )
+        assert frags == [bytes(f) for f in expected]
+        assert sum(1 for _, p, _ in ttn.calls if p.endswith("/down/push")) == 1
+        for n in (2, 3):  # two more resends, 10 min apart
+            pg.clock.fast_forward("10:30")
+            pg.wait_for_function(
+                "(n) => JSON.parse(localStorage.getItem('oc.remote.setup')).resends === n", arg=n
+            )
+        pg.clock.fast_forward("10:30")
+        pg.get_by_text("The van did not confirm").wait_for()
+        st = json.loads(pg.evaluate("localStorage.getItem('oc.remote.setup')"))
+        assert st["step"] == "rescan" and "tk" not in st
+        assert sum(1 for _, p, _ in ttn.calls if p.endswith("/down/push")) == 3
