@@ -6,6 +6,7 @@
  *   now <ms>                 the clock of tick / frame / sensor
  *   tick                     cali_thermo_run_tick(now)
  *   frame <fn> <hex>         the session's frame of fn (stored and live) at now
+ *   live 0|1                 0: the stored frames are not this link's (cali_session_frame_live finds none)
  *   ready 0|1                cali_session_ready()
  *   ign <-1|0|1>             cali_ac_ignition()
  *   sensor <alias> <centi|-> cali_sensors_value(alias): that value read at now ("-" = no reading)
@@ -13,7 +14,7 @@
  *   done <code>              the pending command ends with this CALI_CTL_* code
  *   on 0|1 | auto | stop     cali_thermo_set_enabled / cali_thermo_request("AUTO" | "OFF")
  *   ref|backup <alias|->     the configured thermometers
- *   target <centi> | set <key> <value>
+ *   target <centi> | night 0|1 | set <key> <value>
  *   state                    "THERMO <cali_thermo_state_json>"
  * Output: "SUBMIT <what> <value>" per submit, "HOLD <0|1>" per cali_session_hold change, "CONNECT_NOW"
  * per cali_session_connect_now, "REC <body>" per diagnostics record. */
@@ -35,7 +36,7 @@ static uint64_t s_now;
 static uint8_t s_fr[CODEC_NCHARS][CODEC_FRAME_MAX];
 static size_t s_len[CODEC_NCHARS];
 static uint64_t s_at[CODEC_NCHARS];
-static int s_ready, s_ign = -1, s_hold = -1, s_rc = CALI_CTL_PENDING;
+static int s_live = 1, s_ready, s_ign = -1, s_hold = -1, s_rc = CALI_CTL_PENDING;
 static cali_ctl_done_t s_done;
 static struct {
     char alias[24];
@@ -50,7 +51,9 @@ int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
     *len = s_len[i];
     return 1;
 }
-int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len) { return cali_session_frame(i, frame, len); }
+int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len) {
+    return s_live && cali_session_frame(i, frame, len);
+}
 uint64_t cali_session_frame_ms(size_t i) { return i < CODEC_NCHARS ? s_at[i] : 0; }
 int cali_session_ready(void) { return s_ready; }
 void cali_session_hold(int on) {
@@ -116,7 +119,8 @@ int main(int argc, char **argv) {
                     s_len[i]++;
                 s_at[i] = s_now;
             }
-        } else if (!strcmp(cmd, "ready")) s_ready = atoi(a);
+        } else if (!strcmp(cmd, "live")) s_live = atoi(a);
+        else if (!strcmp(cmd, "ready")) s_ready = atoi(a);
         else if (!strcmp(cmd, "ign")) s_ign = atoi(a);
         else if (!strcmp(cmd, "sensor") && n == 3) set_sensor(a, b);
         else if (!strcmp(cmd, "rc")) s_rc = atoi(a);
@@ -130,6 +134,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(cmd, "ref")) snprintf(c->ref, sizeof c->ref, "%.16s", strcmp(a, "-") ? a : "");
         else if (!strcmp(cmd, "backup")) snprintf(c->backup, sizeof c->backup, "%.16s", strcmp(a, "-") ? a : "");
         else if (!strcmp(cmd, "target")) c->target = (int32_t)atol(a);
+        else if (!strcmp(cmd, "night")) c->night = atoi(a);
         else if (!strcmp(cmd, "set") && n == 3) (void)cali_thermo_cfg_set(a, (int32_t)atol(b));
         else if (!strcmp(cmd, "state")) {
             char buf[512];

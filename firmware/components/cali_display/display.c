@@ -41,7 +41,10 @@
  * is read), ALS_PS_STATUS 0x8C (bit 7 = ALS data INVALID), PS_DATA 0x8D + 0x8E bits 2:0 (11 bit). */
 #define LTR_ADDR 0x23
 #define LTR_GAIN 8   /* ALS gain 8x: 0.125 .. 8k lux (dark van to daylight through glass) */
-#define LTR_IO_MS 10 /* per transfer: a dead sensor costs the owner (NimBLE host) task one 10 ms wait per tick */
+/* Per transfer. At least 3 ticks (CONFIG_FREERTOS_HZ 100): the driver's wait ends on a tick boundary, so a
+ * 1-tick wait (10 ms) can end microseconds after the transfer starts, and the read fails with ESP_ERR_TIMEOUT
+ * (bench: 74 % of the reads that cross a tick). A dead sensor costs the owner (NimBLE host) task 30 ms per tick. */
+#define LTR_IO_MS 30
 static const uint8_t LTR_INIT[][2] = {
     {0x82, 0x7B},              /* PS LED 60 kHz, 100 % duty, 50 mA (the data sheet's own example) */
     {0x83, 0x04},              /* 4 PS pulses */
@@ -347,8 +350,30 @@ static void touch_ids_log(void) {   /* once at init: what chip + power mode the 
     else cali_log("display: touch ft5x06 id read failed");
 }
 
+/* Failed sensor reads per device since boot, and the last error (the reads ignore their errors otherwise). */
+static uint32_t s_io_errs[BUS_BL + 1], s_io_logged;
+static esp_err_t s_io_last[BUS_BL + 1];
+static uint64_t s_io_log_ms;
+
+static int io_ok(int dev, esp_err_t e) {
+    if (e == ESP_OK) return 1;
+    s_io_errs[dev]++;
+    s_io_last[dev] = e;
+    return 0;
+}
+
+static void io_errors_log(uint64_t now_ms) {   /* owner task: at most once per CALI_DIAG_PERIOD_MS, when a count grew */
+    uint32_t n = s_io_errs[BUS_LTR] + s_io_errs[BUS_BMI] + s_io_errs[BUS_AXP];
+    if (n == s_io_logged || (s_io_logged && now_ms - s_io_log_ms < CALI_DIAG_PERIOD_MS)) return;
+    cali_log("display: sensor read errors ltr %lu %s bmi %lu %s axp %lu %s", (unsigned long)s_io_errs[BUS_LTR],
+             esp_err_to_name(s_io_last[BUS_LTR]), (unsigned long)s_io_errs[BUS_BMI], esp_err_to_name(s_io_last[BUS_BMI]),
+             (unsigned long)s_io_errs[BUS_AXP], esp_err_to_name(s_io_last[BUS_AXP]));
+    s_io_logged = n;
+    s_io_log_ms = now_ms;
+}
+
 static int ltr_get(uint8_t reg, uint8_t *v) {   /* single-byte combined reads, as the data sheet shows */
-    return i2c_master_transmit_receive(s_ltr, &reg, 1, v, 1, LTR_IO_MS) == ESP_OK ? 0 : -1;
+    return io_ok(BUS_LTR, i2c_master_transmit_receive(s_ltr, &reg, 1, v, 1, LTR_IO_MS)) ? 0 : -1;
 }
 
 static void ltr_init(void) {
@@ -420,13 +445,13 @@ static void imu_init(void) {   /* after ltr_init: the camera/sensor rails are on
 /* Acceleration in mg; 0 = a reading, -1 = none (the model then compares nothing). */
 static int imu_read(int32_t acc[3]) {
     uint8_t reg = IMU_ACC_X, b[6];
-    if (i2c_master_transmit_receive(s_imu->i2c_handle, &reg, 1, b, 6, LTR_IO_MS) != ESP_OK) return -1;
+    if (!io_ok(BUS_BMI, i2c_master_transmit_receive(s_imu->i2c_handle, &reg, 1, b, 6, LTR_IO_MS))) return -1;
     for (int i = 0; i < 3; i++) acc[i] = (int32_t)(int16_t)(b[2 * i + 1] << 8 | b[2 * i]) * 1000 / 4096;
     return 0;
 }
 
 static int axp_get(uint8_t reg, uint8_t *v, size_t n) {   /* LTR_IO_MS per transfer, as the LTR reads */
-    return i2c_master_transmit_receive(s_axp, &reg, 1, v, n, LTR_IO_MS) == ESP_OK ? 0 : -1;
+    return io_ok(BUS_AXP, i2c_master_transmit_receive(s_axp, &reg, 1, v, n, LTR_IO_MS)) ? 0 : -1;
 }
 
 /* Read-modify-write, only when the bit is clear. 0 = the bit is set (now or already), -1 = a failed transfer. */
@@ -478,6 +503,9 @@ int cali_display_init(const cali_transport_t *t) {
     /* BSP_ERROR_CHECK=y: bsp_i2c_init and bsp_display_start abort on their own faults, so prove the
      * chips the board package needs answer first. */
     (void)bsp_i2c_init();
+    /* A reset in the middle of a transfer (OTA reboot, RTS) does not reset the I2C chips: one can still hold SDA,
+     * and the probes below then fail (bench: "unavailable (axp2101)" once, until the next reset). Clock it free. */
+    (void)i2c_master_bus_reset(bsp_i2c_get_handle());
     if (i2c_master_probe(bsp_i2c_get_handle(), AXP2101_ADDR, PROBE_MS) != ESP_OK) { cali_log("display: unavailable (axp2101)"); return -1; }
     if (i2c_master_probe(bsp_i2c_get_handle(), AW9523_ADDR, PROBE_MS) != ESP_OK) { cali_log("display: unavailable (aw9523)"); return -1; }
     (void)bsp_display_start();
@@ -553,6 +581,7 @@ void cali_display_tick(uint64_t now_ms) {
         if (s_axp) bus_mark(BUS_AXP);   /* no chip handle = no transfer attempted */
         cali_battery_update(&b, now_ms);
     }
+    io_errors_log(now_ms);   /* before the lock: a busy lock must not hold back an AXP failure */
     cali_battery_get(&in.batt);
     __atomic_store_n(&s_batt_usb, in.batt.usb, __ATOMIC_RELAXED);
     __atomic_store_n(&s_batt_chg, in.batt.charging, __ATOMIC_RELAXED);

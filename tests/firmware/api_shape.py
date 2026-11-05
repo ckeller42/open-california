@@ -44,7 +44,7 @@ DEVICE_KEYS = frozenset(
 THERMOSTAT_STATE_KEYS = frozenset({"mode", "target", "t_ref", "level", "reason"})
 # GET/POST /api/thermostat (R_FW_THERMOSTAT_API) and its "status" member (cali_thermo_state_json)
 THERMOSTAT_API_KEYS = frozenset(
-    {"rev", "mode", "target", "runtime_min", "ref", "backup", "out", "outside_on", "cfg", "status"}
+    {"rev", "mode", "target", "runtime_min", "ref", "backup", "out", "outside_on", "night", "cfg", "status"}
 )
 THERMOSTAT_STATUS_KEYS = frozenset(
     {
@@ -59,6 +59,11 @@ THERMOSTAT_STATUS_KEYS = frozenset(
         "active",
         "outside_active",
         "end",
+        "blocked",
+        "wait_left_s",
+        "night",
+        "eta_s",
+        "eta_ends_first",
     }
 )
 OTA_KEYS = frozenset(

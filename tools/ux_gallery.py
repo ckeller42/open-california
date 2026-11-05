@@ -501,6 +501,11 @@ def thermostat_fixture(**over):
         "active": None,
         "outside_active": False,
         "end": "none",
+        "blocked": None,
+        "wait_left_s": None,
+        "eta_s": None,
+        "eta_ends_first": False,
+        "night": False,
     }
     status.update(over.pop("status", {}))
     body = {
@@ -512,6 +517,7 @@ def thermostat_fixture(**over):
         "backup": None,
         "out": None,
         "outside_on": False,
+        "night": False,
         "cfg": {},
         "status": status,
     }
@@ -568,6 +574,9 @@ class EspStub:
         self.sensor_posts = []  # POST /api/sensors bodies, in order
         self.thermostat_posts = []  # POST /api/thermostat bodies, in order
         self.thermostat_error = None  # (status, body) answered to the next POST /api/thermostat instead
+        self.thermostat_delay_s = (
+            0  # each POST /api/thermostat answers this late (the satellite takes a few 100 ms)
+        )
         self.wifi_posts = []  # POST /api/wifi bodies, in order
         self.joins = False  # True: a POST /api/wifi in "setup" joins (turns "station", setup pending)
         self.down = False  # True: every request gets no answer (the connection just closes)
@@ -757,15 +766,17 @@ class EspStub:
     def _thermostat(self, body):
         """``POST /api/thermostat``: the accepted keys land in the fixture and count ``rev``; an
         ``AUTO`` request answers like the firmware once enabled (mode AUTO)."""
+        time.sleep(self.thermostat_delay_s)
         if self.thermostat_error:
             err, self.thermostat_error = self.thermostat_error, None
             return err
         th = self.fixtures[self.mode]["/api/thermostat"]
-        for k in ("target", "runtime_min", "ref", "backup", "out", "outside_on", "mode"):
+        for k in ("target", "runtime_min", "ref", "backup", "out", "outside_on", "mode", "night"):
             if k in body:
                 th[k] = body[k]
-        if "mode" in body:
-            th["status"]["mode"] = body["mode"]
+        for k in ("mode", "enabled"):
+            if k in body:
+                th["status"][k] = body[k]
         th["rev"] += 1
         return 200, th
 

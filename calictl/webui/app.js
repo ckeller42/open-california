@@ -3986,16 +3986,21 @@ function spinner() {
 
 // --- Cabin thermostat card (R_FW_THERMOSTAT_API), Air heater screen, ESP satellite only -------------
 // GET/POST /api/thermostat exist on the satellite only (buspi: no card). The card shows while a Govee is
-// configured (ext) and the satellite accepts writes. The firmware ships it DISABLED: then the card says so and offers no AUTO switch
-// (enabling is API-only, with confirm). The heater unit's own safety concept stays authoritative.
-/** @typedef {{enabled:boolean, mode:string, reason:?string, heater:string, t_ref:?number, target:?number, level:?number, active:?string, end:string}} ThermoStatus end: "run" (a normal run that ends by itself) or "none" */
-/** @typedef {{rev:number, mode:string, target:number, runtime_min:number, ref:?string, backup:?string, out:?string, outside_on:boolean, status:ThermoStatus}} Thermo */
+// configured (ext) and the satellite accepts writes. The AUTO switch is always there: the firmware ships the thermostat
+// disabled, and the confirmation window asked at every start enables it and starts AUTO in one POST. A start that
+// status.blocked says would be refused dims the switch and names the reason first. The heater unit's own safety
+// concept stays authoritative.
+/** @typedef {{enabled:boolean, mode:string, reason:?string, heater:string, t_ref:?number, target:?number, level:?number, active:?string, end:string, blocked:?string, wait_left_s:?number, night:boolean, eta_s?:?number, eta_ends_first?:boolean}} ThermoStatus end: "run" (a normal run that ends by itself) or "none"; blocked: the refusal an AUTO request would get now (NO_CAMPING, IGNITION, …) */
+/** @typedef {{rev:number, mode:string, target:number, runtime_min:number, ref:?string, backup:?string, out:?string, outside_on:boolean, night:boolean, status:ThermoStatus}} Thermo night: the stored run-time choice "Night" (no time limit) */
 /** @type {?Thermo} */
 let THERMO = null;
 let thermoSheet = false;    // the thermometer sheet is open (survives the 2 s re-render)
 let thermoLoading = false;  // a GET /api/thermostat is in flight
 let thermoAsked = false;    // the first fetch of this page load went out
 let thermoChain = Promise.resolve();   // POSTs run one at a time, each with the then-current rev
+let thermoBusy = 0;         // queued or running POSTs: an AUTO start waits, its confirm reads the settings
+/** @type {?number} */
+let thermoWant = null;      // the target the owner tapped: shown until every queued POST returned (a reply or poll is older)
 const THERMO_STEP = 50, THERMO_MIN = 500, THERMO_MAX = 3000;   // centi-°C
 
 // Reason code -> text (English source; the German is the strings.de.js entry of the same text).
@@ -4013,6 +4018,9 @@ const THERMO_REASON = {
   AUTO_REFUSED_TIMER_ARMED: "Stop the timer first",
   AUTO_REFUSED_STALE_HEATER: "Heater state not known yet — try again in a moment",
   AUTO_REFUSED_WARM: "Already warm enough — heater not started",
+  WAITING_FOR_CONTINUOUS: "Waiting for continuous heating",
+  NIGHT_WAIT_ENDED: "Continuous heating not switched on — AUTO off",
+  HOLD_AT_MIN_LEVEL: "Warmer than the target at the lowest level",
   START: "Heater started",
   ADOPT_RUN: "Taking over the running heater",
   ADOPT_CONTINUOUS: "Taking over continuous heating",
@@ -4037,6 +4045,9 @@ const THERMO_REASON = {
   STOPPING: "Stopping the heater",
   STOP_DROPPED: "The stop was not confirmed — check the heater",
 };
+
+// A run that ends by itself (or the owner's own OFF) shows nothing: the card simply shows AUTO off.
+const THERMO_QUIET = new Set(["RUN_ENDED", "CONTINUOUS_ENDED", "NIGHT_WAIT_ENDED", "USER_OFF"]);
 
 /** @param {string} code @returns {string} the English source text of a reason code ("" = unknown) */
 function thermoReasonText(code) {
@@ -4081,8 +4092,9 @@ function thermoAsk() {
  * rev, also with no state loaded: the firmware never blocks a stop. @param {Record<string, any>} patch */
 function thermoPost(patch) {
   const off = Object.keys(patch).length === 1 && patch.mode === "OFF";
+  thermoBusy++;
   thermoChain = thermoChain.then(async () => {
-    if (!THERMO && !off) return;
+    if (!THERMO && !off) { if (--thermoBusy === 0) thermoWant = null; return; }
     try {
       const body = off ? patch : Object.assign({}, patch, { rev: /** @type {Thermo} */ (THERMO).rev });
       const r = await api("/api/thermostat", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -4093,19 +4105,94 @@ function thermoPost(patch) {
         toast("The thermostat was changed elsewhere — reloaded, please try again", "warn");
       } else toast("Couldn't change the thermostat", "error");
     } catch (e) { toast("Couldn't change the thermostat", "error"); }
+    if (--thermoBusy === 0) thermoWant = null;
     render();
   });
 }
 
-/** @param {Thermo} th @returns {string} e.g. "level 4 • running" */
+/** @param {Thermo} th @returns {string} e.g. "level 4 · ends 23:40" */
 function thermoStatusText(th) {
   const st = th.status;
   if (st.mode === "OFF") return /** @type {string} */ (t("off"));
   if (st.mode === "STOPPING") return /** @type {string} */ (t("stopping"));
-  const lv = st.level != null ? tf("level {n}", { n: st.level }) + " • " : "";
-  if (st.mode === "DEGRADED") return lv + t("degraded");
-  if (st.active && st.active === th.backup && th.backup !== th.ref) return lv + t("on backup");
+  if (st.mode === "WAITING") return /** @type {string} */ (t("waiting"));
+  const lv = st.level != null ? tf("level {n}", { n: st.level }) + " · " : "";
+  if (st.mode === "DEGRADED") {
+    if (st.night) return st.level != null ? tf("Night · level {n} · degraded · no end", { n: st.level }) : /** @type {string} */ (t("Night · degraded · no end"));
+    return lv + t("degraded");
+  }
+  const backup = !!st.active && st.active === th.backup && th.backup !== th.ref;
+  if (st.night) {
+    if (backup) return st.level != null ? tf("Night · level {n} · on backup · no end", { n: st.level }) : /** @type {string} */ (t("Night · on backup · no end"));
+    return st.level != null ? tf("Night · level {n} · no end", { n: st.level }) : /** @type {string} */ (t("Night · no end"));
+  }
+  if (backup) return lv + t("on backup");
+  // a timed run ends when the unit's remaining run time (1702 RunningTimeinAction, min) is up, on the page clock;
+  // the value counts down only while the unit reports it heating (parked it echoes the setting), and is
+  // shown only on live data (an old reading would name a past end)
+  const ah = /** @type {FnState} */ (STATE.airheater || {}), rem = ah.running_time_remaining;
+  if (st.heater === "RUNNING" && ah.running && rem != null && linkState() === "live") {
+    // anchored to the poll's reading time (stateAt - _meta.age_s, as the unit clock), so it does not drift later
+    const d = new Date(stateAt - (STATE._meta && STATE._meta.age_s ? STATE._meta.age_s * 1000 : 0) + rem * 60000);
+    return lv + tf("ends {t}", { t: hhmm(d.getHours(), d.getMinutes()) });
+  }
   return lv + (st.heater === "CONTINUOUS" ? t("continuous") : t("running"));
+}
+
+/** The time-to-target line (R_THERMOSTAT_ETA): the firmware's straight-line estimate, in 5-min steps and
+ * always "about" (it is optimistic near the target and ignores the after-heat), or null when it has none.
+ * @param {ThermoStatus} st @returns {?string} */
+function thermoEtaText(st) {
+  // only on live data: an old snapshot would name a time the estimate no longer supports
+  if (st.mode !== "AUTO" || st.eta_s == null || st.target == null || linkState() !== "live") return null;
+  const target = (st.target / 100).toFixed(1);
+  if (st.eta_ends_first) return tf("The run time ends before {target} °C", { target: target });
+  const min = Math.max(5, Math.round(st.eta_s / 300) * 5), d = new Date(Date.now() + min * 60000);
+  return tf("{target} °C in about {min} min (≈{t})", { target: target, min: min, t: hhmm(d.getHours(), d.getMinutes()) });
+}
+
+/** @param {number} s seconds left @returns {string} the night wait line, e.g. "… Waiting 4:32 min." */
+function thermoWaitText(s) {
+  return tf("Switch on “Dauerbetrieb” on the panel now and confirm with “Yes”. Waiting {m}:{ss} min.",
+    { m: Math.floor(s / 60), ss: String(s % 60).padStart(2, "0") });
+}
+
+/** The confirmation asked at every AUTO start: the day run, or the night's step at the panel.
+ * @param {Thermo} th @returns {string} */
+function thermoConfirmText(th) {
+  const v = { target: (th.target / 100).toFixed(1), alias: th.ref || t("none"), min: th.runtime_min };
+  const ah = /** @type {FnState} */ (STATE.airheater || {});
+  // Dauerbetrieb already on: AUTO takes it over, and it has no run time
+  if (th.status.heater === "CONTINUOUS" || ah.permanent)
+    return tf("Take over the running “Dauerbetrieb” with the thermostat? It holds {target} °C (thermometer “{alias}”) until you switch it off.", v);
+  if (th.night)
+    return tf("Heat for the night? 1. Tap OK. 2. Switch on “Dauerbetrieb” on the panel in the van and confirm its question with “Yes”. The thermostat then takes over and holds {target} °C (thermometer “{alias}”) until you switch it off.", v);
+  // a timed run already going: AUTO adopts its timer and sends no runtime, so no duration is promised
+  if (th.status.heater === "RUNNING")
+    return tf("Take over the running air heater with the thermostat? It holds {target} °C (thermometer “{alias}”); the run time already set stays.", v);
+  return tf("Start the air heater with the thermostat? It holds {target} °C (thermometer “{alias}”) for at most {min} min, then it stops.", v);
+}
+
+/** The hint under a dimmed AUTO switch: why a start would be refused now, with a link where it can be fixed.
+ * @param {string} code status.blocked @returns {HTMLElement} */
+function thermoBlockedEl(code) {
+  const text = thermoReasonShown("AUTO_REFUSED_" + code);
+  const box = document.createElement("div");
+  box.className = "note thermo-hint";
+  if (code === "NO_REFERENCE") {   // the hint itself opens the thermometer sheet
+    const b = thermoEl("linkbtn", text, "button");
+    b.onclick = () => { thermoSheet = true; render(); };
+    box.appendChild(b);
+    return box;
+  }
+  box.appendChild(thermoEl("", text));
+  if (code === "NO_CAMPING") {
+    const b = thermoEl("linkbtn", /** @type {string} */ (t("Open camping mode ›")), "button");
+    b.onclick = () => goto("campingmode");   // the screen only: the card never switches camping mode on
+    box.appendChild(document.createTextNode(" "));
+    box.appendChild(b);
+  }
+  return box;
 }
 
 /**
@@ -4186,44 +4273,47 @@ function thermostatCard() {
   card.appendChild(thermoEl("thermo-h", /** @type {string} */ (t("Thermostat")), "h2"));
   const auto = document.createElement("div");
   auto.className = "row";
-  if (!st.enabled) {
-    auto.appendChild(thermoEl("lbl", /** @type {string} */ (t("Thermostat disabled"))));
-  } else {
-    auto.appendChild(thermoEl("lbl", /** @type {string} */ (t("AUTO"))));
-    auto.appendChild(thermoEl("sval", thermoStatusText(th)));
-    const sw = document.createElement("button");
-    sw.className = "switch";
-    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", /** @type {string} */ (t("AUTO")));
-    sw.setAttribute("aria-checked", st.mode === "OFF" ? "false" : "true");
-    sw.disabled = readOnly();
-    sw.onclick = () => {
-      if (st.mode === "OFF") {
-        if (!confirm(/** @type {string} */ (t("Start the fuel-burning auxiliary air heater (AUTO)? It is not live-verified. Continue?")))) return;
-        thermoPost({ mode: "AUTO", confirm: true });
-      } else thermoPost({ mode: "OFF" });
-    };
-    auto.appendChild(sw);
-  }
+  const blocked = st.mode === "OFF" ? st.blocked : null;
+  auto.appendChild(thermoEl("lbl", /** @type {string} */ (t("AUTO"))));
+  auto.appendChild(thermoEl("sval", thermoStatusText(th)));
+  const sw = document.createElement("button");
+  sw.className = "switch";
+  sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", /** @type {string} */ (t("AUTO")));
+  sw.setAttribute("aria-checked", st.mode === "OFF" ? "false" : "true");
+  sw.disabled = readOnly() || !!blocked || (st.mode === "OFF" && thermoBusy > 0);
+  sw.onclick = () => {
+    if (st.mode === "OFF") {
+      if (thermoBusy > 0) return;
+      if (!confirm(thermoConfirmText(th))) return;
+      // enable in the same POST only while the feature is off: a failed enable write turns it off again server-side
+      thermoPost(st.enabled ? { mode: "AUTO", confirm: true } : { enabled: true, mode: "AUTO", confirm: true });
+    } else thermoPost({ mode: "OFF" });
+  };
+  auto.appendChild(sw);
   card.appendChild(auto);
+  if (blocked) card.appendChild(thermoBlockedEl(blocked));
   // t_ref → target, −/+ 0.5 °C
   const tr = document.createElement("div");
   tr.className = "row";
   tr.appendChild(thermoEl("big", st.t_ref != null ? (st.t_ref / 100).toFixed(1) + " °C" : "—"));
   tr.appendChild(thermoEl("lbl", "→"));
+  const want = thermoWant ?? th.target;
   /** @param {string} label @param {string} sym @param {number} d */
   const step = (label, sym, d) => {
     const b = document.createElement("button");
     b.className = "btn thermo-step"; b.textContent = sym;
     b.setAttribute("aria-label", /** @type {string} */ (t(label)));
-    const nt = th.target + d;
+    const nt = want + d;
     b.disabled = readOnly() || nt < THERMO_MIN || nt > THERMO_MAX;
-    b.onclick = () => { th.target = nt; thermoPost({ target: nt }); render(); };
+    b.onclick = () => { thermoWant = nt; thermoPost({ target: nt }); render(); };
     return b;
   };
   tr.appendChild(step("Colder", "−", -THERMO_STEP));
-  tr.appendChild(thermoEl("sval", (th.target / 100).toFixed(1) + " °C"));
+  tr.appendChild(thermoEl("sval", (want / 100).toFixed(1) + " °C"));
   tr.appendChild(step("Warmer", "+", THERMO_STEP));
   card.appendChild(tr);
+  const eta = thermoEtaText(st);
+  if (eta) card.appendChild(thermoEl("note thermo-eta", eta));
   if (st.heater === "OFF" && st.mode === "OFF") {   // the AUTO start run time: only while the heater is off
     const rt = document.createElement("div");
     rt.className = "row";
@@ -4235,13 +4325,22 @@ function thermostatCard() {
       o.value = String(m); o.textContent = tf("{m} min", { m: m });
       sel.appendChild(o);
     }
-    sel.value = String(th.runtime_min);
+    const night = document.createElement("option");   // no time limit: Dauerbetrieb, switched on at the panel
+    night.value = "night"; night.textContent = /** @type {string} */ (t("Night"));
+    sel.appendChild(night);
+    sel.value = th.night ? "night" : String(th.runtime_min);
     sel.disabled = readOnly();
-    sel.onchange = () => thermoPost({ runtime_min: Number(sel.value) });
+    sel.onchange = () => {
+      thermoPost(sel.value === "night" ? { night: true } : { night: false, runtime_min: Number(sel.value) });
+      if (st.mode === "OFF") sw.disabled = true;   // AUTO stays dimmed until the POST returned (no re-render: it would reset the select)
+    };
     rt.appendChild(sel);
     card.appendChild(rt);
   }
-  if (st.reason) card.appendChild(thermoEl("note thermo-line", thermoReasonShown(st.reason)));
+  if (st.mode === "WAITING" && st.wait_left_s != null) card.appendChild(thermoEl("note thermo-line", thermoWaitText(st.wait_left_s)));
+  else if (st.reason && !THERMO_QUIET.has(st.reason) && !(blocked && st.reason === "AUTO_REFUSED_" + blocked)) {
+    card.appendChild(thermoEl("note thermo-line", thermoReasonShown(st.reason)));
+  }
   const open = document.createElement("button");
   open.className = "row thermo-open";
   open.setAttribute("aria-expanded", thermoSheet ? "true" : "false");

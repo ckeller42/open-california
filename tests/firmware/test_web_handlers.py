@@ -3097,7 +3097,7 @@ TH_DEFAULT_CFG = {
     "period_ms": 60000, "kp": 1500, "ki": 50, "ka": 100, "u_out_max": 3000, "hyst": 500,
     "min_dwell_ms": 300000, "band_hi": 200, "hot_hold_ms": 900000, "overheat": 400, "min_level": 1,
     "stale_after_ms": 600000, "heater_stale_ms": 180000, "batt_min_dv": 119, "batt_hold_ms": 300000,
-    "verify_ms": 10000, "runtime_min": 120,
+    "verify_ms": 10000, "runtime_min": 120, "night_wait_ms": 300000, "night_confirm_ms": 30000,
 }  # fmt: skip
 
 
@@ -3144,6 +3144,70 @@ def test_thermostat_get_defaults(web_cli):
     assert b["cfg"] == TH_DEFAULT_CFG
     assert set(b["status"]) == THERMOSTAT_STATUS_KEYS
     assert b["status"]["enabled"] is False and b["status"]["mode"] == "OFF"
+    assert b["night"] is False
+    st = b["status"]
+    # blocked is computed at each GET; no frames here: neither camping mode nor shore power
+    assert (st["blocked"], st["wait_left_s"], st["night"]) == ("NO_CAMPING", None, False)
+    assert (st["eta_s"], st["eta_ends_first"]) == (None, False)
+
+
+def test_night_needs_no_confirm_and_persists(web_cli):
+    """``night`` is a run-time setting like the target: no ``confirm``, stored in ``th_cfg``, back after a reboot.
+
+    .. test:: POST /api/thermostat: the night setting persists
+       :id: T_FW_THERMOSTAT_API_NIGHT
+       :links: R_FW_THERMOSTAT_API
+    """
+    rs, _ = drive(
+        web_cli,
+        [*(s.encode() for s in STATION), req("POST", "/api/thermostat", '{"night":true}'),
+         b"thinit", req("GET", "/api/thermostat"), req("POST", "/api/thermostat", '{"night":false}')],
+    )  # fmt: skip
+    assert rs[0].status == 200 and rs[0].json()["night"] is True
+    assert rs[1].json()["night"] is True and rs[1].json()["status"]["night"] is False  # status: before a step
+    assert rs[2].json()["night"] is False
+    r, _ = one(web_cli, "POST", "/api/thermostat", '{"night":1}', setup=STATION)
+    assert (r.status, r.json()["error"]) == (400, "bad_json")
+
+
+def test_enable_and_auto_in_one_post(web_cli):
+    """``{"enabled":true,"mode":"AUTO","confirm":true}`` on a disabled thermostat switches it on first, so the
+    AUTO request reaches the step as an enabled one (the card's one tap).
+
+    .. test:: POST /api/thermostat: enabled applies before the AUTO request of the same body
+       :id: T_FW_THERMOSTAT_API_ENABLE_AUTO
+       :links: R_FW_THERMOSTAT_API
+    """
+    rs, _ = drive(
+        web_cli,
+        [*(s.encode() for s in STATION), b"ready 1",
+         req("POST", "/api/thermostat", '{"enabled":true,"mode":"AUTO","confirm":true}'), b"thtick",
+         req("GET", "/api/thermostat")],
+    )  # fmt: skip
+    st = rs[1].json()["status"]
+    assert st["enabled"] is True
+    assert st["reason"] == "AUTO_REFUSED_STALE_HEATER", st  # past the switch check; no 1702 frame here
+
+
+def test_v1_stored_config_survives_the_upgrade(web_cli):
+    """A version-1 ``th_cfg`` (17 settings, no night) loads with its target, aliases and run time kept and the
+    new members at their defaults: the van's settings survive the OTA.
+
+    .. test:: Thermostat config: a version-1 record survives the upgrade
+       :id: T_FW_THERMOSTAT_CFG_V1
+       :links: R_FW_THERMOSTAT_API
+    """
+    import struct
+
+    s17 = [TH_DEFAULT_CFG[k] for k in list(TH_DEFAULT_CFG)[:17]]
+    s17[1], s17[16] = 2000, 60  # kp, runtime_min
+    blob = struct.pack("<B3x17ii17s17s17sxi", 1, *s17, 2150, b"kitchen", b"", b"outside", 1)
+    assert len(blob) == 132
+    b, _ = th_get(web_cli, extra=["kvhex th_cfg " + blob.hex(), "thinit"])
+    assert (b["target"], b["runtime_min"], b["ref"], b["backup"], b["out"], b["outside_on"], b["night"]) == (
+        2150, 60, "kitchen", None, "outside", True, False,
+    )  # fmt: skip
+    assert b["cfg"] == {**TH_DEFAULT_CFG, "kp": 2000, "runtime_min": 60}
 
 
 def test_auto_refused_while_disabled(web_cli):
@@ -3266,7 +3330,18 @@ def test_cfg_needs_confirm_and_persists(web_cli):
     b = rs[2].json()
     assert (b["cfg"]["kp"], b["cfg"]["min_level"], b["target"], b["runtime_min"]) == (2000, 2, 2150, 60)
     assert b["cfg"]["runtime_min"] == 60
-    assert [ln for ln in other if ln.startswith("KV ")] == ["KV <missing>", "KV \x01"]
+    assert [ln for ln in other if ln.startswith("KV ")] == ["KV <missing>", "KV \x02"]  # the version byte
+
+
+def test_cfg_night_keys_are_accepted(web_cli):
+    """The longest cfg keys (``night_confirm_ms``, ``night_wait_ms``) fit the POST parser's key buffer."""
+    rs, _ = drive(
+        web_cli,
+        [*(s.encode() for s in STATION),
+         req("POST", "/api/thermostat", '{"cfg":{"night_confirm_ms":45000,"night_wait_ms":600000},"confirm":true}')],
+    )  # fmt: skip
+    assert rs[0].status == 200
+    assert (rs[0].json()["cfg"]["night_confirm_ms"], rs[0].json()["cfg"]["night_wait_ms"]) == (45000, 600000)
 
 
 @pytest.mark.parametrize(
