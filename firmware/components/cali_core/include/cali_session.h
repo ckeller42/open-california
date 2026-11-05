@@ -100,6 +100,8 @@ extern "C" {
  * continuous heating with no changing field must not go stale for the thermostat (heater_stale_ms).
  */
 #define CALI_SESSION_HEATER_REREAD_MS 60000u
+/** Retry of a failed held 1702 read (ms): shorter than CALI_THERMO_LINK_WAIT_MS, so an AUTO tap's wait retries. */
+#define CALI_SESSION_HEATER_RETRY_MS 5000u
 
 /**
  * @brief What a cali_session_io_fn call reports.
