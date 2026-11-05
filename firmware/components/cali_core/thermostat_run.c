@@ -366,10 +366,15 @@ void cali_thermo_run_init(void) {
 void cali_thermo_run_tick(uint64_t now_ms) {
     s_tick_now = now_ms;
     if (s_wait || s_n) return;   /* a batch is going out: its done callback sends the next */
-    /* an AUTO tap from OFF woke the link (cali_thermo_request): give it time to come up, then step */
-    if (s_req == CALI_THERMO_REQ_AUTO && s_on && S.mode == CALI_THERMO_OFF && !cali_session_ready()) {
-        if (!s_link_wait) s_link_wait = now_ms + CALI_THERMO_LINK_WAIT_MS;
-        if (now_ms < s_link_wait) return;
+    /* an AUTO tap from OFF woke the link (cali_thermo_request): give it time to come up and, in OFF the session
+     * does not re-read 1702, to read the heater (the hold reads it at once), then step */
+    if (s_req == CALI_THERMO_REQ_AUTO && s_on && S.mode == CALI_THERMO_OFF) {
+        uint64_t at = cali_session_frame_ms((size_t)fn_index("airheater"));
+        if (!cali_session_ready() || !at || now_ms - at > (uint64_t)C.s.heater_stale_ms) {
+            cali_session_hold(1);   /* the step's hold(busy) releases it when the request is refused */
+            if (!s_link_wait) s_link_wait = now_ms + CALI_THERMO_LINK_WAIT_MS;
+            if (now_ms < s_link_wait) return;
+        }
     }
     s_link_wait = 0;
     if (!s_due && now_ms < s_next) return;

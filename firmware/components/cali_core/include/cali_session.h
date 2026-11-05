@@ -272,7 +272,7 @@ void cali_session_set_warm_ms(uint32_t ms);
  *
  * While held the power-save rest stays away (a hang-up reconnects on the ordinary backoff and the
  * CALI_SESSION_UNIT_COOLDOWN_MS cooldown), the BLE idle policy counts it as activity, and 1702 is
- * re-read every CALI_SESSION_HEATER_REREAD_MS while the link is up. Holding switches the link mode
+ * read at once and then every CALI_SESSION_HEATER_REREAD_MS while the link is up. Holding switches the link mode
  * to hold and leaves a rest at once. The mode is forced on that transition only; releasing the hold
  * does not restore the previous mode.
  *

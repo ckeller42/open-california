@@ -3357,7 +3357,7 @@ HEATER = int(
 
 def test_hold_keeps_the_link_and_rereads_the_heater(fake):
     """cali_session_hold(1) (the thermostat outside OFF): a power-save hang-up redials instead of
-    resting, a hold set while resting leaves the rest, and 1702 is re-read every
+    resting, a hold set while resting leaves the rest, and 1702 is read at once and then re-read every
     CALI_SESSION_HEATER_REREAD_MS with its frame time stamped; without the hold neither happens.
 
     .. test:: The thermostat's session hold: no rest, 1702 re-read
@@ -3377,3 +3377,7 @@ def test_hold_keeps_the_link_and_rereads_the_heater(fake):
     assert out[-1] == "FRAMEAT %d" % HEATER and "FRAMEAT %d" % T in out
     out = run(fake, *base, "tick %d" % HEATER)  # no hold: water only
     assert calls(after(out, "CALL read %d" % READS[-1]), "read %d" % 0x1702) == []
+    # a hold set later (an AUTO tap from OFF) reads 1702 at the next tick, not a period later
+    n = len(run(fake, *base))
+    out = run(fake, *base, "hold 1", "tick %d" % (HEATER - 90))
+    assert calls(out[n:], "read") == ["CALL read %d" % 0x1702]

@@ -1245,6 +1245,10 @@ these hold; otherwise the step answers `AUTO_REFUSED_<WHY>` and sends nothing:
 With the feature on and the link down (for example after the idle policy let it go), the AUTO request
 first wakes the link and waits up to 30 s (`CALI_THERMO_LINK_WAIT_MS`) for it; only then are the
 conditions checked, so the tap does not end in `AUTO_REFUSED_NO_LINK` while the link comes up.
+In mode OFF the satellite does not re-read `1702`: an idle heater sends no notification, so its
+reading soon becomes older than `heater_stale_ms`. The AUTO request then holds the session, which reads
+`1702` at once, and waits for the fresh reading in the same 30 s, so the tap does not end in
+`AUTO_REFUSED_STALE_HEATER`.
 
 If a safety stop (overheat, target exceeded, low battery, feature switched off) is still pending or
 waits for the link, a new AUTO request is ignored with `STOPPING`. The owner's own pending stop is

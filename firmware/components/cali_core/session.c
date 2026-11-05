@@ -911,6 +911,7 @@ void cali_session_hold(int on) {
     if (on == s_hold) return;
     s_hold = on;
     if (!on) return;
+    s_heater_next = s_now;   /* a new hold wants a fresh 1702 now (an AUTO tap from OFF waits for it) */
     if (s_mode != CALI_BLE_HOLD) (void)cali_session_set_mode(CALI_BLE_HOLD, "thermostat");   /* writes need hold */
     reconnect_soon("thermostat");
 }
