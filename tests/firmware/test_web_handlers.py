@@ -33,6 +33,8 @@ from .api_shape import (
     DEVICE_KEYS,
     DISPLAY_DIAG_KEYS,
     DISPLAY_KEYS,
+    ENERGY_KEYS,
+    EXPERIMENTAL_KEYS,
     EXT_ENTRY_KEYS,
     LINK_KEYS,
     OTA_KEYS,
@@ -239,6 +241,8 @@ def test_api_state_shape(web_cli):
     assert set(body["device"]["ota"]) == OTA_KEYS
     assert body["device"]["time"] == {"source": "none", "synced": False, "boot": 0}  # no cali_time_init
     assert set(body["device"]["time"]) == TIME_KEYS
+    assert set(body["device"]["experimental"]) == EXPERIMENTAL_KEYS
+    assert set(body["device"]["energy"]) == ENERGY_KEYS
     # no card on the host (cali_sdlog_init never called), no resource stats (web.c's weak stub)
     assert body["device"]["sd"] == {
         "state": "absent",
@@ -2157,6 +2161,9 @@ def test_lora_switch_persists_and_shows_the_link_in_state(web_cli):
     assert "KV \x01" in other and any(l.startswith("LOG exp: lora on") for l in other)
     assert (rs[2].status, rs[2].json()) == (200, {"ok": True, "lora": False})
     assert "lora" not in json.loads(rs[3].body)["device"]
+    # a fresh process with the byte stored reads it back
+    rs, _ = drive(web_cli, [b"kvhex exp_lora 01", *(s.encode() for s in STATION), req("GET", "/api/state")])
+    assert json.loads(rs[0].body)["device"]["experimental"] == {"sensors": False, "lora": True}
 
 
 @pytest.mark.parametrize(

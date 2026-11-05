@@ -70,6 +70,8 @@ OTA_KEYS = frozenset(
     {"state", "available_sha", "progress_pct", "error", "channel"}
 )  # /api/state device.ota (R_FW_OTA)
 TIME_KEYS = frozenset({"source", "synced", "boot"})  # /api/state device.time (R_FW_TIME)
+EXPERIMENTAL_KEYS = frozenset({"sensors", "lora"})  # device.experimental (R_FW_EXPERIMENTAL, R_FW_LORA)
+ENERGY_KEYS = frozenset({"boot", "solar_wh", "load_wh", "batt_net_wh", "load_a"})  # device.energy
 SD_KEYS = frozenset({"state", "total_mb", "free_mb", "dropped"})  # device.sd (R_FW_SD_LOG)
 RES_KEYS = frozenset({"heap_free_kb", "heap_min_kb", "psram_free_kb", "cpu_pct"})  # device.res (diag only)
 BLE_KEYS = frozenset({"mode", "exp", "idle_min", "rest_poll_min"})  # /api/state device.ble

@@ -26,6 +26,8 @@ from tests.firmware.api_shape import (
     DEVICE_KEYS,
     DISPLAY_DIAG_KEYS,
     DISPLAY_KEYS,
+    ENERGY_KEYS,
+    EXPERIMENTAL_KEYS,
     EXT_ENTRY_KEYS,
     LINK_KEYS,
     OTA_KEYS,
@@ -65,6 +67,8 @@ def test_state_fixture_shape(fixtures, mode):
     assert set(d["link"]) == LINK_KEYS
     assert set(d["ota"]) == OTA_KEYS
     assert set(d["time"]) == TIME_KEYS | TIME_DIAG_KEYS
+    assert set(d["experimental"]) == EXPERIMENTAL_KEYS and set(d["energy"]) == ENERGY_KEYS
+    assert d["energy"]["boot"] == d["time"]["boot"]  # both are cali_time_boot()
     assert (
         set(d["sd"]) == SD_KEYS | SD_DIAG_KEYS
         and set(d["res"]) == RES_KEYS

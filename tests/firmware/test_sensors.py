@@ -348,13 +348,15 @@ def test_sensors_type_sum_and_first(cli, tmp_path):
     sid = json.loads(out[-1][4:])["seen"][0]["id"]
     out = run(cli, tmp_path, ["init", "typesum victron_mppt 0 0 60000", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}",
                               f"add {sid} - {KEY.hex()}", "typesum victron_mppt 0 1000 60000", "first victron_mppt",
-                              f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "typesum victron_mppt 0 60000 60000",
+                              f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "first victron_mppt",
+                              "typesum victron_mppt 0 60000 60000",
                               "typesum victron_mppt 0 60001 60000", "first victron_battery", "typesum govee 0 0 1"])  # fmt: skip
     got = [line for line in out if line.startswith(("TYPESUM", "FIRST"))]
     assert got == [
         "TYPESUM 0 0.00",  # none configured
         "TYPESUM -1 0.00",  # configured, no reading since the add
         "FIRST 0 0 0.00",
+        "FIRST 0 7 2.30",  # the fresh reading: 7 fields, battery_current 2.3 A
         "TYPESUM 1 2.30",  # 2.3 A, 60 s old: still counts
         "TYPESUM -1 0.00",  # 1 ms older: unknown
         "FIRST -1 0 0.00",
