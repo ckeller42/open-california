@@ -174,7 +174,10 @@ def test_pack_energy_stale_sensor_reads_ff(cli):
     sensors = ["mppt -3.5 13.2 3 0 0.4 118 1.25", "bsense 13.05", "sensat 1000"]
     fresh = bytes.fromhex(run(cli, *sensors, "snap 61000", "pack2")[-1])  # 60 s old: still counts
     stale = bytes.fromhex(run(cli, *sensors, "snap 61001", "pack2")[-1])
-    assert int.from_bytes(fresh[31:33], "big", signed=True) == -35 and int.from_bytes(fresh[39:41], "big") == 1305
+    assert (
+        int.from_bytes(fresh[31:33], "big", signed=True) == -35
+        and int.from_bytes(fresh[39:41], "big") == 1305
+    )
     assert stale[31:41] == b"\xff" * 10
 
 
@@ -268,7 +271,7 @@ def test_switch_and_keys_never_printed(cli):
     assert out == ["0", "LOG exp: lora on", "1", "LOG exp: lora off", "0"]
     key = bytes(range(0, 0x100, 0x11)).hex()  # a dummy AppKey, built so no scanner takes it for a real one
     out = run(cli, f"console keys ac1f09fffe27799a 0000000000000000 {key}", "kv")
-    assert out[0] == "LOG lora: keys stored (used at the next module setup)" and key not in out[0]
+    assert out[0] == "LOG lora: keys stored (used at the next join attempt)" and key not in out[0]
     assert out[1] == f"lora_keys ac1f09fffe27799a0000000000000000{key}"
     assert run(cli, "console keys 12 34 56")[0].startswith("LOG lora: keys: 16 + 16 + 32")
 

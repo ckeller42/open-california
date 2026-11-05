@@ -1782,8 +1782,8 @@ with it the router) is a later step.
 - **Setup:** an application and one device per van in The Things Stack (OTAA, EU868, class A), the
   generated formatter `firmware/components/cali_lora/ttn_formatter.js` as the uplink formatter
   (`python3 -m tools.gen_lora_dict` writes it from the dictionary; CI checks it is fresh), and the
-  Storage Integration. On the satellite: `lora keys <deveui> <joineui> <appkey>`, then `lora on` (or
-  `POST /api/experimental {"lora":true}`).
+  Storage Integration. On the satellite: `lora keys <deveui> <joineui> <appkey>` (the next join
+  attempt uses them), then `lora on` (or `POST /api/experimental {"lora":true}`).
 - **Uplinks:** port 2 (50 B: the raw energy and water frames, the first Victron charger, the battery
   sense (each 0xFF when its reading is older than 60 s), the [energy counters](#energy-counters-r_fw_energy_counters)) at the interval the airtime budget
   allows (60 % of 25 s per day; about 20 to 70 min at SF10 to SF12, never below 10 min); port 3 (the
@@ -1791,7 +1791,8 @@ with it the router) is a later step.
   and firmware version) daily and after each join. The formatter returns raw fields only, so the
   reader interprets them with `semantics.js` like the WiFi path.
 - **Honest status:** airtime counts as on air only when the module confirms a send with
-  `+EVT:TX_DONE`; a send without it is charged to the budget but shown apart. Three AT commands in a
+  `+EVT:TX_DONE`; a send without it is charged to the budget but shown apart, and its port 3 functions
+  and port 4 stay pending. With 8 downlinks in the last 24 h no uplink goes out until one ages out. Three AT commands in a
   row without an answer reset the module and drop `joined`; while it stays silent the task retries every
   10 min. A spike bench run showed why: a hung module that the old firmware counted as "sending"
   looked joined for three days while nothing reached the network.

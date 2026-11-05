@@ -373,7 +373,7 @@ int cali_lora_console(const char *args) {
         uint8_t k[32];   /* DevEUI 8, JoinEUI 8, AppKey 16; never printed */
         if (unhex(a, k, 8) || unhex(b, k + 8, 8) || unhex(c, k + 16, 16)) cali_log("lora: keys: 16 + 16 + 32 hex digits");
         else if (cali_kv_set(CALI_LORA_KEYS_KEY, k, sizeof k) != 0) cali_log("lora: keys: store failed");
-        else cali_log("lora: keys stored (used at the next module setup)");
+        else cali_log("lora: keys stored (used at the next join attempt)");
         memset(k, 0, sizeof k);
     } else {
         cali_log("lora: usage: lora on|off|status|keys <deveui> <joineui> <appkey>");

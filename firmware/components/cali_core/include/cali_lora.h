@@ -39,13 +39,15 @@
  *
  *    With the experimental switch ``exp_lora`` on (default off; ``POST /api/experimental {"lora":…}``,
  *    console ``lora on|off``), the firmware shall drive a RAK3172 on UART1 (TX GPIO43, RX GPIO18, RST
- *    GPIO5): reset it, detect it by ``AT``, join by OTAA (EU868, class A, ADR) with the DevEUI/JoinEUI/
- *    AppKey stored by ``lora keys`` (NVS, never printed), and send port 2 at the interval the airtime
- *    budget allows (at least 600 s), port 3 when a function changed, and port 4 daily. Uplink airtime and
- *    downlinks stay within 25 s and 8 per rolling 24 h. A send counts as airtime in ``/api/state`` only
- *    after ``+EVT:TX_DONE``. After 3 AT commands in a row without any answer the firmware shall reset the
- *    module, report it not joined, and try again every 10 min while it stays silent. With the switch off,
- *    no LoRa pin is touched. ``/api/state`` reports ``device.lora`` only while the switch is on.
+ *    GPIO5): reset it, detect it by ``AT``, join by OTAA (EU868, class A, ADR) with the
+ *    DevEUI/JoinEUI/AppKey stored by ``lora keys`` (NVS, never printed; written to the module before
+ *    each join attempt), and send port 2 at the interval the airtime budget allows (at least 600 s),
+ *    port 3 when a function changed, and port 4 daily. Uplink airtime and downlinks stay within 25 s and
+ *    8 per rolling 24 h: no uplink goes out once either is used up. A send counts as airtime in
+ *    ``/api/state`` only after ``+EVT:TX_DONE``. After 3 AT commands in a row without any answer the
+ *    firmware shall reset the module, report it not joined, and try again every 10 min while it stays
+ *    silent. With the switch off, no LoRa pin is touched. ``/api/state`` reports ``device.lora`` only
+ *    while the switch is on.
  * @endverbatim
  *
  * C99, no malloc, no ESP-IDF headers. Proven by `tests/firmware/test_lora.py` (`test/lora_cli.c`).
