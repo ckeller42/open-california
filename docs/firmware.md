@@ -1761,10 +1761,13 @@ chargers' positive battery-side current plus the unit's own solar when installed
 house load of [signals.md](business-logic/signals.md#house-load-derived), the C twin of the web UI's
 `houseLoad()`, parity-tested against `calictl.semantics` over random frames) and `batt_net_wh` (the
 second battery's signed net current). A step counts only with the unit's energy frame from the current
-link and a session update in the last 60 s; the load and the chargers' share of `solar_wh` also need
-every charger's reading at most 60 s old (the unit's own solar counts without them). The ESP has no wall clock without the router, so a reader takes differences between readings of
-the same `boot`: a lost reading lowers the resolution, never the total. The counters are 24-bit deci-Wh
-(the LoRa uplink's width) and wrap.
+link (with the second battery's voltage and current in it) and a session update in the last 60 s. The
+chargers' share of `solar_wh` also needs every configured charger's reading at most 60 s old (the
+unit's own solar counts without them). `load_wh` needs that, a value for every installed unit source
+(DC-DC, shore, solar), and a result of at least -0.5 A. A gap of more than 5 s between two ticks is not
+integrated into any counter. The ESP has no wall clock without the router, so a reader takes
+differences between readings of the same `boot`: a lost reading lowers the resolution, never the total.
+The counters are 24-bit deci-Wh (the LoRa uplink's width) and wrap.
 
 ## LoRaWAN telemetry (`R_FW_LORA`)
 
@@ -1782,11 +1785,14 @@ with it the router) is a later step.
 - **Setup:** an application and one device per van in The Things Stack (OTAA, EU868, class A), the
   generated formatter `firmware/components/cali_lora/ttn_formatter.js` as the uplink formatter
   (`python3 -m tools.gen_lora_dict` writes it from the dictionary; CI checks it is fresh), and the
-  Storage Integration. On the satellite: `lora keys <deveui> <joineui> <appkey>` (the next join
+  {term}`Storage Integration`. On the satellite: `lora keys <deveui> <joineui> <appkey>` (the next join
   attempt uses them), then `lora on` (or `POST /api/experimental {"lora":true}`).
 - **Uplinks:** port 2 (50 B: the raw energy and water frames, the first Victron charger, the battery
-  sense (each 0xFF when its reading is older than 60 s), the [energy counters](#energy-counters-r_fw_energy_counters)) at the interval the airtime budget
-  allows (60 % of 25 s per day; about 20 to 70 min at SF10 to SF12, never below 10 min); port 3 (the
+  sense (each 0xFF when its reading is older than 60 s), the
+  [energy counters](#energy-counters-r_fw_energy_counters)) at the interval the airtime budget allows:
+  at most as many a day as fit in 60 % of 25 s at the current spreading factor, in any rolling 24 h
+  (with 13 B of LoRaWAN overhead: 118 ms on air at SF7 = every 681 s, 698 ms at SF10 = every 69 min,
+  2793 ms at SF12 = 5 a day, every 4.8 h; never below 10 min); port 3 (the
   functions whose raw frame changed, every one at least every 12 h); port 4 (the general frame, uptime
   and firmware version) daily and after each join. The formatter returns raw fields only, so the
   reader interprets them with `semantics.js` like the WiFi path.

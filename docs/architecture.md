@@ -95,7 +95,7 @@ flowchart TB
 - **The Things Stack** (experimental, `R_FW_LORA`)
   - *Interface:* {term}`LoRaWAN` uplinks from the satellite's RAK3172 module (ports 2, 3, 4: raw frames,
     charger readings, energy counters) through The Things Network's gateways; the owner's phone reads
-    them from its Storage Integration while no router runs in the van
+    them from its {term}`Storage Integration` while no router runs in the van
   - *Direction:* write only from here (no downlink is acted on yet)
 - **Owner**
   - *Interface:* web UI (`--web`, port 8088 on buspi), CLI, guided pairing wizard

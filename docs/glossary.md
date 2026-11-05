@@ -18,7 +18,12 @@ buspi
 LoRaWAN
   A long-range, low-power radio network protocol. The satellite's experimental LoRa module sends the
   van's energy picture through The Things Network's gateways to The Things Stack (`R_FW_LORA`); a
-  few dozen bytes every 10 to 60 minutes, within a daily airtime budget. See {doc}`firmware`
+  few dozen bytes every 11 minutes (SF7) to every 4.8 hours (SF12), within a daily airtime budget. See {doc}`firmware`
+  ("LoRaWAN telemetry").
+
+Storage Integration
+  The Things Stack's built-in store of a device's uplink messages, with the decoded payload; an app
+  reads them back over its HTTP API. The phone reads the satellite's LoRa telemetry from it. See {doc}`firmware`
   ("LoRaWAN telemetry").
 
 GPIO
