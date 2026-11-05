@@ -136,9 +136,13 @@ unsigned cali_lora_downlinks_used(cali_lora_budget_t *b, uint32_t now_s) {
 
 uint32_t cali_lora_next_interval_s(cali_lora_budget_t *b, uint32_t now_s, unsigned sf, unsigned len, unsigned share) {
     uint32_t air = cali_lora_airtime_ms(len + CALI_LORA_OVERHEAD, sf);
-    uint64_t share_ms = (uint64_t)CALI_LORA_UPLINK_MS * share / 100;
-    /* steady state: spread this packet's share of the daily budget evenly at this SF */
-    uint32_t wait = (uint32_t)(((uint64_t)CALI_LORA_DAY_S * air + share_ms - 1) / share_ms);
+    uint32_t share_ms = (uint32_t)((uint64_t)CALI_LORA_UPLINK_MS * share / 100);
+    /* steady state: at most per_day = floor(share / air) packets in any rolling day. An uplink ages out
+     * when now - t >= CALI_LORA_DAY_S, so with spacing I a window holds floor((DAY - 1) / I) + 1 of
+     * them, at most per_day when I = ceil(DAY / per_day). */
+    uint32_t per_day = air ? share_ms / air : 1;
+    if (!per_day) per_day = 1;
+    uint32_t wait = (CALI_LORA_DAY_S + per_day - 1) / per_day;
     if (wait < CALI_LORA_BASE_S) wait = CALI_LORA_BASE_S;
     /* and never past the rolling budget: wait until enough old uplinks age out */
     uint32_t used = cali_lora_uplink_used_ms(b, now_s);

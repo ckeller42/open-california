@@ -240,8 +240,9 @@ int cali_lora_downlink_take(cali_lora_budget_t *b, uint32_t now_s);
  */
 unsigned cali_lora_downlinks_used(cali_lora_budget_t *b, uint32_t now_s);
 /**
- * @brief Seconds until the next port-2 uplink: its share of the daily airtime spread evenly at this SF,
- *        at least CALI_LORA_BASE_S, and never past the rolling budget.
+ * @brief Seconds until the next port-2 uplink: DAY / floor(share / airtime) rounded up, so no rolling
+ *        24 h holds more port-2 uplinks at this SF than fit in its share; at least CALI_LORA_BASE_S, and
+ *        never past the rolling budget.
  * @param b      Budget.
  * @param now_s  Uptime s.
  * @param sf     Spreading factor.

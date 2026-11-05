@@ -125,10 +125,21 @@ def test_budget_confirmed_and_charged(cli):
     assert run(cli, "up 0 30000 0", "room 10")[-1] == "0"
     out = run(cli, *(f"up {k * 600} 2500 1" for k in range(10)), "interval 6000 7 23 100")
     assert out == [str(86400 - 6000)]
-    assert run(cli, "interval 0 7 23 100", "interval 0 12 50 60") == ["600", str(-(-86400 * 2793 // 15000))]
+    assert run(cli, "interval 0 7 23 100") == ["600"]
     # a full ring has no room: one more would drop an unexpired uplink's airtime
     out = run(cli, *(f"up {k} 1 0" for k in range(320)), "room 400", "room 86400")
     assert out == ["0", str(25000 - 319)]
+
+
+def test_port2_interval_keeps_its_share_in_every_rolling_day(cli):
+    """An uplink leaves the ring when now - t >= 86400, so packets at 0, I, 2I, ... put
+    floor(86399 / I) + 1 of them in one window; that many times the airtime stays within port 2's
+    60 % of 25 s at every SF (with an empty ring, so only the steady-state spacing counts)."""
+    for sf in range(7, 13):
+        air = int(run(cli, f"airtime {50 + 13} {sf}")[0])
+        interval = int(run(cli, f"interval 0 {sf} 50 60")[0])
+        assert interval >= 600 and (86399 // interval + 1) * air <= 15000, (sf, air, interval)
+    assert run(cli, "interval 0 12 50 60") == [str(86400 // (15000 // 2793))]  # SF12: 5 a day, 17280 s
 
 
 def test_downlinks_and_backoff(cli):
