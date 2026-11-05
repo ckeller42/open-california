@@ -222,6 +222,35 @@ def test_target_buttons_step_half_a_degree(stub, error_gated_page):
         cm.__exit__(None, None, None)
 
 
+def test_quick_target_taps_on_a_slow_satellite_add_up(stub, error_gated_page):
+    """Four quick taps on + with slow POST replies end at +2 °C: an earlier reply or the poll never
+    shows an older target in between, and no tap is lost."""
+    _enable(stub)
+    stub.thermostat_delay_s = 0.8
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        card = _card(pg)
+        expect(card.get_by_text("21.0 °C")).to_be_visible()
+        pg.evaluate("""() => { window.__seen = [];
+          setInterval(() => { const v = [...document.querySelectorAll('.card.thermo .row .sval')]
+            .map(e => e.textContent).find(x => /^\\d+\\.\\d °C$/.test(x));
+            if (window.__seen[window.__seen.length - 1] !== v) window.__seen.push(v); }, 20); }""")
+        for _ in range(4):
+            card.get_by_role("button", name="Warmer").click()
+            pg.wait_for_timeout(250)
+        _posted(stub, pg, 4)
+        pg.wait_for_function(
+            "() => document.querySelectorAll('.card.thermo').length && window.__seen.includes('23.0 °C')",
+            timeout=8000,
+        )
+        pg.wait_for_timeout(2500)  # replies and polls after the last tap
+        assert [b["target"] for b in stub.thermostat_posts] == [2150, 2200, 2250, 2300]
+        seen = pg.evaluate("window.__seen")
+        assert seen == sorted(seen) and seen[-1] == "23.0 °C", seen
+    finally:
+        cm.__exit__(None, None, None)
+
+
 def test_stale_rev_reloads_and_tells_the_user(stub):
     # Chromium logs the firmware's own 409 as a console.error: only that one is let through
     _enable(stub)
