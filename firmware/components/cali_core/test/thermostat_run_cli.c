@@ -130,6 +130,7 @@ int main(int argc, char **argv) {
             d(atoi(a), NULL);
         } else if (!strcmp(cmd, "on")) (void)cali_thermo_set_enabled(atoi(a));
         else if (!strcmp(cmd, "auto")) (void)cali_thermo_request("AUTO");
+        else if (!strcmp(cmd, "hfault")) printf("HFAULT %d\n", cali_thermo_run_heater_fault());
         else if (!strcmp(cmd, "stop")) (void)cali_thermo_request("OFF");
         else if (!strcmp(cmd, "ref")) snprintf(c->ref, sizeof c->ref, "%.16s", strcmp(a, "-") ? a : "");
         else if (!strcmp(cmd, "backup")) snprintf(c->backup, sizeof c->backup, "%.16s", strcmp(a, "-") ? a : "");

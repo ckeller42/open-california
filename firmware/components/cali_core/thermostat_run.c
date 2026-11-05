@@ -36,6 +36,7 @@ static int s_on, s_req, s_due;
 static uint64_t s_next;
 static uint64_t s_link_wait;        /* an AUTO tap waits for the link it woke until this uptime; 0 = not yet */
 static uint64_t s_heater_seen;      /* the time of the last 1702 frame the tick looked at */
+static int s_heater_fault;          /* the last ErrorCode seen, until the heater runs again; 0 = none */
 /* the batch going out: s_cmds[s_i] is in flight while s_wait */
 static cali_thermo_cmd_t s_cmds[CALI_THERMO_MAX_CMDS];
 static int s_n, s_i, s_wait;
@@ -373,7 +374,10 @@ void cali_thermo_run_tick(uint64_t now_ms) {
         static codec_kv_t kv[CODEC_KV_MAX];   /* static as in inputs(): the owner task's stack is small */
         int n = frame_fields("airheater", 1, kv);
         s_heater_seen = hat;
-        if (field(kv, n, "FaultTriggerBit") > 0 || field(kv, n, "ErrorCode") > 0) s_due = 1;
+        int32_t err = field(kv, n, "ErrorCode");
+        if (field(kv, n, "FaultTriggerBit") > 0 || err > 0) s_due = 1;
+        if (err > 0) s_heater_fault = (int)err;
+        else if (field(kv, n, "NormalOperation") > 0 || field(kv, n, "PermanentOperation") > 0) s_heater_fault = 0;
     }
     if (s_wait || s_n) return;   /* a batch is going out: its done callback sends the next */
     /* an AUTO tap from OFF woke the link (cali_thermo_request): give it time to come up and, in OFF the session
@@ -396,6 +400,8 @@ void cali_thermo_run_tick(uint64_t now_ms) {
                                      : C.s.period_ms);
     if (s_n) submit_next();
 }
+
+int cali_thermo_run_heater_fault(void) { return s_heater_fault; }
 
 int cali_thermo_request(const char *mode) {
     if (strcmp(mode, "AUTO") == 0) {

@@ -567,3 +567,22 @@ def test_battery_changes_never_wake_the_screen(cli):
     )
     assert out[0]["state"] == "on" and [v["state"] for v in out[1:]] == ["off"] * 3
     assert out[-1]["footer"].endswith("Akku 5 % ~9 min")
+
+
+@pytest.mark.parametrize(
+    "code,lang,want",
+    [
+        (4, 0, "amber|verbunden · Heizung gesperrt bis zur Fahrt"),
+        (4, 1, "amber|connected · heater locked until a drive"),
+        (3, 0, "amber|verbunden · Heizungsfehler 3"),
+        (3, 1, "amber|connected · heater error 3"),
+    ],
+)
+def test_camper_row_keeps_the_last_heater_fault(cli, code, lang, want):
+    """The unit clears a heater ErrorCode within seconds (ErrorCode 4 after 36 s and 7 s on the van), so the
+    screen shows the last one the satellite kept (``heater_fault``) on a connected camper row; a lost or
+    stale link keeps its own text."""
+    (v,) = run(cli, BASE + " hfault=%d now=7980000 lang=%d" % (code, lang))
+    assert v["camper"] == want
+    (v,) = run(cli, BASE.replace("link=1", "link=0") + " hfault=%d now=20000 lang=0" % code)
+    assert v["camper"] == "red|Verbindung verloren, verbinde neu"

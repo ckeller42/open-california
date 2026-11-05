@@ -362,6 +362,14 @@ void cali_thermo_run_init(void);
  */
 void cali_thermo_run_tick(uint64_t now_ms);
 
+/**
+ * @brief The last heater ErrorCode the run tick saw in a new 1702 frame, kept until a frame shows the heater
+ * running again. The unit clears the code within seconds (ErrorCode 4 after 7 to 36 s on the van); the
+ * status screen shows the kept one.
+ * @return The ErrorCode 1..15, or 0 for none.
+ */
+int cali_thermo_run_heater_fault(void);
+
 /** Longest wait of an AUTO request from OFF for the link it woke and a fresh 1702 read, ms; then the step answers it. */
 #define CALI_THERMO_LINK_WAIT_MS 30000u
 
