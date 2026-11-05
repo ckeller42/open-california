@@ -17,7 +17,7 @@
  *   battery current ×10 (signed), [33..34] its PV power W, [35..36] its yield today ×100 kWh, [37] its
  *   charge state, [38] its error code, [39..40] the battery sense's voltage ×100, [41..49] the energy
  *   counters (R_FW_ENERGY_COUNTERS) as three 24-bit deci-Wh values: solar, load, battery net (signed).
- *   A missing frame or sensor reads 0xFF bytes.
+ *   A missing frame, or a sensor without a reading in the last 60 s, reads 0xFF bytes.
  * - port 3: the functions whose frame changed, or was not sent for CALI_LORA_REFRESH_S, oldest first:
  *   [char index in CODEC_CHARS][length][frame]..., whole entries only. Energy, water and general are
  *   never in it (ports 2 and 4 carry them).
@@ -97,7 +97,7 @@ extern "C" {
 #define CALI_LORA_BASE_S 600u
 /** @brief unanswered AT commands in a row before a module reset */
 #define CALI_LORA_SILENT_MAX 3u
-/** @brief ports 2 + 3 at the 600 s base interval are 288 a day */
+/** @brief ports 2 + 3 at the 600 s base interval are 288 a day; a full ring reads as no room */
 #define CALI_LORA_UP_RING 320
 /** @brief the downlink ring (at least CALI_LORA_DOWNLINKS) */
 #define CALI_LORA_DL_RING 16
@@ -220,7 +220,7 @@ uint32_t cali_lora_uplink_confirmed_ms(cali_lora_budget_t *b, uint32_t now_s);
  * @brief Airtime left in the 24-h budget, never below 0.
  * @param b Budget.
  * @param now_s Uptime s.
- * @return ms.
+ * @return ms; 0 while the ring holds CALI_LORA_UP_RING unexpired uplinks.
  */
 uint32_t cali_lora_uplink_room_ms(cali_lora_budget_t *b, uint32_t now_s);
 /**
@@ -268,7 +268,8 @@ typedef struct {
 } cali_lora_snap_t;
 
 /**
- * @brief Fill a snapshot from the session, the sensors and the counters (owner task).
+ * @brief Fill a snapshot from the session, the sensors and the counters (owner task). A Victron reading
+ *        older than CALI_ENERGY_MAX_AGE_MS goes in as none (`n` 0).
  * @param s Out.
  * @param now_ms Uptime.
  */

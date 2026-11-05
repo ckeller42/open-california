@@ -126,6 +126,9 @@ def test_budget_confirmed_and_charged(cli):
     out = run(cli, *(f"up {k * 600} 2500 1" for k in range(10)), "interval 6000 7 23 100")
     assert out == [str(86400 - 6000)]
     assert run(cli, "interval 0 7 23 100", "interval 0 12 50 60") == ["600", str(-(-86400 * 2793 // 15000))]
+    # a full ring has no room: one more would drop an unexpired uplink's airtime
+    out = run(cli, *(f"up {k} 1 0" for k in range(320)), "room 400", "room 86400")
+    assert out == ["0", str(25000 - 319)]
 
 
 def test_downlinks_and_backoff(cli):
@@ -165,6 +168,14 @@ def test_pack_energy_missing_inputs_read_ff(cli):
     assert (
         b[3:25] == b"\xff" * 22 and b[25:31] == bytes([0x11, 0x22]) + b"\xff" * 4 and b[31:41] == b"\xff" * 10
     )
+
+
+def test_pack_energy_stale_sensor_reads_ff(cli):
+    sensors = ["mppt -3.5 13.2 3 0 0.4 118 1.25", "bsense 13.05", "sensat 1000"]
+    fresh = bytes.fromhex(run(cli, *sensors, "snap 61000", "pack2")[-1])  # 60 s old: still counts
+    stale = bytes.fromhex(run(cli, *sensors, "snap 61001", "pack2")[-1])
+    assert int.from_bytes(fresh[31:33], "big", signed=True) == -35 and int.from_bytes(fresh[39:41], "big") == 1305
+    assert stale[31:41] == b"\xff" * 10
 
 
 def test_pack_daily(cli):

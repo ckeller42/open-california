@@ -1785,7 +1785,7 @@ with it the router) is a later step.
   Storage Integration. On the satellite: `lora keys <deveui> <joineui> <appkey>`, then `lora on` (or
   `POST /api/experimental {"lora":true}`).
 - **Uplinks:** port 2 (50 B: the raw energy and water frames, the first Victron charger, the battery
-  sense, the [energy counters](#energy-counters-r_fw_energy_counters)) at the interval the airtime budget
+  sense (each 0xFF when its reading is older than 60 s), the [energy counters](#energy-counters-r_fw_energy_counters)) at the interval the airtime budget
   allows (60 % of 25 s per day; about 20 to 70 min at SF10 to SF12, never below 10 min); port 3 (the
   functions whose raw frame changed, every one at least every 12 h); port 4 (the general frame, uptime
   and firmware version) daily and after each join. The formatter returns raw fields only, so the

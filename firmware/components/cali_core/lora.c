@@ -111,6 +111,7 @@ uint32_t cali_lora_uplink_confirmed_ms(cali_lora_budget_t *b, uint32_t now_s) { 
 
 uint32_t cali_lora_uplink_room_ms(cali_lora_budget_t *b, uint32_t now_s) {
     uint32_t used = up_sum(b, now_s, 0);
+    if (b->up_n == CALI_LORA_UP_RING) return 0;   /* full: one more would drop an unexpired uplink's airtime */
     return used >= CALI_LORA_UPLINK_MS ? 0 : CALI_LORA_UPLINK_MS - used;
 }
 
@@ -170,8 +171,11 @@ void cali_lora_snapshot(cali_lora_snap_t *s, uint64_t now_ms) {
         memcpy(s->frame[i], f, len);
         s->len[i] = (uint8_t)len;
     }
-    (void)cali_sensors_first("victron_mppt", &s->mppt);
-    (void)cali_sensors_first("victron_battery", &s->bsense);
+    /* a reading older than the energy counters' 60 s is "none": an offline sensor never looks current */
+    if (cali_sensors_first("victron_mppt", &s->mppt) == 0 && now_ms - s->mppt.at_ms > CALI_ENERGY_MAX_AGE_MS)
+        s->mppt.n = 0;
+    if (cali_sensors_first("victron_battery", &s->bsense) == 0 && now_ms - s->bsense.at_ms > CALI_ENERGY_MAX_AGE_MS)
+        s->bsense.n = 0;
     s->ctr = *cali_energy_counters();
     s->boot = cali_time_boot();
     s->uptime_s = (uint32_t)(now_ms / 1000);

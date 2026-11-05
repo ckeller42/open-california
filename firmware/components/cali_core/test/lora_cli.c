@@ -1,5 +1,6 @@
 /* lora_cli.c — host driver for lora.c (R_FW_LORA), one command per stdin line. Snapshot input:
- *   frame <function> <hex>   mppt <7 floats|->   bsense <volts|->   ctr <solar> <load> <net>   boot <n>   snap <now_ms>
+ *   frame <function> <hex>   mppt <7 floats|->   bsense <volts|->   sensat <at_ms>   ctr <solar> <load> <net>   boot <n>
+ *   snap <now_ms>
  * Packers:   pack2 | pack4 <fw> | trk_init | trk_update <now_s> | trk_pack <max> | trk_commit <now_s>
  * Radio:     parse <line> | outcome <kind> <tx_done> | airtime <phy_len> <sf> | maxpl <sf>
  * Budget:    up <t_s> <ms> <confirmed> | used <t> | conf <t> | room <t> | dl <t> | interval <t> <sf> <len> <share> | backoff <n>
@@ -107,6 +108,8 @@ int main(void) {
             s_have_bs = sscanf(rest, "%f", s_bs.f) == 1;
             s_bs.f[1] = NAN;
             s_bs.n = s_have_bs ? 2 : 0;
+        } else if (!strcmp(cmd, "sensat") && sscanf(rest, "%llu", &ull) == 1) {   /* both readings' advert time */
+            s_mppt.at_ms = s_bs.at_ms = ull;
         } else if (!strcmp(cmd, "ctr")) {
             long net;
             unsigned long sol, lo;
