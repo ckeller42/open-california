@@ -1661,6 +1661,17 @@ pins the CPU at 240 MHz (`{"dfs":true}` back to 40–240); it is not stored, and
 report the **live** `esp_pm` config, so a boot's DFS state is a fact, not a flag. Both are debug
 aids, to be removed once the cause of the NACKs is known.
 
+The owner task's sensor reads (LTR-553, BMI270, AXP2101) wait at most `LTR_IO_MS` = 30 ms per
+transfer. The I2C driver's wait ends on a FreeRTOS tick boundary (`CONFIG_FREERTOS_HZ` 100), so a
+1-tick wait can end microseconds after a transfer starts and fail it with `ESP_ERR_TIMEOUT`; 3 ticks
+leave at least 20 ms. A failed sensor read is counted per device, and
+`LOG display: sensor read errors ltr n ERR bmi n ERR axp n ERR` (the counts since boot and each
+device's last error) comes at most once per `CALI_DIAG_PERIOD_MS` when a count grew.
+
+At init, `i2c_master_bus_reset` clocks the bus free before the probes: a reset in the middle of a
+transfer does not reset the I2C chips, and a chip that still holds SDA makes the probes fail
+(`display: unavailable (axp2101)`).
+
 ## Battery (`R_FW_BATTERY`)
 
 The {term}`CoreS3` has a 500 mAh cell. With WiFi + BLE linked it drains about 0.33 %/min (~100 mA),
