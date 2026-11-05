@@ -44,8 +44,20 @@ DEVICE_KEYS = frozenset(
 # device.lora (R_FW_LORA, R_FW_LORA_SETUP): present only while exp_lora is on
 LORA_KEYS = frozenset(
     {
-        "module", "joined", "at_unanswered", "sf", "last_s", "airtime_ms_24h", "airtime_charged_ms_24h",
-        "unconfirmed_sends", "downlinks_24h", "uplinks", "note", "setup", "has_ttn_keys", "dev_eui",
+        "module",
+        "joined",
+        "at_unanswered",
+        "sf",
+        "last_s",
+        "airtime_ms_24h",
+        "airtime_charged_ms_24h",
+        "unconfirmed_sends",
+        "downlinks_24h",
+        "uplinks",
+        "note",
+        "setup",
+        "has_ttn_keys",
+        "dev_eui",
     }
 )
 # device.thermostat (R_FW_THERMOSTAT_API): present only while a reference thermometer is selected

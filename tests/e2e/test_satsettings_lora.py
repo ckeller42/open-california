@@ -36,7 +36,9 @@ DE = {
 }
 LOCALES = [("en-US", "en"), ("de-DE", "de")]
 FORGET_BODY = {"forget": True, "confirm": True}
-HINT = "Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app."
+HINT = (
+    "Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app."
+)
 ASK = (
     "Forget LoRa? The satellite deletes its LoRa keys and switches LoRa off. "
     "The device stays registered at The Things Network until you delete it there."
@@ -86,7 +88,9 @@ def test_values_in_words(stub, error_gated_page, locale, lang):
         expect(pg.locator("#lora-module")).to_have_text(tr("Found", lang))
         expect(pg.locator("#lora-net")).to_have_text(tr("Joined", lang))
         expect(pg.locator("#lora-last")).to_have_text(tr("confirmed {n} min ago", lang, n="7"))
-        expect(pg.locator("#lora-air")).to_have_text(tr("{a} s confirmed / {c} s charged", lang, a="3.3", c="3.9"))
+        expect(pg.locator("#lora-air")).to_have_text(
+            tr("{a} s confirmed / {c} s charged", lang, a="3.3", c="3.9")
+        )
         expect(pg.locator("#lora-setup")).to_have_text(tr("Set up", lang))
         expect(pg.locator("#lora-eui")).to_have_text("70B3D57ED0012345")
         expect(box).to_contain_text(tr(HINT, lang))
@@ -101,7 +105,9 @@ def test_states_before_the_first_confirmed_uplink(stub, error_gated_page, locale
         expect(pg.locator("#lora-module")).to_have_text(tr("Not found", lang))
         expect(pg.locator("#lora-net")).to_have_text(tr("Not joined", lang))
         expect(pg.locator("#lora-last")).to_have_text(tr("none confirmed yet", lang))  # never a bare "sent"
-        expect(pg.locator("#lora-air")).to_have_text(tr("{a} s confirmed / {c} s charged", lang, a="0.0", c="0.5"))
+        expect(pg.locator("#lora-air")).to_have_text(
+            tr("{a} s confirmed / {c} s charged", lang, a="0.0", c="0.5")
+        )
         expect(pg.locator("#lora-setup")).to_have_text(tr("Keys made, waiting for the app", lang))
         expect(pg.locator("#lora-eui")).to_have_text("—")
 
