@@ -261,9 +261,7 @@ def test_stalled_read_times_out_and_polling_goes_on(site, ttn, error_gated_page)
     ttn.add_uplink(DEV, 2, port2(), datetime.now(UTC) - timedelta(minutes=5))
     ttn.stall_reads = 1
     short = "const _to = AbortSignal.timeout.bind(AbortSignal); AbortSignal.timeout = (ms) => _to(Math.min(ms, 500));"
-    with error_gated_page(
-        site, init_script=short + _init(ttn, secret), service_workers="block"
-    ) as pg:
+    with error_gated_page(site, init_script=short + _init(ttn, secret), service_workers="block") as pg:
         pg.clock.install()
         pg.wait_for_timeout(1500)  # the first read stalled, then timed out (real time)
         expect(pg.locator("#status")).not_to_contain_text("5 min ago")

@@ -266,7 +266,8 @@ def _make_handler(fake):
                     recs = [
                         r
                         for r in recs
-                        if _tkey(r["received_at"]) > cut or (fake.after_inclusive and _tkey(r["received_at"]) == cut)
+                        if _tkey(r["received_at"]) > cut
+                        or (fake.after_inclusive and _tkey(r["received_at"]) == cut)
                     ]
                 if q.get("order") == ["-received_at"]:
                     recs.reverse()

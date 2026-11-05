@@ -169,7 +169,10 @@ def test_stalled_read_ends_as_timeout(fake):
     _, read = fake.make_key("read")
     fake.add_uplink("van-000001", 2, b"\x01")
     fake.stall_reads = 1
-    r = js(fake, f"readUplinks(B,{json.dumps(read)},APP,'van-000001',{{signal:AbortSignal.timeout(300)}}).catch(err)")
+    r = js(
+        fake,
+        f"readUplinks(B,{json.dumps(read)},APP,'van-000001',{{signal:AbortSignal.timeout(300)}}).catch(err)",
+    )
     assert (r["err"], r["kind"], r["status"]) == ("TtnError", "timeout", 0)
     assert js(fake, f"readUplinks(B,{json.dumps(read)},APP,'van-000001').then(a=>a.length)") == 1
 

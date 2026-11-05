@@ -17,7 +17,11 @@ def _xfer(frags):
     """Feed ``frags`` to lora_aead_cli's ``xfer``; return the (rc, confirm, plain) of the last line."""
     lines = [f"xfer {VEC['tk']} {VEC['deveui']} {f}" for f in frags]
     out = subprocess.run(
-        [str(build_host("lora_aead_cli"))], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True
+        [str(build_host("lora_aead_cli"))],
+        input="\n".join(lines) + "\n",
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.splitlines()
     return out[-1].split()
 

@@ -66,13 +66,17 @@ def cli(tmp_path_factory):
 
 
 def run(cli, *lines):
-    out = subprocess.run([str(cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True)
+    out = subprocess.run(
+        [str(cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True
+    )
     return out.stdout.splitlines()
 
 
 def test_vector_matches_file():
     v = json.loads(VECTOR.read_text())
-    got = js(f'(async()=>(await sealTransfer(u8("{v["plain"]}"),u8("{v["tk"]}"),"{v["deveui"]}",u8("{v["nonce"]}"))).map(h))()')
+    got = js(
+        f'(async()=>(await sealTransfer(u8("{v["plain"]}"),u8("{v["tk"]}"),"{v["deveui"]}",u8("{v["nonce"]}"))).map(h))()'
+    )
     assert got == v["fragments"]
     assert all(len(f) // 2 <= 51 for f in got)
     # the vector's plaintext is the Task 1 style plaintext of the dummy keys
@@ -110,10 +114,23 @@ def test_setup_qr_matches_c(cli):
 def test_parse_rejects_foreign_and_truncated():
     ok = f"OCS1*{DEVEUI}*{TK.upper()}*{TK.upper()}"
     assert js(f"parseSetupQr({json.dumps(ok)}) !== null")
-    for bad in ("WIFI:S:x;;", f"OCS1*{DEVEUI}*{TK.upper()[:-1]}*{TK.upper()}", ok + "*", ok[:-1], ok.replace("OCS1", "OCR1")):
+    for bad in (
+        "WIFI:S:x;;",
+        f"OCS1*{DEVEUI}*{TK.upper()[:-1]}*{TK.upper()}",
+        ok + "*",
+        ok[:-1],
+        ok.replace("OCS1", "OCR1"),
+    ):
         assert js(f"parseSetupQr({json.dumps(bad)})") is None
     cut = REPAIR.lower().rsplit("*", 1)[0]
-    for bad in (cut, REPAIR + "*X", REPAIR.replace("MY-VAN-APP", "MY*VAN"), REPAIR.replace("OCR1", "OCS1"), "OCR1*A*B*C*" + K1 + "*" + K2[:-1], "OCR1*" + "A" * 65 + "*B*C*" + K1 + "*" + K2):
+    for bad in (
+        cut,
+        REPAIR + "*X",
+        REPAIR.replace("MY-VAN-APP", "MY*VAN"),
+        REPAIR.replace("OCR1", "OCS1"),
+        "OCR1*A*B*C*" + K1 + "*" + K2[:-1],
+        "OCR1*" + "A" * 65 + "*B*C*" + K1 + "*" + K2,
+    ):
         assert js(f"parseRepairQr({json.dumps(bad)})") is None
     assert js("parseRepairQr('')") is None
 

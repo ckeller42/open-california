@@ -104,7 +104,11 @@ def test_remote_build_contents(site):
 def test_only_tracked_files_are_published(tmp_path):
     """An untracked file and a dotfile in calictl/webui never reach the site; every served file is tracked."""
     webui = ROOT / "calictl" / "webui"
-    probes = [webui / "untracked-probe.txt", webui / ".probe-dotfile", webui / "vendor" / "untracked-probe.txt"]
+    probes = [
+        webui / "untracked-probe.txt",
+        webui / ".probe-dotfile",
+        webui / "vendor" / "untracked-probe.txt",
+    ]
     try:
         for p in probes:
             p.write_text("not for the public site", encoding="utf-8")
@@ -115,8 +119,9 @@ def test_only_tracked_files_are_published(tmp_path):
     built = {str(p.relative_to(tmp_path / "site")) for p in (tmp_path / "site").rglob("*") if p.is_file()}
     assert not {"untracked-probe.txt", ".probe-dotfile", "vendor/untracked-probe.txt"} & built
     tracked = set(
-        subprocess.run(["git", "ls-files", "calictl/webui"], cwd=ROOT, capture_output=True, text=True, check=True)
-        .stdout.split()
+        subprocess.run(
+            ["git", "ls-files", "calictl/webui"], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout.split()
     )
     generated = {"remote-flag.js", ".nojekyll"}
     assert {"calictl/webui/" + n for n in built - generated} <= tracked
@@ -237,8 +242,10 @@ def test_built_setup_flow_under_its_csp(site):
     with FakeTtn() as ttn:
         _, secret = ttn.make_key("all")
         # an empty phone; only the test seam that sends the keys to the fake (built page: OC_REMOTE from its file)
-        init = watch + "localStorage.getItem('oc.remote.cfg') || localStorage.setItem('oc.remote.cfg', %s);" % (
-            json.dumps(json.dumps({"base": ttn.base}))
+        init = (
+            watch
+            + "localStorage.getItem('oc.remote.cfg') || localStorage.setItem('oc.remote.cfg', %s);"
+            % (json.dumps(json.dumps({"base": ttn.base})))
         )
         httpd = _serve(site, csp_extra="http://127.0.0.1:*")
         try:

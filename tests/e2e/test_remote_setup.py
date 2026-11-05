@@ -489,7 +489,7 @@ def test_rescan_takes_the_repair_qr_of_this_van(site, ttn, error_gated_page):  #
 
 
 def test_repair_qr_ends_a_waiting_setup(site, ttn, error_gated_page):  # noqa: F811
-    """"Scan the van's code" during a setup that waits for a confirmation: the repair QR configures the phone and
+    """The menu's "Scan the van's code" during a waiting setup: the repair QR configures the phone and
     clears the setup, so the next start does not reopen it."""
     tx = TEXT["en-US"]
     with _page(error_gated_page, site, ttn) as pg:
