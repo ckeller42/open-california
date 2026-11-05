@@ -86,6 +86,7 @@ def test_full_setup_calls_in_order(fake):
     assert dev["registry"] == ["is", "js", "ns", "as"]
     assert dev["ns"]["frequency_plan_id"] == "EU_863_870_TTN" and dev["ns"]["supports_class_c"] is True
     assert dev["js"]["root_keys"]["app_key"]["key"] == APPKEY
+    assert dev["ns"]["supports_class_c"] is True and dev["js"]["root_keys"]["app_key"]["key"] == APPKEY
     assert dev["masks"]["ns"][-3:] == ["ids.device_id", "ids.dev_eui", "ids.join_eui"]
     # the full key is gone: 401
     again = js(fake, f"checkFullKey(B,{json.dumps(secret)}).catch(err)")
@@ -102,8 +103,7 @@ def test_full_setup_calls_in_order(fake):
 
 
 def test_setup_refuses_wrong_key_kinds(fake):
-    cases = [("user", "user_key", None), ("read", "not_all_rights", None)]
-    for kind, want, _ in cases:
+    for kind, want in [("user", "user_key"), ("read", "not_all_rights")]:
         _, secret = fake.make_key(kind)
         r = js(fake, f"checkFullKey(B,{json.dumps(secret)}).catch(err)")
         assert r["kind"] == want, kind
@@ -151,13 +151,79 @@ def test_read_uplinks(fake):
         fake.add_uplink("van-000001", port, data, t0 + timedelta(minutes=i))
     r = js(
         fake,
-        f"readUplinks(B,{json.dumps(read)},APP,'van-000001',{{limit:10}}).then(a=>a.map(u=>({{port:u.port,hex:[...u.bytes].map(x=>x.toString(16)).join(''),at:u.at}})))",
+        f"readUplinks(B,{json.dumps(read)},APP,'van-000001',{{limit:10}}).then(a=>a.map(u=>({{port:u.port,hex:[...u.bytes].map(x=>x.toString(16).padStart(2,'0')).join(''),at:u.at}})))",
     )
     ms = int(t0.timestamp() * 1000)
-    assert r == [{"port": 3, "hex": "", "at": ms + 120000}, {"port": 12, "hex": "0616263 64".replace(" ", ""), "at": ms + 60000},
-                 {"port": 2, "hex": "12", "at": ms}]  # fmt: skip
+    assert r == [{"port": 3, "hex": "", "at": ms + 120000}, {"port": 12, "hex": "0061626364", "at": ms + 60000},
+                 {"port": 2, "hex": "0102", "at": ms}]  # fmt: skip
     r = js(
         fake,
         f"readUplinks(B,{json.dumps(read)},APP,'van-000001',{{after:{ms + 60000}}}).then(a=>a.map(u=>u.port))",
     )
     assert r == [3]
+
+
+def test_cursor_is_nanosecond_exact(fake):
+    """TTS sends RFC3339Nano; the raw ``receivedAt`` as ``after`` returns no duplicate, and ``at`` is in ms."""
+    _, secret = fake.make_key("all")
+    read = full_setup(fake, secret)["p"]["readKey"]
+    t0 = datetime(2026, 10, 31, 7, 34, 5, 998108, tzinfo=UTC)
+    fake.add_uplink("van-000001", 2, b"a", t0, ns=63)
+    fake.add_uplink("van-000001", 2, b"b", t0, ns=64)  # same millisecond, one nanosecond later
+    q = "readUplinks(B,%s,APP,'van-000001',%s)"
+    r = js(fake, q % (json.dumps(read), "{}") + ".then(a=>a.map(u=>[u.receivedAt,u.at,u.bytes[0]]))")
+    ms = int(t0.timestamp() * 1000)
+    assert r == [["2026-10-31T07:34:05.998108064Z", ms, 98], ["2026-10-31T07:34:05.998108063Z", ms, 97]]
+    # the cursor of the first (older) uplink returns only the second; the newest returns nothing
+    cur = "{after:%s}" % json.dumps(r[1][0])
+    assert js(fake, q % (json.dumps(read), cur) + ".then(a=>a.map(u=>u.bytes[0]))") == [98]
+    cur = "{after:%s}" % json.dumps(r[0][0])
+    assert js(fake, q % (json.dumps(read), cur) + ".then(a=>a.length)") == 0
+    # the by-hand parser: offsets, short fractions, junk
+    assert js(fake, "[ttnParseTime('2026-10-31T09:34:05.5+02:00'), ttnParseTime('2026-10-31T07:34:05Z'), ttnParseTime('x')]") == [
+        ms - 998 + 500, ms - 998, None]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("body", "want"),
+    [
+        (b"", []),
+        (
+            b'{"result":{"received_at":"2026-10-31T07:34:05.1Z","uplink_message":{"f_port":2,"frm_payload":"AQ=="}}}\r\n\r\n',
+            [2],
+        ),
+        (b'{"result":{"received_at":"2026-10-31T07:34:05.1Z","uplink_message":{"f_port":3}}}\n', [3]),
+    ],
+)
+def test_storage_stream_shapes(fake, body, want):
+    """An empty body, CRLF line ends and a trailing newline read cleanly."""
+    _, secret = fake.make_key("all")
+    read = full_setup(fake, secret)["p"]["readKey"]
+    fake.storage_body = body
+    assert js(fake, f"readUplinks(B,{json.dumps(read)},APP,'van-000001').then(a=>a.map(u=>u.port))") == want
+
+
+@pytest.mark.parametrize(
+    "body", [b'{"error":{"code":2,"message":"secret-looking text"}}\n', b'{"result":{"rece']
+)
+def test_storage_stream_errors(fake, body):
+    """An error line and a truncated line throw TtnError kind ``stream``, without the payload."""
+    _, secret = fake.make_key("all")
+    read = full_setup(fake, secret)["p"]["readKey"]
+    fake.storage_body = body
+    r = js(fake, f"readUplinks(B,{json.dumps(read)},APP,'van-000001').catch(err)")
+    assert r["err"] == "TtnError" and r["kind"] == "stream" and r["status"] == 200
+    assert "secret-looking" not in r["msg"] and read not in r["msg"]
+
+
+def test_key_create_refuses_rights_the_caller_lacks(fake):
+    """A cmd key may not mint a key with rights it does not hold (403)."""
+    _, secret = fake.make_key("all")
+    keys = full_setup(fake, secret)["p"]
+    assert fake.keys[keys["cmdKey"]]["rights"][-1] == "RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE"
+    fake.keys[keys["cmdKey"]]["rights"].append("RIGHT_APPLICATION_SETTINGS_API_KEYS")
+    r = js(
+        fake,
+        f"ttnCall(B,{json.dumps(keys['cmdKey'])},'POST','/applications/'+APP+'/api-keys',{{name:'x',rights:['RIGHT_APPLICATION_ALL']}}).catch(err)",
+    )
+    assert r["status"] == 403

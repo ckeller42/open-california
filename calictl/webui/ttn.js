@@ -53,6 +53,7 @@ async function checkFullKey(base, key) {
   const appId = j.entity_ids && j.entity_ids.application_ids && j.entity_ids.application_ids.application_id;
   if (!appId) throw new TtnError(0, "This is not an application key: create the key in the application's API keys.", "user_key");
   const k = j.api_key || {};
+  if (!k.id) throw new TtnError(0, "TTN did not report the key's id.", "auth");
   if (!(k.rights || []).includes("RIGHT_APPLICATION_ALL"))
     throw new TtnError(0, 'The key needs "Grant all current and future rights".', "not_all_rights");
   return { appId, keyId: k.id };
@@ -100,7 +101,7 @@ async function enableStorage(base, key, appId) {
 async function makePhoneKeys(base, key, appId) {
   const old = (await (await ttnCall(base, key, "GET", `/applications/${appId}/api-keys`)).json()).api_keys || [];
   for (const k of old)
-    if (k.name === TTN_READ_NAME || k.name === TTN_CMD_NAME) await ttnCall(base, key, "DELETE", `/applications/${appId}/api-keys/${k.id}`);
+    if (k.name === TTN_READ_NAME || k.name === TTN_CMD_NAME) await ttnCall(base, key, "DELETE", `/applications/${appId}/api-keys/${k.id}`, undefined, [404]);
   /** @param {string} name @param {string[]} rights */
   const make = async (name, rights) =>
     (await (await ttnCall(base, key, "POST", `/applications/${appId}/api-keys`, { name, rights })).json()).key;
@@ -119,8 +120,9 @@ async function deleteOwnKey(base, key, appId, keyId) {
 /**
  * Reads stored uplinks, newest first (Storage API, newline-delimited JSON).
  * @param {string} base @param {string} readKey @param {string} appId @param {string} devId
- * @param {{after?: number | string, limit?: number}} [opt] `after` = ms since epoch or an RFC3339 string
- * @returns {Promise<Array<{port: number, bytes: Uint8Array, at: number}>>}
+ * @param {{after?: number | string, limit?: number}} [opt] `after` = ms since epoch, or a raw RFC3339(Nano) string passed through unchanged
+ * @returns {Promise<Array<{port: number, bytes: Uint8Array, at: number, receivedAt: string}>>} `receivedAt` is the raw
+ *   timestamp: pass the newest one as `after` (unchanged) for the next read; `at` is its ms value
  */
 async function readUplinks(base, readKey, appId, devId, opt) {
   const { after, limit } = opt || {};
@@ -128,13 +130,39 @@ async function readUplinks(base, readKey, appId, devId, opt) {
   if (limit) q += "&limit=" + limit;
   if (after !== undefined) q += "&after=" + encodeURIComponent(typeof after === "number" ? new Date(after).toISOString() : after);
   const res = await ttnCall(base, readKey, "GET", `/as/applications/${appId}/devices/${devId}/packages/storage/uplink_message${q}`);
-  return (await res.text()).split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l).result)
-    .filter((r) => r && r.uplink_message)
-    .map((r) => ({
+  const bad = (/** @type {string} */ why) => new TtnError(res.status, "TTN storage stream: " + why, "stream");
+  /** @type {Array<{port: number, bytes: Uint8Array, at: number, receivedAt: string}>} */
+  const out = [];
+  for (const line of (await res.text()).split("\n")) {
+    if (!line.trim()) continue;
+    let o;
+    try { o = JSON.parse(line); } catch (e) { throw bad("unparsable line"); }
+    if (o.error) throw bad("error line" + (o.error.code === undefined ? "" : " code " + o.error.code));
+    const r = o.result;
+    if (!r || !r.uplink_message) continue;
+    const at = ttnParseTime(r.received_at);
+    if (Number.isNaN(at)) throw bad("bad received_at");
+    out.push({
       port: r.uplink_message.f_port,
       bytes: Uint8Array.from(atob(r.uplink_message.frm_payload || ""), (c) => c.charCodeAt(0)),
-      at: Date.parse(r.received_at),
-    }));
+      at, receivedAt: r.received_at,
+    });
+  }
+  return out;
+}
+
+/**
+ * RFC3339(Nano) to ms since epoch, by hand (seconds + the first 3 fraction digits), so every browser agrees.
+ * NaN when malformed.
+ * @param {string} t @returns {number}
+ */
+function ttnParseTime(t) {
+  const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.(\d+))?(?:Z|([+-])(\d\d):(\d\d))$/.exec(String(t));
+  if (!m) return NaN;
+  const [y, mo, d, h, mi, sec] = m.slice(1, 7).map(Number);
+  const ms = Number(((m[7] || "") + "000").slice(0, 3));
+  const off = m[8] ? (m[8] === "-" ? -1 : 1) * (Number(m[9]) * 60 + Number(m[10])) * 60000 : 0;
+  return Date.UTC(y, mo - 1, d, h, mi, sec, ms) - off;
 }
 
 /**

@@ -32,6 +32,28 @@ B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 _APP = r"/api/v3/(?:(?:js|ns|as)/)?applications/([^/]+)"
 
 
+def _tkey(t):
+    """RFC3339Nano text to a sortable ``(seconds, nanoseconds)``."""
+    sec, _, frac = t.rstrip("Z").partition(".")
+    return datetime.fromisoformat(sec + "+00:00"), int((frac + "000000000")[:9])
+
+
+def _pick(ed, paths):
+    """The fields of ``ed`` that ``paths`` (dotted) name, as TTS stores only the masked fields."""
+    out = {}
+    for path in paths:
+        if path.startswith("ids."):
+            continue
+        src, dst = ed, out
+        parts = path.split(".")
+        for part in parts[:-1]:
+            src = src.get(part, {})
+            dst = dst.setdefault(part, {})
+        if parts[-1] in src:
+            dst[parts[-1]] = src[parts[-1]]
+    return out
+
+
 def _secret():
     """A random key in TTS form ``NNSXS.<39 b32>.<52 b32>``."""
     r = random.SystemRandom()
@@ -50,6 +72,7 @@ class FakeTtn:
         self.associations = {}  # port -> package name
         self.uplinks = {}  # dev id -> [{"received_at", "f_port", "frm_payload"}]
         self.downlinks = []  # (dev id, f_port, bytes, key id)
+        self.storage_body = None  # test hook: bytes to answer every storage read with
         self.calls = []  # (method, path, key id)
         self.lock = threading.Lock()
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _make_handler(self))
@@ -89,11 +112,15 @@ class FakeTtn:
             }
         return kid, secret
 
-    def add_uplink(self, dev, port, payload, when=None):
-        """Test hook: store an uplink of ``dev`` on ``port`` with ``payload`` bytes at ``when`` (a ``datetime``)."""
+    def add_uplink(self, dev, port, payload, when=None, ns=0):
+        """Test hook: store an uplink of ``dev`` on ``port`` with ``payload`` bytes at ``when`` (a ``datetime``).
+
+        ``received_at`` is RFC3339Nano as TTS sends it (9 fraction digits): the microseconds of ``when`` plus the
+        last three digits ``ns`` (0-999).
+        """
         when = when or datetime.now(UTC)
         rec = {
-            "received_at": when.astimezone(UTC).isoformat().replace("+00:00", "Z"),
+            "received_at": when.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "%03dZ" % ns,
             "f_port": port,
             "frm_payload": base64.b64encode(bytes(payload)).decode(),
         }
@@ -177,7 +204,7 @@ def _make_handler(fake):
                     return 404, {"code": 5, "message": "device not found"}
                 d, ed = fake.devices[dev], body["end_device"]
                 d["registry"].append(reg)
-                d[reg] = {k: v for k, v in ed.items() if k != "ids"}
+                d[reg] = _pick(ed, body["field_mask"]["paths"])
                 d["masks"] = {**d.get("masks", {}), reg: body["field_mask"]["paths"]}
                 return 200, ed
             m = re.fullmatch(_APP + r"/packages/associations/(\d+)", p)
@@ -197,6 +224,10 @@ def _make_handler(fake):
                         if v["app"] == m[1]
                     ]
                     return 200, {"api_keys": ks}
+                if "RIGHT_APPLICATION_ALL" not in key["rights"] and not set(body["rights"]) <= set(
+                    key["rights"]
+                ):
+                    return 403, {"code": 7, "message": "cannot grant rights the key does not hold"}
                 kid, secret = fake._add_key("created", body["name"], body["rights"])
                 return 200, {"id": kid, "key": secret, "name": body["name"], "rights": body["rights"]}
             m = re.fullmatch(_APP + r"/api-keys/([^/]+)", p)
@@ -212,14 +243,12 @@ def _make_handler(fake):
             if m and method == "GET":
                 if err := self._need(key, m[1], "RIGHT_APPLICATION_TRAFFIC_READ"):
                     return err
-                recs = sorted(fake.uplinks.get(m[2], []), key=lambda r: r["received_at"])
+                if fake.storage_body is not None:
+                    return 200, fake.storage_body
+                recs = sorted(fake.uplinks.get(m[2], []), key=lambda r: _tkey(r["received_at"]))
                 if "after" in q:
-                    cut = datetime.fromisoformat(q["after"][0].replace("Z", "+00:00"))
-                    recs = [
-                        r
-                        for r in recs
-                        if datetime.fromisoformat(r["received_at"].replace("Z", "+00:00")) > cut
-                    ]
+                    cut = _tkey(q["after"][0])
+                    recs = [r for r in recs if _tkey(r["received_at"]) > cut]
                 if q.get("order") == ["-received_at"]:
                     recs.reverse()
                 recs = recs[: int(q["limit"][0])] if "limit" in q else recs
