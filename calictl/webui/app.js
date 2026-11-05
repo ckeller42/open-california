@@ -3824,7 +3824,7 @@ function thermoPost(patch) {
   const off = Object.keys(patch).length === 1 && patch.mode === "OFF";
   thermoBusy++;
   thermoChain = thermoChain.then(async () => {
-    if (!THERMO && !off) { thermoBusy--; return; }
+    if (!THERMO && !off) { if (--thermoBusy === 0) thermoWant = null; return; }
     try {
       const body = off ? patch : Object.assign({}, patch, { rev: /** @type {Thermo} */ (THERMO).rev });
       const r = await api("/api/thermostat", { method: "POST", headers: { "Content-Type": "application/json" },
