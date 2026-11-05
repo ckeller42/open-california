@@ -46,23 +46,33 @@ Open `https://open-california.github.io/` on your phone.
 
 ## 3. Set up the van
 
-1. On the satellite, **press the screen for 3 seconds**. The LoRa screen opens and shows a code.
-2. In the app, open the menu and choose **Set up LoRa**. Choose your cluster (`eu1`), paste the
-   full-rights API key and tap **Check the key**. The app registers the van at The Things Network
-   and makes the keys.
-3. When the app asks for it, scan the code on the satellite's screen with the phone's camera.
-   Allow the camera when the phone asks. Hold the phone so that the whole code is in the picture.
-4. Wait. The app sends the keys to the van over LoRa, in small parts, and each part takes a while.
-   The satellite's LoRa screen shows **Joined** as soon as the van has joined the network. The app
-   shows **The van has the keys.** when the van has received all the parts and confirmed them.
-   The first message from a new device can take several minutes. If the app waits more than ten
-   minutes for the first message, check the antenna and the gateway coverage at the van.
+1. In the app, open the menu and choose **Set up LoRa**. Choose your cluster (`eu1`), paste the
+   full-rights API key and tap **Check the key**. The app only checks the key in this step.
+2. On the satellite, **press the screen for 3 seconds**. The LoRa screen opens and shows the setup
+   code. The screen closes after two minutes, so do this step just before the next one.
+3. Scan the code on the satellite's screen with the phone's camera. Allow the camera when the
+   phone asks. Hold the phone so that the whole code is in the picture. After the scan, the app
+   registers the van at The Things Network, makes the read key and the command key, and deletes
+   the full-rights key.
+4. Wait. **Do not press the satellite's screen again until the app says The van has the keys.**
+   Each new open of the LoRa screen makes a new transfer key, and the keys that the app sent
+   before no longer fit.
+   - The app shows that it waits for the van's first message. The first message from a new
+     device can take several minutes. If the app waits more than ten minutes, check the antenna
+     and the gateway coverage at the van.
+   - When the first message is at The Things Network, the van has joined. The app then shows
+     **Keys sent to the van** and sends the keys over LoRa, in small parts. Each part takes a
+     while.
+   - The app shows **The van has the keys.** when the van has received all the parts and
+     confirmed them.
 5. Tap **Show the van**. The numbers appear, each with its age. The page marks the data as LoRa
    and shows how old it is. A LoRa message is far slower than WiFi: the numbers are minutes old, not seconds.
 
 If you close the app while it waits, open it again: it continues where it stopped. If the van
-could not read the keys, the app tells you; press the satellite's screen for 3 seconds again and
-scan the new code.
+could not read the keys, the app tells you. Then press the satellite's screen for 3 seconds again
+and scan the new code. If the satellite shows its repair code instead, scan that code: the van
+already has the keys, and the app finishes the setup. If the app says that the van's daily downlink
+limit is reached, leave the app installed: the setup continues the next day.
 
 ## Add a second phone
 
@@ -75,13 +85,20 @@ The second phone needs no TTN account and no full-rights key.
 
 ## You lost a phone
 
-Someone who has the phone can read your van's numbers until you make new keys.
+Someone who has the phone can read your van's numbers until you make new keys. You need a new
+full-rights API key and a visit to the van.
 
 1. In the TTN console, open your application, open **API keys** and delete the keys that the app
-   made.
-2. On the satellite, press the screen for 3 seconds and press for 3 seconds a second time on the
-   repair code. The satellite then makes new keys.
-3. Set up the app again (step 3) on your phone, and scan the new code on other phones.
+   made (`oc-remote-read` and `oc-remote-cmd`). From then on, no phone can read the van.
+2. In the same place, create a new API key with **Grant all current and future rights** (as in
+   section 1).
+3. In the app on your phone, choose **Set up LoRa**, paste the new key and tap **Check the key**.
+4. On the satellite, press the screen for 3 seconds. The screen shows the repair code. Press the
+   screen for 3 seconds a second time. The satellite makes a new transfer key and shows a new
+   setup code. The satellite does not make the read key and the command key: the phone makes them.
+5. Scan the setup code. The app makes a new read key and a new command key, deletes the full-rights
+   key and sends the new keys to the van, as in step 3 of the setup.
+6. When the app says **The van has the keys.**, scan the new repair code on your other phones.
 
 ## Remove a van or forget LoRa
 
@@ -94,7 +111,8 @@ To remove everything, do both and then delete the device and the application in 
 
 ## Limits
 
-- The data is read only. The remote app sends no commands to the van.
+- The data is read only. The remote app sends no commands to the van. Its only messages to the van
+  are the one-time key transfer of the setup.
 - The Things Network has a fair use policy: a device may use about 30 seconds of uplink airtime
-  and receive 10 messages a day. The satellite stays below that.
+  and receive 10 messages a day. The app sends at most 8 setup messages to the van in 24 hours.
 - The remote app needs a network connection. It opens offline and shows the last data with its age.

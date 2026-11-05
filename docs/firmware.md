@@ -1058,7 +1058,7 @@ try-lock: a concurrent caller, a full queue or a body that does not fit `CALI_SD
 
 | `ev` / `kind` | When | Fields |
 |---|---|---|
-| `diag` | every 60 s (app_main) | `heap_free`, `heap_min` (internal heap, B), `psram_free`, `cpu_pct` (since the previous diag), `stack_min` `{owner, sd, display, ota, console, lwip}` (high-water mark, B; `owner` is the NimBLE host task that runs `cali_core`), `wifi_rssi`, `ble_rssi` (`null` offline / unlinked), `link_up`, `uptime_s` |
+| `diag` | every 60 s (app_main) | `heap_free`, `heap_min` (internal heap, B), `psram_free`, `cpu_pct` (since the previous diag), `stack_min` `{owner, sd, display, ota, console, lwip, lora, lora_rx}` (high-water mark, B; `lora`/`lora_rx` only while the LoRa task runs; `owner` is the NimBLE host task that runs `cali_core`), `wifi_rssi`, `ble_rssi` (`null` offline / unlinked), `link_up`, `uptime_s` |
 | `screen` | every 60 s (app_main), once the screen has a reading | `lux`, `prox`, `motion` (the raw screen sensors, as `/api/state?diag=1` shows them; each `null` when unknown) |
 | `evt` `boot` | once per boot, when the card takes it | `reset_reason` (`esp_reset_reason`: `poweron`/`sw`/`panic`/`task_wdt`/`int_wdt`/`brownout`/…), `fw`, `boot`, `prev_up_s` (the previous boot's last diag uptime, RTC no-init RAM: survives a reset, `null` after power-on) |
 | `evt` `panic` | right after `boot`, when the previous boot panicked (`R_FW_PANIC_CAPTURE`, below) | `task` (the task running on the panicking core), `reason` (the exception, or abort()/assert's details; <= 47 chars), `bt` (up to 16 backtrace PCs, innermost first, space-separated bare hex) |
@@ -1856,12 +1856,18 @@ within seconds; a downlink that switches camping mode on (and with it the router
   51 bytes. The satellite puts the fragments together, decrypts them and stores the keys only when the
   tag is valid and the keys can be shown as the repair QR. It answers on FPort 12 as soon as the daily
   airtime budget has room, ahead of the other ports: status 0 (stored), 1 (bad tag or unusable keys),
-  2 (fragments missing, with a bitmap of the received ones) or 3 (no transfer key). When the module does
+  2 (fragments missing, with a bitmap of the received ones) or 3 (no transfer key). A fragment that
+  arrives without a transfer key while the TTN keys are stored gets status 0 again (the earlier answer
+  was lost), not 3. When the module does
   not confirm the answer with `+EVT:TX_DONE`, the satellite sends it again after at least a minute, and
-  gives up after five tries; the app then sends the keys again. After the module confirms a status-0
-  answer, the satellite erases the transfer key, unless a new setup has made a new one in the meantime. Every fragment counts as one of the day's downlinks. From then on
+  gives up after five tries. Ten minutes without an answer, the app sends the last fragment again as a
+  probe: the satellite answers with the bitmap of what it has, or with status 0. The app sends at most
+  8 setup downlinks in 24 hours. After the module confirms a status-0
+  answer, the satellite erases the transfer key, unless a new setup has made a new one in the meantime.
+  A new setup start drops a pending status-2 answer only. Every fragment counts as one of the day's downlinks. From then on
   the LoRa screen shows the repair QR (the TTN keys) instead of the setup QR. No key and no fragment
-  byte goes into a log line.
+  byte goes into a log line. When LoRa is switched off, the task forgets the module state, so switching
+  it on again starts like the first use.
 - **Uplinks:** port 2 (50 B: the raw energy and water frames, the first Victron charger, the battery
   sense (each 0xFF when its reading is older than 60 s), the
   [energy counters](#energy-counters-r_fw_energy_counters)) at the interval the airtime budget allows:
@@ -2231,6 +2237,12 @@ collected here. `firmware/README.md` has the human-readable version of the same 
    :tags: web, lora
 
    The public remote app talks only to The Things Stack, never to the owner's router, Pi or satellite; it sets a van up for LoRa from a full-rights application key that it deletes afterwards, and reads the van's uplinks with a read key.
+   It sends a key only to a cluster host under ``thethings.network`` or ``thethings.industries``. A
+   TTS call or body read that does not end within 20 s fails as a timeout, and the next poll goes on.
+   An uplink at the read cursor is acted on once. During the setup it pushes at most 8 downlinks in
+   24 h and holds the rest until there is room; 10 min without a confirmation it pushes the last
+   fragment again as a probe; while it asks for a new scan, the van's repair QR with the stored keys
+   ends the setup as a success, and a repair QR always ends a setup that waits.
 
 .. req:: The web UI tells a sleeping van from an unreachable backend
    :id: R_UI_LINK_STATE

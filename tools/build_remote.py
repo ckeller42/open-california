@@ -3,7 +3,9 @@
 The remote app (``window.OC_REMOTE``) talks only to The Things Stack and never to the owner's router (see
 ``docs/howto-lora-remote-setup.md``). This script writes ``_build/remote/``: the web UI files (the remote-only
 scripts included, which the satellite's bundle never carries), ``vendor/``, and its OWN ``index.html``,
-``manifest.webmanifest`` and ``sw.js`` (the local app's three are untouched). The site is served from the root
+``manifest.webmanifest`` and ``sw.js`` (the local app's three are untouched). Only files that git tracks are
+copied (``git ls-files``): an untracked or ignored file in a checkout (an icon draft, an editor file) never
+reaches the public site. The site is served from the root
 of its origin, so ``/sw.js`` has scope ``/`` and the page's absolute paths stay valid.
 
 ``python3 -m tools.build_remote --out _build/remote`` writes the site. ``--check`` writes nothing: it builds
@@ -20,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -53,16 +56,23 @@ def _replace_once(text: str, old: str, new: str) -> str:
     return text.replace(old, new)
 
 
+def sources() -> list[Path]:
+    """The files of ``calictl/webui`` the site serves: tracked by git, not in SKIP, no dotfile."""
+    names = subprocess.run(
+        ["git", "ls-files", "-z", "--", "."], cwd=WEBUI, capture_output=True, text=True, check=True
+    ).stdout.split("\0")
+    rels = sorted(Path(n) for n in names if n)
+    return [r for r in rels if r.parts[0] not in SKIP and not any(p.startswith(".") for p in r.parts)]
+
+
 def build(out: Path) -> None:
     """Write the site into ``out`` (emptied first)."""
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
-    for src in sorted(WEBUI.rglob("*")):
-        rel = src.relative_to(WEBUI)
-        if src.is_file() and rel.parts[0] not in SKIP and "__pycache__" not in rel.parts:
-            (out / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(src, out / rel)
+    for rel in sources():
+        (out / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(WEBUI / rel, out / rel)
     (out / "remote-flag.js").write_text("window.OC_REMOTE = true;\n", encoding="utf-8")
     (out / ".nojekyll").write_text("", encoding="utf-8")
 
