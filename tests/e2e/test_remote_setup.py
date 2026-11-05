@@ -23,6 +23,7 @@ import hashlib
 import io
 import json
 import re
+import threading
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -50,7 +51,7 @@ TEXT = {
         "done": "The van has the keys.",
         "show": "Show the van",
         "rescan": "scan the new setup code",
-        "keyleft": "Delete it in the TTN console",
+        "keyleft": "in The Things Network console",
         "userkey": "This is not an application key",
     },
     "de-DE": {
@@ -64,7 +65,7 @@ TEXT = {
         "done": "Das Fahrzeug hat die Schlüssel.",
         "show": "Fahrzeug anzeigen",
         "rescan": "neuen Einrichtungscode",
-        "keyleft": "Löschen Sie ihn in der TTN-Konsole",
+        "keyleft": "in der Konsole von The Things Network",
         "userkey": "Das ist kein Anwendungsschlüssel",
     },
 }
@@ -149,7 +150,17 @@ def _join(pg, fake):
     fake.add_uplink(DEV, 4, port4())
     _poll(pg)
     pg.wait_for_function("() => (JSON.parse(localStorage.getItem('oc.remote.setup')) || {}).step === 'sent'")
-    return fake.downlinks[n:]
+    return _pushed(pg, fake, n)
+
+
+def _pushed(pg, fake, n):
+    """The downlinks pushed after the first ``n`` (the app stores ``sent`` before its push answers)."""
+    for _ in range(100):
+        if len(fake.downlinks) > n:
+            pg.wait_for_timeout(100)  # one push request: let the fake finish its loop
+            return fake.downlinks[n:]
+        pg.wait_for_timeout(50)
+    raise AssertionError("no downlink pushed")
 
 
 def _plain(frags):
@@ -235,7 +246,7 @@ def test_missing_fragment_resent(site, ttn, error_gated_page):  # noqa: F811
         pg.wait_for_function(
             "() => JSON.parse(localStorage.getItem('oc.remote.setup')).queued.join() === '1'"
         )
-        again = [f for _, _, f, _ in ttn.downlinks[n:]]
+        again = [f for _, _, f, _ in _pushed(pg, ttn, n)]
         assert again == [first[1]], "exactly fragment 1, byte for byte (same nonce)"
         pg.get_by_text(tx["sent"]).wait_for()
 
@@ -253,7 +264,7 @@ def test_bad_tag_asks_for_a_new_scan(site, ttn, error_gated_page):  # noqa: F811
         new_tk = bytes(range(0x40, 0x50))
         _photo(pg, setup_qr(new_tk))
         pg.get_by_text(tx["sent"]).wait_for()
-        blob = b"".join(f[1:] for _, _, f, _ in ttn.downlinks[n:])
+        blob = b"".join(f[1:] for _, _, f, _ in _pushed(pg, ttn, n))
         assert AESGCM(new_tk).decrypt(blob[:12], blob[12:], bytes.fromhex(DEV_EUI))[0] == 1
 
 
@@ -333,3 +344,31 @@ def test_join_hint_after_10_min(site, ttn, error_gated_page):  # noqa: F811
         pg.clock.fast_forward("10:30")
         hint.wait_for()
         pg.get_by_text(re.compile(r"since .* \(1[01] min ago\)")).wait_for()
+
+
+def test_reload_during_registration_warns_about_the_key(site, ttn, error_gated_page):  # noqa: F811
+    """The page closes while the van is registered: the full-rights key is still live at TTN, so every remote
+    screen names its id (never the secret) until the owner says it is deleted."""
+    tx = TEXT["en-US"]
+    kid, secret = ttn.make_key("all")
+    ttn.create_gate = threading.Event()
+    try:
+        with _page(error_gated_page, site, ttn, allow_errors=("ERR_",)) as pg:
+            _menu(pg, tx["setup"])
+            pg.locator("#rs-key").fill(secret)
+            pg.get_by_role("button", name=tx["check"]).click()
+            pg.get_by_text(tx["scanhint"]).first.wait_for()
+            assert pg.get_by_text(kid).count() == 0  # the flow is alive: no warning yet
+            _photo(pg, setup_qr())
+            pg.wait_for_function("() => document.body.textContent.includes('Talking to TTN')")
+            pg.reload()
+            warn = pg.get_by_text("Delete the API key %s in The Things Network console" % kid)
+            warn.wait_for()
+            _no_key_anywhere(pg, secret)
+            _menu(pg, tx["scan"])
+            warn.wait_for()  # on every remote screen
+            pg.get_by_role("button", name="I have deleted it").click()
+            assert pg.get_by_text(kid).count() == 0
+            assert pg.evaluate("localStorage.getItem('oc.remote.keyleft')") is None
+    finally:
+        ttn.create_gate.set()

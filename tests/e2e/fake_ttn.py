@@ -74,6 +74,7 @@ class FakeTtn:
         self.downlinks = []  # (dev id, f_port, bytes, key id)
         self.storage_body = None  # test hook: bytes to answer every storage read with
         self.refuse_key_delete = False  # test hook: deleting a full-rights ("all") key answers 500
+        self.create_gate = None  # test hook: a threading.Event the device create waits for (max 15 s)
         self.calls = []  # (method, path, key id)
         self.lock = threading.Lock()
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _make_handler(self))
@@ -184,6 +185,8 @@ def _make_handler(fake):
                 return 200, {"api_key": {"entity_ids": ids, "api_key": ak}}
             m = re.fullmatch(_APP + r"/devices", p)
             if m and method == "POST":
+                if fake.create_gate is not None:
+                    fake.create_gate.wait(15)
                 if err := self._need(key, m[1], "RIGHT_APPLICATION_DEVICES_WRITE"):
                     return err
                 dev = body["end_device"]["ids"]["device_id"]

@@ -116,9 +116,12 @@ async function remoteState(cfg, now) {
 // a log. It is dropped right after deleteOwnKey, which runs as soon as the phone's two keys exist and the
 // configuration is stored, before the join wait and the transfer. What a reload must survive is in
 // oc.remote.setup: {step: "join"|"sent"|"rescan", cluster, appId, devId, devEui, tk, nonce, queued, total,
-// startedAt, cursor, keyLeft}; tk (the van's transfer key, hex) is wiped by deleting the entry on status 0.
+// startedAt, sentAt, cursor}; tk (the van's transfer key, hex) is wiped by deleting the entry on status 0.
+// oc.remote.keyleft lists the full-rights keys (id and application only, never the secret) from a passed check
+// until their delete answered: a closed page, an abandoned flow or a failed delete leaves the owner a warning.
 
 const REMOTE_SETUP_KEY = "oc.remote.setup";
+const REMOTE_KEYLEFT_KEY = "oc.remote.keyleft";   // [{keyId, appId}]
 const REMOTE_SETUP_POLL_MS = 15000;   // setup only; the cockpit reads every REMOTE_POLL_MS
 const REMOTE_JOIN_HINT_MS = 600000;
 const REMOTE_JOIN_SKEW_MS = 120000;   // an uplink counts as the join from 2 min before the wait (phone vs TTS clock)
@@ -129,7 +132,6 @@ let rsKey = "", rsKeyId = "", rsAppId = "", rsCluster = "";
 /** @type {"key"|"scan"|"work"|"done"} the screen while oc.remote.setup is empty */
 let rsPhase = "key";
 let rsMsg = "";        // an English source text (translated at paint), never an error's own message
-let rsKeyLeft = false; // the finished setup could not delete the full-rights key
 /** @type {ReturnType<typeof setTimeout>|null} */
 let rsTimer = null;
 /** @type {{view: string, phase: string, lang: string, el: HTMLElement}|null} the open screen (kept across repaints) */
@@ -143,6 +145,31 @@ const rsHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(
 const rsSeam = () => (remoteLoad(REMOTE_CFG_KEY) || {}).base;
 /** @param {any} st */
 const rsSave = (st) => remoteSave(REMOTE_SETUP_KEY, st);
+/** @returns {Array<{keyId: string, appId: string}>} */
+const rsKeysLeft = () => remoteLoad(REMOTE_KEYLEFT_KEY) || [];
+/** Mark (on) or clear (off) a full-rights key that may be live at TTN. @param {string} keyId @param {string} appId @param {boolean} on */
+function rsMarkKey(keyId, appId, on) {
+  const left = rsKeysLeft().filter((k) => k.keyId !== keyId);
+  if (on) left.push({ keyId, appId });
+  if (left.length) remoteSave(REMOTE_KEYLEFT_KEY, left);
+  else try { localStorage.removeItem(REMOTE_KEYLEFT_KEY); } catch (e) { /* storage blocked */ }
+}
+
+/** app.js render(), every remote screen: one warning per full-rights key that may still be live (not the one the
+ * open setup screen is using right now). @returns {HTMLElement|null} */
+function remoteKeyWarn() {
+  const left = rsKeysLeft().filter((k) => !(view === "remotesetup" && k.keyId === rsKeyId));
+  if (!left.length) return null;
+  const box = h("div", { class: "sat" });
+  for (const k of left) {
+    const done = satBtn(T("I have deleted it"));
+    done.onclick = () => { rsMarkKey(k.keyId, k.appId, false); render(); };
+    box.append(h("div", { class: "card dcard" }, h("p", { class: "warn" },
+      tf("A full-rights key may still be live. Delete the API key {id} in The Things Network console (application {app}).",
+        { id: k.keyId, app: k.appId })), h("div", { class: "acts" }, done)));
+  }
+  return box;
+}
 
 /** The phase a screen shows: the stored setup's step wins. @param {string} v */
 function rsPhaseNow(v) {
@@ -200,6 +227,7 @@ async function rsCheck(cluster, key) {
   rsPhase = "work"; rsRefresh();
   try {
     const r = await checkFullKey(remoteBase({ cluster, base: rsSeam() }), key);
+    rsMarkKey(r.keyId, r.appId, true);   // live at TTN until deleteOwnKey answers
     rsKey = key; rsKeyId = r.keyId; rsAppId = r.appId; rsCluster = cluster;
     rsPhase = "scan";
   } catch (e) {
@@ -236,13 +264,12 @@ async function rsSetupQr(text) {
     remoteSave(REMOTE_CFG_KEY, cfg);
     const next = { step: "join", cluster: rsCluster, appId: rsAppId, devId, devEui: q.devEui, tk: rsHex(q.tk),
       nonce: rsHex(crypto.getRandomValues(new Uint8Array(12))), queued: [], total: 0, startedAt: Date.now(),
-      cursor: null, keyLeft: true };
-    rsSave(next);   // keyLeft until the delete answers: a reload in between still warns
+      cursor: null };
+    rsSave(next);
     try {
       await deleteOwnKey(base, rsKey, rsAppId, rsKeyId);
-      next.keyLeft = false;
-      rsSave(next);
-    } catch (e) { /* keyLeft stays: every later screen tells the owner to delete it in the console */ }
+      rsMarkKey(rsKeyId, rsAppId, false);
+    } catch (e) { /* the mark stays: every remote screen tells the owner to delete it in the console */ }
     rsKey = rsKeyId = "";   // the phone's keys exist: the full-rights key is done, whatever the delete answered
   } catch (e) {
     rsPhase = "scan"; rsMsg = rsErrText(e); rsRefresh();   // before the phone's keys: the owner may scan again
@@ -257,14 +284,18 @@ async function rsSetupQr(text) {
 async function rsSend(st, which) {
   const cfg = remoteCfg();
   if (!cfg) return;
+  const prev = remoteLoad(REMOTE_SETUP_KEY);
   try {
     const frags = await sealTransfer(/** @type {Uint8Array<ArrayBuffer>} */ (packPlain(cfg)), loraUnhex(st.tk), st.devEui, loraUnhex(st.nonce));
     const idx = (which || frags.map((_, i) => i)).filter((i) => i < frags.length);
+    // stored BEFORE the push: a reload between push and save never queues the fragments twice (10 downlinks a day)
+    rsSave({ ...st, step: "sent", queued: idx, total: frags.length, sentAt: Date.now() });
     await pushDownlinks(remoteBase(cfg), cfg.cmdKey, cfg.appId, cfg.devId, idx.map((i) => frags[i]), 12);
-    Object.assign(st, { step: "sent", queued: idx, total: frags.length, sentAt: Date.now() });
-    rsSave(st);
     rsMsg = "";
-  } catch (e) { rsMsg = rsErrText(e); }
+  } catch (e) {
+    if (prev) rsSave(prev);   // not queued: the next read asks again
+    rsMsg = rsErrText(e);
+  }
   rsPoll();
 }
 
@@ -301,7 +332,6 @@ async function rsStep() {
       const ok = c && c.status === 0 && c.hash4
         && rsHex(c.hash4) === rsHex(await plainHash4(/** @type {Uint8Array<ArrayBuffer>} */ (packPlain(cfg))));
       if (ok) {
-        rsKeyLeft = !!st.keyLeft;
         try { localStorage.removeItem(REMOTE_SETUP_KEY); } catch (e) { /* storage blocked */ }
         rsPhase = "done"; rsMsg = "";
         rsRefresh();
@@ -393,7 +423,6 @@ function rsBuild(v, phase) {
       h("div", { class: "acts" }, ok, no));
   }
   const status = h("p", { id: "rs-status", role: "status" });
-  const left = h("p", { class: "warn", id: "rs-keyleft" });
   if (phase === "key") {
     const sel = h("select", { id: "rs-cluster" });
     for (const c of REMOTE_CLUSTERS) sel.append(h("option", { value: c }, c));
@@ -405,9 +434,10 @@ function rsBuild(v, phase) {
     sel.onchange = () => { hostBox.hidden = sel.value !== REMOTE_OTHER; };
     if (rsCluster && !REMOTE_CLUSTERS.includes(rsCluster)) { sel.value = REMOTE_OTHER; host.value = rsCluster; hostBox.hidden = false; }
     else if (rsCluster) sel.value = rsCluster;
-    const key = h("input", { type: "password", id: "rs-key", autocomplete: "off", autocapitalize: "none", spellcheck: "false" });
+    // one-time-code: no password manager offers to save or fill it
+    const key = h("input", { type: "password", id: "rs-key", autocomplete: "one-time-code", autocapitalize: "none", spellcheck: "false" });
     const go = satBtn(T("Check the key"), "primary", "rs-check");
-    const form = h("form", null,
+    const form = h("form", { autocomplete: "off" },
       h("p", null, T("In the TTN console, create an API key of your application with “Grant all current and future rights” and paste it here. The app uses it for a few calls and deletes it right after.")),
       h("label", { for: "rs-cluster" }, T("Cluster")), sel, hostBox,
       h("label", { for: "rs-key" }, T("Full-rights API key")), key, h("div", { class: "acts" }, go), msg);
@@ -423,15 +453,15 @@ function rsBuild(v, phase) {
   if (phase === "scan") {
     const st = remoteLoad(REMOTE_SETUP_KEY);
     return card(h("p", null, T(st ? "The van could not read the keys. Open its LoRa screen again (press its screen for 3 s) and scan the new setup code."
-      : "Open the LoRa screen on the van (press its screen for 3 s) and scan its setup code.")), rsScanner(rsSetupQr), msg, left);
+      : "Open the LoRa screen on the van (press its screen for 3 s) and scan its setup code.")), rsScanner(rsSetupQr), msg);
   }
   if (phase === "done") {
     const show = satBtn(T("Show the van"), "primary");
     show.onclick = () => { goto("home"); refreshState(true); };
-    return card(status, left, h("div", { class: "acts" }, show));
+    return card(status, h("div", { class: "acts" }, show));
   }
   const hint = h("p", { class: "note", id: "rs-hint" }, T("No uplink yet after 10 min: check the antenna, the gateway coverage at the van, and the LoRa box in the van's Satellite settings."));
-  return card(status, hint, msg, left);
+  return card(status, hint, msg);
 }
 
 /** The status line (what the screen waits for, since when), the message and the key warning. */
@@ -439,10 +469,8 @@ function rsPaint() {
   if (!rsDom) return;
   const q = (/** @type {string} */ id) => /** @type {HTMLElement|null} */ (rsDom && rsDom.el.querySelector("#" + id));
   const st = remoteLoad(REMOTE_SETUP_KEY);
-  const msg = q("rs-msg"), status = q("rs-status"), hint = q("rs-hint"), left = q("rs-keyleft");
+  const msg = q("rs-msg"), status = q("rs-status"), hint = q("rs-hint");
   if (msg) msg.textContent = rsMsg ? T(rsMsg) : "";
-  if (left) left.textContent = (st ? st.keyLeft : rsKeyLeft)
-    ? T("The app could not delete the full-rights key. Delete it in the TTN console (the application's API keys).") : "";
   if (!status) return;
   const since = st && (st.step === "sent" ? st.sentAt : st.startedAt);
   const vars = since ? { clock: clockText(since / 1000), ago: agoText(Math.max(0, (Date.now() - since) / 1000)) } : {};
@@ -450,7 +478,7 @@ function rsPaint() {
   status.textContent = phase === "work" ? T("Talking to TTN …")
     : phase === "join" ? tf("Registered. Waiting for the van's first uplink since {clock} ({ago}).", vars)
     : phase === "sent" ? tf("Keys sent to the van. Waiting for its confirmation since {clock} ({ago}).", vars)
-    : phase === "done" ? (rsKeyLeft ? "" : T("The van has the keys.")) : "";
+    : phase === "done" ? (rsKeysLeft().length ? "" : T("The van has the keys.")) : "";   // a live key: no success
   if (hint) hint.hidden = !(phase === "join" && st && Date.now() - st.startedAt >= REMOTE_JOIN_HINT_MS);
 }
 

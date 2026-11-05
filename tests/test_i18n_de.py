@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "calictl" / "webui" / "app.js"
 REMOTE = ROOT / "calictl" / "webui" / "remote.js"  # the remote app's screens (R_UI_REMOTE_APP)
 DE = ROOT / "calictl" / "webui" / "strings.de.js"
+REMOTE_DE = ROOT / "calictl" / "webui" / "strings.remote.de.js"  # the remote app only, merged into STRINGS_DE
 
 
 def _de_keys():
@@ -29,9 +30,10 @@ def _de_keys():
         [
             node,
             "-e",
-            "global.window={};require(process.argv[1]);"
+            "global.window={};require(process.argv[1]);require(process.argv[2]);"
             "process.stdout.write(JSON.stringify(Object.keys(window.STRINGS_DE)))",
             str(DE),
+            str(REMOTE_DE),
         ],
         text=True,
     )
@@ -62,9 +64,10 @@ def test_de_values_are_nonempty_strings():
         [
             node,
             "-e",
-            "global.window={};require(process.argv[1]);"
+            "global.window={};require(process.argv[1]);require(process.argv[2]);"
             "process.stdout.write(JSON.stringify(window.STRINGS_DE))",
             str(DE),
+            str(REMOTE_DE),
         ],
         text=True,
     )
@@ -77,7 +80,11 @@ def test_no_duplicate_de_keys():
     """A key written twice in strings.de.js: the object literal keeps the LAST value only, so one
     English string silently shows another German one (the pill's "Connecting…" once read the pairing
     wizard's "Verbindung wird aufgebaut…"). Node's Object.keys cannot see this; read the source."""
-    keys = re.findall(r'^\s*("(?:[^"\\]|\\.)*")\s*:', DE.read_text(encoding="utf-8"), re.M)
+    keys = re.findall(
+        r'^\s*("(?:[^"\\]|\\.)*")\s*:',
+        DE.read_text(encoding="utf-8") + REMOTE_DE.read_text(encoding="utf-8"),
+        re.M,
+    )
     seen, dups = set(), set()
     for k in (json.loads(q) for q in keys):
         (dups if k in seen else seen).add(k)

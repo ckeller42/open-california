@@ -1091,8 +1091,8 @@ const satellite = () => !!(STATE._meta && STATE._meta.satellite);
 // The public remote app (R_UI_REMOTE_APP, the remote build's index.html sets it): the data comes from The Things
 // Stack only (remote.js); the page never calls its own /api/*, whoever serves it.
 const REMOTE = /** @type {any} */ (window).OC_REMOTE === true;
-const REMOTE_POLL_MS = 300000;
-const REMOTE_VIEWS = ["remotesetup", "remotescan", "remoteremove"];   // remote.js remoteRender()   // TTS read while visible; the van sends every >= 10 min
+const REMOTE_POLL_MS = 300000;   // TTS read while visible; the van sends every >= 10 min
+const REMOTE_VIEWS = ["remotesetup", "remotescan", "remoteremove"];   // remote.js remoteRender()
 /** Remote mode: refuse every same-origin /api/* path BEFORE any request. Every /api/* call goes through it. @param {string} path */
 function remoteGuard(path) {
   const u = new URL(path, location.href);
@@ -2200,6 +2200,8 @@ function render() {
       : t("🔒 Read-only — control is disabled on this daemon."));
     app.appendChild(b);
   }
+  const kw = REMOTE ? remoteKeyWarn() : null;   // a full-rights key that may be live at TTN (remote.js)
+  if (kw) app.appendChild(kw);
   const fw = STATE._meta && STATE._meta.firmware;
   if (fw && fw.untested) {
     const b = document.createElement("div");

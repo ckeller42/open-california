@@ -12,6 +12,7 @@ in bytes); it fits ``WEB_APP_GZ_MAX``; an inlined ``</script`` is refused.
 """
 
 import gzip
+import hashlib
 import re
 import shutil
 from pathlib import Path
@@ -149,5 +150,19 @@ def test_remote_only_scripts_are_not_in_the_bundle():
         "function rsSetupQr(",  # the setup flow (remote.js)
         "qr-scanner-worker",  # the vendored QR library (calictl/webui/vendor/qr-scanner)
         "QrScanner",
+        "Talking to TTN",  # a remote-only German string (strings.remote.de.js)
     ):
         assert marker not in html, marker
+
+
+def test_vendored_qr_scanner_matches_its_readme():
+    """The vendored qr-scanner files are the ones whose sha256 the README records (calictl/webui/vendor/qr-scanner)."""
+    d = ROOT / "calictl" / "webui" / "vendor" / "qr-scanner"
+    table = dict(
+        re.findall(
+            r"^\| `([^`]+)` \| `([0-9a-f]{64})` \|$", (d / "README.md").read_text(encoding="utf-8"), re.M
+        )
+    )
+    assert set(table) == {"qr-scanner.umd.min.js", "qr-scanner-worker.min.js", "LICENSE"}
+    for name, digest in table.items():
+        assert hashlib.sha256((d / name).read_bytes()).hexdigest() == digest, name
