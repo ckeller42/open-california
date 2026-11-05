@@ -97,6 +97,14 @@ flowchart TB
     charger readings, energy counters) through The Things Network's gateways; the owner's phone reads
     them from its {term}`Storage Integration` while no router runs in the van
   - *Direction:* write only from here (no downlink is acted on yet)
+- **Remote app** (`R_UI_REMOTE_APP`)
+  - *Interface:* the same web UI built as a static site (`tools/build_remote.py`, published at
+    `https://open-california.github.io/`) with `window.OC_REMOTE` set. It is a static client of The Things
+    Stack and never of the router, the Pi or the satellite: its page policy allows calls only to
+    `*.thethings.network` and `*.thethings.industries`, and its code refuses every `/api/` call. It sets a
+    van up with a full-rights key that it deletes afterwards and reads the uplinks with a read key
+    ({doc}`howto-lora-remote-setup`)
+  - *Direction:* read only
 - **Owner**
   - *Interface:* web UI (`--web`, port 8088 on buspi), CLI, guided pairing wizard
   - *Direction:* both

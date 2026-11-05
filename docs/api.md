@@ -347,6 +347,8 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.test_ttn_js
 .. automodule:: tests.e2e.test_remote_app
 .. automodule:: tests.e2e.test_remote_setup
+.. automodule:: tools.build_remote
+.. automodule:: tests.test_build_remote
 .. automodule:: calictl.esp_ingest
 .. automodule:: tests.test_esp_ingest
 .. automodule:: tests.test_esplab_sensors_setup

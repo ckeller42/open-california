@@ -2396,7 +2396,11 @@ collected here. `firmware/README.md` has the human-readable version of the same 
   read-only, an unknown uplink version says "update the app", and no request reaches the page's own `/api/*` or any
   host but the fake TTN; `api()` and `satFetch()` refuse before any request). The decoder's C round trip and the
   version refusal: `tests/firmware/test_lora.py`; the ESP bundle without the remote-only scripts:
-  `tests/test_app_bundle.py`.
+  `tests/test_app_bundle.py`. The static build `tools/build_remote.py` is verified by `T_UI_REMOTE_BUILD`
+  (`tests/test_build_remote.py`: the page policy, the remote flag as a file, the manifest, the own cache name, the
+  ESP bundle untouched, and the built page loaded in Chromium under its policy without a violation). The
+  requirement stays `open` until the live check: the public repository, its Pages site and the first setup with
+  a real van are the owner's steps.
 - **`R_UI_LINK_STATE`** — verified by `T_UI_LINK_ASLEEP`, `T_UI_LINK_UNREACHABLE`,
   `T_UI_LINK_UNPAIRED` (`tests/e2e/test_link_state.py`, page.clock over a fixed calictl state: blip, hung poll, hidden
   tab, asleep-then-unreachable, DE copy + the quiet live region) and `T_UI_LINK_RESTORED`

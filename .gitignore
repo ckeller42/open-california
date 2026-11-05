@@ -59,6 +59,7 @@ calictl/webui/icons/
 # internal dev planning artifacts — kept local, not published
 docs/superpowers/
 docs/_build/
+_build/
 
 # playwright MCP scratch (browser snapshots/screenshots)
 .playwright-mcp/
