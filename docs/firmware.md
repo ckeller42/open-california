@@ -1627,7 +1627,7 @@ The CoreS3 screen is dark when nobody uses it:
   that fails touch is off (logged; the hand-near wake still works), never back on the aborting read.
   The I2C driver serializes the devices on the bus itself (`bus_lock_mux`), so the LTR (owner task,
   under the display lock) and AXP (owner task, outside it) reads need no LVGL lock; they keep their
-  10 ms timeouts, the touch read waits without one (`esp_lcd` I2C default).
+  30 ms timeouts, the touch read waits without one (`esp_lcd` I2C default).
 - **Brightness** follows the room light: a log curve from `min` at ≤ 1 lux to `max` at ≥ 1000 lux,
   an EMA on log10(lux) with a 3 s time constant, and the applied level moves only on a change of
   more than 15 % (a 1 s headlight sweep does not move it). Dim = 30 % of the on level, at least 3 %.
@@ -1645,7 +1645,7 @@ The CoreS3 screen is dark when nobody uses it:
   reaches no ESP GPIO. The lux formula is Lite-On's family formula (cited in `display.c`); absolute
   lux behind the cover glass is uncalibrated.
 - **Motion wake:** the BMI270 accelerometer (I2C `0x69` on the same bus — M5Unified's CoreS3 address)
-  is read every tick next to the LTR-553 (`ACC_X..Z` `0x0C..0x11`, ±8 g, 10 ms timeout). The model's
+  is read every tick next to the LTR-553 (`ACC_X..Z` `0x0C..0x11`, ±8 g, 30 ms timeout). The model's
   `motion` is the length of the change of the accel vector against the previous read, in mg; above
   `DISPLAY_MOTION_WAKE_MG` (200) for two reads in a row it is a wake — the rising edge only: it re-arms
   only after every read stayed below `DISPLAY_MOTION_STILL_MG` (50) for `DISPLAY_MOTION_REARM_MS` (10 s),
@@ -1695,6 +1695,17 @@ pins the CPU at 240 MHz (`{"dfs":true}` back to 40–240); it is not stored, and
 `device.display.dfs`/`pm` plus the boot line `LOG pm: dfs 40-240` (or `pm: fixed …` / `pm: off`)
 report the **live** `esp_pm` config, so a boot's DFS state is a fact, not a flag. Both are debug
 aids, to be removed once the cause of the NACKs is known.
+
+The owner task's sensor reads (LTR-553, BMI270, AXP2101) wait at most `LTR_IO_MS` = 30 ms per
+transfer. The I2C driver's wait ends on a FreeRTOS tick boundary (`CONFIG_FREERTOS_HZ` 100), so a
+1-tick wait can end microseconds after a transfer starts and fail it with `ESP_ERR_TIMEOUT`; 3 ticks
+leave at least 20 ms. A failed sensor read is counted per device, and
+`LOG display: sensor read errors ltr n ERR bmi n ERR axp n ERR` (the counts since boot and each
+device's last error) comes at most once per `CALI_DIAG_PERIOD_MS` when a count grew.
+
+At init, `i2c_master_bus_reset` clocks the bus free before the probes: a reset in the middle of a
+transfer does not reset the I2C chips, and a chip that still holds SDA makes the probes fail
+(`display: unavailable (axp2101)`).
 
 ## Battery (`R_FW_BATTERY`)
 
