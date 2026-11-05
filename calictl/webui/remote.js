@@ -247,7 +247,8 @@ async function rsSetupQr(text) {
   const st = remoteLoad(REMOTE_SETUP_KEY);
   if (st && st.step === "rescan") {
     if (q.devEui !== st.devEui) { rsMsg = "This code belongs to another van."; rsRefresh(); return; }
-    Object.assign(st, { tk: rsHex(q.tk), nonce: rsHex(crypto.getRandomValues(new Uint8Array(12))) });
+    // a new transfer: new TK and nonce, a fresh resend budget (rsSend stores queued, total and sentAt anew)
+    Object.assign(st, { tk: rsHex(q.tk), nonce: rsHex(crypto.getRandomValues(new Uint8Array(12))), resends: 0 });
     rsSave(st);
     rsMsg = "";
     await rsSend(st, null);   // the van is joined: it has just sent its confirmation (a failed push: scan again)

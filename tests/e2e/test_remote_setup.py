@@ -411,3 +411,14 @@ def test_resend_after_10_min_without_confirmation(site, ttn, error_gated_page): 
         st = json.loads(pg.evaluate("localStorage.getItem('oc.remote.setup')"))
         assert st["step"] == "rescan" and "tk" not in st
         assert sum(1 for _, p, _ in ttn.calls if p.endswith("/down/push")) == 3
+        # a new scan starts a new transfer with a fresh resend budget
+        _photo(pg, setup_qr(bytes(range(0x40, 0x50))))
+        pg.get_by_text(tx["sent"]).wait_for()
+        st = json.loads(pg.evaluate("localStorage.getItem('oc.remote.setup')"))
+        assert st["resends"] == 0
+        _pushed(pg, ttn, 12)  # 3 resends of 4 fragments, then the new transfer's 4
+        pushes = sum(1 for _, p, _ in ttn.calls if p.endswith("/down/push"))
+        assert pushes == 4
+        pg.clock.fast_forward("10:30")
+        pg.wait_for_function("() => JSON.parse(localStorage.getItem('oc.remote.setup')).resends === 1")
+        assert sum(1 for _, p, _ in ttn.calls if p.endswith("/down/push")) == pushes + 1, "exactly one resend"
