@@ -89,6 +89,17 @@ def test_pack_matches_c(cli):
     assert js("h(await plainHash4(u8('616263')))") == run(cli, "sha4 616263")[0]
 
 
+def test_longest_plaintext_round_trips(cli):
+    """The 256-byte plaintext (cluster 64, app 36, dev 36 characters): JS packs it, C writes the repair QR, JS parses
+    it back to the same configuration."""
+    longest = {**INPUTS, "cluster": "a" * 60 + ".com", "appId": "b" * 36, "devId": "c" * 36}
+    plain = js(f"h(packPlain({json.dumps(longest)}))")
+    assert len(plain) // 2 == 256
+    n, text = run(cli, f"repairqr 600 {plain}")[0].split(" ", 1)
+    assert int(n) == len(text) and text.startswith("OCR1*")
+    assert js(f"parseRepairQr({json.dumps(text)})") == longest
+
+
 def test_setup_qr_matches_c(cli):
     tk = TK
     text = run(cli, f"setupqr {DEVEUI} {tk} {tk}")[0].split(" ", 1)[1]

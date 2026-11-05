@@ -22,6 +22,7 @@
 #include "cali_ap_identity.h"
 #include "cali_display_model.h"
 #include "cali_lora.h"
+#include "cali_lora_setup.h"   /* cali_wipe */
 #include "cali_platform.h"
 #include "cali_status.h"
 #include "cali_wifi_run.h"
@@ -641,8 +642,8 @@ static int qr_paint(const char *text) {
                 if (qrcodegen_getModule(s_qr_mod, x / px, y / px))
                     bits[(uint32_t)(off + y) * stride + (uint32_t)(off + x) / 8] |= (uint8_t)(0x80u >> ((off + x) % 8));
     }
-    memset(s_qr_tmp, 0, sizeof s_qr_tmp);
-    memset(s_qr_mod, 0, sizeof s_qr_mod);
+    cali_wipe(s_qr_tmp, sizeof s_qr_tmp);
+    cali_wipe(s_qr_mod, sizeof s_qr_mod);
     lv_image_cache_drop(s_qr_buf);
     lv_obj_invalidate(s_lqr);
     return ok;
@@ -683,14 +684,14 @@ static void lora_paint(const cali_display_view_t *v, uint64_t now_ms) {
             cali_log("display: lora qr: %d chars not alphanumeric, not shown", n);
             n = 0;
         }
-        if (n <= 0) memset(text, 0, sizeof text);
+        if (n <= 0) cali_wipe(text, sizeof text);
         sig = n > 0 ? fnv1a(text) : 0;
         if (sig != s_qr_sig || v->show_lora != s_lora_show) {
             s_qr_ok = qr_paint(text);
             if (n > 0 && !s_qr_ok) cali_log("display: lora qr: %d chars do not encode", n);   /* the length only */
             s_qr_sig = s_qr_ok ? sig : 0;
         }
-        memset(text, 0, sizeof text);
+        cali_wipe(text, sizeof text);
     }
     if (!s_lora_show) {
         __atomic_store_n(&s_lora_shown, 1, __ATOMIC_RELAXED);   /* before it becomes visible: shot.c refuses */

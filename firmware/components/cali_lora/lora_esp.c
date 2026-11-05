@@ -207,15 +207,15 @@ static void confirm_set(const uint8_t *c, size_t n, const uint8_t *tk_id) {
     memcpy(s_confirm, c, n);
     s_confirm_len = n;
     if (tk_id) memcpy(s_confirm_tk, tk_id, sizeof s_confirm_tk);
-    else memset(s_confirm_tk, 0, sizeof s_confirm_tk);
+    else cali_wipe(s_confirm_tk, sizeof s_confirm_tk);
     s_confirm_seq++;
     s_confirm_tries = 0;
     s_confirm_retry_at = 0;
 }
 
 static void confirm_clear(void) {
-    memset(s_confirm, 0, sizeof s_confirm);
-    memset(s_confirm_tk, 0, sizeof s_confirm_tk);
+    cali_wipe(s_confirm, sizeof s_confirm);
+    cali_wipe(s_confirm_tk, sizeof s_confirm_tk);
     s_confirm_len = 0;
     s_confirm_seq++;
 }
@@ -230,18 +230,19 @@ static void xfer_rx(const cali_rak_event_t *e) {
         return;
     }
     if (cali_kv_get(CALI_LORA_TK_KEY, tk, &tl) != CALI_KV_OK || tl != sizeof tk) {
-        static const uint8_t no_tk[1] = {3};
+        /* 00|sha256(lora_ttn) when the keys are here (the app lost the status-0 confirmation), else 03 */
+        confirm_len = cali_lora_confirm_no_tk(confirm);
         cali_lora_xfer_reset(&s_xfer);
-        confirm_set(no_tk, 1, NULL);
-        cali_log("lora: transfer fragment without a transfer key: status 3");
-        memset(tk, 0, sizeof tk);
+        confirm_set(confirm, confirm_len, NULL);
+        cali_log("lora: transfer fragment without a transfer key: status %u", (unsigned)confirm[0]);
+        cali_wipe(tk, sizeof tk);
         return;
     }
     uint8_t tk_id[4];
     cali_lora_sha256_4(tk, sizeof tk, tk_id);
     int r = cali_lora_xfer_rx(&s_xfer, e->payload, e->payload_len, tk, eui, cali_lora_aead_open_psa, plain,
                               &plain_len, confirm, &confirm_len);
-    memset(tk, 0, sizeof tk);
+    cali_wipe(tk, sizeof tk);
     if (r == 1 && confirm[0] == 0 && !cali_lora_ttn_ok(plain, plain_len)) {
         confirm[0] = 1;   /* authentic but not a plaintext the repair QR can show: store nothing */
         confirm_len = 1;
@@ -251,7 +252,7 @@ static void xfer_rx(const cali_rak_event_t *e) {
         cali_log("lora: transfer: storing the TTN keys failed");
         r = 0;   /* no confirmation: the app sends again */
     }
-    memset(plain, 0, sizeof plain);
+    cali_wipe(plain, sizeof plain);
     if (r == 1 || r == 2) {
         confirm_set(confirm, confirm_len, tk_id);
         cali_log("lora: transfer: confirmation status %u queued", (unsigned)confirm[0]);
@@ -281,11 +282,12 @@ static void set_if_differs(const char *name, const char *want) {
     char q[24], cmd[64];
     snprintf(q, sizeof q, "AT+%s=?", name);
     cali_rak_event_t e = at(q, 2000);
-    if (e.kind == CALI_RAK_VALUE && strcasecmp(e.value, want) == 0) return;
-    snprintf(cmd, sizeof cmd, "AT+%s=%s", name, want);
-    if (at(cmd, 2000).kind != CALI_RAK_OK) cali_log("lora: AT+%s rejected", name);
-    memset(cmd, 0, sizeof cmd);   /* AT+APPKEY=... */
-    memset(&e, 0, sizeof e);      /* the module's answer to AT+APPKEY=? */
+    if (!(e.kind == CALI_RAK_VALUE && strcasecmp(e.value, want) == 0)) {
+        snprintf(cmd, sizeof cmd, "AT+%s=%s", name, want);
+        if (at(cmd, 2000).kind != CALI_RAK_OK) cali_log("lora: AT+%s rejected", name);
+    }
+    cali_wipe(cmd, sizeof cmd);   /* AT+APPKEY=... */
+    cali_wipe(&e, sizeof e);      /* the module's answer to AT+APPKEY=? */
 }
 
 static void hexs(char *out, const uint8_t *b, size_t n) {
@@ -318,8 +320,8 @@ static bool apply_keys(void) {
         s_have_keys = false;
         s_st.note = NO_KEYS_NOTE;
     }
-    memset(h, 0, sizeof h);
-    memset(k, 0, sizeof k);
+    cali_wipe(h, sizeof h);
+    cali_wipe(k, sizeof k);
     return s_have_keys;
 }
 
@@ -371,10 +373,12 @@ static int setup_open(void) {
                   memcmp(before, after, 16) != 0;
         cali_log("lora: setup opened%s", changed ? " (new AppKey: join again)" : "");
     }
-    memset(before, 0, sizeof before);
-    memset(after, 0, sizeof after);
+    cali_wipe(before, sizeof before);
+    cali_wipe(after, sizeof after);
     cali_lora_xfer_reset(&s_xfer);   /* fragments sealed with the old transfer key are useless */
-    confirm_clear();                 /* and an old confirmation must never erase the new key */
+    /* so is a status-2 request for more of them; a pending status 0 still goes out (the app waits for it, and
+     * erase_tk_if keeps the new key), as do 1 and 3 (they ask the app for the new scan) */
+    if (s_confirm_len && s_confirm[0] == 2) confirm_clear();
     return changed;
 }
 
@@ -469,8 +473,8 @@ static void erase_tk_if(const uint8_t *tk_id) {
         else if (cali_kv_erase(CALI_LORA_TK_KEY) != 0) cali_log("lora: transfer: erasing the transfer key failed");
         else cali_log("lora: transfer done: transfer key erased");
     }
-    memset(tk, 0, sizeof tk);
-    memset(id, 0, sizeof id);
+    cali_wipe(tk, sizeof tk);
+    cali_wipe(id, sizeof id);
 }
 
 /* The pending key-transfer confirmation: on every pass while the 24-h airtime budget has room, ahead of
@@ -499,7 +503,7 @@ static void send_confirm(uint32_t now) {
             s_confirm_retry_at = (uint32_t)(cali_uptime_ms() / 1000) + CONFIRM_RETRY_S;
         }
     }
-    memset(tk_id, 0, sizeof tk_id);
+    cali_wipe(tk_id, sizeof tk_id);
 }
 
 static void lora_task(void *arg) {
@@ -514,6 +518,12 @@ static void lora_task(void *arg) {
         (void)xQueueReceive(s_snap_q, &s_snap, pdMS_TO_TICKS(1000));   /* the newest snapshot, or the last one */
         if (!s_snap.enabled) {   /* off: no pin is touched, nothing is sent */
             atomic_store(&s_setup_done, atomic_load(&s_setup_req));   /* a request made while off never rotates the key later */
+            /* forgotten keys, or a module changed meanwhile: on again starts like the first use */
+            ready = false;
+            s_st.joined = false;
+            s_have_keys = false;
+            cali_lora_xfer_reset(&s_xfer);
+            if (s_confirm_len) confirm_clear();
             continue;
         }
         if (!ready || s_silent >= CALI_LORA_SILENT_MAX) {

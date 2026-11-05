@@ -1,5 +1,6 @@
 """The ESP's AES-128-GCM open (``lora_aead.c``, PSA) against the vector the JS sealer made."""
 
+import hashlib
 import json
 import subprocess
 
@@ -29,7 +30,8 @@ def test_psa_opens_js_vector():
        :links: R_FW_LORA_SETUP
     """
     rc, conf, plain = _xfer(VEC["fragments"])
-    assert (rc, conf[:2], plain) == ("1", "00", VEC["plain"])
+    want = "00" + hashlib.sha256(bytes.fromhex(VEC["plain"])).digest()[:4].hex()
+    assert (rc, conf, plain) == ("1", want, VEC["plain"])
     bad = list(VEC["fragments"])
     last = bytearray(bytes.fromhex(bad[-1]))
     last[-1] ^= 1

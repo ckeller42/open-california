@@ -448,6 +448,15 @@ size_t cali_lora_setup_qr_text(char *out, size_t max, const cali_lora_status_t *
 int cali_lora_ttn_ok(const uint8_t *plain, size_t len);
 
 /**
+ * @brief The confirmation for a key-transfer fragment that arrives without a transfer key: `00 |
+ *        sha256(lora_ttn)[0..3]` when usable TTN keys are stored (the transfer is done and its status-0
+ *        confirmation was lost), else `03`.
+ * @param confirm Receives the confirmation; 5 bytes.
+ * @return Its length: 5 or 1.
+ */
+size_t cali_lora_confirm_no_tk(uint8_t *confirm);
+
+/**
  * @brief The switch (lazy NVS read).
  * @return 1 when on.
  */

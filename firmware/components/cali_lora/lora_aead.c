@@ -29,6 +29,6 @@ int cali_lora_aead_open_psa(const uint8_t *key, const uint8_t *nonce, const uint
         }
         (void)psa_destroy_key(id);
     }
-    memset(pt, 0, sizeof pt); /* plaintext is a secret */
+    cali_wipe(pt, sizeof pt); /* plaintext is a secret */
     return rc;
 }

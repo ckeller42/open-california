@@ -3,6 +3,11 @@
 
 #include <string.h>
 
+void cali_wipe(void *p, size_t n) {
+    volatile uint8_t *b = (volatile uint8_t *)p;
+    while (n--) *b++ = 0;
+}
+
 static const char B32[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 static const char HEX[] = "0123456789ABCDEF";
 #define KEY_PREFIX "NNSXS."
@@ -118,27 +123,33 @@ size_t cali_lora_repair_qr(char *out, size_t max, const uint8_t *plain, size_t l
     const uint8_t *dev = plain + o;
     o += dl;
     char rk[CALI_LORA_KEY_LEN + 1], ck[CALI_LORA_KEY_LEN + 1];
-    if (cali_lora_key_unpack(plain + o, rk) || cali_lora_key_unpack(plain + o + CALI_LORA_KEY_PACKED, ck)) return 0;
+    size_t r = 0;
     /* the exact output length first: every write below is then inside `out` */
-    if (max < 5 + cl + 1 + al + 1 + dl + 1 + 2 * CALI_LORA_KEY_LEN + 1 + 1) return 0;
-    const char *end = out + max;
-    char *p = out;
-    memcpy(p, "OCR1*", 5);
-    p += 5;
-    p = put_id(p, end, cluster, cl);
-    if (p) *p++ = '*';
-    p = put_id(p, end, app, al);
-    if (p) *p++ = '*';
-    p = put_id(p, end, dev, dl);
-    if (!p || (size_t)(end - p) < 2 * (CALI_LORA_KEY_LEN + 1) + 1) return 0;
-    *p++ = '*';
-    memcpy(p, rk, CALI_LORA_KEY_LEN);
-    p += CALI_LORA_KEY_LEN;
-    *p++ = '*';
-    memcpy(p, ck, CALI_LORA_KEY_LEN);
-    p += CALI_LORA_KEY_LEN;
-    *p = 0;
-    return (size_t)(p - out);
+    if (!cali_lora_key_unpack(plain + o, rk) && !cali_lora_key_unpack(plain + o + CALI_LORA_KEY_PACKED, ck) &&
+        max >= 5 + cl + 1 + al + 1 + dl + 1 + 2 * CALI_LORA_KEY_LEN + 1 + 1) {
+        const char *end = out + max;
+        char *p = out;
+        memcpy(p, "OCR1*", 5);
+        p += 5;
+        p = put_id(p, end, cluster, cl);
+        if (p) *p++ = '*';
+        p = put_id(p, end, app, al);
+        if (p) *p++ = '*';
+        p = put_id(p, end, dev, dl);
+        if (p && (size_t)(end - p) >= 2 * (CALI_LORA_KEY_LEN + 1) + 1) {
+            *p++ = '*';
+            memcpy(p, rk, CALI_LORA_KEY_LEN);
+            p += CALI_LORA_KEY_LEN;
+            *p++ = '*';
+            memcpy(p, ck, CALI_LORA_KEY_LEN);
+            p += CALI_LORA_KEY_LEN;
+            *p = 0;
+            r = (size_t)(p - out);
+        }
+    }
+    cali_wipe(rk, sizeof rk);   /* the unpacked keys */
+    cali_wipe(ck, sizeof ck);
+    return r;
 }
 
 /* ---- SHA-256 (small, portable) ---- */
@@ -186,10 +197,11 @@ void cali_lora_sha256_4(const uint8_t *in, size_t n, uint8_t *out) {
     for (int k = 0; k < 8; k++) t[tl - 1 - k] = (uint8_t)(bits >> (8 * k));
     for (size_t k = 0; k < tl; k += 64) sha_block(h, t + k);
     for (int k = 0; k < 4; k++) out[k] = (uint8_t)(h[0] >> (24 - 8 * k));
+    cali_wipe(t, sizeof t);   /* the message's tail: a key or the plaintext */
 }
 
 /* ---- key transfer ---- */
-void cali_lora_xfer_reset(cali_lora_xfer_t *x) { memset(x, 0, sizeof *x); }
+void cali_lora_xfer_reset(cali_lora_xfer_t *x) { cali_wipe(x, sizeof *x); }
 
 static int bad(cali_lora_xfer_t *x) {
     cali_lora_xfer_reset(x);
@@ -238,7 +250,7 @@ int cali_lora_xfer_rx(cali_lora_xfer_t *x, const uint8_t *frag, size_t n, const 
         *confirm_len = 5;
         *plain_len = ct;
     } else {
-        memset(plain, 0, ct); /* no unauthenticated bytes leave */
+        cali_wipe(plain, ct); /* no unauthenticated bytes leave */
         confirm[0] = 1;
         *confirm_len = 1;
     }

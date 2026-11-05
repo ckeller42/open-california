@@ -26,8 +26,10 @@
  *    ciphertext (12-byte nonce, 16-byte tag, the DevEUI as associated data) cut into fragments of at most
  *    50 bytes, each ``seq(1)`` (bit 7 = last, bits 0..2 = index) followed by the bytes. The confirmation
  *    uplink on FPort 12 shall be ``status(1) | sha256(plaintext)[0..3]``: status 0 ok, 1 bad tag; status 2
- *    (missing fragments) is ``02 | bitmap`` with bit ``i`` set for every received index ``i``; status 3
- *    (``03``) answers a fragment that arrives without a transfer key. ``lora_ttn`` shall be stored only
+ *    (missing fragments) is ``02 | bitmap`` with bit ``i`` set for every received index ``i``; a fragment
+ *    that arrives without a transfer key is answered ``00 | sha256(lora_ttn)[0..3]`` when ``lora_ttn`` is
+ *    stored (a lost status-0 confirmation is sent again), else status 3 (``03``). A new setup start clears
+ *    only a pending status-2 confirmation. ``lora_ttn`` shall be stored only
  *    from a plaintext with a valid tag that fits ``lora_ttn`` and encodes as the repair QR (else status 1).
  *    The confirmation shall go out as soon as the 24-h airtime budget has room, ahead of ports 2/3/4; a
  *    send without ``+EVT:TX_DONE`` is repeated after at least 60 s, at most 5 times, then dropped.
@@ -165,6 +167,14 @@ void cali_lora_xfer_reset(cali_lora_xfer_t *x);
 int cali_lora_xfer_rx(cali_lora_xfer_t *x, const uint8_t *frag, size_t n, const uint8_t *tk,
                       const uint8_t *deveui, cali_lora_aead_open_fn open, uint8_t *plain,
                       size_t *plain_len, uint8_t *confirm, size_t *confirm_len);
+
+/**
+ * @brief Overwrites a secret buffer with zeros through volatile writes, so the compiler cannot drop the
+ *        wipe as a dead store.
+ * @param p The buffer.
+ * @param n Its length in bytes.
+ */
+void cali_wipe(void *p, size_t n);
 
 /**
  * @brief The first 4 bytes of SHA-256.

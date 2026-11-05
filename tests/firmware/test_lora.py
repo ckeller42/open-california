@@ -5,6 +5,7 @@
    :links: R_FW_LORA
 """
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -597,6 +598,38 @@ def test_ttn_plaintext_checked_before_storing(cli):
     big = plaintext(cluster="a" * 64, app="b" * 36, dev="c" * 36) + bytes(80)
     out = run(cli, f"ttnok {good.hex()}", *(f"ttnok {b.hex()}" for b in bad), f"ttnok {big.hex()}")
     assert out == ["1", "0", "0", "0", "0", "0"]
+
+
+def test_ttn_plaintext_of_256_bytes_accepted(cli):
+    """The longest plaintext (cluster 64, app 36, dev 36 characters) is exactly CALI_LORA_TTN_MAX and is stored.
+
+    .. test:: lora key transfer: a 256-byte plaintext (the longest IDs) is accepted for lora_ttn
+       :id: T_FW_LORA_TTN_MAX
+       :links: R_FW_LORA_SETUP
+    """
+    longest = plaintext(cluster="a" * 64, app="b" * 36, dev="c" * 36)
+    assert len(longest) == 256
+    assert run(cli, f"ttnok {longest.hex()}", f"ttnok {(longest + bytes(1)).hex()}") == ["1", "0"]
+
+
+def test_fragment_without_transfer_key_repeats_the_lost_confirmation(cli):
+    """A port-12 fragment after the transfer finished (lora_tk erased, lora_ttn stored) is the app's probe after a
+    lost status-0 confirmation: the van answers 00|sha256(lora_ttn)[0..3] again. Without lora_ttn: 03.
+
+    .. test:: lora key transfer: a fragment without a transfer key gets 00|sha256(lora_ttn) when the keys are stored, else 03
+       :id: T_FW_LORA_NO_TK
+       :links: R_FW_LORA_SETUP
+    """
+    plain = plaintext()
+    out = run(
+        cli,
+        "notk",
+        f"kvset lora_ttn {plain.hex()}",
+        "notk",
+        f"kvset lora_ttn {plaintext(ver=2).hex()}",  # unusable bytes are never confirmed as success
+        "notk",
+    )
+    assert out == ["03", "00" + hashlib.sha256(plain).digest()[:4].hex(), "03"]
 
 
 def web_decode(port, data):

@@ -7,7 +7,8 @@
  * Status:    stjson <module> <joined> <unanswered> <sf> <last_s> <air> <charged> <unconf> <dl> <now_s>
  * Setup:     stsetup <setup> <ttn> <eui> | setupopen | setupstate | forget | kvset <key> <hex> | kv <key>
  *            qr <exp_on> <present> <eui|-> [max] (prints "QR <text>", "QR -" when none and the buffer is
- *            zeroed, "QR dirty" when none and bytes stay) | sqr ... (the same for cali_lora_setup_qr_text) | ttnok <hex>
+ *            zeroed, "QR dirty" when none and bytes stay) | sqr ... (the same for cali_lora_setup_qr_text) | ttnok <hex> |
+ *            notk (cali_lora_confirm_no_tk as hex)
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
  * Driven by tests/firmware/test_lora.py. Fakes: session frames, sensors, counters, clock, NVS, log. */
 #include <math.h>
@@ -253,6 +254,9 @@ int main(void) {
                 while (i < max && !q[i]) i++;
                 puts(i == max ? "QR -" : "QR dirty");
             }
+        } else if (!strcmp(cmd, "notk")) {   /* the confirmation for a fragment without a transfer key */
+            uint8_t c[5];
+            hex(c, cali_lora_confirm_no_tk(c));
         } else if (!strcmp(cmd, "ttnok") && sscanf(rest, "%799s", a) == 1) {
             uint8_t v[CALI_LORA_TTN_MAX + 8];
             printf("%d\n", cali_lora_ttn_ok(v, unhex(a, v, sizeof v)));
