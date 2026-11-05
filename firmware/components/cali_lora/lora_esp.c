@@ -70,9 +70,8 @@ int cali_lora_port_status(cali_lora_status_t *out) {
 /* ---- the AT driver ---- */
 
 static void log_line(const char *dir, const char *line) {
-    const char *k = strstr(line, "KEY=");   /* AT+APPKEY=... never reaches the log */
-    if (k) cali_log("lora: %s %.*s<redacted>", dir, (int)(k - line + 4), line);
-    else cali_log("lora: %s %s", dir, line);
+    char safe[48];   /* the keys and EUIs never reach the log, in either direction */
+    cali_log("lora: %s %s", dir, cali_rak_redact(line, safe, sizeof safe) ? safe : line);
 }
 
 static bool is_status(cali_rak_kind_t k) {

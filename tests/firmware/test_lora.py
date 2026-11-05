@@ -92,6 +92,24 @@ def test_parse(cli):
     assert out[10].split()[6] == "3"
 
 
+def test_redact_hides_the_keys_and_euis_both_ways(cli):
+    """What lora_esp.c logs for each AT line, sent (>>) and received (<<)."""
+    eui, key = "AC1F09FFFE27799A", bytes(range(0, 0x100, 0x11)).hex().upper()  # dummy values
+    lines = [f"AT+DEVEUI={eui}", f"AT+APPEUI={eui}", f"AT+APPKEY={key}", "AT+DEVEUI=?", "AT+DR=?", "AT+DR=5"]
+    lines += ["AT+SEND=2:0102", "+EVT:JOINED", "OK"]
+    assert run(cli, *(f"redact {line}" for line in lines)) == [
+        "AT+DEVEUI=<redacted>",
+        "AT+APPEUI=<redacted>",
+        "AT+APPKEY=<redacted>",
+        "AT+DEVEUI=?",
+        "AT+DR=?",
+        "AT+DR=5",
+        "AT+SEND=2:0102",
+        "+EVT:JOINED",
+        "OK",
+    ]
+
+
 def test_outcome_confirmed_only_with_tx_done(cli):
     out = run(
         cli, *(f"outcome {k} {t}" for k in ("BUSY", "ERROR", "NOT_JOINED", "OK", "NONE") for t in (0, 1))

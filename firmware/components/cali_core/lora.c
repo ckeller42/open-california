@@ -49,6 +49,18 @@ cali_rak_event_t cali_rak_parse(const char *in) {
     return e;
 }
 
+int cali_rak_redact(const char *line, char *out, size_t n) {
+    const char *eq = strchr(line, '=');
+    char name[32];
+    snprintf(name, sizeof name, "%.*s", eq ? (int)(eq - line) : 0, line);
+    if (eq && strcmp(eq + 1, "?") != 0 && (strstr(name, "KEY") || strstr(name, "EUI"))) {
+        snprintf(out, n, "%s=<redacted>", name);
+        return 1;
+    }
+    snprintf(out, n, "%s", line);
+    return 0;
+}
+
 const char *cali_rak_kind_name(cali_rak_kind_t k) {
     static const char *const n[] = {"NONE", "OK", "ERROR", "BUSY", "NOT_JOINED", "JOINED", "JOIN_FAILED",
                                     "TX_DONE", "LINKCHECK", "RX", "VALUE"};

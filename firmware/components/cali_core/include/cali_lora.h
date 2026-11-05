@@ -136,6 +136,17 @@ typedef struct {
 } cali_rak_event_t;
 
 /**
+ * @brief A line to or from the module as it may be logged: the value of a `...KEY=` or `...EUI=` line
+ *        (AppKey, DevEUI, JoinEUI, in a command or in the module's reply) becomes `<redacted>`; a `=?`
+ *        query and every other line stay as they are.
+ * @param line  The line without CR/LF.
+ * @param out   Out: the loggable line (truncated to n; 48 bytes always hold a redacted one).
+ * @param n     Size of out.
+ * @return 1 when out is a redacted line, 0 when the line is safe to log as it is.
+ */
+int cali_rak_redact(const char *line, char *out, size_t n);
+
+/**
  * @brief Classify one line from the RAK3172 (RUI3): OK, AT_ERROR & co., `+EVT:JOINED`, `+EVT:TX_DONE`,
  *        `+EVT:LINKCHECK:…`, `+EVT:RX_1:…`/`RX_C` + `UNICAST:<port>:<hex>`, or a value reply.
  * @param line  The line without CR/LF.

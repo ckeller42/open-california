@@ -2,7 +2,7 @@
  *   frame <function> <hex>   mppt <7 floats|->   bsense <volts|->   sensat <at_ms>   ctr <solar> <load> <net>   boot <n>
  *   snap <now_ms>
  * Packers:   pack2 | pack4 <fw> | trk_init | trk_update <now_s> | trk_pack <max> | trk_commit <now_s>
- * Radio:     parse <line> | outcome <kind> <tx_done> | airtime <phy_len> <sf> | maxpl <sf>
+ * Radio:     parse <line> | redact <line> | outcome <kind> <tx_done> | airtime <phy_len> <sf> | maxpl <sf>
  * Budget:    up <t_s> <ms> <confirmed> | used <t> | conf <t> | room <t> | dl <t> | interval <t> <sf> <len> <share> | backoff <n>
  * Status:    stjson <module> <joined> <unanswered> <sf> <last_s> <air> <charged> <unconf> <dl> <now_s>
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
@@ -139,6 +139,10 @@ int main(void) {
             printf("%s %d %d %d %d %d %s %d ", cali_rak_kind_name(e.kind), e.lc_status, e.lc_margin, e.lc_gateways,
                    e.rssi, e.snr, e.value[0] ? e.value : "-", e.port);
             hex(e.payload, e.payload_len);
+        } else if (!strcmp(cmd, "redact")) {
+            char out[160];
+            cali_rak_redact(rest, out, sizeof out);
+            puts(out);
         } else if (!strcmp(cmd, "outcome") && sscanf(rest, "%63s %u", b, &u1) == 2) {
             cali_lora_outcome_t o = cali_lora_outcome(kind_of(b), (int)u1);
             printf("%d %d\n", o.charged, o.confirmed);
