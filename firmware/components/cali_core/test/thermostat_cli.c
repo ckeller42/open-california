@@ -5,6 +5,7 @@
  * tools/gen_thermostat_vectors.py):
  *   H <cfg x19> <heater x8> <age>          -> state level code
  *   S <cfg x19> <in ...> <state ...>       -> <out ...> | <state ...>
+ *   E <span_ms> <rise> <gap> <rem_s>       -> seconds ends_first
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -164,6 +165,15 @@ int main(int argc, char **argv) {
         cali_thermo_cfg_t cfg;
         cali_thermo_heater_t h;
         int kind = next()[0], hp, k;
+        if (kind == 'E') {
+            int64_t span = i64();
+            int32_t rise = i32(), gap = i32(), rem = i32();
+            int ends;
+            int32_t e = cali_thermo_eta(span, rise, gap, rem, &ends);
+            if (e == CALI_THERMO_NONE) printf("- %d\n", ends);
+            else printf("%ld %d\n", (long)e, ends);
+            continue;
+        }
         cfg_read(&cfg);
         if (kind == 'H') {
             int level, code, s;

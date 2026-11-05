@@ -257,3 +257,36 @@ def test_night_confirm_sampled_within_seconds(cli, tmp_path):
     first = next(i for i, s in enumerate(states) if s["mode"] == "AUTO")
     assert 2000 + 1000 * first <= 2000 + 35000, first
     assert states[first]["reason"] == "ADOPT_CONTINUOUS" and submits(out) == ["level 6"]
+
+
+def test_eta_after_six_minutes_of_rise(cli, tmp_path):
+    """``status.eta_s`` stays null for the first 6 min of an AUTO run (the heater's dead time), then
+    follows the rise of one sample per minute; ``eta_ends_first`` compares it with the unit's run time
+    left; mode OFF clears it.
+
+    .. test:: Thermostat runner: the time-to-target estimate
+       :id: T_FW_THERMOSTAT_RUN_ETA
+       :links: R_THERMOSTAT_ETA, R_FW_THERMOSTAT_API
+    """
+
+    def hot(rem):
+        return frame("airheater", Installed=1, NormalOperation=1, HeatingLevel=10, RunningTimeinAction=rem)
+
+    lines = [*SETUP, "target 3000", "auto", "tick", *[f"done {OK}"] * 3, "now 1500", hot(4), "tick", "state"]
+    for k in range(1, 12):  # 17.00 -> 19.75 at 0.25 K/min; 4 min of run time left, from 8 min on 60 min
+        lines += [
+            f"now {1500 + k * 60000}",
+            hot(60 if k >= 8 else 4),
+            f"sensor cabin {1700 + k * 25}",
+            "tick",
+            "state",
+        ]
+    lines += ["stop", "tick", "state"]
+    states = [json.loads(s[7:])["thermostat"] for s in run(cli, tmp_path, lines) if s.startswith("THERMO ")]
+    assert all(s["mode"] == "AUTO" and s["level"] == 10 for s in states[:-1])
+    assert [s["eta_s"] for s in states[:6]] == [None] * 6  # under 6 min of samples
+    # 6 min: 150 up, 1150 to go = 2760 s; 7 min: 175 up, 1125 to go = 2700 s; 8 min: 200 up = 2640 s
+    assert [s["eta_s"] for s in states[6:9]] == [2760, 2700, 2640]
+    assert [s["eta_ends_first"] for s in states[6:9]] == [True, True, False]
+    assert states[11]["eta_s"] == 2460  # the 10 min window: from 1 min (17.25) to 11 min (19.75), 1025 to go
+    assert states[-1]["eta_s"] is None and states[-1]["eta_ends_first"] is False

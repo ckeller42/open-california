@@ -501,6 +501,8 @@ def thermostat_fixture(**over):
         "end": "none",
         "blocked": None,
         "wait_left_s": None,
+        "eta_s": None,
+        "eta_ends_first": False,
         "night": False,
     }
     status.update(over.pop("status", {}))

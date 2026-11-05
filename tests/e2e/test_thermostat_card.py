@@ -596,3 +596,55 @@ def test_confirm_on_running_heater_names_no_duration_and_skips_enabled(stub, err
         assert "Take over the running air heater" in pg.evaluate("() => thermoConfirmText(THERMO)")
     finally:
         cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "lang,eta,first,want",
+    [
+        ("en", 2040, False, "18.0 °C in about 35 min (≈{t})"),
+        ("de", 2040, False, "18.0 °C in etwa 35 min (≈{t})"),
+        ("en", 60, False, "18.0 °C in about 5 min (≈{t})"),
+        ("en", 960, True, "The run time ends before 18.0 °C"),
+        ("de", 960, True, "Die Laufzeit endet vor 18.0 °C"),
+    ],
+)
+def test_eta_line(stub, error_gated_page, lang, eta, first, want):
+    """While AUTO heats, the card shows the firmware's time-to-target estimate in 5-min steps, always
+    "about"; an estimate later than the run's end says so instead of naming a time.
+
+    .. test:: Thermostat card: the time-to-target line
+       :id: T_THERMOSTAT_CARD_ETA
+       :links: R_THERMOSTAT_ETA, AD_THERMOSTAT_ETA
+    """
+    _enable(stub, mode="AUTO", heater="RUNNING", level=10, active="cabin", reason="HOLD", end="run",
+            target=1800, eta_s=eta, eta_ends_first=first)  # fmt: skip
+    stub.fixtures["satellite"]["/api/thermostat"].update(mode="AUTO", target=1800)
+    cm, pg = _open(stub, error_gated_page, lang)
+    try:
+        line = _card(pg).locator(".thermo-eta")
+        expect(line).to_have_count(1)
+        if "{t}" in want:
+            mins = int(want.split(" min")[0].split()[-1])
+            ok = pg.evaluate(
+                "(m) => [0, 1].map((k) => { const d = new Date(Date.now() + (m - k) * 60000);"
+                " return hhmm(d.getHours(), d.getMinutes()); })",
+                mins,
+            )
+            assert line.text_content() in [want.format(t=w) for w in ok]
+        else:
+            expect(line).to_have_text(want)
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize("mode,eta", [("AUTO", None), ("OFF", 600), ("WAITING", 600)])
+def test_eta_line_hidden_without_an_estimate(stub, error_gated_page, mode, eta):
+    """No estimate, or a mode other than AUTO: no line."""
+    _enable(stub, mode=mode, heater="RUNNING", level=10, reason="HOLD", eta_s=eta)
+    stub.fixtures["satellite"]["/api/thermostat"]["mode"] = mode
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_be_visible()
+        expect(_card(pg).locator(".thermo-eta")).to_have_count(0)
+    finally:
+        cm.__exit__(None, None, None)

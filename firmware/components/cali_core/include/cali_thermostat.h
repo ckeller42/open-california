@@ -67,8 +67,9 @@
  *
  *    The firmware shall serve ``GET /api/thermostat`` (``rev``, ``mode``, ``target``, ``runtime_min``,
  *    the thermometer aliases, ``outside_on``, ``night``, all settings, the status with the reason,
- *    ``blocked`` (computed at each GET from the last-known frames), ``wait_left_s`` (counted at each GET) and the run's
- *    ``night``) and
+ *    ``blocked`` (computed at each GET from the last-known frames), ``wait_left_s`` (counted at each GET), the run's
+ *    ``night``, and ``eta_s`` with ``eta_ends_first`` (cali_thermo_eta() of one reference sample per
+ *    minute while mode AUTO heats, as of the last step; null and false otherwise)) and
  *    ``POST /api/thermostat`` (station mode only) with any of ``enabled``, ``mode``, ``target``,
  *    ``runtime_min``, ``ref``, ``backup``, ``out`` (an alias of a configured Govee, or null),
  *    ``outside_on``, ``night``, ``cfg``, ``rev`` and ``confirm``; ``enabled`` applies before the
@@ -323,6 +324,31 @@ int cali_thermo_heater_state(const cali_thermo_heater_t *h, int64_t age_ms, cons
  */
 const char *cali_thermo_blocked(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg);
 
+/** @brief The rate window of cali_thermo_eta(), ms (Python `ETA_WINDOW_MS`). */
+#define CALI_THERMO_ETA_WINDOW_MS 600000
+/** @brief No estimate before this span of samples, ms (Python `ETA_MIN_SPAN_MS`). */
+#define CALI_THERMO_ETA_MIN_SPAN_MS 360000
+/** @brief No estimate below this rise, centi-K per minute (Python `ETA_MIN_RATE`). */
+#define CALI_THERMO_ETA_MIN_RATE 5
+/** @brief No estimate within this of the target, centi-K (Python `ETA_NEAR`). */
+#define CALI_THERMO_ETA_NEAR 50
+
+/**
+ * @brief Seconds until the reference reaches the target (Python `eta()`, R_THERMOSTAT_ETA).
+ *
+ * A straight line through the oldest and the newest sample of the run's last
+ * CALI_THERMO_ETA_WINDOW_MS. No estimate before CALI_THERMO_ETA_MIN_SPAN_MS, below
+ * CALI_THERMO_ETA_MIN_RATE, or within CALI_THERMO_ETA_NEAR of the target.
+ *
+ * @param span_ms     Time between the oldest and the newest sample, ms.
+ * @param rise        Newest minus oldest reference value, centi-degrees C.
+ * @param gap         Target minus the newest reference value, centi-degrees C.
+ * @param rem_s       Run time left, s, or CALI_THERMO_NONE (no limit).
+ * @param ends_first  Out: 1 when the estimate is later than the end of the run time, else 0.
+ * @return The seconds, or CALI_THERMO_NONE when there is no honest estimate.
+ */
+int32_t cali_thermo_eta(int64_t span_ms, int32_t rise, int32_t gap, int32_t rem_s, int *ends_first);
+
 /**
  * @brief One thermostat decision (Python `step()`).
  *
@@ -401,12 +427,13 @@ cali_thermo_run_cfg_t *cali_thermo_run_cfg(void);
 int cali_thermo_cfg_set(const char *key, int32_t value);
 
 /**
- * @brief Write the status object: `{"enabled","mode","reason","heater","t_ref","t_out","target","level","active","outside_active","end","blocked","wait_left_s","night"}`.
+ * @brief Write the status object: `{"enabled","mode","reason","heater","t_ref","t_out","target","level","active","outside_active","end","blocked","wait_left_s","night","eta_s","eta_ends_first"}`.
  *
  * `reason` is the last step's reason that was not NULL (null before any); temperatures and the
  * level are null when unknown. `blocked` is cali_thermo_blocked() of the current inputs (computed
  * here, with the last-known frames); `wait_left_s` is counted here from the end of the night wait
- * (in mode WAITING, else null); `night` is the last step's (false before any).
+ * (in mode WAITING, else null); `night` is the last step's (false before any); `eta_s` and
+ * `eta_ends_first` are cali_thermo_eta() of the last step (null and false while mode AUTO does not heat).
  *
  * @param j  The JSON writer; the caller writes the key first.
  */

@@ -221,6 +221,17 @@ static void takeover(cali_thermo_state_t *st, const cali_thermo_snap_t *snap, in
     add(o, "level", lvl);
 }
 
+int32_t cali_thermo_eta(int64_t span_ms, int32_t rise, int32_t gap, int32_t rem_s, int *ends_first) {
+    int32_t s;
+    *ends_first = 0;
+    if (span_ms < CALI_THERMO_ETA_MIN_SPAN_MS || gap <= CALI_THERMO_ETA_NEAR ||
+        (int64_t)rise * 60000 < CALI_THERMO_ETA_MIN_RATE * span_ms)
+        return NONE;
+    s = (int32_t)rdiv((int64_t)gap * span_ms, (int64_t)rise * 1000);
+    *ends_first = rem_s != NONE && s > rem_s;
+    return s;
+}
+
 const char *cali_thermo_blocked(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg) {
     if (in->heater) {
         int lvl, code, hs = cali_thermo_heater_state(in->heater, 0, cfg, &lvl, &code);

@@ -61,6 +61,8 @@ THERMOSTAT_STATUS_KEYS = frozenset(
         "blocked",
         "wait_left_s",
         "night",
+        "eta_s",
+        "eta_ends_first",
     }
 )
 OTA_KEYS = frozenset(
