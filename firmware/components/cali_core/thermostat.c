@@ -12,7 +12,7 @@
 
 const char *const cali_thermo_heater_names[8] = {"OFF",   "RUNNING", "CONTINUOUS", "TIMER_ARMED",
                                                  "FAULT", "LOCKED",  "BLOCKED",    "UNKNOWN"};
-const char *const cali_thermo_mode_names[4] = {"OFF", "AUTO", "DEGRADED", "STOPPING"};
+const char *const cali_thermo_mode_names[5] = {"OFF", "AUTO", "DEGRADED", "STOPPING", "WAITING"};
 
 static const char *const FAULT_REASON[16] = {
     NULL,       "FAULT_1",  "FAULT_2",  "FAULT_3",  "FAULT_4",  "FAULT_5",  "FAULT_6",  "FAULT_7",
@@ -186,6 +186,54 @@ static void end(cali_thermo_state_t *st, cali_thermo_out_t *o) {
     o->n = 0;
 }
 
+static const char *fault_reason(int code) {
+    return code == 4 ? "LOCKED" : code >= 1 && code <= 15 ? FAULT_REASON[code] : "HEATER_UNKNOWN";
+}
+
+/* Python _takeover(): start from the demand (integrator 0), send that level at once if it differs.
+ * t_ref NONE (no valid reference): take the heater as it is; rule (7) acts next step. */
+static void takeover(cali_thermo_state_t *st, const cali_thermo_snap_t *snap, int32_t level, int32_t t_ref,
+                     int32_t t_out, const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, cali_thermo_out_t *o) {
+    int64_t now = in->now_ms;
+    cali_thermo_ctl_t ctl0;
+    const char *w;
+    int32_t lvl;
+    st->has_pending = 0;
+    st->has_expect = 1;
+    st->expect = *snap;
+    st->last_ctl_ms = now;
+    o->n = 0;
+    /* integrator 0; the dwell restarts only with a level sent */
+    ctl0.i = 0;
+    ctl0.last_change_ms = st->ctl.last_change_ms;
+    ctl0.hot_since_ms = NONE_MS;
+    ctl0.u = 0;
+    ctl0.u_out = 0;
+    st->ctl = ctl0;
+    if (t_ref == NONE) return;
+    lvl = control(t_ref, t_out, in->target, 0, &ctl0, cfg, NONE, now, &w);
+    st->ctl = ctl0;
+    if (lvl == NONE || lvl == 0) lvl = cfg->min_level; /* overheat: the lowest level */
+    if (lvl == level || !in->link_ready) return;
+    pend(st, "level", lvl, now, level, NULL);
+    st->expect.level = lvl;
+    st->ctl.last_change_ms = now;
+    add(o, "level", lvl);
+}
+
+const char *cali_thermo_blocked(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg) {
+    if (in->heater) {
+        int lvl, code, hs = cali_thermo_heater_state(in->heater, 0, cfg, &lvl, &code);
+        if (code == -1) return "NOT_INSTALLED";
+        if (hs == CALI_THERMO_H_FAULT || hs == CALI_THERMO_H_LOCKED || hs == CALI_THERMO_H_BLOCKED) return "FAULT";
+        if (hs == CALI_THERMO_H_TIMER_ARMED) return "TIMER_ARMED";
+    }
+    if (!(in->known_camping_on > 0 || in->known_shore_on > 0)) return "NO_CAMPING";
+    if (in->known_ignition_on != 0) return "IGNITION";
+    if (!valid(&in->ref, cfg)) return "NO_REFERENCE";
+    return NULL;
+}
+
 static const char *refusal(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, int hs, int code) {
     if (!in->enabled) return "AUTO_REFUSED_DISABLED";
     if (!in->link_ready) return "AUTO_REFUSED_NO_LINK";
@@ -197,16 +245,18 @@ static const char *refusal(const cali_thermo_in_t *in, const cali_thermo_cfg_t *
     if (!(in->camping_on || in->shore_on)) return "AUTO_REFUSED_NO_CAMPING";
     if (in->ignition_on != 0) return "AUTO_REFUSED_IGNITION";
     if (!valid(&in->ref, cfg)) return "AUTO_REFUSED_NO_REFERENCE";
-    if (hs == CALI_THERMO_H_OFF && (int64_t)in->ref.value > (int64_t)in->target + cfg->band_hi)
+    if (!in->night && hs == CALI_THERMO_H_OFF && (int64_t)in->ref.value > (int64_t)in->target + cfg->band_hi)
         return "AUTO_REFUSED_WARM"; /* a start would soon stop again: a burner short cycle */
     return NULL;
 }
 
 /* Python out(why): the reason, the mode and the status at the time of the return. */
-static void finish(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, const cali_thermo_state_t *st, int hs,
+static void finish(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, cali_thermo_state_t *st, int hs,
                    int level, int32_t t_out, const char *why, cali_thermo_out_t *o) {
     const cali_thermo_sensor_t *r = st->active ? &in->backup : &in->ref;
     cali_thermo_status_t *s = &o->status;
+    if (st->mode == CALI_THERMO_OFF) st->night = 0;
+    if (st->mode != CALI_THERMO_WAITING) st->wait_until_ms = st->cont_since_ms = NONE_MS;
     o->reason = why;
     o->mode = st->mode;
     s->heater = hs;
@@ -221,6 +271,14 @@ static void finish(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, con
     }
     s->outside_active = t_out != NONE;
     s->end = hs == CALI_THERMO_H_RUNNING ? "run" : "none";
+    s->blocked = cali_thermo_blocked(in, cfg);
+    if (st->wait_until_ms == NONE_MS) {
+        s->wait_left_s = NONE;
+    } else { /* Python max(0, ceil(left / 1000)): C division truncates, so round up by hand */
+        int64_t left = st->wait_until_ms - in->now_ms;
+        s->wait_left_s = left <= 0 ? 0 : (int32_t)((left + 999) / 1000);
+    }
+    s->night = st->mode != CALI_THERMO_OFF ? st->night : in->night;
 }
 
 void cali_thermo_init(cali_thermo_state_t *st) {
@@ -230,6 +288,8 @@ void cali_thermo_init(cali_thermo_state_t *st) {
     st->ctl.u_out = NONE; /* no outside reading in use yet */
     st->batt_low_since_ms = NONE_MS;
     st->last_ctl_ms = NONE_MS;
+    st->wait_until_ms = NONE_MS;
+    st->cont_since_ms = NONE_MS;
 }
 
 #define RET(why)                                                  \
@@ -241,7 +301,7 @@ void cali_thermo_init(cali_thermo_state_t *st) {
 void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, cali_thermo_state_t *st,
                       cali_thermo_out_t *out) {
     int64_t now = in->now_ms;
-    int link = in->link_ready, hs, level, code, has_snap, on, req, faulty, heating;
+    int link = in->link_ready, hs, level, code, has_snap, on, req, faulty, heating, owner_off;
     int32_t target = in->target, t_out;
     const char *reason = NULL;
     cali_thermo_snap_t snap = {0, 0, NONE};
@@ -258,9 +318,18 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
     t_out = in->outside_on && valid(&in->out, cfg) ? in->out.value : NONE;
     faulty = hs == CALI_THERMO_H_FAULT || hs == CALI_THERMO_H_LOCKED || hs == CALI_THERMO_H_BLOCKED;
     heating = hs == CALI_THERMO_H_RUNNING || hs == CALI_THERMO_H_CONTINUOUS;
+    /* an owner OFF (or the feature disabled) while on: a failed level command must not end AUTO first */
+    owner_off = (st->mode == CALI_THERMO_AUTO || st->mode == CALI_THERMO_DEGRADED) &&
+                (in->request == CALI_THERMO_REQ_OFF || !in->enabled);
 
     /* (1) pending command: readback, result, verify window */
-    if (st->has_pending) {
+    if (st->has_pending && st->mode == CALI_THERMO_WAITING) { /* the night pre-set: never retried, never ends the wait */
+        const cali_thermo_pending_t *p = &st->pending;
+        const char *res = in->cmd_result;
+        int post = has_snap && now - in->heater_age_ms >= p->since_ms;
+        if ((post && applied(p, &snap)) || (res && !is(res, "OK")) || now - p->since_ms >= cfg->verify_ms)
+            st->has_pending = 0;
+    } else if (st->has_pending) {
         cali_thermo_pending_t *p = &st->pending;
         const char *res = in->cmd_result;
         int start = is(p->what, "power") && p->value == 1;
@@ -272,6 +341,8 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
                      snap.permanent != e->permanent);
         if (moved) {
             end(st, out);
+            if (!snap.normal && !snap.permanent) /* switched off at the panel: the run ended */
+                RET(e->permanent ? "CONTINUOUS_ENDED" : "RUN_ENDED");
             RET("FOREIGN_CHANGE");
         }
         if (has_snap && post && applied(p, &snap)) {
@@ -280,6 +351,8 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             st->expect = snap;
         } else if (faulty) {
             /* rule (3) ends AUTO with the fault's reason */
+        } else if (is(p->what, "level") && is(res, "REFUSED") && owner_off) {
+            /* rule (2) stops the heater: a refused level must not end AUTO and drop the owner's OFF */
         } else if (is(res, "REFUSED")) {
             int off = is_off(p);
             st->has_pending = 0;
@@ -298,15 +371,57 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
                 RET("STOP_DROPPED");
             }
             if (p->tries >= 2 || (start && !start_retry_ok(p, in, cfg))) {
-                if (!is_off(p)) end(st, out);
-                st->has_pending = 0;
-                RET(fail);
+                if (!(is(p->what, "level") && owner_off)) { /* an owner OFF: rule (2) stops the heater */
+                    if (!is_off(p)) end(st, out);
+                    st->has_pending = 0;
+                    RET(fail);
+                }
+            } else {
+                resend(p, st, in, 0, out);
+                p->since_ms = now;
+                p->tries = 2;
             }
-            resend(p, st, in, 0, out);
-            p->since_ms = now;
-            p->tries = 2;
         }
         if (out->n) reason = is_off(p) ? "STOPPING" : "AUTO_ON";
+    }
+
+    /* (W) night wait: send nothing but a stop; take over Dauerbetrieb once it held night_confirm_ms */
+    if (st->mode == CALI_THERMO_WAITING) {
+        if (has_snap) { /* the last fresh heater: what an owner OFF stops */
+            st->has_expect = 1;
+            st->expect = snap;
+        }
+        if (in->request == CALI_THERMO_REQ_OFF || !in->enabled) {
+            const char *why = in->enabled ? "USER_OFF" : "DISABLED";
+            /* stop what runs: an immediate run or an unconfirmed Dauerbetrieb; with the heater stale
+               or the link down the stop of the last fresh reading waits in STOPPING */
+            stop(st, link && has_snap, now, why, out);
+            RET(st->mode == CALI_THERMO_STOPPING ? "STOPPING" : why);
+        }
+        if (faulty) {
+            end(st, out);
+            RET(code == 1 ? "BATTERY_LOW" : fault_reason(code));
+        }
+        if (hs != CALI_THERMO_H_CONTINUOUS) {
+            st->cont_since_ms = NONE_MS;
+            if (now >= st->wait_until_ms) {
+                end(st, out);
+                RET("NIGHT_WAIT_ENDED");
+            }
+            RET("WAITING_FOR_CONTINUOUS");
+        }
+        if (st->cont_since_ms == NONE_MS) { /* a Dauerbetrieb first seen after the wait is not taken over */
+            if (now >= st->wait_until_ms) {
+                end(st, out);
+                RET("NIGHT_WAIT_ENDED");
+            }
+            st->cont_since_ms = now;
+        }
+        /* confirmed by a heater frame read night_confirm_ms after the first one, not by a cached frame */
+        if (now - in->heater_age_ms - st->cont_since_ms < cfg->night_confirm_ms) RET("WAITING_FOR_CONTINUOUS");
+        st->mode = CALI_THERMO_AUTO;
+        takeover(st, &snap, level, valid(&in->ref, cfg) ? in->ref.value : NONE, t_out, in, cfg, out);
+        RET("ADOPT_CONTINUOUS");
     }
 
     /* (2) owner request (feature disabled while on = owner OFF) */
@@ -327,6 +442,7 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         const char *why = refusal(in, cfg, hs, code);
         int32_t t_ref, lvl;
         cali_thermo_ctl_t ctl0;
+        const char *w;
         if (why) RET(why); /* the owner's own stop (if any) runs on */
         if (st->has_pending) { /* the last owner request wins: drop the owner's stop */
             st->has_pending = 0;
@@ -344,8 +460,18 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         st->batt_low_since_ms = NONE_MS;
         st->has_stop_snapshot = 0;
         st->last_ctl_ms = now;
+        st->night = in->night;
+        if (in->night && hs != CALI_THERMO_H_CONTINUOUS) {
+            st->mode = CALI_THERMO_WAITING;
+            st->wait_until_ms = now + cfg->night_wait_ms;
+            st->cont_since_ms = NONE_MS;
+            st->has_expect = 1;
+            st->expect = snap;
+            /* pre-set the demand: the panel starts Dauerbetrieb at the stored level */
+            if (hs == CALI_THERMO_H_OFF) takeover(st, &snap, level, t_ref, t_out, in, cfg, out);
+            RET("WAITING_FOR_CONTINUOUS");
+        }
         if (hs == CALI_THERMO_H_OFF) {
-            const char *w;
             lvl = control(t_ref, t_out, target, 0, &ctl0, cfg, NONE, now, &w);
             st->ctl = ctl0;
             if (lvl == NONE || lvl == 0) lvl = cfg->min_level; /* overheat at entry: start low, the next step stops */
@@ -359,15 +485,9 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             add(out, "level", lvl);
             add(out, "power", 1);
             RET("START");
-        } else {
-            const char *w;
-            control(t_ref, t_out, target, 0, &ctl0, cfg, level, now, &w);
-            if (level != NONE) track(&ctl0, level, t_ref, target, cfg);
-            st->ctl = ctl0;
-            st->has_expect = 1;
-            st->expect = snap;
-            RET(hs == CALI_THERMO_H_CONTINUOUS ? "ADOPT_CONTINUOUS" : "ADOPT_RUN");
         }
+        takeover(st, &snap, level, t_ref, t_out, in, cfg, out);
+        RET(hs == CALI_THERMO_H_CONTINUOUS ? "ADOPT_CONTINUOUS" : "ADOPT_RUN");
     }
     if (req == CALI_THERMO_REQ_AUTO && on && st->active == 1 && valid(&in->ref, cfg)) {
         st->active = 0; /* back to the reference only by the owner */
@@ -396,7 +516,7 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
     }
     if (faulty) {
         end(st, out);
-        RET(code == 4 ? "LOCKED" : code >= 1 && code <= 15 ? FAULT_REASON[code] : "HEATER_UNKNOWN");
+        RET(fault_reason(code));
     }
     if (!has_snap) {
         out->n = 0; /* no writes until fresh; AUTO stays on */
@@ -470,6 +590,17 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         const char *why;
         int32_t lvl = control(act->value, t_out, target, now - st->last_ctl_ms, &st->ctl, cfg, level, now, &why);
         st->last_ctl_ms = now;
+        if ((is(why, "OVERHEAT") || is(why, "TARGET_EXCEEDED_AT_MIN_LEVEL")) && hs == CALI_THERMO_H_CONTINUOUS) {
+            int32_t lo = cfg->min_level; /* the ESP cannot restart Dauerbetrieb: hold, never stop */
+            if (level != lo && link) {
+                out->n = 0;
+                add(out, "level", lo);
+                pend(st, "level", lo, now, level, NULL);
+                st->expect.level = lo;
+                st->ctl.last_change_ms = now;
+            }
+            RET("HOLD_AT_MIN_LEVEL");
+        }
         if (is(why, "OVERHEAT") || is(why, "TARGET_EXCEEDED_AT_MIN_LEVEL")) {
             stop(st, link, now, why, out);
             RET(why);
