@@ -2,7 +2,7 @@
 the van only from The Things Stack, here ``tests/e2e/fake_ttn.py``. No real TTS server is contacted.
 
 A small static server serves ``calictl/webui`` with an index variant that adds the remote-only scripts
-(``ttn.js``, ``lora_decode.js``, ``remote.js``) before ``app.js``, as the remote build does; an init script
+(``lora_setup.js``, ``ttn.js``, ``lora_decode.js``, ``remote.js``) before ``app.js``, as the remote build does; an init script
 sets ``OC_REMOTE`` and the phone's configuration (``oc.remote.cfg``). The uplinks are the mock unit's frames
 packed as the firmware's ports 2, 3 and 4 (``cali_lora.h``). OPT-IN like test_gui.py: skipped without
 Playwright + Chromium.
@@ -40,7 +40,7 @@ from fake_ttn import FakeTtn  # noqa: E402
 
 WEBUI = Path(__file__).resolve().parents[2] / "calictl" / "webui"
 DEV = "van-000001"
-REMOTE_SCRIPTS = ("ttn.js", "lora_decode.js", "remote.js")
+REMOTE_SCRIPTS = ("lora_setup.js", "ttn.js", "lora_decode.js", "remote.js")
 
 
 def _frames():
@@ -123,9 +123,21 @@ def ttn():
         yield f
 
 
-def _init(ttn, secret):
-    """OC_REMOTE + the phone's configuration, as the remote build and Task 10's setup leave them."""
-    cfg = {"cluster": ttn.base, "appId": ttn.app, "devId": DEV, "readKey": secret, "cmdKey": secret}
+CLUSTER = "eu1.cloud.thethings.network"
+
+
+def _init(ttn, secret, **over):
+    """OC_REMOTE + the phone's configuration, as the remote build and the setup leave them. ``base`` is the test
+    seam: the app honours it only for ``http://127.0.0.1:<port>``, so no real TTS server is contacted."""
+    cfg = {
+        "cluster": CLUSTER,
+        "appId": ttn.app,
+        "devId": DEV,
+        "readKey": secret,
+        "cmdKey": secret,
+        "base": ttn.base,
+    }
+    cfg.update(over)
     return "window.OC_REMOTE = true; localStorage.setItem('oc.remote.cfg', %s);" % json.dumps(json.dumps(cfg))
 
 
@@ -153,7 +165,9 @@ def test_remote_never_calls_same_origin_api(site, ttn, error_gated_page):
         expect(pg.locator("#app")).to_contain_text("5 min ago")
         # every control is read-only (no camping-mode command yet, spec 5.4)
         expect(
-            pg.locator("#app :is(input,select):enabled, #app [role=switch]:not([disabled])")
+            pg.locator(
+                "#app :is(input,select):enabled, #app [role=switch]:not([disabled]), #app button:enabled"
+            )
         ).to_have_count(0)
         # the guard itself: api(), satFetch() and the beacon refuse before any request
         n = len(reqs)
@@ -187,3 +201,39 @@ def test_remote_refuses_an_unknown_version(site, ttn, error_gated_page):
     ) as pg:
         expect(pg.locator("#conn")).to_contain_text("App aktualisieren")
         expect(pg.locator("#status")).to_have_text("LoRa · vor 5 Min")
+
+
+@pytest.mark.parametrize(
+    "over",
+    [
+        {"cluster": "https://evil.example"},  # a URL in the cluster: refused
+        {"cluster": "evil.example/x"},
+        {"base": "https://evil.example"},  # the seam only ever points at 127.0.0.1
+        {"base": "http://127.0.0.1.evil.example:80"},
+    ],
+)
+def test_remote_config_cannot_point_the_keys_elsewhere(site, ttn, error_gated_page, over):
+    """The read key goes only to ``https://<validated host>`` (or the test's 127.0.0.1 fake)."""
+    _, secret = ttn.make_key("read")
+    reqs = []
+    with error_gated_page(
+        site, init_script=_init(ttn, secret, **over), requests=reqs, service_workers="block"
+    ) as pg:
+        base = pg.evaluate("() => { const c = remoteCfg(); return c && remoteBase(c); }")
+        expect(pg.locator("#status")).to_contain_text("LoRa")
+    assert base in (None, "https://" + CLUSTER), base
+    assert not any("evil" in u for u in reqs), reqs
+
+
+def test_remote_energy_points_are_spaced(site, ttn, error_gated_page):
+    """A van that reboots often adds at most one energy point per minute (oc.remote.energy stays bounded)."""
+    _, secret = ttn.make_key("read")
+    now = datetime.now(UTC)
+    for i in range(5):  # five boots, 10 s apart
+        frame = bytearray(port2())
+        frame[1:3] = (10 + i).to_bytes(2, "big")
+        ttn.add_uplink(DEV, 2, bytes(frame), now - timedelta(seconds=60 - 10 * i))
+    with error_gated_page(site, init_script=_init(ttn, secret), service_workers="block") as pg:
+        expect(pg.locator("#status")).to_contain_text("LoRa ·")
+        energy = json.loads(pg.evaluate("localStorage.getItem('oc.remote.energy')"))
+    assert len(energy) == 1, energy

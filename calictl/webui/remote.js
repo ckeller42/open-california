@@ -9,7 +9,7 @@
 const REMOTE_CFG_KEY = "oc.remote.cfg";       // {cluster, appId, devId, readKey, cmdKey} (Task 10 writes it)
 const REMOTE_LAST_KEY = "oc.remote.last";     // the newest frame per function, the read cursor
 const REMOTE_ENERGY_KEY = "oc.remote.energy"; // [{at, boot, solar_wh, load_wh, batt_net_wh}], oldest first
-// ponytail: one counter point per hour and boot, 90 days (~2200 points); finer or longer when a view needs it
+// ponytail: one counter point per hour (a new boot: at once, but >= 60 s apart), 90 days (~2200 points); finer or longer when a view needs it
 const REMOTE_ENERGY_STEP_MS = 3600000;
 const REMOTE_ENERGY_KEEP_MS = 90 * 86400000;
 
@@ -23,15 +23,23 @@ function remoteSave(key, v) {
   try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* storage blocked/full: the next read starts over */ }
 }
 
-/** @returns {{cluster: string, appId: string, devId: string, readKey: string, cmdKey: string} | null} */
+/** A TTS cluster host (`eu1.cloud.thethings.network`, `<tenant>.eu1.cloud.thethings.industries`): never a URL. @param {any} h */
+const remoteHostOk = (h) => typeof h === "string" && h.length <= 64 && LORA_ID_RE.test(h);
+
+/** @returns {{cluster: string, appId: string, devId: string, readKey: string, cmdKey: string, base?: string} | null}
+ * null without a usable configuration (a cluster that is not a plain host is refused) */
 function remoteCfg() {
   const c = remoteLoad(REMOTE_CFG_KEY);
-  return c && c.cluster && c.appId && c.devId && c.readKey ? c : null;
+  return c && remoteHostOk(c.cluster) && c.appId && c.devId && c.readKey ? c : null;
 }
 
-/** The cluster's API base: a host gets https://; a full URL (the tests' fake TTS) stays as it is. @param {string} cluster */
-function remoteBase(cluster) {
-  return /^https?:\/\//.test(cluster) ? cluster.replace(/\/+$/, "") : "https://" + cluster;
+/** The API base the keys go to: always `https://<cluster host>`. The only exception is the tests' seam `base`,
+ * honoured only for `http://127.0.0.1:<port>` (the fake TTS), so a configuration can never send a key elsewhere.
+ * @param {{cluster: string, base?: string}} o */
+function remoteBase(o) {
+  if (typeof o.base === "string" && /^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(o.base)) return o.base;
+  if (!remoteHostOk(o.cluster)) throw new TtnError(0, "bad cluster host", "setup");
+  return "https://" + o.cluster;
 }
 
 /**
@@ -40,7 +48,7 @@ function remoteBase(cluster) {
  * function, `link.last_snap_age_ms` (the newest frame's age), `energy` (the counters), `fw` and `lora_version`
  * (an uplink version this app does not know, else null). Port 12 (key-transfer confirmations) is not state.
  * Throws TtnError when TTS refuses or does not answer.
- * @param {{cluster: string, appId: string, devId: string, readKey: string}} cfg
+ * @param {{cluster: string, appId: string, devId: string, readKey: string, base?: string}} cfg
  * @param {number} now ms since epoch
  * @returns {Promise<Record<string, any>>}
  */
@@ -48,7 +56,7 @@ async function remoteState(cfg, now) {
   const id = [cfg.cluster, cfg.appId, cfg.devId].join("/");
   let last = remoteLoad(REMOTE_LAST_KEY);
   if (!last || last.id !== id) last = { id, cursor: null, fn: {}, ext: null, energy: null, fw: null, newest: null, unknown: null };
-  const ups = await readUplinks(remoteBase(cfg.cluster), cfg.readKey, cfg.appId, cfg.devId,
+  const ups = await readUplinks(remoteBase(cfg), cfg.readKey, cfg.appId, cfg.devId,
     last.cursor ? { after: last.cursor } : {});
   /** @type {Array<{at: number, boot: number, solar_wh: number, load_wh: number, batt_net_wh: number}>} */
   const points = remoteLoad(REMOTE_ENERGY_KEY) || [];
@@ -64,7 +72,8 @@ async function remoteState(cfg, now) {
       const p = { at: u.at, boot: d.boot, ...d.counters };
       last.energy = p;
       const prev = points[points.length - 1];
-      if (!prev || prev.boot !== p.boot || p.at - prev.at >= REMOTE_ENERGY_STEP_MS) points.push(p);
+      // a new boot adds a point at once, but at most one a minute (a van in a reboot loop must not fill the storage)
+      if (!prev || p.at - prev.at >= (prev.boot !== p.boot ? 60000 : REMOTE_ENERGY_STEP_MS)) points.push(p);
     }
     if (d.port === 4) last.fw = d.fw;
     last.newest = Math.max(last.newest || 0, u.at);
