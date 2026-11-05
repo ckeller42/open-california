@@ -320,3 +320,52 @@ def test_night_confirm_sampled_within_seconds(cli, tmp_path):
     first = next(i for i, s in enumerate(states) if s["mode"] == "AUTO")
     assert 2000 + 1000 * first <= 2000 + 35000, first
     assert states[first]["reason"] == "ADOPT_CONTINUOUS" and submits(out) == ["level 6"]
+
+
+def test_eta_after_six_minutes_of_rise(cli, tmp_path):
+    """``status.eta_s`` stays null for the first 6 min of an AUTO run (the heater's dead time), then
+    follows the rise of one sample per minute; ``eta_ends_first`` compares it with the unit's run time
+    left; mode OFF clears it.
+
+    .. test:: Thermostat runner: the time-to-target estimate
+       :id: T_FW_THERMOSTAT_RUN_ETA
+       :links: R_THERMOSTAT_ETA, R_FW_THERMOSTAT_API
+    """
+
+    def hot(rem):
+        return frame("airheater", Installed=1, NormalOperation=1, HeatingLevel=10, RunningTimeinAction=rem)
+
+    # the reading of 17.00 is from 1000 (SETUP), so the first sample is stamped 1000, not at the step (1500)
+    lines = [*SETUP, "backup bed", "sensor bed 1700", "target 3000", "auto", "tick", *[f"done {OK}"] * 3,
+             "now 1500", hot(4), "tick", "state"]  # fmt: skip
+    for k in range(1, 12):  # 17.00, then 17.50 -> 20.00: 0.5 K in the first minute, then 0.25 K/min
+        lines += [
+            f"now {1500 + k * 60000}",
+            hot(60 if k >= 8 else 4),
+            f"sensor cabin {1725 + k * 25}",
+            f"sensor bed {1700 + k * 25}",
+            "tick",
+            "state",
+        ]
+    lines += [
+        "now 721500",
+        hot(60),
+        "sensor cabin -",
+        "sensor bed 2000",
+        "tick",
+        "state",
+    ]  # the backup takes over
+    lines += ["stop", "tick", "state"]
+    states = [json.loads(s[7:])["thermostat"] for s in run(cli, tmp_path, lines) if s.startswith("THERMO ")]
+    assert all(s["mode"] == "AUTO" and s["level"] == 10 for s in states[:-1])
+    assert [s["eta_s"] for s in states[:6]] == [None] * 6  # under 6 min of samples
+    # calictl.thermostat.eta over (span from 1000, rise, gap to 30.00, run time left)
+    assert [s["eta_s"] for s in states[6:9]] == [2318, 2313, 2296]
+    assert [s["eta_ends_first"] for s in states[6:9]] == [True, True, False]  # 4 min left, then 60
+    assert (
+        states[11]["eta_s"] == 2400
+    )  # the 10 min window drops 17.00: 17.50 -> 20.00, 1000 to go (keeping it: 2200)
+    assert (
+        states[12]["active"] == "bed" and states[12]["eta_s"] is None
+    )  # a new thermometer starts a new series
+    assert states[-1]["eta_s"] is None and states[-1]["eta_ends_first"] is False

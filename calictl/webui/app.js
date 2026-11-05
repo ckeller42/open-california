@@ -3720,7 +3720,7 @@ function spinner() {
 // disabled, and the confirmation window asked at every start enables it and starts AUTO in one POST. A start that
 // status.blocked says would be refused dims the switch and names the reason first. The heater unit's own safety
 // concept stays authoritative.
-/** @typedef {{enabled:boolean, mode:string, reason:?string, heater:string, t_ref:?number, target:?number, level:?number, active:?string, end:string, blocked:?string, wait_left_s:?number, night:boolean}} ThermoStatus end: "run" (a normal run that ends by itself) or "none"; blocked: the refusal an AUTO request would get now (NO_CAMPING, IGNITION, …) */
+/** @typedef {{enabled:boolean, mode:string, reason:?string, heater:string, t_ref:?number, target:?number, level:?number, active:?string, end:string, blocked:?string, wait_left_s:?number, night:boolean, eta_s?:?number, eta_ends_first?:boolean}} ThermoStatus end: "run" (a normal run that ends by itself) or "none"; blocked: the refusal an AUTO request would get now (NO_CAMPING, IGNITION, …) */
 /** @typedef {{rev:number, mode:string, target:number, runtime_min:number, ref:?string, backup:?string, out:?string, outside_on:boolean, night:boolean, status:ThermoStatus}} Thermo night: the stored run-time choice "Night" (no time limit) */
 /** @type {?Thermo} */
 let THERMO = null;
@@ -3867,6 +3867,18 @@ function thermoStatusText(th) {
     return lv + tf("ends {t}", { t: hhmm(d.getHours(), d.getMinutes()) });
   }
   return lv + (st.heater === "CONTINUOUS" ? t("continuous") : t("running"));
+}
+
+/** The time-to-target line (R_THERMOSTAT_ETA): the firmware's straight-line estimate, in 5-min steps and
+ * always "about" (it is optimistic near the target and ignores the after-heat), or null when it has none.
+ * @param {ThermoStatus} st @returns {?string} */
+function thermoEtaText(st) {
+  // only on live data: an old snapshot would name a time the estimate no longer supports
+  if (st.mode !== "AUTO" || st.eta_s == null || st.target == null || linkState() !== "live") return null;
+  const target = (st.target / 100).toFixed(1);
+  if (st.eta_ends_first) return tf("The run time ends before {target} °C", { target: target });
+  const min = Math.max(5, Math.round(st.eta_s / 300) * 5), d = new Date(Date.now() + min * 60000);
+  return tf("{target} °C in about {min} min (≈{t})", { target: target, min: min, t: hhmm(d.getHours(), d.getMinutes()) });
 }
 
 /** @param {number} s seconds left @returns {string} the night wait line, e.g. "… Waiting 4:32 min." */
@@ -4030,6 +4042,8 @@ function thermostatCard() {
   tr.appendChild(thermoEl("sval", (want / 100).toFixed(1) + " °C"));
   tr.appendChild(step("Warmer", "+", THERMO_STEP));
   card.appendChild(tr);
+  const eta = thermoEtaText(st);
+  if (eta) card.appendChild(thermoEl("note thermo-eta", eta));
   if (st.heater === "OFF" && st.mode === "OFF") {   // the AUTO start run time: only while the heater is off
     const rt = document.createElement("div");
     rt.className = "row";

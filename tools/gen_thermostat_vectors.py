@@ -8,7 +8,7 @@ Every case is one call of :func:`calictl.thermostat.step` (the authority):
 (``tests/firmware/test_thermostat_parity.py``). Groups: ``grid`` (each base state x one changed input),
 ``sweep`` (seeded random walks from :func:`~calictl.thermostat.initial_state`, seed 4711) and
 ``session:<name>`` (scripted multi-step sessions). ``heater`` holds direct
-:func:`~calictl.thermostat.heater_state` cases. Checked in; never hand-edit:
+:func:`~calictl.thermostat.heater_state` cases, ``eta`` direct :func:`~calictl.thermostat.eta` cases. Checked in; never hand-edit:
 
     python3 -m tools.gen_thermostat_vectors            # rewrite the file
     python3 -m tools.gen_thermostat_vectors --check    # exit 1 if the checked-in file is stale
@@ -946,12 +946,45 @@ def heater_cases():
     return cases
 
 
+def eta_cases():
+    """:func:`~calictl.thermostat.eta` at its edges, today's run (2026-11-05) and a seeded spread."""
+    w, m = th.ETA_MIN_SPAN_MS, th.ETA_MIN_RATE
+    ins = [
+        (w - 1, 300, 1000, None),  # too few samples
+        (w, 300, 1000, None),
+        (w, m * 6, 1000, None),  # exactly the slowest rise (6 min x 5)
+        (w, m * 6 - 1, 1000, None),
+        (600_000, 250, th.ETA_NEAR, None),  # at the target
+        (600_000, 250, th.ETA_NEAR + 1, None),
+        (600_000, 250, 400, 600),  # 10:02: 10.0 -> 14.0 at 0.25 K/min, 10 min run left: ends first
+        (600_000, 250, 400, 960),  # exactly at the end: not first
+        (600_000, 250, 400, 959),
+        (600_000, 0, 400, None),
+        (600_000, -120, 400, None),  # cooling
+        (600_000, 7, 3, None),  # a negative gap / overshoot
+        (600_000, 250, -200, None),
+        (600_000, 3, 7000, None),  # odd remainders
+        (600_000, 51, 999, 3),
+    ]
+    rnd = random.Random(4711)
+    for _ in range(200):
+        ins.append(
+            (
+                rnd.randrange(0, 700_001),
+                rnd.randrange(-300, 1500),
+                rnd.randrange(-500, 4000),
+                rnd.choice((None, rnd.randrange(0, 7201))),
+            )
+        )
+    return [[list(i), [s, int(f)]] for i in ins for s, f in [th.eta(*i)]]
+
+
 def generate():
     rec = Rec()
     sessions(rec)
     grid(rec)
     sweep(rec)
-    return {"cfgs": CFGS, "heater": heater_cases(), "cases": rec.cases, "tags": rec.tags}
+    return {"cfgs": CFGS, "heater": heater_cases(), "eta": eta_cases(), "cases": rec.cases, "tags": rec.tags}
 
 
 def coverage():
@@ -1005,8 +1038,9 @@ def render() -> str:
     g = generate()
     head = json.dumps({"cfgs": g["cfgs"]})[:-1]
     heater = ",\n".join(json.dumps(c, separators=(",", ":")) for c in g["heater"])
+    eta = ",\n".join(json.dumps(c, separators=(",", ":")) for c in g["eta"])
     body = ",\n".join(json.dumps(c, separators=(",", ":")) for c in g["cases"])
-    return head + ', "heater": [\n' + heater + '\n], "cases": [\n' + body + "\n]}\n"
+    return head + ', "heater": [\n' + heater + '\n], "eta": [\n' + eta + '\n], "cases": [\n' + body + "\n]}\n"
 
 
 def main() -> int:
