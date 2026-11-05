@@ -1592,7 +1592,7 @@ The CoreS3 screen is dark when nobody uses it:
   that fails touch is off (logged; the hand-near wake still works), never back on the aborting read.
   The I2C driver serializes the devices on the bus itself (`bus_lock_mux`), so the LTR (owner task,
   under the display lock) and AXP (owner task, outside it) reads need no LVGL lock; they keep their
-  10 ms timeouts, the touch read waits without one (`esp_lcd` I2C default).
+  30 ms timeouts, the touch read waits without one (`esp_lcd` I2C default).
 - **Brightness** follows the room light: a log curve from `min` at ≤ 1 lux to `max` at ≥ 1000 lux,
   an EMA on log10(lux) with a 3 s time constant, and the applied level moves only on a change of
   more than 15 % (a 1 s headlight sweep does not move it). Dim = 30 % of the on level, at least 3 %.
@@ -1610,7 +1610,7 @@ The CoreS3 screen is dark when nobody uses it:
   reaches no ESP GPIO. The lux formula is Lite-On's family formula (cited in `display.c`); absolute
   lux behind the cover glass is uncalibrated.
 - **Motion wake:** the BMI270 accelerometer (I2C `0x69` on the same bus — M5Unified's CoreS3 address)
-  is read every tick next to the LTR-553 (`ACC_X..Z` `0x0C..0x11`, ±8 g, 10 ms timeout). The model's
+  is read every tick next to the LTR-553 (`ACC_X..Z` `0x0C..0x11`, ±8 g, 30 ms timeout). The model's
   `motion` is the length of the change of the accel vector against the previous read, in mg; above
   `DISPLAY_MOTION_WAKE_MG` (200) for two reads in a row it is a wake — the rising edge only: it re-arms
   only after every read stayed below `DISPLAY_MOTION_STILL_MG` (50) for `DISPLAY_MOTION_REARM_MS` (10 s),

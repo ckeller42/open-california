@@ -517,6 +517,7 @@ void cali_display_tick(uint64_t now_ms) {
         if (s_axp) bus_mark(BUS_AXP);   /* no chip handle = no transfer attempted */
         cali_battery_update(&b, now_ms);
     }
+    io_errors_log(now_ms);   /* before the lock: a busy lock must not hold back an AXP failure */
     cali_battery_get(&in.batt);
     __atomic_store_n(&s_batt_usb, in.batt.usb, __ATOMIC_RELAXED);
     __atomic_store_n(&s_batt_chg, in.batt.charging, __ATOMIC_RELAXED);
@@ -547,7 +548,6 @@ void cali_display_tick(uint64_t now_ms) {
     bsp_display_unlock();
     cali_display_publish(&v);   /* /api/state device.display */
     touch_errors_evt(now_ms);
-    io_errors_log(now_ms);
 
     /* only after a successful paint; can still block/abort inside the board package (cali_display.h) */
     if (s_brightness != v.brightness_pct) {
