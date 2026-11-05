@@ -403,6 +403,40 @@ def blocked(inp: dict, cfg: dict) -> str | None:
     return None
 
 
+ETA_WINDOW_MS = 600_000  # the rate is measured over the last 10 min of the run
+ETA_MIN_SPAN_MS = 360_000  # no estimate before 6 min of samples (the heater's dead time is 4-5 min)
+ETA_MIN_RATE = 5  # centi-K per minute: a slower rise gives no estimate
+ETA_NEAR = 50  # centi-K: within 0.5 K of the target the controller holds, no estimate
+
+
+def eta(span_ms: int, rise: int, gap: int, rem_s: int | None) -> tuple[int | None, bool]:
+    """When the reference sensor reaches the target, from the rise over the last minutes of the run.
+
+    .. req:: Thermostat time-to-target estimate
+       :id: R_THERMOSTAT_ETA
+       :status: implemented
+       :tags: thermostat
+
+       While the thermostat heats, it shall estimate the seconds until the reference sensor reaches
+       the target as a straight line through the oldest and the newest sample of the last
+       ``ETA_WINDOW_MS``. It shall give no estimate before ``ETA_MIN_SPAN_MS`` of samples, for a rise
+       slower than ``ETA_MIN_RATE`` centi-K per minute, or within ``ETA_NEAR`` of the target. It
+       shall flag an estimate that is later than the end of the run time. The line is optimistic
+       near the target (the controller lowers the level there) and ignores the after-heat (the
+       cabin can rise 2 K after the heater stops), so the card says "about" and never "not reached".
+
+    :param span_ms: time between the oldest and the newest sample.
+    :param rise: newest minus oldest reference value, centi-degrees C.
+    :param gap: target minus the newest reference value, centi-degrees C.
+    :param rem_s: seconds of run time left, or ``None`` when the run has no limit (night).
+    :returns: ``(seconds, ends_first)``; ``(None, False)`` when there is no honest estimate.
+    """
+    if span_ms < ETA_MIN_SPAN_MS or gap <= ETA_NEAR or rise * 60_000 < ETA_MIN_RATE * span_ms:
+        return None, False
+    s = _rdiv(gap * span_ms, rise * 1000)
+    return s, rem_s is not None and s > rem_s
+
+
 def _refusal(inp: dict, cfg: dict, hs: str, code: int) -> str | None:
     if not inp["enabled"]:
         return "AUTO_REFUSED_DISABLED"

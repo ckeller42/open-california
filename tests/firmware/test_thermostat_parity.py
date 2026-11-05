@@ -8,7 +8,7 @@ return the same commands, reason, mode, status and next state for every case.
 .. test:: The C thermostat decision reproduces every Python vector
    :id: T_FW_THERMOSTAT_PARITY
    :links: R_FW_THERMOSTAT_DECIDE, R_THERMOSTAT_SESSION, R_THERMOSTAT_CONTROL, R_THERMOSTAT_STATE,
-      R_THERMOSTAT_NIGHT, R_THERMOSTAT_BLOCKED
+      R_THERMOSTAT_NIGHT, R_THERMOSTAT_BLOCKED, R_THERMOSTAT_ETA
 """
 
 import json
@@ -157,6 +157,7 @@ def test_c_defaults_equal_python(cli):
 def test_c_twin_reproduces_every_vector(cli):
     cfgs = [list(c.values()) for c in V["cfgs"]]
     lines = ["H " + _line(cfgs[0], h_in) for h_in, _ in V["heater"]]
+    lines += ["E " + _line(e_in) for e_in, _ in V["eta"]]
     prev = None
     for _, k, inp, st, _, st2 in V["cases"]:  # st null = the previous case's st2
         lines.append("S " + _line(cfgs[k], inp, st or prev))
@@ -168,5 +169,7 @@ def test_c_twin_reproduces_every_vector(cli):
     assert len(outs) == len(lines)
     for h, line in zip(V["heater"], outs):
         assert line == _line(h[1]), h[0]
-    for n, (c, line) in enumerate(zip(V["cases"], outs[len(V["heater"]) :])):
+    for e, line in zip(V["eta"], outs[len(V["heater"]) :]):
+        assert line == _line(e[1]), e[0]
+    for n, (c, line) in enumerate(zip(V["cases"], outs[len(V["heater"]) + len(V["eta"]) :])):
         assert line == _line(c[4]) + " | " + _line(c[5]), n

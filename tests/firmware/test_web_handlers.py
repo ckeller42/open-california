@@ -3031,6 +3031,7 @@ def test_thermostat_get_defaults(web_cli):
     st = b["status"]
     # blocked is computed at each GET; no frames here: neither camping mode nor shore power
     assert (st["blocked"], st["wait_left_s"], st["night"]) == ("NO_CAMPING", None, False)
+    assert (st["eta_s"], st["eta_ends_first"]) == (None, False)
 
 
 def test_night_needs_no_confirm_and_persists(web_cli):

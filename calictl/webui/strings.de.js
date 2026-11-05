@@ -875,6 +875,8 @@ window.STRINGS_DE = {
   "Night · level {n} · degraded · no end": "Nacht · Stufe {n} · eingeschränkt · kein Ende",
   "Night · degraded · no end": "Nacht · eingeschränkt · kein Ende",
   "ends {t}": "endet {t}",
+  "{target} °C in about {min} min (≈{t})": "{target} °C in etwa {min} min (≈{t})",
+  "The run time ends before {target} °C": "Die Laufzeit endet vor {target} °C",
   "Take over the running air heater with the thermostat? It holds {target} °C (thermometer “{alias}”); the run time already set stays.":
     "Die laufende Luftstandheizung mit dem Thermostat übernehmen? Es hält {target} °C (Thermometer „{alias}“); die eingestellte Laufzeit bleibt.",
   "Open camping mode ›": "Campingmodus öffnen ›",
