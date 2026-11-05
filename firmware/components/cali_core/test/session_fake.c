@@ -221,7 +221,10 @@ int cali_kv_set(const char *key, const void *buf, size_t len) {
 
 /* console.c's "sensors" commands link these (web.c / the platform clock are not in this build). */
 int cali_exp_sensors_set(int on) { (void)on; return -1; }
-int cali_lora_console(const char *args) { (void)args; return 0; }   /* console.c's "lora" (R_FW_LORA) */
+int cali_lora_console(const char *args) {   /* console.c's "lora" (R_FW_LORA): what it hands over */
+    cali_log("lora args [%s]", args);
+    return 0;
+}
 uint64_t cali_uptime_ms(void) { return 0; }
 /* ... and its "pi" commands these (pi_wake.c: tests/firmware/test_web_handlers.py) */
 int cali_pw_pulse(const char *reason, uint32_t ms) { (void)reason; (void)ms; return -1; }
