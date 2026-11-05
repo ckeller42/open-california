@@ -2,10 +2,10 @@
 the van only from The Things Stack, here ``tests/e2e/fake_ttn.py``. No real TTS server is contacted.
 
 A small static server serves ``calictl/webui`` with an index variant that adds the remote-only scripts
-(``lora_setup.js``, ``ttn.js``, ``lora_decode.js``, ``remote.js``) before ``app.js``, as the remote build does; an init script
-sets ``OC_REMOTE`` and the phone's configuration (``oc.remote.cfg``). The uplinks are the mock unit's frames
-packed as the firmware's ports 2, 3 and 4 (``cali_lora.h``). OPT-IN like test_gui.py: skipped without
-Playwright + Chromium.
+(``REMOTE_SCRIPTS``: the vendored ``qr-scanner``, ``lora_setup.js``, ``ttn.js``, ``lora_decode.js``,
+``remote.js``) before ``app.js``, as the remote build does; an init script sets ``OC_REMOTE`` and the
+phone's configuration (``oc.remote.cfg``). The uplinks are the mock unit's frames packed as the firmware's
+ports 2, 3 and 4 (``cali_lora.h``). OPT-IN like test_gui.py: skipped without Playwright + Chromium.
 
 .. test:: The remote mode shows the van's LoRa data with ages and never calls the page's own /api/*
    :id: T_UI_REMOTE_NO_ROUTER
@@ -40,7 +40,13 @@ from fake_ttn import FakeTtn  # noqa: E402
 
 WEBUI = Path(__file__).resolve().parents[2] / "calictl" / "webui"
 DEV = "van-000001"
-REMOTE_SCRIPTS = ("lora_setup.js", "ttn.js", "lora_decode.js", "remote.js")
+REMOTE_SCRIPTS = (
+    "vendor/qr-scanner/qr-scanner.umd.min.js",
+    "lora_setup.js",
+    "ttn.js",
+    "lora_decode.js",
+    "remote.js",
+)
 
 
 def _frames():

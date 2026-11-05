@@ -137,7 +137,7 @@ def test_freshness_also_checks_the_header_text_around_the_array(tmp_path, monkey
 
 
 def test_remote_only_scripts_are_not_in_the_bundle():
-    """The remote app's scripts (TTN client, LoRa decoder and setup, remote data source) stay out of the ESP bundle."""
+    """The remote app's scripts (TTN client, LoRa decoder and setup, remote data source, the QR library) stay out of the ESP bundle."""
     remote = ("remote.js", "ttn.js", "lora_decode.js", "lora_setup.js")
     assert not set(remote) & set(gen_c_dict._APP_SCRIPTS)
     html = gen_c_dict.render_app_bundle()
@@ -146,5 +146,8 @@ def test_remote_only_scripts_are_not_in_the_bundle():
         "function readUplinks(",
         "loraDecodeUplink =",
         "function parseRepairQr(",
+        "function rsSetupQr(",  # the setup flow (remote.js)
+        "qr-scanner-worker",  # the vendored QR library (calictl/webui/vendor/qr-scanner)
+        "QrScanner",
     ):
         assert marker not in html, marker

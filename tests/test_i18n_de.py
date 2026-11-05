@@ -16,6 +16,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "calictl" / "webui" / "app.js"
+REMOTE = ROOT / "calictl" / "webui" / "remote.js"  # the remote app's screens (R_UI_REMOTE_APP)
 DE = ROOT / "calictl" / "webui" / "strings.de.js"
 
 
@@ -45,7 +46,7 @@ _TF = re.compile(r'\btf\(\s*"((?:[^"\\]|\\.)*)"\s*,')
 
 def test_every_simple_t_key_has_a_german_translation():
     keys = _de_keys()
-    src = APP.read_text(encoding="utf-8")
+    src = APP.read_text(encoding="utf-8") + REMOTE.read_text(encoding="utf-8")
     lits = set(_T.findall(src)) | set(_TF.findall(src))
     lits = {k for k in lits if k}  # drop the empty string
     missing = sorted(k for k in lits if k not in keys)

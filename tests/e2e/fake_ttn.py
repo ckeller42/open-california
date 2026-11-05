@@ -73,6 +73,7 @@ class FakeTtn:
         self.uplinks = {}  # dev id -> [{"received_at", "f_port", "frm_payload"}]
         self.downlinks = []  # (dev id, f_port, bytes, key id)
         self.storage_body = None  # test hook: bytes to answer every storage read with
+        self.refuse_key_delete = False  # test hook: deleting a full-rights ("all") key answers 500
         self.calls = []  # (method, path, key id)
         self.lock = threading.Lock()
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _make_handler(self))
@@ -236,6 +237,8 @@ def _make_handler(fake):
                     return err
                 with fake.lock:
                     gone = [s for s, v in fake.keys.items() if v["id"] == m[2]]
+                    if fake.refuse_key_delete and any(fake.keys[s]["kind"] == "all" for s in gone):
+                        return 500, {"code": 13, "message": "internal"}
                     for s in gone:
                         del fake.keys[s]
                 return (200, {}) if gone else (404, {"code": 5, "message": "key not found"})

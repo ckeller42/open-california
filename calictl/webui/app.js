@@ -292,7 +292,7 @@ const viewUrl = (v) => location.pathname + location.search + (v === "home" ? "" 
  * and consumed. A deep link wins over the setup landing. */
 function openFromHash() {
   const full = location.hash.slice(1), h = full.split("/")[0], step = full.slice(h.length + 1);
-  const screen = h === "devicestatus" || ORDER.includes(h) || ((SAT_VIEWS.includes(h) || h === "satdiag") && satellite());
+  const screen = REMOTE ? ORDER.includes(h) || REMOTE_VIEWS.includes(h) : h === "devicestatus" || ORDER.includes(h) || ((SAT_VIEWS.includes(h) || h === "satdiag") && satellite());
   if (!STATE._meta || !(screen || h === "pair" || SAT_VIEWS.includes(h))) return;
   landChecked = true;
   if (h === "pair") {
@@ -313,6 +313,7 @@ function openFromHash() {
 
 /** The in-app Device-status screen (from the ⋮ menu or the status pill). */
 function openDeviceStatus() {
+  if (REMOTE) return;   // the local app's screen: the remote app has no device to show there
   closeMenu();
   goto("devicestatus");
   // The load-time /api/pairing fetch may have failed (PAIRING still null): retry on open so
@@ -343,8 +344,11 @@ menuEl.onclick = (ev) => {
   // 2026-10-15): it lives in the unpaired banner, Device status's Camper-unit card and the `#pair` link.
   /** @type {HTMLElement[][]} */
   const groups = [[], []];
-  // The in-app Device-status screen, on both flavors (the satellite's settings open from it).
-  groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));   // also before the first answer (M1)
+  // The in-app Device-status screen, on both flavors (the satellite's settings open from it). The remote app
+  // (R_UI_REMOTE_APP) has its setup screens there instead.
+  if (REMOTE) groups[0].push(menuItem(T("Set up LoRa"), () => remoteOpen("remotesetup")),
+    menuItem(T("Scan the van's code"), () => remoteOpen("remotescan")), menuItem(T("Remove this van"), () => remoteOpen("remoteremove")));
+  else groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));   // also before the first answer (M1)
   if (HELP[view]) groups[1].push(menuItem(/** @type {string} */ (t("Help")), openHelp));   // per-screen help (#314)
   // Language toggle: label names the language you'd switch TO.
   groups[1].push(menuItem(LANG === "de" ? "English" : "Deutsch", () => { setLang(LANG === "de" ? "en" : "de"); }));
@@ -1087,7 +1091,8 @@ const satellite = () => !!(STATE._meta && STATE._meta.satellite);
 // The public remote app (R_UI_REMOTE_APP, the remote build's index.html sets it): the data comes from The Things
 // Stack only (remote.js); the page never calls its own /api/*, whoever serves it.
 const REMOTE = /** @type {any} */ (window).OC_REMOTE === true;
-const REMOTE_POLL_MS = 300000;   // TTS read while visible; the van sends every >= 10 min
+const REMOTE_POLL_MS = 300000;
+const REMOTE_VIEWS = ["remotesetup", "remotescan", "remoteremove"];   // remote.js remoteRender()   // TTS read while visible; the van sends every >= 10 min
 /** Remote mode: refuse every same-origin /api/* path BEFORE any request. Every /api/* call goes through it. @param {string} path */
 function remoteGuard(path) {
   const u = new URL(path, location.href);
@@ -1414,6 +1419,7 @@ async function refreshState(force) {
   paintLink();
   // the satellite screens keep their DOM (a typed password, an open step): a poll updates them in place
   if (SAT_VIEWS.includes(view) && satDom && satDom.view === view && !landed) { satUpdate(); return; }
+  if (REMOTE_VIEWS.includes(view)) return;   // the setup screens repaint themselves (remote.js)
   if (landed) { lastRender = ""; force = true; }
   if (view === "airheater") await thermoLoad();   // the thermostat card's own answer (satellite only)
   // don't repaint out from under a control the user is actively using — a poll-driven re-render
@@ -2178,6 +2184,7 @@ function pairingCard() {
 }
 
 function render() {
+  if (REMOTE && !REMOTE_VIEWS.includes(view)) rsCamStop();   // the camera runs on a scan screen only
   backEl.hidden = view === "home";
   backEl.onclick = back;
   stopClockTicker();          // any live vehicle-clock ticker belongs to the old DOM; restarted on re-render
@@ -2186,7 +2193,7 @@ function render() {
   if (sp) app.appendChild(sp);
   paintLink();   // the asleep / unreachable banner lives in #conn, above #app
   // WiFi setup explains the hotspot once itself (its Camper unit box), not as a read-only warning
-  if (readOnly() && STATE._meta && !STATE._meta.restored && view !== "wifisetup" && view !== "setup") {
+  if (readOnly() && STATE._meta && !STATE._meta.restored && view !== "wifisetup" && view !== "setup" && !REMOTE_VIEWS.includes(view)) {
     const b = document.createElement("div");
     b.className = "readonly";
     b.textContent = /** @type {string} */ (REMOTE ? t("LoRa — display only") : satellite() ? t("Satellite — display only")
@@ -2212,6 +2219,7 @@ function render() {
   else if (view === "devicestatus") renderDeviceStatus();
   else if (view === "satdiag") renderSatDiag();
   else if (SAT_VIEWS.includes(view)) renderSat();
+  else if (REMOTE_VIEWS.includes(view)) remoteRender(view);
   else renderFeature(view);
   roofViewSync();
 }
@@ -4803,6 +4811,7 @@ addEventListener("pointerdown", reportInput, true);
 addEventListener("keydown", reportInput, true);
 
 async function main() {
+  if (REMOTE) remoteBoot();   // a setup a reload interrupted goes on (spec 5.1: survives an app restart)
   paintLink();                // "connecting…" at once, not "…" while a hung first poll waits 8 s
   await refreshState(true);   // also takes the one-off /api/pairing once a calictl `_meta` answers
   render();
