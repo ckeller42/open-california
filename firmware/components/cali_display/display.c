@@ -634,7 +634,7 @@ static int qr_paint(const char *text) {
     uint32_t stride = s_qr_buf->header.stride;
     int ok = text[0] && qrcodegen_encodeText(text, s_qr_tmp, s_qr_mod, qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, QR_VMAX,
                                              qrcodegen_Mask_AUTO, false);
-    memset(bits, 0, (size_t)stride * LQR_BOX);
+    cali_wipe(bits, (size_t)stride * LQR_BOX);   /* the old QR: the secret in another shape */
     if (ok) {
         int n = qrcodegen_getSize(s_qr_mod), px = LQR_BOX / (n + 8), off = (LQR_BOX - px * n) / 2;
         for (int y = 0; y < n * px; y++)
