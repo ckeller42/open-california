@@ -648,3 +648,18 @@ def test_eta_line_hidden_without_an_estimate(stub, error_gated_page, mode, eta):
         expect(_card(pg).locator(".thermo-eta")).to_have_count(0)
     finally:
         cm.__exit__(None, None, None)
+
+
+def test_eta_line_hidden_on_old_data(stub, error_gated_page):
+    """With the satellite's data older than its offline limit the card names no time to target."""
+    _enable(
+        stub, mode="AUTO", heater="RUNNING", level=10, active="cabin", reason="HOLD", end="run", eta_s=2040
+    )
+    stub.fixtures["satellite"]["/api/thermostat"]["mode"] = "AUTO"
+    stub.fixtures["satellite"]["/api/state"]["device"]["link"]["last_snap_age_ms"] = 600000
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_have_attribute("aria-checked", "true")
+        expect(_card(pg).locator(".thermo-eta")).to_have_count(0)
+    finally:
+        cm.__exit__(None, None, None)

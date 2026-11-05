@@ -272,21 +272,37 @@ def test_eta_after_six_minutes_of_rise(cli, tmp_path):
     def hot(rem):
         return frame("airheater", Installed=1, NormalOperation=1, HeatingLevel=10, RunningTimeinAction=rem)
 
-    lines = [*SETUP, "target 3000", "auto", "tick", *[f"done {OK}"] * 3, "now 1500", hot(4), "tick", "state"]
-    for k in range(1, 12):  # 17.00 -> 19.75 at 0.25 K/min; 4 min of run time left, from 8 min on 60 min
+    # the reading of 17.00 is from 1000 (SETUP), so the first sample is stamped 1000, not at the step (1500)
+    lines = [*SETUP, "backup bed", "sensor bed 1700", "target 3000", "auto", "tick", *[f"done {OK}"] * 3,
+             "now 1500", hot(4), "tick", "state"]  # fmt: skip
+    for k in range(1, 12):  # 17.00, then 17.50 -> 20.00: 0.5 K in the first minute, then 0.25 K/min
         lines += [
             f"now {1500 + k * 60000}",
             hot(60 if k >= 8 else 4),
-            f"sensor cabin {1700 + k * 25}",
+            f"sensor cabin {1725 + k * 25}",
+            f"sensor bed {1700 + k * 25}",
             "tick",
             "state",
         ]
+    lines += [
+        "now 721500",
+        hot(60),
+        "sensor cabin -",
+        "sensor bed 2000",
+        "tick",
+        "state",
+    ]  # the backup takes over
     lines += ["stop", "tick", "state"]
     states = [json.loads(s[7:])["thermostat"] for s in run(cli, tmp_path, lines) if s.startswith("THERMO ")]
     assert all(s["mode"] == "AUTO" and s["level"] == 10 for s in states[:-1])
     assert [s["eta_s"] for s in states[:6]] == [None] * 6  # under 6 min of samples
-    # 6 min: 150 up, 1150 to go = 2760 s; 7 min: 175 up, 1125 to go = 2700 s; 8 min: 200 up = 2640 s
-    assert [s["eta_s"] for s in states[6:9]] == [2760, 2700, 2640]
-    assert [s["eta_ends_first"] for s in states[6:9]] == [True, True, False]
-    assert states[11]["eta_s"] == 2460  # the 10 min window: from 1 min (17.25) to 11 min (19.75), 1025 to go
+    # calictl.thermostat.eta over (span from 1000, rise, gap to 30.00, run time left)
+    assert [s["eta_s"] for s in states[6:9]] == [2318, 2313, 2296]
+    assert [s["eta_ends_first"] for s in states[6:9]] == [True, True, False]  # 4 min left, then 60
+    assert (
+        states[11]["eta_s"] == 2400
+    )  # the 10 min window drops 17.00: 17.50 -> 20.00, 1000 to go (keeping it: 2200)
+    assert (
+        states[12]["active"] == "bed" and states[12]["eta_s"] is None
+    )  # a new thermometer starts a new series
     assert states[-1]["eta_s"] is None and states[-1]["eta_ends_first"] is False

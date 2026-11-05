@@ -3873,7 +3873,8 @@ function thermoStatusText(th) {
  * always "about" (it is optimistic near the target and ignores the after-heat), or null when it has none.
  * @param {ThermoStatus} st @returns {?string} */
 function thermoEtaText(st) {
-  if (st.mode !== "AUTO" || st.eta_s == null || st.target == null) return null;
+  // only on live data: an old snapshot would name a time the estimate no longer supports
+  if (st.mode !== "AUTO" || st.eta_s == null || st.target == null || linkState() !== "live") return null;
   const target = (st.target / 100).toFixed(1);
   if (st.eta_ends_first) return tf("The run time ends before {target} °C", { target: target });
   const min = Math.max(5, Math.round(st.eta_s / 300) * 5), d = new Date(Date.now() + min * 60000);

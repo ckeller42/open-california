@@ -1220,13 +1220,16 @@ change made elsewhere never blocks the stop.
 While mode `AUTO` heats, a line under the target says when the reference thermometer reaches the target:
 *18.0 °C in about 35 min (≈10:35)*, in 5-minute steps and never under 5 min. When that time falls after
 the end of the unit's run time (1702 `RunningTimeinAction`, not at night), the line says *The run time ends
-before 18.0 °C* instead. Without an estimate the line is not there.
+before 18.0 °C* instead; the run time left is the frame's value less the frame's age. Without an estimate,
+or while the data is not live (the link pill does not show *live*), the line is not there.
 
 The satellite takes one reference reading per minute while mode `AUTO` heats and draws a straight line
 from the oldest reading of the last 10 minutes to the newest (`calictl.thermostat.eta`, the C twin
 `cali_thermo_eta`, held equal by the golden vectors). It gives no estimate in the first 6 minutes of a run
 (the heater's dead time is 4 to 5 minutes), for a rise slower than 0.05 K per minute, or within 0.5 K of
-the target, where the controller holds the temperature. Leaving mode `AUTO` clears the readings.
+the target, where the controller holds the temperature. Each reading carries the time it was
+measured, not the time of the step. Leaving mode `AUTO` or a switch between the reference and the backup
+thermometer clears the readings, and a new target clears the estimate until the next step.
 
 The line is optimistic near the target and does not know the after-heat. In one run on the van (level 10, target
 14.0 °C, outside about 7 °C) the reference rose about 0.25 K per minute after the dead time; the controller

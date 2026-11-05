@@ -203,36 +203,50 @@ static void inputs(cali_thermo_in_t *in, uint64_t now, int commit) {
     in->known_ignition_on = t15 < 0 && en < 0 ? -1 : t15 > 0 || en > 0;
 }
 
-/* R_THERMOSTAT_ETA: one t_ref sample per minute while AUTO heats; anything else clears them. The estimate
- * runs from the oldest sample in the window to this step's value. */
+/* R_THERMOSTAT_ETA: one t_ref sample per minute while AUTO heats, each stamped with its reading's time; leaving
+ * AUTO or a switch of the active thermometer clears them. The estimate runs from the oldest sample in the
+ * window to this step's reading. */
 #define ETA_N 12
 static struct {
     uint64_t at;
     int32_t t;
 } s_es[ETA_N];
 static int s_en;
+static int s_eta_src = -1;   /* S.active of the samples */
 static int32_t s_eta = CALI_THERMO_NONE;
 static int s_eta_first;
 
-static void eta_drop_oldest(void) { memmove(s_es, s_es + 1, (size_t)--s_en * sizeof *s_es); }
+static void eta_drop_oldest(void) {
+    if (s_en > 0) memmove(s_es, s_es + 1, (size_t)--s_en * sizeof *s_es);
+}
 
-static void eta_update(uint64_t now, int32_t rem_min) {
+static void eta_update(uint64_t now, const cali_thermo_in_t *in, int32_t rem_min) {
     const cali_thermo_status_t *st = &s_out.status;
+    const cali_thermo_sensor_t *r = S.active ? &in->backup : &in->ref;
     s_eta = CALI_THERMO_NONE;
     s_eta_first = 0;
-    if (S.mode != CALI_THERMO_AUTO || st->t_ref == CALI_THERMO_NONE ||
-        (st->heater != CALI_THERMO_H_RUNNING && st->heater != CALI_THERMO_H_CONTINUOUS)) {
-        s_en = 0;
-        return;
-    }
-    if (s_en == 0 || now - s_es[s_en - 1].at >= 60000) {
+    int heating = S.mode == CALI_THERMO_AUTO && st->t_ref != CALI_THERMO_NONE &&
+                  (st->heater == CALI_THERMO_H_RUNNING || st->heater == CALI_THERMO_H_CONTINUOUS);
+    if (!heating || S.active != s_eta_src) s_en = 0;   /* another thermometer: its readings start a new series */
+    s_eta_src = S.active;
+    if (!heating) return;
+    uint64_t age = r->age_ms > 0 && r->age_ms != CALI_THERMO_NONE_MS ? (uint64_t)r->age_ms : 0;
+    uint64_t at = now > age ? now - age : 0;
+    if (s_en > 0 && at < s_es[s_en - 1].at) at = s_es[s_en - 1].at;
+    if (s_en <= 0 || at - s_es[s_en - 1].at >= 60000) {
         if (s_en == ETA_N) eta_drop_oldest();
-        s_es[s_en].at = now;
+        s_es[s_en].at = at;
         s_es[s_en++].t = st->t_ref;
     }
-    while (s_en > 1 && now - s_es[0].at > CALI_THERMO_ETA_WINDOW_MS) eta_drop_oldest();
-    s_eta = cali_thermo_eta((int64_t)(now - s_es[0].at), st->t_ref - s_es[0].t, C.target - st->t_ref,
-                            st->night || rem_min == CALI_THERMO_NONE ? CALI_THERMO_NONE : rem_min * 60, &s_eta_first);
+    while (s_en > 1 && at - s_es[0].at > CALI_THERMO_ETA_WINDOW_MS) eta_drop_oldest();
+    int32_t rem_s = CALI_THERMO_NONE;
+    if (!st->night && rem_min != CALI_THERMO_NONE) {   /* the frame's run time left, less the frame's age */
+        int64_t left = (int64_t)rem_min * 60 -
+                       (in->heater_age_ms == CALI_THERMO_NONE_MS ? 0 : in->heater_age_ms / 1000);
+        rem_s = left < 0 ? 0 : (int32_t)left;
+    }
+    s_eta = cali_thermo_eta((int64_t)(at - s_es[0].at), st->t_ref - s_es[0].t, C.target - st->t_ref, rem_s,
+                            &s_eta_first);
 }
 
 static void step(uint64_t now) {
@@ -249,7 +263,7 @@ static void step(uint64_t now) {
 
     cali_thermo_step(&in, &C.s, &S, &s_out);
     s_stepped = 1;
-    eta_update(now, field(h, nh, "RunningTimeinAction"));
+    eta_update(now, &in, field(h, nh, "RunningTimeinAction"));
 
     if (s_out.reason && (!s_reason || strcmp(s_out.reason, s_reason) != 0 || S.mode != mode_before))
         cali_log("thermostat: %s (mode %s, heater %s)", s_out.reason, cali_thermo_mode_names[S.mode],
@@ -390,6 +404,7 @@ void cali_thermo_run_init(void) {
     memset(&s_out, 0, sizeof s_out);
     s_stepped = 0;
     s_en = 0;
+    s_eta_src = -1;
     s_eta = CALI_THERMO_NONE;
     s_eta_first = 0;
     s_out.status.heater = CALI_THERMO_H_UNKNOWN;
@@ -585,6 +600,10 @@ int cali_thermo_apply(const cali_thermo_patch_t *p) {
         if (p->cfg_has >> i & 1u) *cfg_at(&n.s, i) = (int32_t)p->cfg[i];
     if (memcmp(&n, &C, sizeof n) != 0) {
         if (cfg_store(&n) != 0) return CALI_THERMO_E_STORE;
+        if (n.target != C.target) {   /* the estimate was for the old target: none until the next step */
+            s_eta = CALI_THERMO_NONE;
+            s_eta_first = 0;
+        }
         C = n;
     }
     if ((h & CALI_THERMO_P_ENABLED) && cali_thermo_set_enabled(p->enabled) != 0) {
