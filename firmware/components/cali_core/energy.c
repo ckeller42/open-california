@@ -84,10 +84,8 @@ void cali_energy_step(cali_energy_ctr_t *c, double dt_s, const cali_energy_in_t 
     if (!in->valid) return;
     double k = in->batt2_v * dt_s / 3600.0 * 10.0;   /* A -> deci-Wh over dt */
     double load;
-    if (mppt_ok) {
-        double solar = (mppt_a > 0 ? mppt_a : 0) + in->unit_solar_a;
-        c->solar_dwh = (c->solar_dwh + (uint32_t)take(&c->frac[0], solar * k)) & CALI_ENERGY_MASK;
-    }
+    double solar = (mppt_ok && mppt_a > 0 ? mppt_a : 0) + in->unit_solar_a;   /* a stale charger: the unit's own still counts */
+    c->solar_dwh = (c->solar_dwh + (uint32_t)take(&c->frac[0], solar * k)) & CALI_ENERGY_MASK;
     if (cali_energy_house_load(in, mppt_ok, mppt_a, &load) == 0)
         c->load_dwh = (c->load_dwh + (uint32_t)take(&c->frac[1], load * k)) & CALI_ENERGY_MASK;
     int32_t b = c->batt_net_dwh + take(&c->frac[2], in->batt2_a * k);

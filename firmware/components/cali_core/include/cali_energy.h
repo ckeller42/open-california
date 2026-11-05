@@ -25,8 +25,8 @@
  *    unit's own solar current when installed) as ``solar_wh``, the house load (signals.md "House load",
  *    negative results down to -0.5 A count as 0) as ``load_wh``, and the battery's signed net current as
  *    ``batt_net_wh``. A step counts only when the unit's energy frame is from the current link and the
- *    session stored a frame in the last 60 s; the load and the chargers' share also need every configured
- *    charger's reading to be at most 60 s old and every installed unit source to have a value. A gap of
+ *    session stored a frame in the last 60 s. The chargers' share needs every configured charger's
+ *    reading to be at most 60 s old; the load needs that and every installed unit source to have a value. A gap of
  *    more than 5 s between ticks is not integrated. ``/api/state`` reports ``device.energy``
  *    ``{boot, solar_wh, load_wh, batt_net_wh, load_a}`` (Wh with one decimal, wrapping as 24-bit deci-Wh;
  *    ``load_a`` the last house load or ``null``).

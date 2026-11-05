@@ -141,22 +141,23 @@ def test_tick_needs_a_fresh_live_frame_and_no_gap(cli):
     (e,) = [json.loads(x)["energy"] for x in run(cli, *common, *ticks, "json")]
     # +2 A into the battery with no source is a mismatch (-2 A): the load stays unknown, the battery counts
     assert (e["batt_net_wh"], e["load_wh"], e["boot"], e["load_a"]) == (26.0, 0, 7, None)
+    nothing = {"boot": 7, "solar_wh": 0, "load_wh": 0, "batt_net_wh": 0, "load_a": None}
     # session's last frame older than 60 s: nothing integrates, the load is unknown
     out = run(cli, "reset", f"fake {raw} - 1 1000 0 0", "tick 70000", "tick 71000", "tick 72000", "json")
-    assert json.loads(out[-1])["energy"] == {
-        "boot": 7,
-        "solar_wh": 0,
-        "load_wh": 0,
-        "batt_net_wh": 0,
-        "load_a": None,
-    }
+    assert json.loads(out[-1])["energy"] == nothing
     # not from this link: nothing
     out = run(cli, "reset", f"fake {raw} - 0 1000 0 0", "tick 1000", "tick 2000", "json")
-    assert json.loads(out[-1])["energy"]["load_a"] is None
-    # a 10 s gap is skipped, the next 1 s step counts
-    out = run(cli, "reset", f"fake {raw} - 1 100000 0 0", "tick 100000", "tick 110000", "tick 111000", "json")
-    assert json.loads(out[-1])["energy"]["batt_net_wh"] == 0.0  # 1 s at 26 W is 0.07 deci-Wh: still 0
+    assert json.loads(out[-1])["energy"] == nothing
+    # a 10 s gap is skipped, the next 1 s steps count: 5 x 0.072 deci-Wh stays 0.0, with the 10 s it is 0.1
+    after = [f"tick {111000 + k * 1000}" for k in range(5)]
+    out = run(cli, "reset", f"fake {raw} - 1 100000 0 0", "tick 100000", "tick 110000", *after, "json")
+    assert json.loads(out[-1])["energy"]["batt_net_wh"] == 0.0
     # a stale charger: solar and load stop, the battery still counts
     out = run(cli, "reset", f"fake {raw} - 1 now -1 0", *ticks, "json")
     e = json.loads(out[-1])["energy"]
     assert (e["solar_wh"], e["load_wh"], e["batt_net_wh"], e["load_a"]) == (0, 0, 26.0, None)
+    # ... but the unit's own solar still counts: 2.0 A at 13 V for an hour is 26.0 Wh
+    pv = frame(PvInstalled=1, IPvAfs=20, ITwoBattBemAfs=20, UTwoBattBemAfs=130).hex()
+    out = run(cli, "reset", f"fake {pv} - 1 now -1 0", *ticks, "json")
+    e = json.loads(out[-1])["energy"]
+    assert (e["solar_wh"], e["load_wh"], e["batt_net_wh"]) == (26.0, 0, 26.0)

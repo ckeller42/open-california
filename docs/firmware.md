@@ -1761,8 +1761,8 @@ chargers' positive battery-side current plus the unit's own solar when installed
 house load of [signals.md](business-logic/signals.md#house-load-derived), the C twin of the web UI's
 `houseLoad()`, parity-tested against `calictl.semantics` over random frames) and `batt_net_wh` (the
 second battery's signed net current). A step counts only with the unit's energy frame from the current
-link and a session update in the last 60 s; the load also needs every charger's reading at most 60 s
-old. The ESP has no wall clock without the router, so a reader takes differences between readings of
+link and a session update in the last 60 s; the load and the chargers' share of `solar_wh` also need
+every charger's reading at most 60 s old (the unit's own solar counts without them). The ESP has no wall clock without the router, so a reader takes differences between readings of
 the same `boot`: a lost reading lowers the resolution, never the total. The counters are 24-bit deci-Wh
 (the LoRa uplink's width) and wrap.
 
