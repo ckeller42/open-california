@@ -163,6 +163,17 @@ def _pushed(pg, fake, n):
     raise AssertionError("no downlink pushed")
 
 
+def _wait_pushes(pg, fake, n):
+    """Wait until the fake has logged ``n`` downlink pushes (the push, not the page state, is the event)."""
+    for _ in range(100):
+        count = sum(1 for _, p, _ in fake.calls if p.endswith("/down/push"))
+        if count >= n:
+            assert count == n, f"{count} pushes, expected {n}"
+            return
+        pg.wait_for_timeout(50)
+    raise AssertionError(f"{count} pushes, expected {n}")
+
+
 def _plain(frags):
     """Decrypt the fragments as the ESP does (AES-128-GCM, AD = the DevEUI)."""
     blob = b"".join(f[1:] for f in frags)
@@ -400,25 +411,22 @@ def test_resend_after_10_min_without_confirmation(site, ttn, error_gated_page): 
                  return fr.map((f) => Array.from(f)); }"""
         )
         assert frags == [bytes(f) for f in expected]
-        assert sum(1 for _, p, _ in ttn.calls if p.endswith("/down/push")) == 1
+        _wait_pushes(pg, ttn, 1)
         for n in (2, 3):  # two more resends, 10 min apart
             pg.clock.fast_forward("10:30")
-            pg.wait_for_function(
-                "(n) => JSON.parse(localStorage.getItem('oc.remote.setup')).resends === n", arg=n
-            )
+            _wait_pushes(pg, ttn, n)
         pg.clock.fast_forward("10:30")
         pg.get_by_text("The van did not confirm").wait_for()
         st = json.loads(pg.evaluate("localStorage.getItem('oc.remote.setup')"))
         assert st["step"] == "rescan" and "tk" not in st
-        assert sum(1 for _, p, _ in ttn.calls if p.endswith("/down/push")) == 3
+        _wait_pushes(pg, ttn, 3)
         # a new scan starts a new transfer with a fresh resend budget
         _photo(pg, setup_qr(bytes(range(0x40, 0x50))))
         pg.get_by_text(tx["sent"]).wait_for()
         st = json.loads(pg.evaluate("localStorage.getItem('oc.remote.setup')"))
         assert st["resends"] == 0
-        _pushed(pg, ttn, 12)  # 3 resends of 4 fragments, then the new transfer's 4
-        pushes = sum(1 for _, p, _ in ttn.calls if p.endswith("/down/push"))
-        assert pushes == 4
+        _wait_pushes(pg, ttn, 4)  # 3 resends, then the new transfer's push
         pg.clock.fast_forward("10:30")
-        pg.wait_for_function("() => JSON.parse(localStorage.getItem('oc.remote.setup')).resends === 1")
-        assert sum(1 for _, p, _ in ttn.calls if p.endswith("/down/push")) == pushes + 1, "exactly one resend"
+        _wait_pushes(pg, ttn, 5)  # exactly one resend
+        pg.wait_for_timeout(500)
+        _wait_pushes(pg, ttn, 5)
