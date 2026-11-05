@@ -210,6 +210,7 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.test_web.test_ux_control_value_is_optional_printable_ascii_up_to_32
 .. automodule:: tests.e2e.test_satsettings
 .. automodule:: tests.e2e.test_satsettings_sensors
+.. automodule:: tests.e2e.test_satsettings_lora
 .. autofunction:: tests.test_web.test_ux_beacon_recorded_any_content_type
 .. autofunction:: tests.test_web.test_api_state_etag_ignores_the_ticking_members_and_answers_304
 .. autofunction:: tests.test_state_etag_parity.test_the_ticking_members_are_the_same_on_calictl_and_the_satellite

@@ -488,6 +488,8 @@ int cali_lora_console(const char *args) {
                  cali_exp_lora() ? "on" : "off", s_st.present < 0 ? "checking" : s_st.present ? "present" : "absent",
                  s_st.joined ? "joined" : "not joined", s_st.at_unanswered, (unsigned long)s_st.airtime_ms,
                  (unsigned long)s_st.charged_ms, setup_name(s_st.setup), s_st.has_ttn_keys ? " (TTN keys stored)" : "");
+    } else if (n >= 1 && !strcmp(op, "forget")) {
+        cali_log(cali_lora_forget() == 0 ? "lora: forgotten (keys erased, LoRa off)" : "lora: forget: store failed");
     } else if (n == 4 && !strcmp(op, "keys")) {
         uint8_t k[32];   /* DevEUI 8, JoinEUI 8, AppKey 16; never printed */
         if (unhex(a, k, 8) || unhex(b, k + 8, 8) || unhex(c, k + 16, 16)) cali_log("lora: keys: 16 + 16 + 32 hex digits");
@@ -495,7 +497,7 @@ int cali_lora_console(const char *args) {
         else cali_log("lora: keys stored (used at the next join attempt)");
         memset(k, 0, sizeof k);
     } else {
-        cali_log("lora: usage: lora on|off|status|keys <deveui> <joineui> <appkey>");
+        cali_log("lora: usage: lora on|off|status|forget|keys <deveui> <joineui> <appkey>");
     }
     return 0;
 }

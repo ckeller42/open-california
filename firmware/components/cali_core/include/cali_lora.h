@@ -470,7 +470,7 @@ void cali_lora_tick(uint64_t now_ms);
  */
 void cali_lora_json(cali_json_t *j);
 /**
- * @brief Console `lora on|off|status|keys <deveui> <joineui> <appkey>` (hex).
+ * @brief Console `lora on|off|status|forget|keys <deveui> <joineui> <appkey>` (hex).
  * @param args  The text after "lora".
  * @return 0.
  */

@@ -184,6 +184,7 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
                 "ble": None,  # ... nor device.ble (R_FW_BLE_IDLE)
                 "experimental": False,
                 "setup": None,  # ... nor device.setup (the first-time setup wizard)
+                "lora": None,  # ... nor device.lora (R_FW_LORA)
             },
         },
     )

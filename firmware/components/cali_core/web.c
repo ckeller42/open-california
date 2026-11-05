@@ -69,7 +69,7 @@ static const char ERR_BUSY[] = "{\"ok\":false,\"error\":\"busy\"}";
 static const char ERR_NOT_PAIRED[] = "{\"ok\":false,\"error\":\"not_paired\"}";   /* /api/ble connect */
 static const char ERR_NO_TIME[] = "{\"ok\":false,\"error\":\"no_time\"}";   /* /api/ble: no wall clock */
 static const char ERR_OTA_UNAVAILABLE[] = "{\"ok\":false,\"error\":\"ota_unavailable\"}";
-static const char ERR_DISABLED[] = "{\"ok\":false,\"error\":\"disabled\"}";   /* /api/sensors, flag off */
+static const char ERR_DISABLED[] = "{\"ok\":false,\"error\":\"disabled\"}";   /* /api/sensors, /api/lora, flag off */
 static const char OVERFLOW_BODY[] = "response too large";
 /* /api/pairing errors: calictl's own bodies (web.py), no "ok" member */
 static const char ERR_P_BAD_JSON[] = "{\"error\":\"bad_json\"}";
@@ -1500,6 +1500,28 @@ static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp)
     }
 }
 
+/* ---- POST /api/lora {"forget":true,"confirm":true}: the Satellite settings LoRa box's "Forget LoRa"
+ * (R_FW_LORA_SETUP): station only, 404 while exp_lora is off. No other body: keys arrive by QR/downlink. ---- */
+static const char *const K_LORA[] = {"forget", "confirm"};
+static void api_lora(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    int v[2] = {0, 0}, seen;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (!cali_exp_lora()) {
+        SET_CONST(resp, 404, ERR_DISABLED);
+    } else if ((seen = parse_body(req->body, req->body_len, K_LORA, 2, exp_field, v)) < 0 || !(seen & 1) || !v[0]) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);   /* "forget" is required and true */
+    } else if (!(seen & 2) || !v[1]) {
+        SET_CONST(resp, 400, ERR_CONFIRM);
+    } else if (cali_lora_forget() != 0) {
+        SET_CONST(resp, 500, ERR_STORE);
+    } else {
+        SET_CONST(resp, 200, OK_BODY);
+    }
+}
+
 /* ---- GET|POST /api/sensors: the Satellite settings Sensors box (R_FW_SENSORS), every mode, 404 while the flag is off ---- */
 
 enum { S_ADD = 1, S_REMOVE = 2, S_ID = 4, S_ALIAS = 8, S_KEY = 16 };
@@ -1645,6 +1667,10 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/sensors") == 0) {
         api_sensors(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/lora") == 0) {
+        api_lora(req, resp);
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the WiFi recovery page, in every mode */

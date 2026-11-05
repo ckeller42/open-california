@@ -32,6 +32,7 @@
  * @typedef {SatWifi & {last_error?: string|null, reverted?: boolean, scan?: {ssid: string, rssi: number, secure: boolean}[]}} SatWifiGet  GET /api/wifi
  * @typedef {{id: number, type: string, alias: string, last_seen_s: number|null, value: Record<string, number|null>|null}} SatSensCfg
  * @typedef {{id: number, type: string, model: string, rssi: number}} SatSensSeen
+ * @typedef {{module: string, joined: boolean, at_unanswered: number, last_s: number|null, airtime_ms_24h: number, airtime_charged_ms_24h: number, setup: string, dev_eui: string|null}} SatLora  device.lora (R_FW_LORA_SETUP)
  * @typedef {{configured: SatSensCfg[], seen: SatSensSeen[], scan: string, error?: string}} SatSensors  GET/POST /api/sensors
  * @typedef {{enabled: boolean, last_s: number|null, reason: string|null, halt_after_min?: number, halt_soc_pct?: number,
  *   halt_in_s?: number|null, halted?: boolean, halt_last_s?: number|null, halt_reason?: string|null, batt_low?: boolean}} SatPiWake
@@ -53,7 +54,7 @@
  * @property {boolean} [restored]           set only by restoreLastState(): the saved offline snapshot shown until a live poll answers
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora?: ?SatLora, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -2314,7 +2315,7 @@ function renderSatDiag() {
 // a typed password, an open confirm step or a sensor name must survive the 2 s poll, so a poll only
 // updates them in place (satUpdate). Their endpoints are the firmware's (web.c, firmware/docs):
 // GET/POST /api/wifi, /api/sensors; POST /api/auto_camper, /api/display, /api/ota, /api/ux_setting,
-// /api/experimental, /api/pi_wake, /api/pi_halt, /api/pi_wake_setting, /api/ble — reached through satFetch, never api() (which refuses them by design).
+// /api/experimental, /api/lora, /api/pi_wake, /api/pi_halt, /api/pi_wake_setting, /api/ble — reached through satFetch, never api() (which refuses them by design).
 const SAT_VIEWS = ["satsettings", "wifisetup", "setup"];
 /** @type {{view: string, lang: string, root: HTMLElement, step?: string}|null} the open satellite screen's DOM */
 let satDom = null;
@@ -2466,6 +2467,13 @@ function buildSat(v) {
       satSwitchRow("exp"), satMsg("exp-msg")),
     satCard("sens", null, h("p", { class: "note" }, T("Nearby sensors appear below; add the ones that are yours.")),
       h("div", { id: "sens-cfg" }), h("div", { id: "sens-seen" }), h("p", { class: "warn", id: "sens-msg", "aria-live": "polite" })));
+  const forget = satBtn(T("Forget LoRa"), "danger", "lora-forget");
+  const lacts = h("div", { class: "btnrow", id: "lora-acts" }, forget);
+  forget.onclick = () => satAsk(lacts, [h("span", null, T("Forget LoRa? The satellite deletes its LoRa keys and switches LoRa off. The device stays registered at The Things Network until you delete it there."))],
+    T("Forget LoRa"), "danger", satLoraForget, "lora-msg");
+  root.append(satCard("lora", "LoRa", ...LORA_ROWS.map(([id, label]) => h("div", { class: "row" }, h("span", { class: "lbl" }, T(label)), h("span", { class: "val", id: "lora-" + id }))),
+    h("p", { class: "note" }, T("Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app.")),
+    lacts, h("p", { class: "warn", id: "lora-msg", "aria-live": "polite" })));
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
   toggle("pw", "/api/pi_wake_setting", "Couldn't change the Pi wake", "enabled", "pw-msg");
   toggle("ux", "/api/ux_setting", "Couldn't change usage data", "enabled", "ux-msg");
@@ -2760,6 +2768,7 @@ function satUpdate() {
   satRow("exp", [T(s.experimental ? "Sensors: on" : "Sensors: off")], !!s.experimental, st);
   satRenderScreen(s.display || null, st);
   satRenderFw(s.ota || null, s.fw, st);
+  satRenderLora(s.lora || null, st);
   sq("sens").hidden = !s.experimental;
   if (s.experimental && !sensOn) { sensOn = true; satSensPoll(); }
 }
@@ -3150,6 +3159,41 @@ function satAsk(acts, nodes, okText, okCls, ok, msgId) {
   b.onclick = async () => { b.disabled = true; await ok(close); b.disabled = false; };
   c.onclick = close;
   (nodes[0] instanceof HTMLInputElement ? nodes[0] : c).focus();
+}
+
+// --- LoRa (R_FW_LORA_SETUP): shown while device.lora is there (the LoRa switch is on); Forget LoRa switches it off
+/** @type {[string, string][]} the box's value rows: id, label */
+const LORA_ROWS = [["module", "Module"], ["net", "Network"], ["last", "Last uplink"], ["air", "Airtime (24 h)"], ["setup", "Setup"], ["eui", "DevEUI"]];
+/** @type {Record<string, string>} device.lora.module / .setup -> the text */
+const LORA_WORDS = { present: "Found", absent: "Not found", checking: "Checking …", none: "Not set up", keys_made: "Keys made, waiting for the app",
+  joined: "Joined, waiting for the keys", ttn_keys: "Set up", error: "Key storage unreadable" };
+
+/** @param {?SatLora} l @param {boolean} st station mode */
+function satRenderLora(l, st) {
+  sq("lora").hidden = !l;
+  if (!l) return;
+  /** @param {string} id @param {string} text */
+  const set = (id, text) => { sq("lora-" + id).textContent = text; };
+  set("module", T(LORA_WORDS[l.module] || l.module));
+  set("net", T(l.at_unanswered > 0 ? "Module not answering" : l.joined ? "Joined" : "Not joined"));
+  // only an uplink the module confirmed is ever reported as one
+  set("last", l.last_s === null ? T("none confirmed yet") : tf("confirmed {n} min ago", { n: Math.floor(/** @type {number} */ (ageNow(l.last_s)) / 60) }));
+  set("air", tf("{a} s confirmed / {c} s charged", { a: (l.airtime_ms_24h / 1000).toFixed(1), c: (l.airtime_charged_ms_24h / 1000).toFixed(1) }));
+  set("setup", T(LORA_WORDS[l.setup] || l.setup));
+  set("eui", l.dev_eui || "—");
+  sq("lora-forget").hidden = !st;   // station only (403 setup_mode over the hotspot)
+}
+
+/** POST /api/lora {forget, confirm}; the next state has no device.lora, so the box goes. @param {() => void} close */
+async function satLoraForget(close) {
+  const msg = sq("lora-msg");
+  msg.textContent = "";
+  ux({ type: "control", fn: "satellite", control: "lora_forget" });
+  let ok = false;
+  try { ok = !!(await satFetch("/api/lora", { forget: true, confirm: true })).body.ok; } catch (e) { /* ok stays false */ }
+  if (!ok) { msg.textContent = T("Couldn't forget LoRa"); return; }
+  close();
+  await refreshState(true);
 }
 
 // --- Sensors (R_FW_SENSORS): shown while the Sensors switch is on; its own 10 s poll (a GET kicks a scan window)
