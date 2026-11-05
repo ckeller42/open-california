@@ -53,6 +53,7 @@
  * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
  * @property {boolean} [restored]           set only by restoreLastState(): the saved offline snapshot shown until a live poll answers
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
+ * @property {{ages: Record<string, number>, version: number|null}} [remote]  set only by adaptSatellite() for remote.js's body: each function's age in s, an unknown uplink version
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
  * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora?: ?SatLora, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
@@ -433,6 +434,7 @@ function uxFlush() {
     uxQueue = [];
     let s = JSON.stringify(body);
     while (s.length > UX_MAX_BYTES && body.events.length > 1) { body.events.shift(); s = JSON.stringify(body); }
+    remoteGuard("/api/ux");
     if (navigator.sendBeacon) navigator.sendBeacon("/api/ux", s);
   } catch (e) { /* telemetry never breaks the page */ }
 }
@@ -1040,6 +1042,7 @@ const FEATURES = {
  * @returns {Promise<any>}
  */
 async function api(path, opts) {
+  remoteGuard(path);
   // Defence in depth: the satellite serves /api/state, /api/pairing and, when it accepts writes,
   // /api/command (+ /api/auto_camper if reported) -- never let any caller fan out to a calictl-only
   // endpoint there; refuse before any network request.
@@ -1081,6 +1084,15 @@ function installed(fn) {
 const readOnly = () => !STATE._meta || !!STATE._meta.read_only;
 // The ESP32 satellite (semantics.js adaptSatellite): no session API.
 const satellite = () => !!(STATE._meta && STATE._meta.satellite);
+// The public remote app (R_UI_REMOTE_APP, the remote build's index.html sets it): the data comes from The Things
+// Stack only (remote.js); the page never calls its own /api/*, whoever serves it.
+const REMOTE = /** @type {any} */ (window).OC_REMOTE === true;
+const REMOTE_POLL_MS = 300000;   // TTS read while visible; the van sends every >= 10 min
+/** Remote mode: refuse every same-origin /api/* path BEFORE any request. Every /api/* call goes through it. @param {string} path */
+function remoteGuard(path) {
+  const u = new URL(path, location.href);
+  if (REMOTE && u.origin === location.origin && u.pathname.startsWith("/api/")) throw new Error("remote: no " + u.pathname);
+}
 // The satellite inlines this script into its page (no src); calictl serves it as /app.js. Known before
 // the first answer, so the first poll of a page load can already say "seen" to the satellite.
 const SAT_BUNDLE = !(/** @type {HTMLScriptElement|null} */ (document.currentScript))?.src;
@@ -1159,8 +1171,9 @@ const leftNow = (s) => (typeof s === "number" ? Math.max(0, s - (Date.now() - st
 const connEl = /** @type {HTMLElement} */ (document.getElementById("conn"));
 let connKey = "";
 
-/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"|"satellite"|"rest"|"redial"} */
+/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"|"satellite"|"rest"|"redial"|"lora"} */
 function linkState() {
+  if (REMOTE) return "lora";   // LoRa data is minutes old by design: its age is the pill, never "offline"
   if (waitingSince != null && Date.now() - waitingSince >= UNREACHABLE_MS) return "unreachable";
   const m = STATE._meta;
   // serve --no-ble: this Pi never opens BLE, the ESP satellite talks to the unit (no offline banner)
@@ -1195,17 +1208,18 @@ function backendName() {
 const LINK_PILL = { live: ["live", "ok"], asleep: ["offline", "warn"], never: ["offline", "warn"],
   unpaired: ["not paired", ""],
   connecting: ["connecting…", ""], unreachable: ["unreachable", "error"],
-  satellite: ["🛰 Satellite mode", ""], rest: ["power saving", ""], redial: ["reconnecting…", ""] };
+  satellite: ["🛰 Satellite mode", ""], rest: ["power saving", ""], redial: ["reconnecting…", ""], lora: ["LoRa", ""] };
 
 // Paint the pill + the persistent #conn banner (outside #app: a hung poll never reaches render(),
 // the 2 s tick still lands here). #conn is a role=status region: its text is replaced only when the
 // state/wording changes; the ticking {ago} (or "Checked" clock) lives in an aria-hidden child.
 function paintLink() {
   const s = linkState();
-  if (!hasWork()) setStatus(LINK_PILL[s][0], LINK_PILL[s][1]);   // a command keeps "Sending…"
   const m = STATE._meta;
   const clock = m && m.last_seen ? clockText(m.last_seen) : null;
   const ago = agoText(m && m.age_s != null ? m.age_s + (Date.now() - stateAt) / 1000 : null);
+  if (s === "lora") setStatus(tf("LoRa · {ago}", { ago: ago }), remoteProblem ? "warn" : "");   // the newest frame's age
+  else if (!hasWork()) setStatus(LINK_PILL[s][0], LINK_PILL[s][1]);   // a command keeps "Sending…"
   let cls = "offline", tmpl = "", tick = "ago", restNext = "";
   /** @type {Record<string, any>} */
   let vars = { clock: clock, ago: ago };
@@ -1234,6 +1248,12 @@ function paintLink() {
     tmpl = "Offline — no data yet (van asleep since the monitor started). Checked {clock}.";
     vars.clock = clockText(/** @type {number} */ (lastAnswerAt) / 1000);
     tick = "clock";
+  } else if (s === "lora") {
+    const version = m && m.remote ? m.remote.version : null;
+    if (version != null) tmpl = "The van sends data in a newer format — please update the app.";
+    else if (remoteProblem === "setup") tmpl = "LoRa is not set up on this phone.";
+    else if (remoteProblem === "ttn") tmpl = clock ? "The Things Stack does not answer. Last data {clock} ({ago})."
+      : "The Things Stack does not answer.";
   } else if (s === "unpaired" && view !== "wifisetup" && view !== "setup") {   // WiFi setup: its unpaired banner says it once
     cls += " unpaired";   // neutral: nothing is broken, the setup is not done yet
     tmpl = "Not paired yet — no data.";
@@ -1298,6 +1318,21 @@ async function restConnect() {
   await refreshState(true);
 }
 
+// Remote mode: the last TTS read's start (ms) and what went wrong ("" | "setup": no configuration on this phone |
+// "ttn": TTS refused or did not answer). The error's text is never shown: it names no key, but stays out anyway.
+let remoteAt = 0, remoteProblem = "";
+/** One TTS read (remote.js) -> the satellite-shaped body. @returns {Promise<any>} */
+async function remotePoll() {
+  remoteAt = Date.now();
+  const cfg = remoteCfg();
+  if (!cfg) { remoteProblem = "setup"; throw new Error("no LoRa configuration"); }
+  try {
+    const body = await remoteState(cfg, Date.now());
+    remoteProblem = "";
+    return body;
+  } catch (e) { remoteProblem = "ttn"; throw e; }
+}
+
 /** @param {boolean} [force] */
 async function refreshState(force) {
   // The satellite answers POST /api/command only after the unit's ACK (<= 4 s) and serves nothing
@@ -1306,6 +1341,7 @@ async function refreshState(force) {
   // WebKit (Safari, iPhone) does not and would stack a connection per 2 s tick on the stalled core,
   // then drain them oldest-first (tests/e2e/test_satellite.py pins "at most one waiting", both engines).
   if (polling) { forceNext = forceNext || !!force; seenNext = seenNext || !!force; return; }
+  if (REMOTE && !force && Date.now() - remoteAt < REMOTE_POLL_MS) return;   // the 2 s tick only repaints
   const seen = !!force || seenNext;
   seenNext = false;
   polling = true;
@@ -1319,18 +1355,22 @@ async function refreshState(force) {
     // as input (R_FW_BLE_VIEWER_KEEP's idle cap); the 2 s tick is a plain poll. Satellite only.
     // the Diagnostics screen adds ?diag=1 (R_FW_STATE_DIAG): the members the plain poll leaves out
     const q = [seen && (SAT_BUNDLE || satellite()) ? "seen=1" : "", diagAsked ? "diag=1" : ""].filter(Boolean);
-    // no-store: the browser cache never answers (a cached 200 would reset every age); the page sends
-    // the ETag itself and handles the 304
-    const res = await fetch("/api/state" + (q.length ? "?" + q.join("&") : ""), { signal: ac.signal, cache: "no-store",
-      headers: !diagAsked && stateEtag && Date.now() - stateAt < STATE_REFRESH_MS ? { "If-None-Match": stateEtag } : {} });
-    if (res.status === 304 && lastBody) { await res.text(); next = null; }   // unchanged: keep STATE (the empty body
-    // read to its end, so the request finishes instead of being cancelled)
+    if (REMOTE) next = await remotePoll();
     else {
-      next = await res.json();
-      // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
-      // unreachable clock
-      if (!isSatelliteBody(next) && !(next && typeof next === "object" && next._meta)) throw new Error("no state");
-      if (!diagAsked) { stateEtag = res.headers.get("ETag"); lastBody = next; }
+      // no-store: the browser cache never answers (a cached 200 would reset every age); the page sends
+      // the ETag itself and handles the 304
+      remoteGuard("/api/state");
+      const res = await fetch("/api/state" + (q.length ? "?" + q.join("&") : ""), { signal: ac.signal, cache: "no-store",
+        headers: !diagAsked && stateEtag && Date.now() - stateAt < STATE_REFRESH_MS ? { "If-None-Match": stateEtag } : {} });
+      if (res.status === 304 && lastBody) { await res.text(); next = null; }   // unchanged: keep STATE (the empty body
+      // read to its end, so the request finishes instead of being cancelled)
+      else {
+        next = await res.json();
+        // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
+        // unreachable clock
+        if (!isSatelliteBody(next) && !(next && typeof next === "object" && next._meta)) throw new Error("no state");
+        if (!diagAsked) { stateEtag = res.headers.get("ETag"); lastBody = next; }
+      }
     }
   } catch (e) {
     paintLink();   // a failure alone changes nothing: unreachable is time-based (UNREACHABLE_MS)
@@ -1353,7 +1393,7 @@ async function refreshState(force) {
   // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the
   // Device status's "Unpair…". Taken the first time a `_meta` answers (calictl or the satellite) -- also when
   // the first poll failed (daemon restarting) -- and never on an unknown runtime.
-  if (STATE._meta && !pairingFetched) { pairingFetched = true; await pairingFetch(); openFromHash(); }
+  if (STATE._meta && !pairingFetched && !REMOTE) { pairingFetched = true; await pairingFetch(); openFromHash(); }
   // The setup hotspot (device.wifi.mode setup/off) or a first-time setup not done yet (device.setup.pending):
   // the app lands on the setup wizard once per load, at the step the state allows (setupStep). Back in
   // station mode WiFi setup gives way to Home (unless the join was made here: it shows the result).
@@ -1595,6 +1635,12 @@ function back() {
 function measuredText(s, unknown) {
   if (typeof s.measured_at !== "number") return unknown;
   return tf("🕒 measured {ago}", { ago: agoText(Math.max(0, Math.round(Date.now() / 1000 - s.measured_at))) });
+}
+
+/** Remote mode: the age of a function's newest LoRa frame ("5 min ago"), else "". @param {string} fn */
+function remoteAgo(fn) {
+  const r = STATE._meta && STATE._meta.remote;
+  return r && typeof r.ages[fn] === "number" ? agoText(ageNow(r.ages[fn])) : "";
 }
 
 /**
@@ -2143,7 +2189,7 @@ function render() {
   if (readOnly() && STATE._meta && !STATE._meta.restored && view !== "wifisetup" && view !== "setup") {
     const b = document.createElement("div");
     b.className = "readonly";
-    b.textContent = /** @type {string} */ (satellite() ? t("Satellite — display only")
+    b.textContent = /** @type {string} */ (REMOTE ? t("LoRa — display only") : satellite() ? t("Satellite — display only")
       : t("🔒 Read-only — control is disabled on this daemon."));
     app.appendChild(b);
   }
@@ -2215,7 +2261,7 @@ const SAT_CLOCK = { synced: "synced", waiting: "not synced yet", none: "no sourc
 /** @type {Record<ReturnType<typeof linkState>, string>} every link state (tsc checks the set) */
 const LINK_WORD = { live: "online", asleep: "asleep", never: "asleep", unpaired: "not paired",
   connecting: "connecting…", unreachable: "unreachable", satellite: "🛰 Satellite mode", rest: "power saving",
-  redial: "reconnecting…" };
+  redial: "reconnecting…", lora: "LoRa" };
 
 /** A Device-status card: its heading names the device (UX review 3.2: one card per device).
  * @param {string} title @returns {HTMLElement} */
@@ -2355,6 +2401,7 @@ const sqInput = (id) => /** @type {HTMLInputElement} */ (sq(id));
  * @returns {Promise<{status: number, body: any}>}
  */
 async function satFetch(path, body, ms = POLL_TIMEOUT_MS) {
+  remoteGuard(path);
   if (!satellite()) throw new Error("not a satellite: " + path);
   const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms);
   try {
@@ -3337,14 +3384,16 @@ function renderSummary() {
   const w = STATE.water || {};
   if (installed("water")) {
     const f = w.fresh, g = w.waste;
-    if (f && f.liters != null) rows.push(sumRow(/** @type {string} */ (t("Fresh water")), `${f.liters} / ${f.capacity_l} l${f.stale ? " 🕒" : ""}`));
-    if (g && g.liters != null) rows.push(sumRow(/** @type {string} */ (t("Waste water")), `${g.liters} / ${g.capacity_l} l${g.stale ? " 🕒" : ""}`));
+    const wa = remoteAgo("water") ? " · " + remoteAgo("water") : "";
+    if (f && f.liters != null) rows.push(sumRow(/** @type {string} */ (t("Fresh water")), `${f.liters} / ${f.capacity_l} l${f.stale ? " 🕒" : ""}${wa}`));
+    if (g && g.liters != null) rows.push(sumRow(/** @type {string} */ (t("Waste water")), `${g.liters} / ${g.capacity_l} l${g.stale ? " 🕒" : ""}${wa}`));
   }
   /** @type {FnState} */
   const e = STATE.energy || {};
   if (e.soc2_pct != null) {
     const h = e.batt2_remaining_h;
-    rows.push(sumRow(/** @type {string} */ (t("Second battery")), `${e.soc2_pct}%` + (h ? ` · ${h} h` : "")));
+    rows.push(sumRow(/** @type {string} */ (t("Second battery")), `${e.soc2_pct}%` + (h ? ` · ${h} h` : "")
+      + (remoteAgo("energy") ? " · " + remoteAgo("energy") : "")));
   }
   if (!rows.length) return null;
   const card = document.createElement("div"); card.className = "card summary";
@@ -3559,7 +3608,8 @@ function renderDashboard() {
     tile.className = "tile" + (alertMsg ? " alert" : "");
     tile.innerHTML = (alertMsg ? `<div class="tbadge">⚠</div>` : "") +
       `<div class="ti">${iconSvg(f.icon)}</div><div class="tt">${t(f.title)}</div>` +
-      `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>`;
+      `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>` +
+      (remoteAgo(fn) ? `<div class="tv">🕒 ${remoteAgo(fn)}</div>` : "");
     if (alertMsg) {
       const msg = /** @type {string} */ (t(alertMsg));
       tile.title = msg;   // pointer hover; touch and VoiceOver get the cause from the accessible name
@@ -3859,6 +3909,11 @@ function renderFeature(fn) {
   /** @type {FnState} */
   const s = STATE[fn] || {};
   titleEl.textContent = /** @type {string} */ (t(f.title));
+  if (remoteAgo(fn)) {                  // remote mode: when this function's values came over LoRa
+    const b = document.createElement("div");
+    b.className = "note"; b.textContent = tf("Values via LoRa, {ago}", { ago: remoteAgo(fn) });
+    app.appendChild(b);
+  }
   if (f.warn) {                         // dynamic FAULT banner (e.g. fridge door open) — red/alert
     /** @type {string|null|undefined} */
     let w;
@@ -4216,6 +4271,7 @@ async function thermoLoad() {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
   try {
+    remoteGuard("/api/thermostat");
     const r = await fetch("/api/thermostat", { cache: "no-store", signal: ac.signal });
     const b = r.ok ? await r.json() : null;
     THERMO = b && typeof b.rev === "number" && b.status ? b : null;

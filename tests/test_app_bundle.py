@@ -134,3 +134,17 @@ def test_freshness_also_checks_the_header_text_around_the_array(tmp_path, monkey
     assert not gen_c_dict.bundle_is_fresh()
     hdr.write_text(good, encoding="utf-8")
     assert gen_c_dict.bundle_is_fresh()
+
+
+def test_remote_only_scripts_are_not_in_the_bundle():
+    """The remote app's scripts (TTN client, LoRa decoder and setup, remote data source) stay out of the ESP bundle."""
+    remote = ("remote.js", "ttn.js", "lora_decode.js", "lora_setup.js")
+    assert not set(remote) & set(gen_c_dict._APP_SCRIPTS)
+    html = gen_c_dict.render_app_bundle()
+    for marker in (
+        "function remoteState(",
+        "function readUplinks(",
+        "loraDecodeUplink =",
+        "function parseRepairQr(",
+    ):
+        assert marker not in html, marker

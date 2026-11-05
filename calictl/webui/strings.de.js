@@ -982,4 +982,13 @@ window.STRINGS_DE = {
   "✓ Setup done": "✓ Einrichtung abgeschlossen",
   "Couldn't finish the setup": "Einrichtung konnte nicht abgeschlossen werden",
   "not set up": "nicht eingerichtet",
+
+  // remote mode (R_UI_REMOTE_APP): the van over LoRa, from The Things Stack
+  "LoRa · {ago}": "LoRa · {ago}",
+  "LoRa — display only": "LoRa — nur Anzeige",
+  "Values via LoRa, {ago}": "Werte über LoRa, {ago}",
+  "The van sends data in a newer format — please update the app.": "Das Fahrzeug sendet Daten in einem neueren Format — bitte die App aktualisieren.",
+  "LoRa is not set up on this phone.": "LoRa ist auf diesem Telefon nicht eingerichtet.",
+  "The Things Stack does not answer. Last data {clock} ({ago}).": "The Things Stack antwortet nicht. Letzte Daten {clock} ({ago}).",
+  "The Things Stack does not answer.": "The Things Stack antwortet nicht.",
 };

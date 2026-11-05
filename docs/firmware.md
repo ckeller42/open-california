@@ -1844,7 +1844,8 @@ within seconds; a downlink that switches camping mode on (and with it the router
   Port C. With the switch off, `cali_lora` never installs the UART or drives RST.
 - **Setup:** an application and one device per van in The Things Stack (OTAA, EU868, class C), the
   generated formatter `firmware/components/cali_lora/ttn_formatter.js` as the uplink formatter
-  (`python3 -m tools.gen_lora_dict` writes it from the dictionary; CI checks it is fresh), and the
+  (`python3 -m tools.gen_lora_dict` writes it from the dictionary, with the same decoder as the remote
+  app's `calictl/webui/lora_decode.js`; CI checks both are fresh), and the
   {term}`Storage Integration`. The device uses the module's own DevEUI. Opening the setup on the satellite makes
   the AppKey (once) and a new transfer key; the module then gets the AppKey and joins again. The setup
   QR carries the DevEUI, the AppKey and the transfer key to the phone. Without these keys the satellite
@@ -2390,7 +2391,12 @@ collected here. `firmware/README.md` has the human-readable version of the same 
   `T_UI_PWA_SATELLITE` (`tests/e2e/test_pwa.py`, Chromium on 127.0.0.1, a secure context) and
   `T_FW_SW_SERVED` (`tests/firmware/test_web_handlers.py`).
 - **`R_UI_REMOTE_APP`** — verified so far by `T_UI_TTN_CLIENT` (`tests/test_ttn_js.py`, `ttn.js` against the fake TTN
-  `tests/e2e/fake_ttn.py`).
+  `tests/e2e/fake_ttn.py`) and `T_UI_REMOTE_NO_ROUTER` (`tests/e2e/test_remote_app.py`: the remote mode against the
+  fake TTN shows battery, water, solar and the cooler with their ages and a "LoRa · age" badge, every control
+  read-only, an unknown uplink version says "update the app", and no request reaches the page's own `/api/*` or any
+  host but the fake TTN; `api()` and `satFetch()` refuse before any request). The decoder's C round trip and the
+  version refusal: `tests/firmware/test_lora.py`; the ESP bundle without the remote-only scripts:
+  `tests/test_app_bundle.py`.
 - **`R_UI_LINK_STATE`** — verified by `T_UI_LINK_ASLEEP`, `T_UI_LINK_UNREACHABLE`,
   `T_UI_LINK_UNPAIRED` (`tests/e2e/test_link_state.py`, page.clock over a fixed calictl state: blip, hung poll, hidden
   tab, asleep-then-unreachable, DE copy + the quiet live region) and `T_UI_LINK_RESTORED`

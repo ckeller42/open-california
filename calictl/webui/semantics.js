@@ -444,7 +444,7 @@ function adaptSatellite(body, nowMs) {
     online: age !== null && age <= SAT_OFFLINE_S,
     age_s: age,
     last_seen: age === null ? null : nowMs / 1000 - age,
-    paired: !!pairing.address,
+    paired: !!pairing.address || dev.source === "lora",   // remote.js: the van sends, so a unit is paired
     // The firmware accepts POST /api/command only in station mode (device.control.writes); an older
     // firmware without the field stays display-only.
     read_only: !(dev.control && dev.control.writes === true),
@@ -489,6 +489,9 @@ function adaptSatellite(body, nowMs) {
   // = AutoCamper.snapshot()
   // The external BLE sensors (R_FW_SENSORS): top-level ext, only while the sensor track is on.
   if (body.ext && typeof body.ext === "object") out.ext = body.ext;
+  // The remote app's body (remote.js, R_UI_REMOTE_APP): the data came over LoRa, each function with its own age,
+  // and an uplink version the app does not know (null: none)
+  if (dev.source === "lora") out._meta.remote = { ages: dev.ages_s || {}, version: dev.lora_version ?? null };
   const ac = dev.auto_camper;
   if (ac) out._meta.auto_camper = { enabled: !!ac.enabled, armed: ac.state !== "idle", notice: null };
   return out;

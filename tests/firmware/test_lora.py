@@ -597,3 +597,81 @@ def test_ttn_plaintext_checked_before_storing(cli):
     big = plaintext(cluster="a" * 64, app="b" * 36, dev="c" * 36) + bytes(80)
     out = run(cli, f"ttnok {good.hex()}", *(f"ttnok {b.hex()}" for b in bad), f"ttnok {big.hex()}")
     assert out == ["1", "0", "0", "0", "0", "0"]
+
+
+def web_decode(port, data):
+    """Decode one uplink with the web UI's generated decoder (``lora_decode.js``, a classic script)."""
+    import os
+
+    node = shutil.which("node")
+    if not node:
+        (pytest.fail if os.environ.get("CI") else pytest.skip)("node not available")
+    js = ROOT / "calictl/webui/lora_decode.js"
+    code = (
+        'const fs=require("fs"),vm=require("vm"),c=vm.createContext({Uint8Array});'
+        f"vm.runInContext(fs.readFileSync({json.dumps(str(js))},'utf8'),c);"
+        f"console.log(JSON.stringify(vm.runInContext('loraDecodeUplink({port},Uint8Array.from({json.dumps(list(data))}))',c)))"
+    )
+    return json.loads(subprocess.run([node, "-e", code], capture_output=True, text=True, check=True).stdout)
+
+
+def test_c_pack_js_decode_round_trip(cli):
+    """C pack_energy / pack_changed / pack_daily -> the web UI's decoder -> calictl.protocol.decode's raw fields."""
+    import random
+
+    rnd = random.Random(9)
+    for _ in range(10):
+        en, wa = bytes(rnd.randrange(255) for _ in range(22)), bytes(rnd.randrange(255) for _ in range(6))
+        out = run(
+            cli,
+            f"frame energy {en.hex()}",
+            f"frame water {wa.hex()}",
+            "mppt 2.3 13.5 5 0 0 87 0.42",
+            "bsense 13.05",
+            "ctr 1234 2345 -345",
+            "boot 7",
+            "snap 0",
+            "pack2",
+        )
+        d = web_decode(2, bytes.fromhex(out[-1]))
+        assert d["port"] == 2 and d["version"] == 1 and d["boot"] == 7
+        assert d["fn"] == {
+            "energy": protocol.decode(FUNCS["energy"], en),
+            "water": protocol.decode(FUNCS["water"], wa),
+        }
+        assert d["counters"] == {"solar_wh": 123.4, "load_wh": 234.5, "batt_net_wh": -34.5}
+        assert d["ext"]["victron_mppt"]["pv_power"] == 87 and d["ext"]["victron_battery"] == {
+            "battery_voltage": 13.05
+        }
+    out = run(
+        cli,
+        "frame cooler 0180300000000000",
+        "frame campingmode 03",
+        f"frame general {GENERAL.hex()}",
+        "snap 3600000",
+        "trk_init",
+        "trk_update 0",
+        "trk_pack 51",
+        "pack4 fw1",
+    )
+    assert web_decode(3, bytes.fromhex(out[0]))["fn"] == {
+        "cooler": protocol.decode(FUNCS["cooler"], bytes.fromhex("0180300000000000")),
+        "campingmode": protocol.decode(FUNCS["campingmode"], b"\x03"),
+    }
+    d4 = web_decode(4, bytes.fromhex(out[1]))
+    assert (
+        d4["fw"] == "fw1"
+        and d4["uptime_s"] == 3600
+        and d4["fn"]["general"] == protocol.decode(FUNCS["general"], GENERAL)
+    )
+    # port 12 (key-transfer confirmation) is passed through, not interpreted
+    assert web_decode(12, b"\x00\x01\x02\x03\x04") == {"port": 12, "confirm": [0, 1, 2, 3, 4]}
+    assert "error" in web_decode(3, b"\x00\x05\x01") and "error" in web_decode(9, b"\x01")
+
+
+def test_decode_refuses_unknown_version(cli):
+    """A version this decoder does not know gives no fields, only the version (the app says "update the app")."""
+    for port, length in ((2, 50), (4, 24)):
+        d = web_decode(port, bytes([99]) + bytes(length - 1))
+        assert d["version"] == 99 and d["fn"] == {} and set(d) == {"port", "version", "fn"}
+        assert formatter(port, bytes([99]) + bytes(length - 1))["errors"]
