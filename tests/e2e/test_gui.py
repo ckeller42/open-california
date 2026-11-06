@@ -1765,3 +1765,62 @@ def test_menu_lists_device_status_before_the_first_answer(base_url):
         for r in held:
             r.abort()
         browser.close()
+
+
+def test_tile_grid_reflows_to_one_column_for_large_text(base_url, error_gated_page):
+    """Dynamic Type: at phone width the tiles sit in two columns; with large accessibility text
+    (root font at 200 %) the grid drops to one column and nothing overflows the page width."""
+
+    def columns(pg):
+        return pg.evaluate(
+            "getComputedStyle(document.querySelector('.tilegrid')).gridTemplateColumns.split(' ').length"
+        )
+
+    with error_gated_page(base_url, viewport={"width": 390, "height": 844}) as pg:
+        expect(pg.locator(".tilegrid .tile").first).to_be_visible()
+        assert columns(pg) == 2
+        pg.evaluate("document.documentElement.style.fontSize = '200%'")
+        assert columns(pg) == 1
+        assert pg.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+
+
+def test_controls_have_44px_targets_and_the_session_pill_does_not_stretch(page):
+    """Apple HIG 44 pt floors on the Cooler screen (switch hit band, <select>, segment and action
+    buttons); the session pill hugs its text in light-mode AA green instead of spanning #app."""
+    pill = page.locator(".session-pill")
+    expect(pill).to_have_class(re.compile(r"\bok\b"), timeout=20000)
+    assert pill.evaluate(
+        "p => p.getBoundingClientRect().width < document.getElementById('app').clientWidth / 2"
+    )
+    assert pill.evaluate("p => getComputedStyle(p).color") == "rgb(30, 122, 67)"  # --ok-text
+    page.get_by_text("Cooler", exact=True).first.click()
+    sw = page.get_by_role("switch", name="Refrigerator box")
+    box = sw.bounding_box()
+    assert box
+    cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    for dy in (-21, 21):  # the ::before band reaches 22 px above and below the centre
+        assert page.evaluate(
+            "([x, y]) => document.elementFromPoint(x, y).classList.contains('switch')", [cx, cy + dy]
+        )
+    for sel, screen in ((".row select", None), (".seg", None), (".btnrow .btn", "Roof")):
+        if screen:
+            page.goto(page.url.split("#")[0])
+            page.get_by_text(screen, exact=True).first.click()
+        loc = page.locator(sel)
+        expect(loc.first).to_be_visible()
+        for i in range(loc.count()):
+            h = loc.nth(i).bounding_box()
+            assert h and h["height"] >= 44, (sel, i, h)
+
+
+def test_reduced_motion_calms_transitions(base_url, error_gated_page):
+    """prefers-reduced-motion: switch transitions stop; the spinner keeps turning, only slower."""
+    with error_gated_page(base_url, reduced_motion="reduce") as pg:
+        pg.get_by_text("Cooler", exact=True).first.click()
+        sw = pg.locator(".switch").first
+        expect(sw).to_be_visible()
+        assert sw.evaluate("s => getComputedStyle(s).transitionDuration") == "0s"
+        assert pg.evaluate(
+            "() => { const s = document.createElement('div'); s.className = 'spinner'; document.body.append(s);"
+            " const c = getComputedStyle(s); return [c.animationName, c.animationDuration]; }"
+        ) == ["spin", "2s"]
