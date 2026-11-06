@@ -15,10 +15,30 @@ echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sud
 sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
 ls -l /dev/kvm
 
-sudo apt-get update -qq
-sudo apt-get install -y -qq bluez dbus qemu-system-x86 linux-image-generic
+# apt runs in timed steps with a limit each. On some runners (mostly the West US regions) this
+# phase took up to 30 min, and under -qq the log stayed empty. Without -qq apt prints one `Get:`
+# line per finished file and a closing `Fetched <size> in <time> (<rate>)`: the log shows which
+# step is slow and the mirror's throughput, also when a limit stops the step.
+apt_step() {   # apt_step <limit seconds> <label> <apt-get args...>
+  local limit=$1 label=$2 t0=$SECONDS
+  shift 2
+  echo "::group::$label"
+  if sudo timeout "$limit" apt-get "$@"; then
+    echo "::endgroup::"
+    echo "$label: $((SECONDS - t0)) s"
+  else
+    local rc=$?
+    echo "::endgroup::"
+    if [ "$rc" -eq 124 ]; then echo "::error::$label took longer than $limit s (slow apt mirror on this runner)"; fi
+    return "$rc"
+  fi
+}
+PKGS=(bluez dbus qemu-system-x86 linux-image-generic)
+apt_step 300 "apt-get update" update
+apt_step 1200 "apt-get download" install -y --download-only "${PKGS[@]}"
+apt_step 600 "apt-get install" install -y -qq "${PKGS[@]}"
 KVER=$(ls /boot/vmlinuz-*-generic | sort -V | tail -1 | sed 's|/boot/vmlinuz-||')
-sudo apt-get install -y -qq "linux-modules-extra-$KVER" || true
+apt_step 600 "apt-get install modules-extra" install -y "linux-modules-extra-$KVER" || true
 echo "guest kernel: $KVER"
 
 # The system python3 (the guest runs the same interpreter off the shared root filesystem).
