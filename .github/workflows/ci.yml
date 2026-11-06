@@ -267,8 +267,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The guest's .deb files come from the cache (GitHub's storage: 38–106 MB/s in every region,
+      # 2026-11-06) instead of the mirror (azure.archive.ubuntu.com: 7–36 kB/s on westus2 runners).
+      # The newest entry is restored; vm.sh downloads only what changed and names the new set.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/debs
+          key: realstack-debs-v1-restore
+          restore-keys: realstack-debs-v1-
       - name: Pair over real BlueZ in a VM
+        id: rig
         run: bash tests/realstack/vm.sh
+      - if: always() && steps.rig.outputs.debs_key != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/debs
+          key: realstack-debs-v1-${{ steps.rig.outputs.debs_key }}
 
   firmware-host-e2e:
     runs-on: ubuntu-latest

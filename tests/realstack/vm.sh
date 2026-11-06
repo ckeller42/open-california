@@ -35,6 +35,14 @@ apt_step() {   # apt_step <limit seconds> <label> <apt-get args...>
 }
 # The limits (120 + 900 + 300 s = 22 min) stay inside the job's 30 min with room for pip and the rig
 # (~3 min), so a slow step always reports its own error before the job limit cancels it.
+# The runner's apt reads its hosts from apt-mirrors.txt, azure.archive.ubuntu.com first. On westus2
+# runners that endpoint gave 7–36 kB/s while archive.ubuntu.com gave 38–45 MB/s on the same runners
+# (2026-11-06), so drop it: a cache miss (first run, a kernel bump, an evicted entry) then still
+# downloads at a normal rate.
+if [ -f /etc/apt/apt-mirrors.txt ]; then
+  sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+  cat /etc/apt/apt-mirrors.txt
+fi
 apt_step 120 "apt-get update" update
 # The guest kernel by its version, not the linux-image-generic metapackage: that one depends on
 # linux-firmware (~680 MB of device firmware a QEMU guest never loads), and the recommends add a
@@ -43,7 +51,20 @@ KVER=$(apt-cache depends linux-image-generic | sed -n 's/.*Depends: linux-image-
 [ -n "$KVER" ] || { echo "::error::no kernel version from linux-image-generic"; exit 1; }
 echo "guest kernel: $KVER"
 PKGS=(bluez dbus qemu-system-x86 "linux-image-$KVER" "linux-modules-extra-$KVER")
+# ~/debs: the .deb files the workflow restored from its cache. apt reuses each one whose version
+# still matches and downloads only the rest; autoclean drops versions the index no longer has, so
+# the saved set does not grow. The workflow saves it under a key that names the set.
+DEBS=~/debs
+if compgen -G "$DEBS/*.deb" >/dev/null; then
+  echo "cached .deb files: $(find "$DEBS" -name '*.deb' | wc -l)"
+  sudo cp "$DEBS"/*.deb /var/cache/apt/archives/
+fi
 apt_step 900 "apt-get download" install -y --no-install-recommends --download-only "${PKGS[@]}"
+sudo apt-get autoclean -qq
+rm -rf "$DEBS" && mkdir -p "$DEBS" && cp /var/cache/apt/archives/*.deb "$DEBS/"
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  echo "debs_key=$(find "$DEBS" -name '*.deb' -printf '%f\n' | sort | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+fi
 apt_step 300 "apt-get install" install -y -qq --no-install-recommends "${PKGS[@]}"
 
 # The system python3 (the guest runs the same interpreter off the shared root filesystem).
