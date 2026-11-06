@@ -33,7 +33,9 @@ apt_step() {   # apt_step <limit seconds> <label> <apt-get args...>
     return "$rc"
   fi
 }
-apt_step 300 "apt-get update" update
+# The limits (120 + 900 + 300 s = 22 min) stay inside the job's 30 min with room for pip and the rig
+# (~3 min), so a slow step always reports its own error before the job limit cancels it.
+apt_step 120 "apt-get update" update
 # The guest kernel by its version, not the linux-image-generic metapackage: that one depends on
 # linux-firmware (~680 MB of device firmware a QEMU guest never loads), and the recommends add a
 # desktop stack. ~1 GB of download becomes ~200 MB (measured on a clean noble).
@@ -41,8 +43,8 @@ KVER=$(apt-cache depends linux-image-generic | sed -n 's/.*Depends: linux-image-
 [ -n "$KVER" ] || { echo "::error::no kernel version from linux-image-generic"; exit 1; }
 echo "guest kernel: $KVER"
 PKGS=(bluez dbus qemu-system-x86 "linux-image-$KVER" "linux-modules-extra-$KVER")
-apt_step 1200 "apt-get download" install -y --no-install-recommends --download-only "${PKGS[@]}"
-apt_step 600 "apt-get install" install -y -qq --no-install-recommends "${PKGS[@]}"
+apt_step 900 "apt-get download" install -y --no-install-recommends --download-only "${PKGS[@]}"
+apt_step 300 "apt-get install" install -y -qq --no-install-recommends "${PKGS[@]}"
 
 # The system python3 (the guest runs the same interpreter off the shared root filesystem).
 /usr/bin/python3 -m pip install -q virtme-ng "bumble==0.0.235" bleak dbus-fast pyyaml
