@@ -572,8 +572,8 @@ def test_battery_changes_never_wake_the_screen(cli):
 @pytest.mark.parametrize(
     "code,lang,want",
     [
-        (4, 0, "amber|verbunden · Heizung gesperrt bis zur Fahrt"),
-        (4, 1, "amber|connected · heater locked until a drive"),
+        (4, 0, "amber|verbunden · Heizung: Max. Betriebsdauer erreicht"),
+        (4, 1, "amber|connected · heater: max. operating time reached"),
         (3, 0, "amber|verbunden · Heizungsfehler 3"),
         (3, 1, "amber|connected · heater error 3"),
     ],
