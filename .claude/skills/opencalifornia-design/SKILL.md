@@ -18,6 +18,15 @@ one visual token. When you change it on one surface, change the shared source an
 surface in the same PR.** The surfaces are built in different languages (un-built JS, C, SwiftUI),
 so nothing enforces this for you except the guards below and this skill.
 
+**Cross-branch reality (until `ios-app` merges):** the iOS source (`ios/App/`) lives only on the
+`ios-app` branch (draft PR #477, which stays a draft). A web-UI or firmware change branches from
+`main`, where `ios/App/` does not exist, so it **cannot** edit the iOS strings or run the iOS
+checks in the same commit — "same PR" is the end state, not today's mechanics. Until `ios-app`
+merges: in the `main`-based PR, record the matching iOS change (the exact EN wording, the German,
+the placeholder) under an **"iOS alignment"** heading in the PR body, and make that change on
+`ios-app` so the two land together in intent; whoever advances `ios-app` reconciles it against
+those notes. The web↔iOS parity guard (see Target) can only run on `main` once `ios/App/` is there.
+
 The iOS app is native SwiftUI (requirement `R_IOS_LOOK`), **never** a `WKWebView` of the web UI —
 Siri intents, BLE-direct control and Dynamic Type all depend on it being native. "Same look" is
 reproduced with native primitives, not embedded HTML.
@@ -38,15 +47,21 @@ So web and iOS **can** share directly — same key scheme — but today they hav
 positional). That drift is the problem this skill exists to stop.
 
 **Target (single source of truth, not yet built — see Status):** one canonical bilingual
-vocabulary file (`{id: {en, de, placeholders}}`, the shape `firmware/web/strings.json` already
-uses) from which the shared entries of `strings.de.js` and `Localizable.xcstrings` are generated
+vocabulary file in the `{id: {en, de}}` shape of `firmware/web/strings.json`, extended with a
+neutral `placeholders` field per entry (`{id: {en, de, placeholders}}`; the firmware file has no
+placeholder field today) from which the shared entries of `strings.de.js` and
+`Localizable.xcstrings` are generated
 or parity-checked, plus a CI guard (sibling of `tests/test_i18n_de.py`) that fails when a shared
 term's EN or DE differs across surfaces. Placeholders are declared neutrally and rendered per
 surface (`{n}` for JS, `%lld`/`%@` for Swift).
 
 **Until it is built:** when you touch a shared label, change it in `strings.de.js` AND
 `Localizable.xcstrings` with byte-identical English and identical German, and keep the glossary
-below. A shared label that exists on only one surface is drift waiting to happen.
+below. Renaming a shared label changes the **English key**, so update the source literal too — the
+`t("…")` string in `app.js` and the key in `Localizable.xcstrings` — not only the German value.
+Placeholders match only after normalising the two conventions (web `{n}` ↔ iOS `%lld`, web `{amb}`
+↔ iOS `%@`): same count, same order, same meaning. A shared label that exists on only one surface
+is drift waiting to happen.
 
 ### Canonical glossary (EN · DE) — the unit's own vocabulary
 
@@ -58,7 +73,8 @@ Take words from the unit's own display, never invent them (the app's `.cvr` tabl
 - Cooler · Kühlbox · Camping mode · Campingmodus · Lighting · Beleuchtung · Air heater · Luftstandheizung
 - Water · Wasser · Fresh water · Frischwasser · Grey water · Grauwasser · Second battery · Zweitbatterie
 - Energy · Energie · Pop-top roof · Aufstelldach · Vehicle · Fahrzeug
-- Sofortheizen · Dauerbetrieb · Flüstermodus · Normal · Normal · Closed · Geschlossen · inactive · inaktiv
+- Immediate heating · Sofortheizen · Continuous heating · Dauerbetrieb · Quiet mode · Flüstermodus
+- Normal · Normal · Closed · Geschlossen · inactive · inaktiv
 - Fresh {n}% · measured {t} ago → Frisch {n}% · vor {t} gemessen
 
 When the unit has no word, write a proposal, list it in the PR body for the owner, and add it
@@ -152,7 +168,7 @@ images) so they are identical and evolve together.
 
 - Web UI: `calictl/webui/` (`app.js`, `app.css`, `strings.de.js`, `semantics.js`), skills
   `webui-change`, `ux-review`.
-- ESP display strings: `firmware/web/strings.json` → `tools/gen_c_dict`.
+- ESP display strings: `firmware/web/strings.json` → `tools/gen_c_dict.py` (`python3 -m tools.gen_c_dict`).
 - iOS: `ios/App/Screens/CockpitView.swift` (home), `ios/App/Localizable.xcstrings`,
   `ios/project.yml` (XcodeGen — new files are globbed from `App/`, never hand-edit the
   `.xcodeproj`), `docs/ios-development-setup.md`.
