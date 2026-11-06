@@ -627,7 +627,10 @@ static void on_read(const cali_tevent_t *e) {
     if (s_heater_reading && e->char_short == HEATER_CHAR && (w = index_of(HEATER_CHAR)) >= 0) {
         s_heater_reading = 0;
         if (e->status == 0) store((size_t)w, e->data, e->len);
-        else cali_log("session: read airheater status %d", e->status);
+        else {
+            cali_log("session: read airheater status %d", e->status);
+            s_heater_next = s_now + CALI_SESSION_HEATER_RETRY_MS;   /* inside an AUTO tap's wait */
+        }
         return;
     }
     if (s_rereading && e->char_short == WATER_CHAR && (w = index_of(WATER_CHAR)) >= 0) {
@@ -805,8 +808,10 @@ void cali_session_tick(uint64_t now_ms) {
         int rc = s_t->read(HEATER_CHAR);
         if (rc == 0)
             s_heater_reading = 1;
-        else
+        else {
             cali_log("session: read airheater failed %d", rc);
+            s_heater_next = now_ms + CALI_SESSION_HEATER_RETRY_MS;
+        }
     }
     /* No verdict on the connect attempt at all — the transport's terminal event got lost (e.g. a
      * connect silently cancelled under a scan): drop and retry, never wedge in CONNECTING (#264,
@@ -911,6 +916,7 @@ void cali_session_hold(int on) {
     if (on == s_hold) return;
     s_hold = on;
     if (!on) return;
+    s_heater_next = s_now;   /* a new hold wants a fresh 1702 now (an AUTO tap from OFF waits for it) */
     if (s_mode != CALI_BLE_HOLD) (void)cali_session_set_mode(CALI_BLE_HOLD, "thermostat");   /* writes need hold */
     reconnect_soon("thermostat");
 }

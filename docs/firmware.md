@@ -1280,6 +1280,10 @@ these hold; otherwise the step answers `AUTO_REFUSED_<WHY>` and sends nothing:
 With the feature on and the link down (for example after the idle policy let it go), the AUTO request
 first wakes the link and waits up to 30 s (`CALI_THERMO_LINK_WAIT_MS`) for it; only then are the
 conditions checked, so the tap does not end in `AUTO_REFUSED_NO_LINK` while the link comes up.
+In mode OFF the satellite does not re-read `1702`: an idle heater sends no notification, so its
+reading soon becomes older than `heater_stale_ms`. The AUTO request then holds the session, which reads
+`1702` at once, and waits for the fresh reading in the same 30 s, so the tap does not end in
+`AUTO_REFUSED_STALE_HEATER`.
 
 If a safety stop (overheat, target exceeded, low battery, feature switched off) is still pending or
 waits for the link, a new AUTO request is ignored with `STOPPING`. The owner's own pending stop is
@@ -1370,7 +1374,7 @@ to see the continuous heating started at the panel. When AUTO is off, the sessio
 | A reading outside -40 to 60 °C, or one that changes more than 3 °C per minute against the last accepted one (the time difference is floored at one minute, so up to 3 °C between two quick adverts is accepted) | The reading is invalid; the sensor counts as lost | as above |
 | The heater reports ErrorCode 2, 3 or 5 to 15 | AUTO ends, no command, never retried | `FAULT_<n>` |
 | The fault bit with ErrorCode 0, or the heater reported as not installed during a run | AUTO ends, no command | `HEATER_UNKNOWN` |
-| ErrorCode 4 (heater locked until the van has driven) | AUTO ends, no command. A new AUTO request is refused until the lock clears | `LOCKED`, then `AUTO_REFUSED_FAULT` |
+| ErrorCode 4 (heater locked until the van has driven) | AUTO ends, no command. A new AUTO request is refused until the lock clears. The unit can clear the code within a minute, so a new `1702` frame with a fault steps at once, not at the next `period_ms` | `LOCKED`, then `AUTO_REFUSED_FAULT` |
 | ErrorCode 1 (low battery, the heater's own report) | A normal stop, then AUTO is off | `BATTERY_LOW` |
 | The second battery stays below `batt_min_dv` for `batt_hold_ms` | A normal stop, then AUTO is off | `BATTERY_LOW` |
 | Someone else changes the heater (the unit's panel, the phone app, the normal level slider of the satellite) | AUTO ends and leaves the heater as it is | `FOREIGN_CHANGE` |

@@ -156,6 +156,69 @@ def test_auto_tap_wakes_the_link_and_waits_for_it(cli, tmp_path):
     assert state(out)["reason"] == "AUTO_REFUSED_NO_LINK" and submits(out) == []
 
 
+def test_auto_tap_waits_for_a_fresh_heater_read(cli, tmp_path):
+    """With the thermostat OFF the session does not re-read 1702, so an idle heater's frame ages past
+    heater_stale_ms. An AUTO tap then holds the session (the hold reads 1702 at once) and waits up to
+    CALI_THERMO_LINK_WAIT_MS for a fresh frame instead of answering AUTO_REFUSED_STALE_HEATER; past that
+    wait it is refused and the hold drops.
+
+    .. test:: Thermostat runner: an AUTO tap waits for a fresh heater read
+       :id: T_FW_THERMOSTAT_RUN_FRESH_HEATER
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    stale = [*SETUP, "now 200000", "auto", "tick", "state"]  # the 1702 frame from 1000 is 199 s old
+    out = run(cli, tmp_path, [*stale, "now 201000", OFF_HEATER, "tick", "state"])
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert "HOLD 1" in out and states[0]["reason"] is None and states[0]["mode"] == "OFF"  # waiting
+    assert states[1]["mode"] == "AUTO" and submits(out) == ["runtime 120"]  # the fresh read starts it
+    out = run(cli, tmp_path, [*stale, "now 231000", "tick", "state"])
+    assert state(out)["reason"] == "AUTO_REFUSED_STALE_HEATER" and submits(out) == []
+    assert out.index("HOLD 0") > out.index("HOLD 1")
+
+
+def test_a_short_fault_between_steps_still_ends_auto_with_it(cli, tmp_path):
+    """A new 1702 frame with a fault steps at once: on the van the unit stopped the heater with ErrorCode 4
+    (heating time exceeded) and cleared the code 36 s later, between two 60 s steps, so the next step saw a
+    heater off without a fault and logged RUN_ENDED instead of LOCKED.
+
+    .. test:: Thermostat runner: a fault frame steps at once
+       :id: T_FW_THERMOSTAT_RUN_FAULT_STEP
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    locked = frame(
+        "airheater", Installed=1, NormalOperation=0, FaultTriggerBit=1, ErrorCode=4, HeatingLevel=6
+    )
+    cleared = frame("airheater", Installed=1, NormalOperation=0, HeatingLevel=6)
+    out = run(cli, tmp_path, [*STARTED, "set period_ms 60000", "now 2600", RUNNING, "tick",
+                              "now 10000", locked, "tick", "now 46000", cleared, "tick", "state"])  # fmt: skip
+    st = state(out)
+    assert (st["mode"], st["reason"]) == ("OFF", "LOCKED"), st
+    assert submits(out) == ["runtime 120", "level 6", "power on"]  # nothing sent to a locked heater
+
+
+def test_the_last_heater_fault_is_kept_until_the_heater_runs(cli, tmp_path):
+    """The run tick keeps the last ErrorCode of a new 1702 frame (the status screen shows it): the unit clears
+    the code within seconds (two refused panel starts on the van, 7 s each), the kept one stays until a frame
+    shows the heater running again. The thermostat need not be on.
+
+    .. test:: Thermostat runner: the last heater fault is kept
+       :id: T_FW_THERMOSTAT_RUN_FAULT_KEPT
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    locked = frame(
+        "airheater", Installed=1, NormalOperation=0, FaultTriggerBit=1, ErrorCode=4, HeatingLevel=2
+    )
+    out = run(cli, tmp_path, ["init", "now 1000", OFF_HEATER, "tick", "hfault", "now 2000", locked, "tick",
+                              "hfault", "now 9000", OFF_HEATER, "tick", "hfault", "now 20000", RUNNING, "tick",
+                              "hfault"])  # fmt: skip
+    assert [line for line in out if line.startswith("HFAULT")] == [
+        "HFAULT 0",
+        "HFAULT 4",
+        "HFAULT 4",
+        "HFAULT 0",
+    ]
+
+
 def test_night_wait_holds_the_session(cli, tmp_path):
     """A night AUTO request with the heater off pre-sets the level alone and enters WAITING; the wait holds
     the session like AUTO (no rest: a WAITING that loses fresh 1702 data never sees the panel's Dauerbetrieb).

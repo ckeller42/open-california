@@ -38,6 +38,7 @@ typedef struct {
     uint32_t ip;                 /**< IPv4 address in host order; 0 = none. */
     int rssi;                    /**< Signal strength in dBm; 0 = none. */
     char last_fail[12];          /**< Last WiFi failure: "", "not_found", "auth" or "other". */
+    int8_t heater_fault;         /**< cali_thermo_run_heater_fault(): the last heater ErrorCode, 0 = none. */
     uint64_t uptime_ms;          /**< Uptime in ms (the now_ms given to cali_status_get). */
     const char *fw;              /**< cali_fw_version(). */
 } cali_status_t;

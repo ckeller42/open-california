@@ -1,8 +1,8 @@
 /* thermostat_run.c — the cabin thermostat on the satellite (R_FW_THERMOSTAT_RUN). Contract: the "Run"
  * part of include/cali_thermostat.h. Proven end to end by tests/firmware/test_thermostat_e2e.py.
  *
- * One cali_thermo_step() per period_ms (and at once after a request, a switch of the feature or a
- * finished command batch), fed from this ESP: the stored 1702 frame + its age, this link's 1202/1602/
+ * One cali_thermo_step() per period_ms (and at once after a request, a switch of the feature, a
+ * finished command batch or a new 1702 frame with a fault), fed from this ESP: the stored 1702 frame + its age, this link's 1202/1602/
  * 1004 frames, the configured Govees by alias. Its commands go out one at a time through the control
  * sequencer (the next from the done callback); the last result goes into the next step's cmd input.
  */
@@ -35,6 +35,8 @@ static const char *s_reason;        /* the last reason that was not NULL */
 static int s_on, s_req, s_due;
 static uint64_t s_next;
 static uint64_t s_link_wait;        /* an AUTO tap waits for the link it woke until this uptime; 0 = not yet */
+static uint64_t s_heater_seen;      /* the time of the last 1702 frame the tick looked at */
+static int s_heater_fault;          /* the last ErrorCode seen, until the heater runs again; 0 = none */
 /* the batch going out: s_cmds[s_i] is in flight while s_wait */
 static cali_thermo_cmd_t s_cmds[CALI_THERMO_MAX_CMDS];
 static int s_n, s_i, s_wait;
@@ -416,11 +418,28 @@ void cali_thermo_run_init(void) {
 
 void cali_thermo_run_tick(uint64_t now_ms) {
     s_tick_now = now_ms;
+    /* a new 1702 frame with a fault steps at once: the unit can clear the code (ErrorCode 4 after 36 s on the
+     * van) before the next period, and the step would then see a heater off without a fault (RUN_ENDED) */
+    uint64_t hat = cali_session_frame_ms((size_t)fn_index("airheater"));
+    if (hat != s_heater_seen) {
+        static codec_kv_t kv[CODEC_KV_MAX];   /* static as in inputs(): the owner task's stack is small */
+        int n = frame_fields("airheater", 1, kv);
+        s_heater_seen = hat;
+        int32_t err = field(kv, n, "ErrorCode");
+        if (field(kv, n, "FaultTriggerBit") > 0 || err > 0) s_due = 1;
+        if (err > 0) s_heater_fault = (int)err;
+        else if (field(kv, n, "NormalOperation") > 0 || field(kv, n, "PermanentOperation") > 0) s_heater_fault = 0;
+    }
     if (s_wait || s_n) return;   /* a batch is going out: its done callback sends the next */
-    /* an AUTO tap from OFF woke the link (cali_thermo_request): give it time to come up, then step */
-    if (s_req == CALI_THERMO_REQ_AUTO && s_on && S.mode == CALI_THERMO_OFF && !cali_session_ready()) {
-        if (!s_link_wait) s_link_wait = now_ms + CALI_THERMO_LINK_WAIT_MS;
-        if (now_ms < s_link_wait) return;
+    /* an AUTO tap from OFF woke the link (cali_thermo_request): give it time to come up and, in OFF the session
+     * does not re-read 1702, to read the heater (the hold reads it at once), then step */
+    if (s_req == CALI_THERMO_REQ_AUTO && s_on && S.mode == CALI_THERMO_OFF) {
+        uint64_t at = cali_session_frame_ms((size_t)fn_index("airheater"));
+        if (!cali_session_ready() || !at || now_ms - at > (uint64_t)C.s.heater_stale_ms) {
+            cali_session_hold(1);   /* the step's hold(busy) releases it when the request is refused */
+            if (!s_link_wait) s_link_wait = now_ms + CALI_THERMO_LINK_WAIT_MS;
+            if (now_ms < s_link_wait) return;
+        }
     }
     s_link_wait = 0;
     if (!s_due && now_ms < s_next) return;
@@ -432,6 +451,8 @@ void cali_thermo_run_tick(uint64_t now_ms) {
                                      : C.s.period_ms);
     if (s_n) submit_next();
 }
+
+int cali_thermo_run_heater_fault(void) { return s_heater_fault; }
 
 int cali_thermo_request(const char *mode) {
     if (strcmp(mode, "AUTO") == 0) {

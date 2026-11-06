@@ -3069,7 +3069,8 @@ def test_enable_and_auto_in_one_post(web_cli):
     )  # fmt: skip
     st = rs[1].json()["status"]
     assert st["enabled"] is True
-    assert st["reason"] == "AUTO_REFUSED_STALE_HEATER", st  # past the switch check; no 1702 frame here
+    # past the switch check (no AUTO_REFUSED_DISABLED): with no 1702 frame here it waits for a heater read
+    assert (st["mode"], st["reason"]) == ("OFF", None), st
 
 
 def test_v1_stored_config_survives_the_upgrade(web_cli):
