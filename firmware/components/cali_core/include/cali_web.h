@@ -114,7 +114,8 @@
  *   (R_FW_STATE_DIAG): the diagnostics the page never shows. The plain 2 s poll carries only what
  *   the page shows. The body is built whole in one handler call (one consistent snapshot) into a
  *   NET_JSON_MAX buffer; an overflow answers 500 and logs "http: overflow". The `ext` member is
- *   present only while exp_sensors is on (cali_sensors_state_json). Shape:
+ *   present only while exp_sensors is on (cali_sensors_state_json), `device.lora` only while exp_lora
+ *   is on (cali_lora_json). Shape:
  *
  * @code{.unparsed}
  * {"t":<uptime_ms> [diag],"fn":{<the SNAP "fn" object, cali_snapshot_fn>},
@@ -147,7 +148,11 @@
  *                       "prox_wake":<bool>,"motion_wake":<bool>,"min","max","offset",
  *                       "dfs":<bool>|null,"pm":"<min>-<max>"|null [diag]},
  *            "ux":{"enabled":<bool>},
- *            "experimental":{"sensors":<bool>},
+ *            "experimental":{"sensors":<bool>,"lora":<bool>},
+ *            "energy":{"boot","solar_wh","load_wh","batt_net_wh","load_a"},
+ *            "lora":{"module","joined","at_unanswered","sf","last_s","airtime_ms_24h",
+ *                    "airtime_charged_ms_24h","unconfirmed_sends","downlinks_24h","uplinks","note"}
+ *                   [only while exp_lora is on],
  *            "water_held":<bool>,
  *            "water_held_age_ms":<int>},
  *  "ext":{"<alias>":{"type":"<id>",<field>:<num|null>,…,"age_s":<int|null>},…}}
@@ -171,7 +176,9 @@
  *     members are null without a screen (host, QEMU). `dfs` and `pm` show the live esp_pm config.
  *   - `ux`: the "Send usage data" switch (NVS ux_on, default on; the web UI's _meta.ux,
  *     R_UX_TELEMETRY).
- *   - `experimental`: the sensor track switch (NVS exp_sensors, default off; R_FW_EXPERIMENTAL).
+ *   - `experimental`: the sensor track switch (NVS exp_sensors, default off; R_FW_EXPERIMENTAL) and
+ *     the LoRa switch (NVS exp_lora, default off; R_FW_LORA).
+ *   - `energy`: cali_energy.h (R_FW_ENERGY_COUNTERS). `lora`: cali_lora.h (R_FW_LORA).
  *   - `water_held_age_ms`: present only while the water level is held AND the baseline was measured
  *     on this boot.
  *
@@ -270,10 +277,11 @@
  * - `POST /api/ux_setting`: `{"enabled":<bool>}` (exactly that object), the Satellite settings
  *   switch. Stores NVS ux_on, answers 200 `{"ok":true,"ux":<bool>}`. Errors: 403, 400 `bad_json`,
  *   500 `store`, 405.
- * - `POST /api/experimental`: `{"sensors":<bool>}` (exactly that object; R_FW_EXPERIMENTAL), the
- *   Satellite settings "Sensors" switch. Calls cali_exp_sensors_set (NVS exp_sensors, applied at
- *   once, log "exp: sensors on|off") and answers 200 `{"ok":true,"sensors":<bool>}`. Errors: 403
- *   `setup_mode`, 400 `bad_json`, 500 `store`, 405.
+ * - `POST /api/experimental`: `{"sensors":<bool>}` or `{"lora":<bool>}` (exactly one of them per
+ *   body; R_FW_EXPERIMENTAL, R_FW_LORA), the Satellite settings "Sensors" switch and the LoRa switch.
+ *   Calls cali_exp_sensors_set or cali_exp_lora_set (NVS exp_sensors / exp_lora, applied at once, log
+ *   "exp: sensors|lora on|off") and answers 200 `{"ok":true,"sensors":<bool>}` or
+ *   `{"ok":true,"lora":<bool>}`. Errors: 403 `setup_mode`, 400 `bad_json`, 500 `store`, 405.
  * - `GET|POST /api/sensors` (R_FW_SENSORS, cali_sensors.h): every WiFi mode. Both answer 404
  *   `{"ok":false,"error":"disabled"}` while exp_sensors is off (checked first). GET answers 200
  *   `{"configured":[{id,type,alias,last_seen_s,value|null,has_key}],"seen":[{id,type,model,rssi}],

@@ -101,8 +101,11 @@
 #include "cali_display_model.h"
 #if CONFIG_CALI_DISPLAY
 #include "cali_display.h"
+#include "cali_lora_esp.h"
 #include "cali_sdcard_esp.h"
 #endif
+#include "cali_energy.h"
+#include "cali_lora.h"
 #include "cali_net_esp.h"
 #include "cali_ota_esp.h"
 #include "cali_platform.h"
@@ -333,6 +336,8 @@ static void do_work(void) {
         cali_runner_tick(now);        /* BLE first: WiFi/web work (NVS writes, mode switches) never */
         cali_session_tick(now);       /* delays this tick's heartbeat decision */
         cali_sensors_tick(now, s_ble, cali_exp_sensors(), cali_runner_in_flow());   /* R_FW_SENSORS */
+        cali_energy_tick(now);        /* Wh since boot + the house load (R_FW_ENERGY_COUNTERS) */
+        cali_lora_tick(now);          /* R_FW_LORA: a snapshot to the LoRa task, its status back */
         cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
         cali_ac_tick(now);            /* auto camper (R_FW_AUTO_CAMPER): restore camping after park */
         cali_thermo_run_tick(now);    /* cabin thermostat (R_FW_THERMOSTAT_RUN): ships disabled */
@@ -614,6 +619,7 @@ void app_main(void) {
     wifi_init(ble);
 #if CONFIG_CALI_DISPLAY
     if (cali_display_init(ble) == 0) cali_sdcard_esp_start();   /* -1: no screen (and no SD); BLE/WiFi carry on */
+    cali_lora_esp_start();   /* R_FW_LORA: idle, no pin touched, until exp_lora is on */
 #endif
 
     const esp_timer_create_args_t targs = {.callback = tick_cb, .name = "cali_tick"};

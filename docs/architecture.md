@@ -54,6 +54,7 @@ flowchart TB
   ha["Home Assistant<br/>entities and commands"]
   graf["Grafana<br/>dashboards"]
   idb[("InfluxDB<br/>time series")]
+  tts[("The Things Stack<br/>LoRaWAN network and storage")]
   owner -->|web UI or CLI| sys
   owner -->|web UI over WiFi| esp
   owner -->|uses| app
@@ -66,12 +67,14 @@ flowchart TB
   ha -->|MQTT commands| sys
   sys -->|numeric fields| idb
   idb --> graf
+  esp -->|LoRaWAN uplinks, experimental| tts
+  owner -->|reads far away| tts
   classDef person fill:#08427b,color:#fff,stroke:#052e56
   classDef system fill:#1168bd,color:#fff,stroke:#0b4884
   classDef ext fill:#999999,color:#fff,stroke:#6b6b6b
   class owner person
   class sys,esp system
-  class unit,app,ha,graf,idb ext
+  class unit,app,ha,graf,idb,tts ext
 ```
 
 - **Camper unit**
@@ -89,6 +92,11 @@ flowchart TB
 - **ESP32 satellite**
   - *Interface:* its own BLE bond to the unit, its own web UI and API over WiFi
   - *Direction:* read and write, independent of buspi
+- **The Things Stack** (experimental, `R_FW_LORA`)
+  - *Interface:* {term}`LoRaWAN` uplinks from the satellite's RAK3172 module (ports 2, 3, 4: raw frames,
+    charger readings, energy counters) through The Things Network's gateways; the owner's phone reads
+    them from its {term}`Storage Integration` while no router runs in the van
+  - *Direction:* write only from here (no downlink is acted on yet)
 - **Owner**
   - *Interface:* web UI (`--web`, port 8088 on buspi), CLI, guided pairing wizard
   - *Direction:* both

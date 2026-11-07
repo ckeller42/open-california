@@ -232,6 +232,10 @@ int cali_mac(uint8_t mac[6]) {
 
 /* console.c's "sensors" commands link these (web.c / the platform clock are not in this build). */
 int cali_exp_sensors_set(int on) { (void)on; return -1; }
+int cali_lora_console(const char *args) {   /* console.c's "lora" (R_FW_LORA): what it hands over */
+    cali_log("lora args [%s]", args);
+    return 0;
+}
 uint64_t cali_uptime_ms(void) { return 0; }
 /* ... and its "pi" commands these (pi_wake.c: tests/firmware/test_web_handlers.py) */
 int cali_pw_pulse(const char *reason, uint32_t ms) { (void)reason; (void)ms; return -1; }

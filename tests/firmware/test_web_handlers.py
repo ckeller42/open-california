@@ -33,6 +33,8 @@ from .api_shape import (
     DEVICE_KEYS,
     DISPLAY_DIAG_KEYS,
     DISPLAY_KEYS,
+    ENERGY_KEYS,
+    EXPERIMENTAL_KEYS,
     EXT_ENTRY_KEYS,
     LINK_KEYS,
     OTA_KEYS,
@@ -115,8 +117,12 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "display_cfg.c"),
             str(CORE / "battery.c"),
             str(CORE / "sensors.c"),
+            str(CORE / "energy.c"),
+            str(CORE / "lora.c"),
+            str(CORE / "lora_port_none.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(CORE / "test" / "web_cli.c"),
+            "-lm",
             "-o",
             str(out),
         ],
@@ -236,6 +242,8 @@ def test_api_state_shape(web_cli):
     assert set(body["device"]["ota"]) == OTA_KEYS
     assert body["device"]["time"] == {"source": "none", "synced": False, "boot": 0}  # no cali_time_init
     assert set(body["device"]["time"]) == TIME_KEYS
+    assert set(body["device"]["experimental"]) == EXPERIMENTAL_KEYS
+    assert set(body["device"]["energy"]) == ENERGY_KEYS
     # no card on the host (cali_sdlog_init never called), no resource stats (web.c's weak stub)
     assert body["device"]["sd"] == {
         "state": "absent",
@@ -324,7 +332,8 @@ EXPECTED_DEVICE_TAIL = (
     '"display":{"state":null,"brightness_pct":null,"sensor":null,'
     '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0},'
     '"ux":{"enabled":true},'
-    '"experimental":{"sensors":false},'
+    '"experimental":{"sensors":false,"lora":false},'
+    '"energy":{"boot":0,"solar_wh":0,"load_wh":0,"batt_net_wh":0,"load_a":null},'
     '"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","reverted":false,"scan":[]}'
@@ -2216,7 +2225,8 @@ def test_api_state_has_experimental_off_by_default(web_cli):
        :links: R_FW_EXPERIMENTAL
     """
     d = json.loads(get(web_cli, "/api/state", setup=STATION))["device"]
-    assert d["experimental"] == {"sensors": False}
+    assert d["experimental"] == {"sensors": False, "lora": False}
+    assert "lora" not in d  # device.lora only while the LoRa switch is on (R_FW_LORA)
 
 
 def test_experimental_switch_persists_and_shows_in_state(web_cli):
@@ -2230,14 +2240,47 @@ def test_experimental_switch_persists_and_shows_in_state(web_cli):
         ],
     )
     assert (rs[0].status, rs[0].json()) == (200, {"ok": True, "sensors": True})
-    assert json.loads(rs[1].body)["device"]["experimental"] == {"sensors": True}
+    assert json.loads(rs[1].body)["device"]["experimental"] == {"sensors": True, "lora": False}
     assert "KV \x01" in other
     assert any(l.startswith("LOG exp: sensors on") for l in other)
     # a fresh process with the byte stored reads it back
     rs, _ = drive(
         web_cli, [b"kvhex exp_sensors 01", *(s.encode() for s in STATION), req("GET", "/api/state")]
     )
-    assert json.loads(rs[0].body)["device"]["experimental"] == {"sensors": True}
+    assert json.loads(rs[0].body)["device"]["experimental"] == {"sensors": True, "lora": False}
+
+
+def test_lora_switch_persists_and_shows_the_link_in_state(web_cli):
+    """POST /api/experimental {"lora":…} stores exp_lora; device.lora appears only while it is on.
+
+    .. test:: The LoRa switch persists; device.lora (module, confirmed vs charged airtime) only while it is on
+       :id: T_FW_LORA_SWITCH
+       :links: R_FW_LORA
+    """
+    rs, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/experimental", '{"lora":true}'),
+            req("GET", "/api/state"),
+            b"kv exp_lora",
+            req("POST", "/api/experimental", '{"lora":false}'),
+            req("GET", "/api/state"),
+        ],
+    )
+    assert (rs[0].status, rs[0].json()) == (200, {"ok": True, "lora": True})
+    d = json.loads(rs[1].body)["device"]
+    assert d["experimental"] == {"sensors": False, "lora": True}
+    # the host build has no module driver (lora_port_none.c): absent, nothing confirmed on air
+    assert (
+        d["lora"]["module"] == "absent" and d["lora"]["airtime_ms_24h"] == 0 and d["lora"]["last_s"] is None
+    )
+    assert "KV \x01" in other and any(l.startswith("LOG exp: lora on") for l in other)
+    assert (rs[2].status, rs[2].json()) == (200, {"ok": True, "lora": False})
+    assert "lora" not in json.loads(rs[3].body)["device"]
+    # a fresh process with the byte stored reads it back
+    rs, _ = drive(web_cli, [b"kvhex exp_lora 01", *(s.encode() for s in STATION), req("GET", "/api/state")])
+    assert json.loads(rs[0].body)["device"]["experimental"] == {"sensors": False, "lora": True}
 
 
 @pytest.mark.parametrize(
@@ -2248,6 +2291,8 @@ def test_experimental_switch_persists_and_shows_in_state(web_cli):
         (STATION, "POST", '{"sensors":true,"x":1}', 400, "bad_json"),
         (STATION, "POST", "{}", 400, "bad_json"),
         (STATION, "POST", '{"sensors":true,"sensors":true}', 400, "bad_json"),
+        (STATION, "POST", '{"sensors":true,"lora":true}', 400, "bad_json"),  # one switch per body
+        (STATION, "POST", '{"lora":1}', 400, "bad_json"),
         (STATION, "POST", '{"sensors":true', 400, "bad_json"),
         (STATION, "POST", '{"sensors":true}x', 400, "bad_json"),
         (STATION, "POST", '{"sensors":true,}', 400, "bad_json"),
@@ -3186,7 +3231,8 @@ def test_enable_and_auto_in_one_post(web_cli):
     )  # fmt: skip
     st = rs[1].json()["status"]
     assert st["enabled"] is True
-    assert st["reason"] == "AUTO_REFUSED_STALE_HEATER", st  # past the switch check; no 1702 frame here
+    # past the switch check (no AUTO_REFUSED_DISABLED): with no 1702 frame here it waits for a heater read
+    assert (st["mode"], st["reason"]) == ("OFF", None), st
 
 
 def test_v1_stored_config_survives_the_upgrade(web_cli):

@@ -78,6 +78,7 @@ int main(int argc, char **argv) {
             else if (!strcmp(tok, "rssi")) s.rssi = atoi(val);
             else if (!strcmp(tok, "fail")) snprintf(s.last_fail, sizeof s.last_fail, "%s", val);
             else if (!strcmp(tok, "up")) s.uptime_ms = strtoull(val, NULL, 10);
+            else if (!strcmp(tok, "hfault")) s.heater_fault = (int8_t)atoi(val);
             else if (!strcmp(tok, "now")) now = strtoull(val, NULL, 10);
             else if (!strcmp(tok, "lang")) lang = atoi(val);
             else if (!strcmp(tok, "lux")) in.lux = atoi(val);

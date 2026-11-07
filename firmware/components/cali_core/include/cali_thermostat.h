@@ -388,7 +388,15 @@ void cali_thermo_run_init(void);
  */
 void cali_thermo_run_tick(uint64_t now_ms);
 
-/** Longest wait of an AUTO request from OFF for the link it woke, ms; then the step answers it. */
+/**
+ * @brief The last heater ErrorCode the run tick saw in a new 1702 frame, kept until a frame shows the heater
+ * running again. The unit clears the code within seconds (ErrorCode 4 after 7 to 36 s on the van); the
+ * status screen shows the kept one.
+ * @return The ErrorCode 1..15, or 0 for none.
+ */
+int cali_thermo_run_heater_fault(void);
+
+/** Longest wait of an AUTO request from OFF for the link it woke and a fresh 1702 read, ms; then the step answers it. */
 #define CALI_THERMO_LINK_WAIT_MS 30000u
 
 /** Step interval in mode WAITING, ms, when period_ms is longer: samples the night confirm window. */
@@ -399,6 +407,8 @@ void cali_thermo_run_tick(uint64_t now_ms);
  *
  * "AUTO" with the feature on also asks the session to connect now (cali_session_connect_now): with the
  * link down, a request from mode OFF waits up to CALI_THERMO_LINK_WAIT_MS for a ready link before the step answers it.
+ * A 1702 frame older than heater_stale_ms (in OFF the session does not re-read it) makes the request hold the
+ * session, which reads 1702 at once, and wait the same time for the fresh frame.
  *
  * @param mode  "AUTO" or "OFF".
  * @return 0, or -1 for another text.

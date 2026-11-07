@@ -67,7 +67,7 @@ COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o
 	sensors.o json.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o ap_identity.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o thermostat_run.o pi_wake.o ble_exp.o ble_exp_run.o
+CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o ap_identity.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o thermostat_run.o pi_wake.o ble_exp.o ble_exp_run.o energy.o lora.o lora_port_none.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
@@ -235,6 +235,17 @@ ble_exp.o: $(COMPONENTS)/cali_core/ble_exp.c $(CORE_H)/cali_ble_exp.h $(CORE_H)/
 ble_exp_run.o: $(COMPONENTS)/cali_core/ble_exp_run.c $(CORE_H)/cali_ble_exp.h $(CORE_H)/cali_json.h $(CORE_H)/cali_auto_camper.h \
 		$(CORE_H)/cali_diag.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CORE_H)/cali_session.h $(CORE_H)/cali_time.h \
 		$(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# Energy counters + house load (R_FW_ENERGY_COUNTERS) and the LoRa core (R_FW_LORA); the host has no
+# module driver: lora_port_none.c (tests/firmware/test_energy.py, test_lora.py).
+energy.o: $(COMPONENTS)/cali_core/energy.c $(CORE_H)/cali_energy.h $(CORE_H)/cali_json.h $(CORE_H)/cali_sensors.h \
+		$(CORE_H)/cali_session.h $(CORE_H)/cali_time.h $(CSRC)/codec.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+lora.o: $(COMPONENTS)/cali_core/lora.c $(CORE_H)/cali_lora.h $(CORE_H)/cali_energy.h $(CORE_H)/cali_json.h \
+		$(CORE_H)/cali_sensors.h $(CORE_H)/cali_session.h $(CORE_H)/cali_time.h $(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+lora_port_none.o: $(COMPONENTS)/cali_core/lora_port_none.c $(CORE_H)/cali_lora.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The boot counter + SNTP state + unit clock (R_FW_TIME): device.time. The host has no SNTP and no

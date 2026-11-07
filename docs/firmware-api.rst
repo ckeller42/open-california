@@ -134,6 +134,16 @@ External sensors
 
 .. doxygenfile:: cali_sensors.h
 
+Energy counters
+~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_energy.h
+
+LoRaWAN telemetry (experimental)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_lora.h
+
 OTA, logging & time
 -------------------
 

@@ -18,7 +18,7 @@
  * the keys in this file. */
 enum {
     K_DEVICE, K_WIFI, K_CAMPER, K_RUNNING, K_SETUP, K_JOINING, K_RETRYING, K_WIFI_OFF, K_CONNECTED,
-    K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_QR_JOIN_TITLE, K_QR_NEXT_TITLE, K_QR_WLAN, K_QR_PASS, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_BATT, K_CHARGING, K_COUNT
+    K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_QR_JOIN_TITLE, K_QR_NEXT_TITLE, K_QR_WLAN, K_QR_PASS, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_BATT, K_CHARGING, K_HEATER_LOCKED, K_HEATER_ERROR, K_COUNT
 };
 static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_DEVICE] = {WEB_STR_DE_DEVICE, WEB_STR_EN_DEVICE},
@@ -46,6 +46,8 @@ static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_QR_PASS] = {WEB_STR_DE_D_QR_PASS, WEB_STR_EN_D_QR_PASS},
     [K_BATT] = {WEB_STR_DE_D_BATT, WEB_STR_EN_D_BATT},
     [K_CHARGING] = {WEB_STR_DE_D_CHARGING, WEB_STR_EN_D_CHARGING},
+    [K_HEATER_LOCKED] = {WEB_STR_DE_D_HEATER_LOCKED, WEB_STR_EN_D_HEATER_LOCKED},
+    [K_HEATER_ERROR] = {WEB_STR_DE_D_HEATER_ERROR, WEB_STR_EN_D_HEATER_ERROR},
 };
 
 static const char *tx(int key, int lang) { return lang == CALI_LANG_EN ? TXT[key].en : TXT[key].de; }
@@ -148,6 +150,11 @@ static void camper_row(cali_row_t *r, const cali_status_t *s, int lang) {
     if (s->snap_age_ms > DISPLAY_STALE_MS) {  /* whole seconds, rounded down */
         snprintf(age, sizeof age, "%u s", (unsigned)(s->snap_age_ms / 1000));
         row(r, CALI_DOT_RED, label, K_STALE, lang, age, NULL);
+        return;
+    }
+    if (s->heater_fault > 0) {  /* the unit clears its ErrorCode within seconds: the satellite's kept one */
+        snprintf(age, sizeof age, "%d", s->heater_fault);
+        row(r, CALI_DOT_AMBER, label, s->heater_fault == 4 ? K_HEATER_LOCKED : K_HEATER_ERROR, lang, age, NULL);
         return;
     }
     {  /* rounded up, at least 1 s */

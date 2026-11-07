@@ -427,7 +427,8 @@ the microSD on the LCD's `SPI3_HOST` under `bsp_display_lock` and runs that task
 The board build paints a 320 x 240 status screen: title + `fw <version>`, then three rows with a
 coloured dot — **Gerät/Device** (running · uptime), **WLAN/WiFi** (setup hotspot / joining /
 retrying = amber, SSID · IP · RSSI = green, not connected + reason = red), **Camper** (not paired
-= grey, connecting / pairing / enter the code = amber, connected · data age = green, link lost /
+= grey, connecting / pairing / enter the code / connected · the last heater error (kept until the heater
+runs again) = amber, connected · data age = green, link lost /
 no data for more than 90 s / pairing failed = red) — and a footer: `http://calictl-esp.local`, or
 in setup mode the hotspot SSID and passphrase. The full row table with the German texts is in
 `docs/howto-esp-wifi-setup.md` "What the screen tells you". Pieces: `cali_core/status.c` (one

@@ -33,6 +33,8 @@
 #include "nimble/nimble_npl.h"
 #include "nimble/nimble_port.h"
 
+#include "cali_energy.h"
+#include "cali_lora.h"
 #include "cali_auto_camper.h"
 #include "cali_thermostat.h"
 #include "cali_ble_nimble.h"
@@ -149,6 +151,8 @@ static void tick_cb(struct ble_npl_event *ev) {
     cali_runner_tick(now);              /* BLE first: WiFi/web work never delays this tick's */
     cali_session_tick(now);             /* heartbeat decision (same order as app_main.c) */
     cali_sensors_tick(now, cali_ble_nimble_transport(), cali_exp_sensors(), cali_runner_in_flow());
+    cali_energy_tick(now);   /* R_FW_ENERGY_COUNTERS */
+    cali_lora_tick(now);     /* R_FW_LORA: lora_port_none.c, the module reads absent */
     cali_ac_tick(now);
     cali_thermo_run_tick(now);
     cali_pw_tick(now);

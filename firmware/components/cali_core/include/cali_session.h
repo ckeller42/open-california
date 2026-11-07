@@ -100,6 +100,8 @@ extern "C" {
  * continuous heating with no changing field must not go stale for the thermostat (heater_stale_ms).
  */
 #define CALI_SESSION_HEATER_REREAD_MS 60000u
+/** Retry of a failed held 1702 read (ms): shorter than CALI_THERMO_LINK_WAIT_MS, so an AUTO tap's wait retries. */
+#define CALI_SESSION_HEATER_RETRY_MS 5000u
 
 /**
  * @brief What a cali_session_io_fn call reports.
@@ -272,7 +274,7 @@ void cali_session_set_warm_ms(uint32_t ms);
  *
  * While held the power-save rest stays away (a hang-up reconnects on the ordinary backoff and the
  * CALI_SESSION_UNIT_COOLDOWN_MS cooldown), the BLE idle policy counts it as activity, and 1702 is
- * re-read every CALI_SESSION_HEATER_REREAD_MS while the link is up. Holding switches the link mode
+ * read at once and then every CALI_SESSION_HEATER_REREAD_MS while the link is up. Holding switches the link mode
  * to hold and leaves a rest at once. The mode is forced on that transition only; releasing the hold
  * does not restore the previous mode.
  *

@@ -1226,6 +1226,16 @@ def test_console_lines(fake):
     ]
 
 
+def test_console_lora_hands_over_the_args(fake):
+    out = run(fake, "> lora status", "> lora", "> lora\tkeys a b c", "> lorax", "> quit")
+    assert [line for line in out if line.startswith("LOG")] == [
+        "LOG lora args [status]",
+        "LOG lora args []",
+        "LOG lora args [keys a b c]",
+        "LOG unknown command: lorax",
+    ]
+
+
 def test_link_drop_mid_read_all_reconnects_and_reads_afresh(fake):
     """The link drops between two READs of a read-all: nothing more goes to the dead link (no read,
     no heartbeat — also not for a late READ completion), no SNAP of the half-read set, a reconnect
@@ -3360,7 +3370,7 @@ HEATER = int(
 
 def test_hold_keeps_the_link_and_rereads_the_heater(fake):
     """cali_session_hold(1) (the thermostat outside OFF): a power-save hang-up redials instead of
-    resting, a hold set while resting leaves the rest, and 1702 is re-read every
+    resting, a hold set while resting leaves the rest, and 1702 is read at once and then re-read every
     CALI_SESSION_HEATER_REREAD_MS with its frame time stamped; without the hold neither happens.
 
     .. test:: The thermostat's session hold: no rest, 1702 re-read
@@ -3380,3 +3390,13 @@ def test_hold_keeps_the_link_and_rereads_the_heater(fake):
     assert out[-1] == "FRAMEAT %d" % HEATER and "FRAMEAT %d" % T in out
     out = run(fake, *base, "tick %d" % HEATER)  # no hold: water only
     assert calls(after(out, "CALL read %d" % READS[-1]), "read %d" % 0x1702) == []
+    # a hold set later (an AUTO tap from OFF) reads 1702 at the next tick, not a period later
+    n = len(run(fake, *base))
+    out = run(fake, *base, "hold 1", "tick %d" % (HEATER - 90))
+    assert calls(out[n:], "read") == ["CALL read %d" % 0x1702]
+    # a failed read (status or refused) is retried after CALI_SESSION_HEATER_RETRY_MS, not a period later
+    tick = "tick %d" % (HEATER - 90)
+    for held in ([*base, "hold 1", tick, "READ 1702 14"], [*base, "fail read", "hold 1", tick]):
+        m = len(run(fake, *held))
+        out = run(fake, *held, "tick %d" % (HEATER - 90 + 4999), "tick %d" % (HEATER - 90 + 5000))
+        assert calls(out[m:], "read") == ["CALL read %d" % 0x1702], held[-2:]
