@@ -112,6 +112,8 @@ CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_LV_COLOR_DEPTH_16=y
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_SNAPSHOT=y
+# Compiles the lv_qrcode widget (the hotspot QR, #499) and LVGL's bundled qrcodegen, which display.c
+# also calls directly for the LoRa screen (R_FW_LORA_SCREEN: alphanumeric mode, ECC L).
 CONFIG_LV_USE_QRCODE=y
 CONFIG_BSP_LCD_DRAW_BUF_HEIGHT=20
 CONFIG_BSP_LCD_DRAW_BUF_DOUBLE=n
