@@ -1,4 +1,5 @@
-"""The LoRa box of the shared UI's Satellite-settings screen (R_FW_LORA_SETUP) against the ESP stub:
+"""The LoRa box of the shared UI's Satellite-settings screen (R_FW_LORA, R_FW_LORA_SETUP) against the
+ESP stub: the LoRa switch posts ``{"lora": <bool>}`` to ``/api/experimental``; the values are
 hidden while ``experimental.lora`` is off, ``device.lora`` in words while it is on (the last uplink
 only as "confirmed"), and "Forget LoRa" with its in-page confirmation posting
 ``{"forget": true, "confirm": true}``. EN + DE; every test fails on an uncaught page error
@@ -7,6 +8,10 @@ only as "confirmed"), and "Forget LoRa" with its in-page confirmation posting
 .. test:: Satellite settings' LoRa box: hidden while off, values in words, Forget LoRa asks then posts (EN + DE)
    :id: T_UI_SAT_LORA
    :links: R_FW_LORA_SETUP
+
+.. test:: Satellite settings' LoRa switch: off -> on -> off posts {"lora": <bool>}, a refusal says so (EN + DE)
+   :id: T_UI_SAT_LORA_SWITCH
+   :links: R_FW_LORA
 
 .. test:: No LoRa key or DevEUI reaches a usage beacon, after a forget and a status view
    :id: T_UX_NO_SECRETS_LORA
@@ -39,6 +44,7 @@ FORGET_BODY = {"forget": True, "confirm": True}
 HINT = (
     "Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app."
 )
+NOTE = "Only for a satellite with a LoRa module (RAK3172). Off: the LoRa pins stay untouched."
 ASK = (
     "Forget LoRa? The satellite deletes its LoRa keys and switches LoRa off. "
     "The device stays registered at The Things Network until you delete it there."
@@ -72,11 +78,49 @@ def _open(error_gated_page, stub, lang):
     return error_gated_page(stub.base + "/#satsettings", locale="de-DE" if lang == "de" else "en-US")
 
 
-def test_box_is_hidden_while_the_switch_is_off(error_gated_page):
+def _exp_posts(stub):
+    return [b for p, b in stub.posts if p == "/api/experimental"]
+
+
+def test_values_are_hidden_while_the_switch_is_off(error_gated_page):
     with ux_gallery.EspStub("satellite") as s:  # the default fixture: experimental.lora off
         with _open(error_gated_page, s, "en") as pg:
-            pg.wait_for_function("() => !!(STATE._meta && STATE._meta.sat)")
-            expect(pg.locator("#lora")).to_be_hidden()
+            expect(pg.locator("#lora-status")).to_have_text("LoRa: off")
+            expect(pg.locator("#lora")).to_contain_text(NOTE)
+            for gone in ("#lora-on", "#lora-forget", "#lora-module"):
+                expect(pg.locator(gone)).to_be_hidden()
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_the_switch_turns_lora_on_and_off(error_gated_page, locale, lang):
+    with ux_gallery.EspStub("satellite") as s:
+        with _open(error_gated_page, s, lang) as pg:
+            expect(pg.locator("#lora-status")).to_have_text(tr("LoRa: off", lang))
+            expect(pg.locator("#lora")).to_contain_text(tr(NOTE, lang))
+            pg.click("#lora-toggle")
+            expect(pg.locator("#lora-status")).to_have_text(tr("LoRa: on", lang))
+            expect(pg.locator("#lora-toggle")).to_have_attribute("aria-checked", "true")
+            expect(pg.locator("#lora-on")).to_be_visible()  # the values follow the switch
+            expect(pg.locator("#lora-setup")).to_have_text(tr("Not set up", lang))
+            assert _exp_posts(s) == [{"lora": True}]
+            pg.click("#lora-toggle")
+            expect(pg.locator("#lora-status")).to_have_text(tr("LoRa: off", lang))
+            expect(pg.locator("#lora-on")).to_be_hidden()
+            assert _exp_posts(s) == [{"lora": True}, {"lora": False}]
+
+
+def test_a_refused_switch_says_so_and_stays_off(error_gated_page):
+    with ux_gallery.EspStub("satellite") as s:
+        s.post_reply["/api/experimental"] = (500, {"ok": False, "error": "store"})
+        with error_gated_page(
+            s.base + "/#satsettings", locale="en-US", allow_errors=("status of 500",)
+        ) as pg:
+            expect(pg.locator("#lora-status")).to_have_text("LoRa: off")
+            pg.click("#lora-toggle")
+            expect(pg.locator("#lora-msg")).to_have_text("Couldn't change the switch")
+            assert _exp_posts(s) == [{"lora": True}]
+            expect(pg.locator("#lora-toggle")).to_have_attribute("aria-checked", "false")
+            expect(pg.locator("#lora-on")).to_be_hidden()
 
 
 @pytest.mark.parametrize("locale,lang", LOCALES)
@@ -126,12 +170,13 @@ def test_forget_asks_and_cancel_posts_nothing(stub, error_gated_page, locale, la
 
 
 @pytest.mark.parametrize("locale,lang", LOCALES)
-def test_forget_confirmed_posts_and_the_box_disappears(stub, error_gated_page, locale, lang):
+def test_forget_confirmed_posts_and_the_values_disappear(stub, error_gated_page, locale, lang):
     with _open(error_gated_page, stub, lang) as pg:
         box = pg.locator("#lora")
         box.get_by_role("button", name=tr("Forget LoRa", lang)).click()
         box.get_by_role("button", name=tr("Forget LoRa", lang)).click()  # the confirm button
-        expect(box).to_be_hidden()
+        expect(pg.locator("#lora-on")).to_be_hidden()
+        expect(pg.locator("#lora-status")).to_have_text(tr("LoRa: off", lang))
         assert stub.posts[-1] == ("/api/lora", FORGET_BODY)
         assert stub.fixtures["satellite"]["/api/state"]["device"]["experimental"]["lora"] is False
 
@@ -143,7 +188,7 @@ def test_a_failed_forget_keeps_the_box_and_says_so(stub, error_gated_page):
         box.get_by_role("button", name="Forget LoRa").click()
         box.get_by_role("button", name="Forget LoRa").click()
         expect(pg.locator("#lora-msg")).to_have_text("Couldn't forget LoRa")
-        expect(box).to_be_visible()
+        expect(pg.locator("#lora-on")).to_be_visible()
 
 
 def test_no_lora_secret_reaches_a_beacon(stub, error_gated_page):
@@ -160,7 +205,7 @@ def test_no_lora_secret_reaches_a_beacon(stub, error_gated_page):
         expect(box).to_contain_text("70B3D57ED0012345")
         box.get_by_role("button", name="Forget LoRa").click()
         box.get_by_role("button", name="Forget LoRa").click()
-        expect(box).to_be_hidden()
+        expect(pg.locator("#lora-on")).to_be_hidden()
         pg.evaluate("dispatchEvent(new PageTransitionEvent('pagehide'))")
         for _ in range(50):
             if stub.ux_beacons:

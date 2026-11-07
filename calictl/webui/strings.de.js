@@ -719,6 +719,9 @@ window.STRINGS_DE = {
   "Key storage unreadable": "Schlüsselspeicher nicht lesbar",
   "Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app.": "Einrichten: den Bildschirm des Satelliten 3 Sekunden gedrückt halten und den Code mit der Open-California-Fernbedienungs-App scannen.",
   "Forget LoRa": "LoRa vergessen",
+  "LoRa: on": "LoRa: an",
+  "LoRa: off": "LoRa: aus",
+  "Only for a satellite with a LoRa module (RAK3172). Off: the LoRa pins stay untouched.": "Nur für einen Satelliten mit LoRa-Modul (RAK3172). Aus: Die LoRa-Pins bleiben unberührt.",
   "Forget LoRa? The satellite deletes its LoRa keys and switches LoRa off. The device stays registered at The Things Network until you delete it there.": "LoRa vergessen? Der Satellit löscht seine LoRa-Schlüssel und schaltet LoRa aus. Das Gerät bleibt im The Things Network registriert, bis du es dort löschst.",
   "Couldn't forget LoRa": "LoRa konnte nicht vergessen werden",
   "Scan paused while pairing": "Suche pausiert während der Kopplung",
@@ -844,7 +847,8 @@ window.STRINGS_DE = {
     + "looks for an update, Install loads it and restarts the satellite.\n\nAdvanced: Send usage data "
     + "sends which screens and controls are used (never values). Sensors turns on the scan for "
     + "add-on Bluetooth sensors; below it add the ones that are yours (a Victron needs its "
-    + "encryption key), rename or remove them.\n\nOver the setup hotspot these switches need the home "
+    + "encryption key), rename or remove them. LoRa turns on the LoRa module; switch it on only on a "
+    + "satellite that has one (RAK3172). Forget LoRa deletes its LoRa keys.\n\nOver the setup hotspot these switches need the home "
     + "WiFi."]:
     "WLAN: das Netzwerk, in dem der Satellit ist. Netzwerk wechseln… listet die Netzwerke, die er "
     + "findet (Erneut suchen sucht noch einmal); Anderes Netzwerk… nimmt einen Namen. Vor dem Wechsel "
@@ -859,7 +863,8 @@ window.STRINGS_DE = {
     + "den Satelliten neu.\n\nErweitert: Nutzungsdaten senden schickt, welche Seiten und Bedienelemente "
     + "genutzt werden (nie Werte). Sensoren schaltet die Suche nach Bluetooth-Zusatzsensoren ein; "
     + "darunter fügst du deine hinzu (ein Victron braucht seinen Verschlüsselungsschlüssel), "
-    + "benennst sie um oder entfernst sie.\n\nÜber den Einrichtungs-Hotspot brauchen diese Schalter das "
+    + "benennst sie um oder entfernst sie. LoRa schaltet das LoRa-Modul ein; schalte es nur bei einem "
+    + "Satelliten ein, der eines hat (RAK3172). LoRa vergessen löscht seine LoRa-Schlüssel.\n\nÜber den Einrichtungs-Hotspot brauchen diese Schalter das "
     + "Heim-WLAN.",
   ["The satellite runs its setup hotspot: it has no home WiFi yet, or cannot reach it. Choose the "
     + "network, enter its password and tap Connect; the satellite then joins it and the hotspot closes. "

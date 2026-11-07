@@ -276,6 +276,7 @@ def test_boxes_in_order_and_camper_unit_links_to_device_status(station, locale, 
                     "Sensors",
                 )
             ]
+            + ["LoRa"]  # a name, the same in every language
         )
         expect(pg.locator("#pair-status")).to_have_text(tr("Paired ✓", lang))
         pg.locator("#pair").get_by_role("button", name=tr("Device status ›", lang)).click()
@@ -528,7 +529,7 @@ def test_over_the_hotspot_every_station_row_says_it_needs_the_home_wifi(setup, l
     suffix = " · " + tr("needs the home WiFi", lang)
     with _settings(setup, locale=locale) as pg:
         _title(pg, lang)
-        for row in ("ac", "pw", "ux", "exp", "scr-auto", "scr-prox", "scr-motion"):
+        for row in ("ac", "pw", "ux", "exp", "lora", "scr-auto", "scr-prox", "scr-motion"):
             expect(pg.locator("#%s-status" % row)).to_have_text(re.compile(re.escape(suffix) + "$"))
             expect(pg.locator("#%s-toggle" % row)).to_be_hidden()
         expect(pg.locator("#fw-status")).to_have_text(re.compile(re.escape(suffix) + "$"))
@@ -551,7 +552,7 @@ def test_settings_fit_a_phone_with_44px_targets(station):
     with _settings(station, viewport=PHONE) as pg:
         expect(pg.locator("#scr-prox-toggle")).to_be_visible()
         assert pg.evaluate("document.documentElement.scrollWidth") <= PHONE["width"]
-        for row in ("scr-auto", "scr-prox", "scr-motion", "ac", "pw", "ux", "exp"):
+        for row in ("scr-auto", "scr-prox", "scr-motion", "ac", "pw", "ux", "exp", "lora"):
             lbl = pg.locator("#%s-status" % row).bounding_box()
             sw = pg.locator("#%s-toggle" % row).bounding_box()
             assert sw["x"] > lbl["x"] + lbl["width"] - 1, row

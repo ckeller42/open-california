@@ -48,9 +48,14 @@ Open `https://open-california.github.io/` on your phone.
 ## 3. Set up the van
 
 LoRa is off on a new satellite, and the LoRa screen does not open while LoRa is off. Switch it on
-once before you start: connect the satellite to a computer with its USB-C cable, open the USB
-console (see [No phone? Use the USB console](howto-esp-wifi-setup.md#no-phone-use-the-usb-console))
-and type `lora on`. The satellite answers `LOG exp: lora on`. LoRa stays on after a restart.
+once before you start: on your home WiFi, open the satellite's page, choose **Satellite settings**
+and turn on the **LoRa** switch under **Advanced**. Switch LoRa on only on a satellite with the LoRa
+module; while LoRa is off, the satellite does not touch the module's pins. LoRa stays on after a
+restart.
+
+Without a phone, connect the satellite to a computer with its USB-C cable, open the USB console
+(see [No phone? Use the USB console](howto-esp-wifi-setup.md#no-phone-use-the-usb-console)) and type
+`lora on`. The satellite answers `LOG exp: lora on`.
 
 1. In the app, open the menu and choose **Set up LoRa**. Choose your cluster (`eu1`), paste the
    full-rights API key and tap **Check the key**. The app only checks the key in this step.
