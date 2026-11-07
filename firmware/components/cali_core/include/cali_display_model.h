@@ -123,6 +123,8 @@ typedef enum {
 #define DISPLAY_MOTION_STILL_MG 50
 /** @brief Motion re-arms only once every read stayed below DISPLAY_MOTION_STILL_MG for this many ms (driving gives one wake, not a pinned screen). */
 #define DISPLAY_MOTION_REARM_MS 10000
+/** @brief Recovery (set up once, back on the hotspot): a tap shows the hotspot QR for this many ms; the status rows show otherwise. */
+#define DISPLAY_RECOVERY_QR_MS 120000
 
 /**
  * @brief The display settings.
@@ -158,7 +160,7 @@ typedef struct {
     cali_row_t wifi;         /**< The WiFi row. */
     cali_row_t camper;       /**< The camper-unit row. */
     char footer[CALI_ROW_TEXT_MAX];   /**< The footer text: `http://NET_HOSTNAME.local` and the battery; "" in setup mode. */
-    char qr[CALI_QR_TEXT_MAX];        /**< The text to draw as a QR code; "" = no QR screen. Setup mode: the hotspot's WiFi QR (holds the password: display only); station with a setup pending: `http://<ip>/#setup`. */
+    char qr[CALI_QR_TEXT_MAX];        /**< The text to draw as a QR code; "" = no QR screen. Setup mode: the hotspot's WiFi QR (holds the password: display only; in recovery only for DISPLAY_RECOVERY_QR_MS after a tap); station with a setup pending: `http://<ip>/#setup`. */
     char qr_title[CALI_ROW_TEXT_MAX]; /**< The line above the QR code. */
     char qr_lines[2][CALI_ROW_TEXT_MAX]; /**< [0] beside the code under the title ("WLAN\nname" or "http://\naddress"); [1] one full-width line below it (the password, or the .local address). */
     cali_disp_state_t state; /**< On, dim or off. */
@@ -183,6 +185,7 @@ typedef struct {
     uint64_t last_good_ms;   /**< Time of the last valid lux. */
     float lux_log;           /**< EMA of log10(max(lux, 1)). */
     uint64_t last_shake_ms;  /**< The last read with motion at or above DISPLAY_MOTION_STILL_MG. */
+    uint64_t qr_until_ms;    /**< Recovery: the hotspot QR shows until this time (0: not shown). */
     int32_t lux;             /**< Last valid lux. */
     int32_t prox;            /**< Last valid proximity reading. */
     int32_t motion;          /**< Last motion value. */

@@ -79,7 +79,8 @@ From now on the satellite joins your network by itself every time it starts. The
 ends when you go **Home** (or open *Satellite settings* from the final checklist). A satellite that
 already has saved WiFi never shows the wizard, and a WiFi change made later from your
 network never starts it. A satellite that falls back to its hotspot (for example, no known
-network for 5 minutes) shows the join QR code again.
+network for 5 minutes) keeps its status rows on the screen; tap the screen to show the join
+QR code for 2 minutes.
 
 **The camper UI doesn't load at all?** The satellite also serves a tiny fallback page,
 **<http://192.168.4.1/device>** on its hotspot (or `http://calictl-esp.local/device` on your network):

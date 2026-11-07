@@ -339,9 +339,17 @@ void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_
     camper_row(&out->camper, s, lang);
     fmt_uptime(s->uptime_ms, up);
     row(&out->device, CALI_DOT_GREEN, tx(K_DEVICE, lang), K_RUNNING, lang, up, NULL);
-    if (s->wifi_mode == CALI_WIFI_MODE_SETUP) out->footer[0] = 0;   /* the QR screen replaces it */
-    else station_footer(out->footer, &in->batt, lang);
     qr_screen(out, s, ap_qr, lang);
+    /* recovery = set up once (a stored network, no setup pending), back on the hotspot: the rows stay
+       and a tap shows the hotspot QR for DISPLAY_RECOVERY_QR_MS */
+    if (s->wifi_mode == CALI_WIFI_MODE_SETUP && s->ssid[0] && !s->setup_pending) {
+        if (in->touched) m->qr_until_ms = now_ms + DISPLAY_RECOVERY_QR_MS;
+        if (now_ms >= m->qr_until_ms) out->qr[0] = 0;
+    } else {
+        m->qr_until_ms = 0;
+    }
+    if (s->wifi_mode == CALI_WIFI_MODE_SETUP) out->footer[0] = 0;   /* no .local address on the hotspot */
+    else station_footer(out->footer, &in->batt, lang);
     wake_and_brightness(m, now_ms, in, cfg, out);
 }
 

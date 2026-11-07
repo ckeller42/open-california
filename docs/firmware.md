@@ -382,7 +382,9 @@ radio and the display, and no log, no `/api/state`, no repo file.
 The status display draws a QR code while there is something to scan (`display_model.c`):
 
 - **Setup mode** — a WiFi QR code `WIFI:T:WPA;S:<ssid>;P:<psk>;;`, the SSID beside it, the password on a
-  full-width line under it. This shows again whenever the satellite falls back to its hotspot.
+  full-width line under it. On a satellite that was set up once (a saved network, no setup
+  pending) and fell back to its hotspot, the status rows stay and a tap on the screen shows this
+  code for 2 minutes (`DISPLAY_RECOVERY_QR_MS`).
 - **Station mode with a setup pending** — a second QR code with `http://<ip>/#setup`, the title
   *Join `<ssid>`, then scan*, the address and `http://calictl-esp.local`.
 

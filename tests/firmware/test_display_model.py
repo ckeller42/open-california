@@ -188,6 +188,23 @@ def test_setup_mode_without_a_qr_text_shows_no_qr(cli):  # identity unavailable:
     assert view(cli, mode="setup", apssid="calictl-esp-1A2B")["qr"] == ""
 
 
+def test_recovery_keeps_the_rows_and_a_tap_shows_the_qr_for_2_min(cli):
+    rec = SETUP.replace("ssid=", "ssid=Insel") + " apqr=" + AP_QR  # set up once, WiFi lost: the hotspot again
+    v = run(
+        cli,
+        "reset",
+        rec + " now=0",
+        rec + " touch=1 now=1000",
+        rec + " now=120999",
+        rec + " now=121000",
+        rec + " touch=1 now=130000",
+    )
+    assert [x["qr"] != "" for x in v] == [False, True, True, False, True]
+    assert v[0]["wifi"].startswith("amber|Hotspot")  # the rows say why: the hotspot is up
+    first = run(cli, "reset", rec + " pending=1 now=0")[0]  # a first-time setup that is not done: QR always
+    assert first["qr"] != ""
+
+
 def test_station_with_setup_pending_shows_the_address_qr(cli):
     v = view(cli, mode="station", lang="en", pending=1)
     assert v["qr"] == "http://192.168.178.86/#setup" and v["qr_title"] == "Join Insel, then scan"
