@@ -378,7 +378,7 @@ def test_a_switch_stays_disabled_while_its_write_runs_and_its_error_is_announced
 def test_hotspot_connect_is_disabled_while_the_join_posts(setup):
     """#511: "Connect" over the hotspot is disabled while POST /api/wifi runs: one join per tap."""
     held = []
-    with _open(setup, "/app") as pg:
+    with _open(setup, "/app#wifisetup") as pg:
         pg.route("**/api/wifi", lambda r: held.append(r) if r.request.method == "POST" else r.continue_())
         pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
         pg.select_option("#ssid", "HomeNet")
