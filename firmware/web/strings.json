@@ -13,7 +13,7 @@
   "d_passkey": {"en": "enter the code shown on the unit", "de": "Code der Einheit eingeben"},
   "d_link_lost": {"en": "connection lost, reconnecting", "de": "Verbindung verloren, verbinde neu"},
   "d_stale": {"en": "no data for %s", "de": "keine Daten seit %s"},
-  "d_heater_locked": {"en": "connected · heater locked until a drive", "de": "verbunden · Heizung gesperrt bis zur Fahrt"},
+  "d_heater_locked": {"en": "connected · heater: max. operating time reached", "de": "verbunden · Heizung: Max. Betriebsdauer erreicht"},
   "d_heater_error": {"en": "connected · heater error %s", "de": "verbunden · Heizungsfehler %s"},
   "d_pair_error": {"en": "pairing failed", "de": "Kopplung fehlgeschlagen"},
   "d_not_paired": {"en": "not paired", "de": "nicht gekoppelt"},
