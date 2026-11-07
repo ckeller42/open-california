@@ -507,6 +507,20 @@ def _lora_forget(dev, body):
         dev.pop("lora", None)
 
 
+def _experimental(dev, body):
+    """POST /api/experimental {"sensors"} or {"lora"}: LoRa on brings device.lora (a van not yet set
+    up, no uplink yet), LoRa off takes it away."""
+    _set("experimental", "sensors")(dev, body)
+    if "lora" in body:
+        dev.setdefault("experimental", {})["lora"] = body["lora"]
+        if not body["lora"]:
+            dev.pop("lora", None)
+        elif "lora" not in dev:
+            dev["lora"] = lora_device(joined=False, last_s=None, airtime_ms_24h=0, airtime_charged_ms_24h=0,
+                                      unconfirmed_sends=0, downlinks_24h=0, uplinks=[0, 0, 0], setup="none",
+                                      has_ttn_keys=False, dev_eui=None)  # fmt: skip
+
+
 # The satellite's settings endpoints (web.c) as the Satellite-settings screen posts them: what each
 # POST changes in device (/api/ota only starts work, the state moves on by itself).
 _SETTINGS = {
@@ -515,7 +529,7 @@ _SETTINGS = {
     "/api/pi_halt": _pi_halt,
     "/api/pi_wake": lambda dev, body: dev["pi_wake"].update(last_s=0, reason="manual"),
     "/api/ux_setting": _set("ux", "enabled"),
-    "/api/experimental": _set("experimental", "sensors"),
+    "/api/experimental": _experimental,
     "/api/display": lambda dev, body: dev["display"].update(body),
     "/api/ota": lambda dev, body: dev["ota"].update({k: v for k, v in body.items() if k == "channel"}),
     "/api/ble": _ble,

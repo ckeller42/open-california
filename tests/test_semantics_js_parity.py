@@ -183,6 +183,7 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
                 "pi_wake": None,  # ... nor device.pi_wake (R_FW_PI_WAKE)
                 "ble": None,  # ... nor device.ble (R_FW_BLE_IDLE)
                 "experimental": False,
+                "lora_on": None,  # ... nor experimental.lora: a firmware without the switch
                 "setup": None,  # ... nor device.setup (the first-time setup wizard)
                 "lora": None,  # ... nor device.lora (R_FW_LORA)
             },

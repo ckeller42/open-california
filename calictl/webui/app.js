@@ -55,7 +55,7 @@
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
  * @property {{ages: Record<string, number>, version: number|null}} [remote]  set only by adaptSatellite() for remote.js's body: each function's age in s, an unknown uplink version
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora?: ?SatLora, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora_on?: boolean|null, lora?: ?SatLora, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -648,7 +648,8 @@ const HELP = {
     + "looks for an update, Install loads it and restarts the satellite.\n\nAdvanced: Send usage data "
     + "sends which screens and controls are used (never values). Sensors turns on the scan for "
     + "add-on Bluetooth sensors; below it add the ones that are yours (a Victron needs its "
-    + "encryption key), rename or remove them.\n\nOver the setup hotspot these switches need the home "
+    + "encryption key), rename or remove them. LoRa turns on the LoRa module; switch it on only on a "
+    + "satellite that has one (RAK3172). Forget LoRa deletes its LoRa keys.\n\nOver the setup hotspot these switches need the home "
     + "WiFi."],
   wifisetup: ["firmware.html",
     "The satellite runs its setup hotspot: it has no home WiFi yet, or cannot reach it. Choose the "
@@ -2548,13 +2549,16 @@ function buildSat(v) {
   const lacts = h("div", { class: "btnrow", id: "lora-acts" }, forget);
   forget.onclick = () => satAsk(lacts, [h("span", null, T("Forget LoRa? The satellite deletes its LoRa keys and switches LoRa off. The device stays registered at The Things Network until you delete it there."))],
     T("Forget LoRa"), "danger", satLoraForget, "lora-msg");
-  root.append(satCard("lora", "LoRa", ...LORA_ROWS.map(([id, label]) => h("div", { class: "row" }, h("span", { class: "lbl" }, T(label)), h("span", { class: "val", id: "lora-" + id }))),
-    h("p", { class: "note" }, T("Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app.")),
-    lacts, h("p", { class: "warn", id: "lora-msg", "aria-live": "polite" })));
+  root.append(satCard("lora", "LoRa", h("p", { class: "note" }, T("Only for a satellite with a LoRa module (RAK3172). Off: the LoRa pins stay untouched.")),
+    satSwitchRow("lora"),
+    h("div", { id: "lora-on" }, ...LORA_ROWS.map(([id, label]) => h("div", { class: "row" }, h("span", { class: "lbl" }, T(label)), h("span", { class: "val", id: "lora-" + id }))),
+      h("p", { class: "note" }, T("Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app.")), lacts),
+    satMsg("lora-msg")));
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
   toggle("pw", "/api/pi_wake_setting", "Couldn't change the Pi wake", "enabled", "pw-msg");
   toggle("ux", "/api/ux_setting", "Couldn't change usage data", "enabled", "ux-msg");
   toggle("exp", "/api/experimental", "Couldn't change the switch", "sensors", "exp-msg");
+  toggle("lora", "/api/experimental", "Couldn't change the switch", "lora", "lora-msg");
   for (const [id, k] of SAT_SCR_ROWS) toggle("scr-" + id, "/api/display", "Couldn't change the screen setting", k, "scr-msg");
   return satDom;
 }
@@ -2845,6 +2849,8 @@ function satUpdate() {
   satRow("exp", [T(s.experimental ? "Sensors: on" : "Sensors: off")], !!s.experimental, st);
   satRenderScreen(s.display || null, st);
   satRenderFw(s.ota || null, s.fw, st);
+  satRow("lora", [T(s.lora_on ? "LoRa: on" : "LoRa: off")], !!s.lora_on, st);
+  sq("lora").hidden = s.lora_on == null;   // a firmware without the switch: no switch that cannot work
   satRenderLora(s.lora || null, st);
   sq("sens").hidden = !s.experimental;
   if (s.experimental && !sensOn) { sensOn = true; satSensPoll(); }
@@ -3239,7 +3245,7 @@ function satAsk(acts, nodes, okText, okCls, ok, msgId) {
   (nodes[0] instanceof HTMLInputElement ? nodes[0] : c).focus();
 }
 
-// --- LoRa (R_FW_LORA_SETUP): shown while device.lora is there (the LoRa switch is on); Forget LoRa switches it off
+// --- LoRa (R_FW_LORA, R_FW_LORA_SETUP): the switch always; the values while device.lora is there (the switch is on); Forget LoRa switches it off
 /** @type {[string, string][]} the box's value rows: id, label */
 const LORA_ROWS = [["module", "Module"], ["net", "Network"], ["last", "Last uplink"], ["air", "Airtime (24 h)"], ["setup", "Setup"], ["eui", "DevEUI"]];
 /** @type {Record<string, string>} device.lora.module / .setup -> the text */
@@ -3248,7 +3254,7 @@ const LORA_WORDS = { present: "Found", absent: "Not found", checking: "Checking 
 
 /** @param {?SatLora} l @param {boolean} st station mode */
 function satRenderLora(l, st) {
-  sq("lora").hidden = !l;
+  sq("lora-on").hidden = !l;
   if (!l) return;
   /** @param {string} id @param {string} text */
   const set = (id, text) => { sq("lora-" + id).textContent = text; };
