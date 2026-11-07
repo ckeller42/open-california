@@ -198,6 +198,16 @@ unlike Cooler's single `af.a`). State/read-back characteristic `00001702-...`; l
 `<-- Incoming Data for AirHeater:` (`rf/b.java:393-402`). Service UUID `00001700-...`
 (`rf/b.java:121`).
 
+**Hardware on this van** (the heater's type plate, owner photo): Eberspächer **Airtronic M2**,
+version D4A, diesel, 12 V, rated 40 W electrical and 3.5 kW heat output, VW part 7T0 010 025. `batt2`
+is the net current of the second battery, so it also carries the other loads and any charging;
+it shows the heater's phases, not the heater's own consumption. During one run it read about
+−9 A while the glow plug starts the heater (about 2 min), about −2.7 A at level 10, about −1 A at
+levels 9 and 8, and a short −6 A at the shutdown burn-off (DEVICE). An Airtronic sets its own output in steps from the air
+temperature at its own sensor against a set temperature; that the unit's `HeatingLevel` is such a
+set temperature, not a fixed output per level, matches the small step from level 9 to level 8 but
+is UNVERIFIED.
+
 ### 1. Action → field map
 
 | Method | Interface | Signature | Field set | Value | Cite |
