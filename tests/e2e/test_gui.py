@@ -453,11 +453,16 @@ def test_roof_screen_renders_move_buttons(page):
     # Regression guard for #174: roofControls() referenced an undeclared `btns` and threw a
     # ReferenceError on every Roof render — shipped to buspi because the mock had no pop-top, so
     # CI never executed the function. With a fitted roof seeded (Position closed, no InfoPopUp
-    # alert) the screen must render all three controls, and with no alert none may be blocked.
+    # alert) the screen must render all three controls. #513: the shared mock is parked with the
+    # ignition OFF, so Open/Close are greyed with the app's ignition text; Stop always works.
     page.get_by_text("Roof", exact=True).first.click()
     for name in ("open", "close", "stop"):
         expect(page.get_by_role("button", name=name)).to_be_visible()
-        expect(page.get_by_role("button", name=name)).to_be_enabled()
+    expect(page.get_by_role("button", name="stop")).to_be_enabled()
+    page.get_by_role("checkbox").check()  # even armed, no ignition = no move
+    for name in ("open", "close"):
+        expect(page.get_by_role("button", name=name)).to_be_disabled()
+    expect(page.get_by_text("Please switch on the ignition to operate the pop-up roof.")).to_be_visible()
     expect(page.get_by_text("Alert")).to_be_visible()  # readouts rendered too
 
 
@@ -519,39 +524,134 @@ def test_every_screen_has_a_help_sheet_en_and_de(base_url, error_gated_page):
         assert de[v] != en[v], "%s help has no German translation" % v
 
 
-def test_roof_hold_release_sends_stop(page):
-    # The hold-to-move contract: pressing Open streams the move, RELEASING must send STOP. Before the
-    # fix, command() re-rendered synchronously, detaching the held button, so its closure-scoped
-    # pointerup never fired and no STOP went out (the roof kept moving until the server's Position
-    # auto-stop). The release is now caught at document level and the screen is not rebuilt while a
-    # move is held. Assert the actual /api/command traffic: a roof "open" on press, "stop" on release.
-    page.on("dialog", lambda d: d.accept())  # the "path clear?" confirm
+@pytest.fixture
+def ignition_page(tmp_path, error_gated_page):
+    """A page on a dedicated daemon whose mock unit has the ignition ON (the roof moves only then;
+    the shared daemon stays parked, which the camping tests need)."""
+    port = _free_port()
+    proc, url = _start_daemon(
+        port,
+        {
+            "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+            "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+            "CALICTL_MOCK_SEED": json.dumps({"vehicle": {"TerminalOneFive": 1}}),
+        },
+    )
+    try:
+        with error_gated_page(url) as pg:
+            yield pg
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+
+
+def _roof_cmds(page):
+    """Record the roof /api/command bodies the page sends, in order."""
+    sent = []
+
+    def on_request(req):
+        if "/api/command" in req.url and req.method == "POST" and '"roof"' in (req.post_data or ""):
+            sent.append(json.loads(req.post_data)["what"])
+
+    page.on("request", on_request)
+    return sent
+
+
+def _roof_stop_cleanup(page):
+    # Never leave the mock daemon mid-move: a failed assertion would otherwise hold the serve lock.
+    page.mouse.up()
+    origin = page.url.split("/", 3)[0] + "//" + page.url.split("/", 3)[2]
+    page.request.post(
+        origin + "/api/command", data={"function": "roof", "what": "stop", "value": None, "confirm": True}
+    )
+
+
+def test_roof_hold_moves_until_release_then_stops(ignition_page):
+    """#513: a press-and-hold is a SUSTAINED move. The safety acknowledgement is the arming box,
+    given once before the gesture — a confirm() inside pointerdown made the user lift the finger,
+    and that pointercancel sent STOP at once. Holding (no pointerup) must send one "open" and no
+    "stop", and the daemon must keep streaming that move (its POST stays open) until the release."""
+    page = ignition_page
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
     page.get_by_text("Roof", exact=True).first.click()
     open_btn = page.get_by_role("button", name="open")
+    expect(open_btn).to_be_disabled()  # not armed yet
+    page.get_by_role("checkbox").check()
     expect(open_btn).to_be_enabled()
-
-    def is_cmd(req, what):
-        return (
-            "/api/command" in req.url
-            and req.method == "POST"
-            and '"roof"' in (req.post_data or "")
-            and ('"%s"' % what) in (req.post_data or "")
-        )
-
+    sent = _roof_cmds(page)
+    answered = []
+    page.on(
+        "response",
+        lambda r: "/api/command" in r.url and answered.append(json.loads(r.request.post_data)["what"]),
+    )
     open_btn.hover()
     try:
-        with page.expect_request(lambda r: is_cmd(r, "open"), timeout=10000):
+        with page.expect_request(
+            lambda r: "/api/command" in r.url and '"open"' in (r.post_data or ""), timeout=10000
+        ):
             page.mouse.down()
-        with page.expect_request(lambda r: is_cmd(r, "stop"), timeout=10000):
-            page.mouse.up()
+        time.sleep(3)  # hold
+        assert sent == ["open"], sent  # sustained: no STOP while held
+        assert not dialogs, dialogs  # no blocking dialog inside the gesture
+        assert answered == [], answered  # the daemon still streams the move
+        with page.expect_response(
+            lambda r: "/api/command" in r.url and '"open"' in (r.request.post_data or ""), timeout=10000
+        ):
+            page.mouse.up()  # the release sends STOP, which ends the streamed move
+        assert sent[:2] == ["open", "stop"], sent
     finally:
-        # Never leave the module-scoped mock daemon mid-move: a failed assertion above would
-        # otherwise hold the serve lock and stall every later test's command ("Sending…" forever).
-        page.mouse.up()
-        origin = page.url.split("/", 3)[0] + "//" + page.url.split("/", 3)[2]
-        page.request.post(
-            origin + "/api/command", data={"function": "roof", "what": "stop", "value": None, "confirm": True}
-        )
+        _roof_stop_cleanup(page)
+
+
+def test_roof_stop_button_interrupts_a_held_move(ignition_page):
+    """#513: the visible Stop goes out of band. Routed through the single-flight command queue it
+    would wait behind the in-flight "open" (which streams the whole move) and never go out."""
+    page = ignition_page
+    page.get_by_text("Roof", exact=True).first.click()
+    page.get_by_role("checkbox").check()
+    open_btn = page.get_by_role("button", name="open")
+    expect(open_btn).to_be_enabled()
+    open_btn.hover()
+    try:
+        with page.expect_request(
+            lambda r: "/api/command" in r.url and '"open"' in (r.post_data or ""), timeout=5000
+        ):
+            page.mouse.down()
+        # a second pointer on Stop (multi-touch): a JS click, the mouse is still holding Open
+        with page.expect_request(
+            lambda r: "/api/command" in r.url and '"stop"' in (r.post_data or ""), timeout=1500
+        ):
+            page.evaluate(
+                "[...document.querySelectorAll('#app button')].find(b => b.textContent === 'Stop').click()"
+            )
+    finally:
+        _roof_stop_cleanup(page)
+
+
+def test_roof_keyboard_hold(ignition_page):
+    """#513 (WCAG 2.1.1): a focused Open moves while Space is held and stops on its release."""
+    page = ignition_page
+    page.get_by_text("Roof", exact=True).first.click()
+    page.get_by_role("checkbox").check()
+    open_btn = page.get_by_role("button", name="open")
+    expect(open_btn).to_be_enabled()
+    open_btn.focus()
+    try:
+        with page.expect_request(
+            lambda r: "/api/command" in r.url and '"open"' in (r.post_data or ""), timeout=5000
+        ):
+            page.keyboard.down(" ")
+        with page.expect_request(
+            lambda r: "/api/command" in r.url and '"stop"' in (r.post_data or ""), timeout=5000
+        ):
+            page.keyboard.up(" ")
+    finally:
+        page.keyboard.up(" ")
+        _roof_stop_cleanup(page)
 
 
 def test_roof_page_opens_and_leaves_the_roof_view(page):
