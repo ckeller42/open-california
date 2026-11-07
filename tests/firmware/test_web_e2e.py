@@ -481,7 +481,9 @@ def test_roof_stays_with_buspi_or_the_app(host_fw, rec_unit, tmp_path, locale, r
         assert page.get_by_text(hint, exact=True).count() >= 1
         page.evaluate("document.getElementById('back').click()")
         _open_tile(page, "Kühlbox" if locale == "de-DE" else "Cooler")
-        assert page.get_by_role("switch", name="Refrigerator box").is_enabled()
+        assert page.get_by_role(
+            "switch", name="Kühlbox" if locale == "de-DE" else "Refrigerator box"
+        ).is_enabled()
         browser.close()
     assert not errors, errors
     assert set(paths) <= {"/", "/api/state", "/api/pairing", "/api/ble"}, (
