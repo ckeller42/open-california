@@ -20,10 +20,14 @@ function remoteLoad(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { return null; }
 }
 
-/** @param {string} key @param {any} v */
+/** @param {string} key @param {any} v @returns {boolean} false: storage blocked or full (the next read starts over) */
 function remoteSave(key, v) {
-  try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* storage blocked/full: the next read starts over */ }
+  try { localStorage.setItem(key, JSON.stringify(v)); return true; } catch (e) { return false; }
 }
+
+/** remoteState's read outlived its configuration (the van was removed, a repair QR chose another): nothing of it
+ * is stored or shown. */
+class RemoteStale extends Error {}
 
 /** A TTS cluster host (`eu1.cloud.thethings.network`, `<tenant>.eu1.cloud.thethings.industries`): never a URL, and
  * only under the two domains the page's connect-src allows (tools/build_remote.py CSP), so a typed router or LAN
@@ -58,13 +62,16 @@ function remoteBase(o) {
  * @returns {Promise<Record<string, any>>}
  */
 async function remoteState(cfg, now) {
-  const id = [cfg.cluster, cfg.appId, cfg.devId].join("/");
+  const id = remoteId(cfg);
   let last = remoteLoad(REMOTE_LAST_KEY);
-  if (!last || last.id !== id) last = { id, cursor: null, fn: {}, ext: null, energy: null, fw: null, newest: null, unknown: null };
+  // another van (a repair QR chose it): its energy history starts empty, the old van's points never mix in
+  const other = !last || last.id !== id;
+  if (other) last = { id, cursor: null, fn: {}, ext: null, energy: null, fw: null, newest: null, unknown: null };
   const ups = await readUplinks(remoteBase(cfg), cfg.readKey, cfg.appId, cfg.devId,
     last.cursor ? { after: last.cursor } : {});
+  if (JSON.stringify(remoteCfg()) !== JSON.stringify(cfg)) throw new RemoteStale("the configuration changed");
   /** @type {Array<{at: number, boot: number, solar_wh: number, load_wh: number, batt_net_wh: number}>} */
-  const points = remoteLoad(REMOTE_ENERGY_KEY) || [];
+  const points = other ? [] : remoteLoad(REMOTE_ENERGY_KEY) || [];
   for (const u of ups.slice().reverse()) {   // oldest first: a newer frame always wins
     if (u.receivedAt === last.cursor) continue;   // `after` may be inclusive: the cursor's own uplink again
     last.cursor = u.receivedAt;
@@ -86,6 +93,22 @@ async function remoteState(cfg, now) {
   }
   remoteSave(REMOTE_LAST_KEY, last);
   remoteSave(REMOTE_ENERGY_KEY, points.filter((p) => now - p.at <= REMOTE_ENERGY_KEEP_MS));
+  return remoteBody(last, now);
+}
+
+/** @param {{cluster: string, appId: string, devId: string}} cfg the van's identity in oc.remote.last */
+const remoteId = (cfg) => [cfg.cluster, cfg.appId, cfg.devId].join("/");
+
+/** The stored frames of `cfg`'s van as remoteState answers them, without a TTS read; null when none are stored.
+ * app.js shows them when the first read fails and no snapshot was restored (calictl.last_state missing or too big
+ * for the storage). @param {{cluster: string, appId: string, devId: string}} cfg @param {number} now */
+function remoteCached(cfg, now) {
+  const last = remoteLoad(REMOTE_LAST_KEY);
+  return last && last.id === remoteId(cfg) && last.newest != null ? remoteBody(last, now) : null;
+}
+
+/** The satellite-shaped body of the stored frames (see remoteState). @param {any} last @param {number} now */
+function remoteBody(last, now) {
   const age = (/** @type {number} */ at) => Math.max(0, (now - at) / 1000);
   /** @type {Record<string, any>} */
   const fn = {};
@@ -423,7 +446,8 @@ function rsRemove() {
   rsTimer = null;
   rsKey = rsKeyId = "";
   rsPhase = "key";
-  for (const k of [REMOTE_CFG_KEY, REMOTE_SETUP_KEY, REMOTE_ENERGY_KEY, REMOTE_LAST_KEY])
+  // and app.js's offline snapshot: a reload never shows the removed van again
+  for (const k of [REMOTE_CFG_KEY, REMOTE_SETUP_KEY, REMOTE_ENERGY_KEY, REMOTE_LAST_KEY, LAST_STATE_KEY])
     try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ }
   STATE = {};
   lastRender = "";

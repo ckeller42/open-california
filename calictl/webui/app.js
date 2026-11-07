@@ -286,14 +286,14 @@ function closeMenu() {
  * reopens the screen. @param {string} v */
 const viewUrl = (v) => location.pathname + location.search + (v === "home" ? "" : "#" + v + (v === "setup" ? "/" + setupAt : ""));
 
-/** Deep links, taken once the runtime is known (the first `_meta`): a screen's hash (`#devicestatus`,
+/** Deep links, taken once the runtime is known (the first `_meta`; the remote app at its start): a screen's hash (`#devicestatus`,
  * `#satsettings`, `#wifisetup`, `#<function>`; the satellite screens are Home on calictl) opens it as
  * this entry's screen, so a reload stays there; `#pair` (the wizard at the top of Home) is an action
  * and consumed. A deep link wins over the setup landing. */
 function openFromHash() {
   const full = location.hash.slice(1), h = full.split("/")[0], step = full.slice(h.length + 1);
   const screen = REMOTE ? ORDER.includes(h) || REMOTE_VIEWS.includes(h) : h === "devicestatus" || ORDER.includes(h) || ((SAT_VIEWS.includes(h) || h === "satdiag") && satellite());
-  if (!STATE._meta || !(screen || h === "pair" || SAT_VIEWS.includes(h))) return;
+  if (!(STATE._meta || REMOTE) || !(screen || h === "pair" || SAT_VIEWS.includes(h))) return;
   landChecked = true;
   if (h === "pair") {
     history.replaceState(null, "", viewUrl("home"));
@@ -1335,7 +1335,26 @@ async function remotePoll() {
     const body = await remoteState(cfg, Date.now());
     remoteProblem = "";
     return body;
-  } catch (e) { remoteProblem = "ttn"; throw e; }
+  } catch (e) {
+    // the van changed while the read was out (removed, a repair QR): its answer is dropped, the next tick reads anew
+    if (e instanceof RemoteStale) { remoteAt = 0; throw e; }
+    remoteProblem = "ttn";
+    // nothing on screen yet (no snapshot restored): the frames stored with the last read, with their ages
+    const b = !STATE._meta && remoteCached(cfg, Date.now());
+    if (b) { STATE = /** @type {State} */ (adaptSatellite(b, Date.now())); stateAt = Date.now(); render(); }
+    throw e;
+  }
+}
+
+/** Remote mode, between two TTS reads: repaint every 10 s so the ages ("5 min ago") count on, also while TTS fails;
+ * never under a control in use or on the setup screens (they repaint themselves). */
+function remoteAges() {
+  const ae = /** @type {HTMLInputElement} */ (document.activeElement);
+  if (!STATE._meta || REMOTE_VIEWS.includes(view) || (ae && (ae.type === "range" || ae.type === "time" || ae.tagName === "SELECT"))) return;
+  const sig = lastRender.replace(/\|\d+$/, "|" + Math.floor((Date.now() - stateAt) / 10000));
+  if (sig === lastRender) return;
+  lastRender = sig;
+  render();
 }
 
 /** @param {boolean} [force] */
@@ -1346,7 +1365,7 @@ async function refreshState(force) {
   // WebKit (Safari, iPhone) does not and would stack a connection per 2 s tick on the stalled core,
   // then drain them oldest-first (tests/e2e/test_satellite.py pins "at most one waiting", both engines).
   if (polling) { forceNext = forceNext || !!force; seenNext = seenNext || !!force; return; }
-  if (REMOTE && !force && Date.now() - remoteAt < REMOTE_POLL_MS) return;   // the 2 s tick only repaints
+  if (REMOTE && !force && Date.now() - remoteAt < REMOTE_POLL_MS) { remoteAges(); return; }   // the 2 s tick only repaints
   const seen = !!force || seenNext;
   seenNext = false;
   polling = true;
@@ -4126,7 +4145,9 @@ function startClockTicker(el) {
   stopClockTicker();
   const base = parseClock(/** @type {FnState} */ (STATE.vehicle || {}).car_clock);
   if (base == null) { el.textContent = "—"; return; }
-  const anchor = stateAt - (STATE._meta && STATE._meta.age_s ? STATE._meta.age_s * 1000 : 0);
+  // remote: the vehicle frame's own age (an energy or water uplink after it is newer than its clock)
+  const r = STATE._meta && STATE._meta.remote, age = r && typeof r.ages.vehicle === "number" ? r.ages.vehicle : STATE._meta && STATE._meta.age_s;
+  const anchor = stateAt - (age ? age * 1000 : 0);
   const paint = () => { el.textContent = fmtClock(base + (Date.now() - anchor)); };
   paint();
   clockTimer = setInterval(paint, 1000);
@@ -4781,6 +4802,9 @@ function restoreLastState() {
     m.restored = true;  // the offline banner explains it: no read-only banner on top
     m.last_seen = seen;
     m.age_s = Math.max(0, Math.round(Date.now() / 1000 - seen));
+    // the remote app's ages per function were taken at the snapshot: add the time since (ageNow counts from now on)
+    const r = m.remote, dt = Math.max(0, (Date.now() - saved.at) / 1000);
+    if (r && r.ages) for (const k of Object.keys(r.ages)) if (typeof r.ages[k] === "number") r.ages[k] += dt;
     STATE = saved.state;
     stateAt = Date.now();
     lastAnswerAt = saved.at;   // "not reachable since" the snapshot was saved
@@ -4814,7 +4838,10 @@ addEventListener("pointerdown", reportInput, true);
 addEventListener("keydown", reportInput, true);
 
 async function main() {
-  if (REMOTE) remoteBoot();   // a setup a reload interrupted goes on (spec 5.1: survives an app restart)
+  if (REMOTE) {
+    remoteBoot();   // a setup a reload interrupted goes on (spec 5.1: survives an app restart)
+    if (view !== "remotesetup") openFromHash();   // else a deep link (#energy, #remotescan): no TTS answer needed
+  }
   paintLink();                // "connecting…" at once, not "…" while a hung first poll waits 8 s
   await refreshState(true);   // also takes the one-off /api/pairing once a calictl `_meta` answers
   render();

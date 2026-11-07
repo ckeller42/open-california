@@ -14,6 +14,7 @@ ports 2, 3 and 4 (``cali_lora.h``). OPT-IN like test_gui.py: skipped without Pla
 
 import functools
 import json
+import re
 import sys
 import threading
 from datetime import UTC, datetime, timedelta
@@ -267,3 +268,91 @@ def test_stalled_read_times_out_and_polling_goes_on(site, ttn, error_gated_page)
         expect(pg.locator("#status")).not_to_contain_text("5 min ago")
         pg.clock.fast_forward("05:30")  # the next poll (REMOTE_POLL_MS)
         expect(pg.locator(".summary")).to_contain_text("11 / 29 l")
+
+
+def test_a_read_that_outlives_the_van_is_dropped(site, ttn, error_gated_page):
+    """The van is removed while a TTS read is out: its answer is neither stored nor shown (the old frames, energy
+    and the offline snapshot stay gone)."""
+    _, secret = ttn.make_key("read")
+    ttn.add_uplink(DEV, 2, port2(), datetime.now(UTC) - timedelta(minutes=5))
+    ttn.stall_reads = 1
+    with error_gated_page(site, init_script=_init(ttn, secret), service_workers="block") as pg:
+        for _ in range(100):  # the first read is waiting at the fake
+            if any("/packages/storage/" in p for _, p, _ in ttn.calls):
+                break
+            pg.wait_for_timeout(50)
+        pg.evaluate("rsRemove()")
+        ttn.release.set()
+        pg.wait_for_timeout(800)
+        keys = pg.evaluate("Object.keys(localStorage)")
+        assert not [k for k in keys if k in ("oc.remote.last", "oc.remote.energy", "calictl.last_state")], (
+            keys
+        )
+        assert pg.evaluate("Object.keys(STATE).length") == 0
+        expect(pg.get_by_text("11 / 29 l")).to_have_count(0)
+
+
+def test_ages_count_on_between_reads(site, ttn, error_gated_page):
+    """The tiles' ages advance between two TTS reads (every REMOTE_POLL_MS), not only when a read answers."""
+    _, secret = ttn.make_key("read")
+    ttn.add_uplink(DEV, 2, port2(), datetime.now(UTC) - timedelta(minutes=5))
+    with error_gated_page(site, init_script=_init(ttn, secret), service_workers="block") as pg:
+        pg.clock.install()
+        expect(pg.locator(".summary")).to_contain_text("5 min ago")
+        pg.clock.fast_forward("03:00")  # < REMOTE_POLL_MS: no read
+        expect(pg.locator(".summary")).to_contain_text("8 min ago")
+
+
+def test_deep_links_open_at_start(site, ttn, error_gated_page):
+    """A remote URL with a screen's hash opens that screen at the start, with or without a configuration."""
+    _, secret = ttn.make_key("read")
+    ttn.add_uplink(DEV, 2, port2(), datetime.now(UTC) - timedelta(minutes=5))
+    with error_gated_page(site + "/#energy", init_script=_init(ttn, secret), service_workers="block") as pg:
+        expect(pg.locator("#app")).to_contain_text("87 W")
+    with error_gated_page(
+        site + "/#remotescan", init_script="window.OC_REMOTE = true;", service_workers="block"
+    ) as pg:
+        expect(pg.locator("#title")).to_have_text("Scan the van's code")
+
+
+def test_offline_start_shows_stored_frames_with_their_true_age(site, ttn, error_gated_page):
+    """Reopened without TTS: the snapshot's ages include the time since it was saved; without a snapshot the frames
+    stored with the last read are shown, and the pill still says TTS fails."""
+    _, secret = ttn.make_key("read")
+    ttn.add_uplink(DEV, 2, port2(), datetime.now(UTC) - timedelta(minutes=5))
+    with error_gated_page(
+        site, init_script=_init(ttn, secret), service_workers="block", allow_errors=("ERR_", "status of 500")
+    ) as pg:
+        expect(pg.locator(".summary")).to_contain_text("11 / 29 l")
+        assert pg.evaluate("localStorage.getItem('calictl.last_state')"), "the offline snapshot (PWA)"
+        # the snapshot is an hour old; TTS fails from now on
+        pg.evaluate(
+            """() => { const s = JSON.parse(localStorage.getItem('calictl.last_state'));
+                       s.at -= 3600000; localStorage.setItem('calictl.last_state', JSON.stringify(s)); }"""
+        )
+        ttn.storage_body = b'{"error": {"code": 13}}\n'
+        pg.reload()
+        expect(pg.locator(".summary")).to_contain_text("65 min ago")  # 5 min + the hour since the snapshot
+        pg.evaluate("localStorage.removeItem('calictl.last_state')")
+        pg.reload()
+        expect(pg.locator(".summary")).to_contain_text("11 / 29 l")
+        expect(pg.locator("#status")).to_have_class(re.compile(r"\bwarn\b"))
+
+
+def test_another_van_starts_its_own_energy_history(site, ttn, error_gated_page):
+    """A repair QR of another van: the old van's energy points are not kept for it; the same van keeps them."""
+    _, secret = ttn.make_key("read")
+    ttn.add_uplink(DEV, 2, port2(), datetime.now(UTC) - timedelta(minutes=5))
+    with error_gated_page(site, init_script=_init(ttn, secret), service_workers="block") as pg:
+        expect(pg.locator(".summary")).to_contain_text("11 / 29 l")
+        n = pg.evaluate(
+            """async () => { await remoteState(remoteCfg(), Date.now());
+                             return JSON.parse(localStorage.getItem('oc.remote.energy')).length; }"""
+        )
+        assert n == 1, "the same van keeps its points"
+        n = pg.evaluate(
+            """async () => { const c = remoteCfg(); localStorage.setItem('oc.remote.cfg', JSON.stringify({...c, devId: 'van-000002'}));
+                             await remoteState(remoteCfg(), Date.now());
+                             return JSON.parse(localStorage.getItem('oc.remote.energy')).length; }"""
+        )
+        assert n == 0
