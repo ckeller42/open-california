@@ -497,6 +497,31 @@ int cali_sensors_value(const char *alias, int field, int32_t *centi, uint64_t *a
     return -1;
 }
 
+int cali_sensors_type_sum(const char *type, int field, uint64_t now_ms, uint64_t max_age_ms, double *sum) {
+    int n = 0;
+    *sum = 0;
+    for (int i = 0; i < s_cfg.n; i++) {
+        const cali_sensor_reading_t *r = &s_val[i].r;
+        if (strcmp(TYPES[s_cfg.e[i].type].id, type) != 0) continue;
+        if (field < 0 || field >= r->n || !isfinite(r->f[field]) || now_ms < r->at_ms || now_ms - r->at_ms > max_age_ms) {
+            *sum = 0;
+            return -1;
+        }
+        *sum += r->f[field];
+        n++;
+    }
+    return n;
+}
+
+int cali_sensors_first(const char *type, cali_sensor_reading_t *out) {
+    for (int i = 0; i < s_cfg.n; i++)
+        if (strcmp(TYPES[s_cfg.e[i].type].id, type) == 0) {
+            *out = s_val[i].r;
+            return 0;
+        }
+    return -1;
+}
+
 const char *cali_sensors_type(const char *alias) {
     for (int i = 0; i < s_cfg.n; i++)
         if (strcmp(s_cfg.e[i].alias, alias) == 0) return TYPES[s_cfg.e[i].type].id;

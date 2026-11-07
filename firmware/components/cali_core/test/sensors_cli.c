@@ -14,6 +14,8 @@
  *   maxbody                                  "MAXBODY <len>"
  *   value <alias> <field>                    "VALUE <rc> [<centi> <at_ms>]" (cali_sensors_value)
  *   centi <float>                            "CENTI <rc> [<centi>]" (cali_sensors_centi; strtof: nan, inf ok)
+ *   typesum <type> <field> <now> <max_age>   "TYPESUM <rc> <sum>" (cali_sensors_type_sum)
+ *   first <type>                             "FIRST <rc> <n> <f0>" (cali_sensors_first)
  * Every ext record reaches the diag sink, which prints "REC <body>". The AES hook is a stub whose
  * keystream block is the key itself (a Victron vector's "ciphertext" = plaintext XOR key). */
 #include <stdio.h>
@@ -114,6 +116,14 @@ int main(int argc, char **argv) {
             uint64_t at;
             if (cali_sensors_value(a[0], atoi(a[1]), &c, &at) == 0) printf("VALUE 0 %ld %llu\n", (long)c, (unsigned long long)at);
             else printf("VALUE -1\n");
+        } else if (!strcmp(cmd, "typesum") && n == 5) {
+            double sum;
+            int rc = cali_sensors_type_sum(a[0], atoi(a[1]), strtoull(a[2], NULL, 10), strtoull(a[3], NULL, 10), &sum);
+            printf("TYPESUM %d %.2f\n", rc, sum);
+        } else if (!strcmp(cmd, "first") && n == 2) {
+            cali_sensor_reading_t r;
+            int rc = cali_sensors_first(a[0], &r);
+            printf("FIRST %d %d %.2f\n", rc, rc == 0 ? r.n : 0, rc == 0 && r.n ? (double)r.f[0] : 0.0);
         } else if (!strcmp(cmd, "centi") && n == 2) {
             int32_t c;
             if (cali_sensors_centi(strtof(a[0], NULL), &c) == 0) printf("CENTI 0 %ld\n", (long)c);

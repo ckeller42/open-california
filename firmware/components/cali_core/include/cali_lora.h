@@ -1,0 +1,418 @@
+/**
+ * @file cali_lora.h
+ * @brief LoRaWAN telemetry (experimental): the platform-free part — the RAK3172 AT line parser, airtime
+ *        and the daily budgets, the uplink packers, the snapshot the owner task hands to the LoRa task,
+ *        and `/api/state` `device.lora`.
+ *
+ * A RAK3172 module (M5Stack Module LoRaWAN-EU868, RUI3 AT firmware) on the CoreS3's UART1 sends the van's
+ * energy picture to The Things Stack while no router runs: far away, the phone reads it from the Things
+ * Stack's Storage Integration. The UART and the task live in the ESP-only component `cali_lora`
+ * (`lora_esp.c`); on the host and in QEMU `lora_port_none.c` stands in and the module reads "absent".
+ * Nothing here runs, and no pin is touched, while the switch `exp_lora` is off.
+ *
+ * **Uplinks** (all multi-byte values big-endian; raw frames exactly as the unit sent them, so the
+ * reader interprets them with Open California's own semantics):
+ * - port 2 (CALI_LORA_ENERGY_LEN = 50 B, fits SF12): [0] version 1, [1..2] boot (16 bit),
+ *   [3..24] the energy frame (22 B), [25..30] the water frame (6 B), [31..32] the first Victron charger's
+ *   battery current ×10 (signed), [33..34] its PV power W, [35..36] its yield today ×100 kWh, [37] its
+ *   charge state, [38] its error code, [39..40] the battery sense's voltage ×100, [41..49] the energy
+ *   counters (R_FW_ENERGY_COUNTERS) as three 24-bit deci-Wh values: solar, load, battery net (signed).
+ *   A missing frame, or a sensor without a reading in the last 60 s, reads 0xFF bytes.
+ * - port 3: the functions whose frame changed, or was not sent for CALI_LORA_REFRESH_S, oldest first:
+ *   [char index in CODEC_CHARS][length][frame]..., whole entries only. Energy, water and general are
+ *   never in it (ports 2 and 4 carry them).
+ * - port 4 (CALI_LORA_DAILY_LEN = 24 B), once a day and after each join: [0] version 1, [1..2] boot,
+ *   [3..6] uptime s, [7..15] the general frame (9 B), [16..23] the firmware version, NUL-padded.
+ *
+ * **Airtime** follows Semtech AN1200.13 for EU868 125 kHz, CR 4/5. The firmware keeps at most
+ * CALI_LORA_UPLINK_MS of uplink airtime and CALI_LORA_DOWNLINKS downlinks per rolling 24 h (The Things
+ * Network's fair use); port 2 may use CALI_LORA_ENERGY_SHARE % of the airtime, the rest stays for ports 3
+ * and 4. A send counts as on air only when the module confirms it with `+EVT:TX_DONE`; the budget also
+ * charges a send the module accepted without that confirmation, but `/api/state` reports it apart, so a
+ * silent module can never look like a working link.
+ *
+ * @verbatim embed:rst:leading-asterisk
+ * .. req:: The satellite sends its energy picture over LoRaWAN while the experimental switch is on
+ *    :id: R_FW_LORA
+ *    :status: implemented
+ *    :tags: esp32, experimental, lora
+ *
+ *    With the experimental switch ``exp_lora`` on (default off; ``POST /api/experimental {"lora":…}``,
+ *    console ``lora on|off``), the firmware shall drive a RAK3172 on UART1 (TX GPIO43, RX GPIO18, RST
+ *    GPIO5): reset it, detect it by ``AT``, join by OTAA (EU868, class A, ADR) with the
+ *    DevEUI/JoinEUI/AppKey stored by ``lora keys`` (NVS, never printed; written to the module before
+ *    each join attempt), and send port 2 at the interval the airtime budget allows (at least 600 s),
+ *    port 3 when a function changed, and port 4 daily. Uplink airtime and downlinks stay within 25 s and
+ *    8 per rolling 24 h: no uplink goes out once either is used up. A send counts as airtime in
+ *    ``/api/state`` only after ``+EVT:TX_DONE``. After 3 AT commands in a row without any answer the
+ *    firmware shall reset the module, report it not joined, and try again every 10 min while it stays
+ *    silent. With the switch off, no LoRa pin is touched. ``/api/state`` reports ``device.lora`` only
+ *    while the switch is on.
+ * @endverbatim
+ *
+ * C99, no malloc, no ESP-IDF headers. Proven by `tests/firmware/test_lora.py` (`test/lora_cli.c`).
+ */
+#ifndef CALI_LORA_H
+#define CALI_LORA_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "cali_energy.h"
+#include "cali_json.h"
+#include "cali_sensors.h"
+#include "codec.h"
+#include "codec_chars.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** @brief The NVS key of the switch. */
+#define CALI_EXP_LORA_KEY "exp_lora"
+/** @brief The NVS key of the 8+8+16 key bytes (DevEUI, JoinEUI, AppKey). */
+#define CALI_LORA_KEYS_KEY "lora_keys"
+
+/** @brief energy + water + chargers + counters */
+#define CALI_LORA_PORT_ENERGY 2
+/** @brief changed functions */
+#define CALI_LORA_PORT_CHANGED 3
+/** @brief daily */
+#define CALI_LORA_PORT_DAILY 4
+/** @brief port 2 length */
+#define CALI_LORA_ENERGY_LEN 50
+/** @brief port 4 length */
+#define CALI_LORA_DAILY_LEN 24
+/** @brief every tracked function at least every 12 h */
+#define CALI_LORA_REFRESH_S 43200u
+/** @brief LoRaWAN bytes around the payload: MHDR 1 + FHDR 7 + FPort 1 + MIC 4 */
+#define CALI_LORA_OVERHEAD 13u
+/** @brief the budgets' rolling window, s */
+#define CALI_LORA_DAY_S 86400u
+/** @brief uplink airtime per rolling 24 h */
+#define CALI_LORA_UPLINK_MS 25000u
+/** @brief downlinks per rolling 24 h */
+#define CALI_LORA_DOWNLINKS 8u
+/** @brief port 2's share of the airtime, % */
+#define CALI_LORA_ENERGY_SHARE 60u
+/** @brief the shortest port-2 interval, s */
+#define CALI_LORA_BASE_S 600u
+/** @brief unanswered AT commands in a row before a module reset */
+#define CALI_LORA_SILENT_MAX 3u
+/** @brief ports 2 + 3 at the 600 s base interval are 288 a day; a full ring reads as no room */
+#define CALI_LORA_UP_RING 320
+/** @brief the downlink ring (at least CALI_LORA_DOWNLINKS) */
+#define CALI_LORA_DL_RING 16
+/** @brief how often the owner task hands a snapshot over */
+#define CALI_LORA_SNAP_MS 10000u
+
+/** @brief One line from the module, classified. */
+typedef enum {
+    CALI_RAK_NONE,         /**< no answer, or a line that is none of these */
+    CALI_RAK_OK,           /**< `OK` */
+    CALI_RAK_ERROR,        /**< `AT_..._ERROR` */
+    CALI_RAK_BUSY,         /**< `AT_BUSY_ERROR` */
+    CALI_RAK_NOT_JOINED,   /**< `AT_NO_NETWORK_JOINED` */
+    CALI_RAK_JOINED,       /**< `+EVT:JOINED` */
+    CALI_RAK_JOIN_FAILED,  /**< `+EVT:JOIN_FAILED...` */
+    CALI_RAK_TX_DONE,      /**< `+EVT:TX_DONE`: the module sent the uplink */
+    CALI_RAK_LINKCHECK,    /**< `+EVT:LINKCHECK:...` */
+    CALI_RAK_RX,           /**< `+EVT:RX_...`: a downlink */
+    CALI_RAK_VALUE,        /**< the value line of `AT+X=?` */
+} cali_rak_kind_t;
+
+/** @brief A parsed line. */
+typedef struct {
+    cali_rak_kind_t kind;  /**< what the line is */
+    int lc_status;         /**< LINKCHECK: 0 = answered */
+    int lc_margin;         /**< LINKCHECK: demodulation margin, dB */
+    int lc_gateways;       /**< LINKCHECK: gateways that heard the request */
+    int rssi;              /**< LINKCHECK, RX: dBm */
+    int snr;               /**< LINKCHECK, RX: dB */
+    char value[64];          /**< VALUE: the reply of `AT+X=?` */
+    int port;                /**< RX: FPort */
+    uint8_t payload[64];     /**< RX: application payload */
+    unsigned payload_len;    /**< RX: payload bytes */
+} cali_rak_event_t;
+
+/**
+ * @brief A line to or from the module as it may be logged: the value of a `...KEY=` or `...EUI=` line
+ *        (AppKey, DevEUI, JoinEUI, in a command or in the module's reply) becomes `<redacted>`; a `=?`
+ *        query and every other line stay as they are.
+ * @param line  The line without CR/LF.
+ * @param out   Out: the loggable line (truncated to n; 48 bytes always hold a redacted one).
+ * @param n     Size of out.
+ * @return 1 when out is a redacted line, 0 when the line is safe to log as it is.
+ */
+int cali_rak_redact(const char *line, char *out, size_t n);
+
+/**
+ * @brief Classify one line from the RAK3172 (RUI3): OK, AT_ERROR & co., `+EVT:JOINED`, `+EVT:TX_DONE`,
+ *        `+EVT:LINKCHECK:…`, `+EVT:RX_1:…`/`RX_C` + `UNICAST:<port>:<hex>`, or a value reply.
+ * @param line  The line without CR/LF.
+ * @return The event; kind NONE for a line that is none of these (the boot banner, an echo).
+ */
+cali_rak_event_t cali_rak_parse(const char *line);
+/**
+ * @brief The kind's name, for the log.
+ * @param k The kind.
+ * @return "OK", "TX_DONE", ...
+ */
+const char *cali_rak_kind_name(cali_rak_kind_t k);
+
+/** @brief What one `AT+SEND` counts as. */
+typedef struct {
+    int charged;     /**< 1: into the budget, it may be on air */
+    int confirmed;   /**< 1: the module reported the transmission */
+} cali_lora_outcome_t;
+/**
+ * @brief The outcome of a send from its final status and whether `+EVT:TX_DONE` followed.
+ * @param status   The final status (NONE = no answer).
+ * @param tx_done  1 when `+EVT:TX_DONE` came.
+ * @return Not charged for a refusal (ERROR, BUSY, NOT_JOINED); confirmed only with TX_DONE.
+ */
+cali_lora_outcome_t cali_lora_outcome(cali_rak_kind_t status, int tx_done);
+
+/**
+ * @brief Airtime of one uplink in ms.
+ * @param phy_len Payload + CALI_LORA_OVERHEAD.
+ * @param sf 7..12.
+ * @return ms.
+ */
+uint32_t cali_lora_airtime_ms(unsigned phy_len, unsigned sf);
+/**
+ * @brief The EU868 maximum payload at a spreading factor.
+ * @param sf 7..12.
+ * @return Bytes.
+ */
+unsigned cali_lora_max_payload(unsigned sf);
+
+/** @brief The rolling 24-h budgets. */
+typedef struct {
+    /** @brief One charged uplink. */
+    struct cali_lora_up {
+        uint32_t t_s;        /**< uptime s */
+        uint32_t ms;         /**< airtime */
+        uint8_t confirmed;   /**< 1 after +EVT:TX_DONE */
+    } up[CALI_LORA_UP_RING]; /**< the uplink ring */
+    unsigned up_head;        /**< its oldest entry */
+    unsigned up_n;           /**< its entries */
+    uint32_t dl[CALI_LORA_DL_RING];  /**< downlink times, uptime s */
+    unsigned dl_head;        /**< its oldest entry */
+    unsigned dl_n;           /**< its entries */
+} cali_lora_budget_t;
+
+/**
+ * @brief Empty the budgets.
+ * @param b The budget.
+ */
+void cali_lora_budget_init(cali_lora_budget_t *b);
+/**
+ * @brief Charge an uplink.
+ * @param b Budget.
+ * @param now_s Uptime s.
+ * @param ms Airtime.
+ * @param confirmed TX_DONE seen.
+ */
+void cali_lora_uplink_add(cali_lora_budget_t *b, uint32_t now_s, uint32_t ms, int confirmed);
+/**
+ * @brief Airtime charged in the last 24 h.
+ * @param b Budget.
+ * @param now_s Uptime s.
+ * @return ms.
+ */
+uint32_t cali_lora_uplink_used_ms(cali_lora_budget_t *b, uint32_t now_s);
+/**
+ * @brief Airtime confirmed on air in the last 24 h.
+ * @param b Budget.
+ * @param now_s Uptime s.
+ * @return ms.
+ */
+uint32_t cali_lora_uplink_confirmed_ms(cali_lora_budget_t *b, uint32_t now_s);
+/**
+ * @brief Airtime left in the 24-h budget, never below 0.
+ * @param b Budget.
+ * @param now_s Uptime s.
+ * @return ms; 0 while the ring holds CALI_LORA_UP_RING unexpired uplinks.
+ */
+uint32_t cali_lora_uplink_room_ms(cali_lora_budget_t *b, uint32_t now_s);
+/**
+ * @brief Take one downlink.
+ * @param b Budget.
+ * @param now_s Uptime s.
+ * @return 1 when one was left, else 0.
+ */
+int cali_lora_downlink_take(cali_lora_budget_t *b, uint32_t now_s);
+/**
+ * @brief Downlinks in the last 24 h.
+ * @param b Budget.
+ * @param now_s Uptime s.
+ * @return Count.
+ */
+unsigned cali_lora_downlinks_used(cali_lora_budget_t *b, uint32_t now_s);
+/**
+ * @brief Seconds until the next port-2 uplink: DAY / floor(share / airtime) rounded up, so no rolling
+ *        24 h holds more port-2 uplinks at this SF than fit in its share; at least CALI_LORA_BASE_S, and
+ *        never past the rolling budget.
+ * @param b      Budget.
+ * @param now_s  Uptime s.
+ * @param sf     Spreading factor.
+ * @param len    Payload length.
+ * @param share  Percent of the daily airtime this packet may use.
+ * @return Seconds.
+ */
+uint32_t cali_lora_next_interval_s(cali_lora_budget_t *b, uint32_t now_s, unsigned sf, unsigned len, unsigned share);
+/**
+ * @brief The wait after the n-th failed join: 60 s doubling, at most 1 h.
+ * @param attempt 0..
+ * @return Seconds.
+ */
+uint32_t cali_lora_join_backoff_s(unsigned attempt);
+
+/** @brief What the owner task hands to the LoRa task: copies, so the task never reads session state. */
+typedef struct {
+    uint8_t frame[CODEC_NCHARS][CODEC_FRAME_MAX];   /**< the raw state frame per CODEC_CHARS index */
+    uint8_t len[CODEC_NCHARS];   /**< 0 = no frame */
+    cali_sensor_reading_t mppt;     /**< the first Victron charger (n 0 = none) */
+    cali_sensor_reading_t bsense;   /**< the first Victron battery sense (n 0 = none) */
+    cali_energy_ctr_t ctr;       /**< the energy counters */
+    uint32_t boot;               /**< the boot counter (R_FW_TIME) */
+    uint32_t uptime_s;           /**< uptime, s */
+    int enabled;                 /**< exp_lora */
+} cali_lora_snap_t;
+
+/**
+ * @brief Fill a snapshot from the session, the sensors and the counters (owner task). A Victron reading
+ *        older than CALI_ENERGY_MAX_AGE_MS goes in as none (`n` 0).
+ * @param s Out.
+ * @param now_ms Uptime.
+ */
+void cali_lora_snapshot(cali_lora_snap_t *s, uint64_t now_ms);
+
+/**
+ * @brief Pack port 2.
+ * @param out The buffer.
+ * @param s The snapshot.
+ * @return CALI_LORA_ENERGY_LEN.
+ */
+size_t cali_lora_pack_energy(uint8_t *out, const cali_lora_snap_t *s);
+/**
+ * @brief Pack port 4.
+ * @param out The buffer.
+ * @param s The snapshot.
+ * @param fw The firmware version.
+ * @return CALI_LORA_DAILY_LEN.
+ */
+size_t cali_lora_pack_daily(uint8_t *out, const cali_lora_snap_t *s, const char *fw);
+
+/** @brief Port 3's change tracker. */
+typedef struct {
+    uint8_t last[CODEC_NCHARS][CODEC_FRAME_MAX];   /**< the frame last sent */
+    uint8_t last_len[CODEC_NCHARS];                /**< its length */
+    uint32_t sent_at[CODEC_NCHARS];                /**< when, uptime s */
+    uint8_t pending[CODEC_NCHARS];                 /**< 1: due on port 3 */
+} cali_lora_tracker_t;
+
+/**
+ * @brief Start the tracker: every function is sent once.
+ * @param t The tracker.
+ */
+void cali_lora_tracker_init(cali_lora_tracker_t *t);
+/**
+ * @brief Mark changed or due functions.
+ * @param t Tracker.
+ * @param s Snapshot.
+ * @param now_s Uptime s.
+ */
+void cali_lora_tracker_update(cali_lora_tracker_t *t, const cali_lora_snap_t *s, uint32_t now_s);
+/**
+ * @brief Pack port 3 without consuming the changes.
+ * @param t       Tracker.
+ * @param s       Snapshot.
+ * @param out     The buffer.
+ * @param max     The payload limit at the current SF.
+ * @param picked  Out: a bit per packed char index, for cali_lora_tracker_commit() after a good send.
+ * @return The length; 0 = nothing to send.
+ */
+size_t cali_lora_pack_changed(const cali_lora_tracker_t *t, const cali_lora_snap_t *s, uint8_t *out, size_t max,
+                              uint32_t *picked);
+/**
+ * @brief Consume the packed changes after a good send.
+ * @param t Tracker.
+ * @param s Snapshot.
+ * @param picked From the pack.
+ * @param now_s Uptime s.
+ */
+void cali_lora_tracker_commit(cali_lora_tracker_t *t, const cali_lora_snap_t *s, uint32_t picked, uint32_t now_s);
+
+/** @brief What the LoRa task reports (copied to the owner task). */
+typedef struct {
+    int present;             /**< the module: -1 checking, 0 absent, 1 present */
+    int joined;              /**< 1: the module's word; stale while at_unanswered > 0 */
+    unsigned at_unanswered;  /**< AT commands in a row without an answer */
+    int sf;                  /**< spreading factor 7..12 */
+    uint32_t last_confirmed_s;   /**< uptime s of the last confirmed uplink, 0 = none */
+    uint32_t airtime_ms;     /**< confirmed by TX_DONE in the last 24 h */
+    uint32_t charged_ms;     /**< charged to the budget in the last 24 h */
+    unsigned unconfirmed;    /**< sends without TX_DONE since boot */
+    unsigned downlinks;      /**< downlinks in the last 24 h */
+    unsigned uplinks[3];     /**< confirmed uplinks since boot: ports 2, 3, 4 */
+    const char *note;        /**< "joining", "join failed", "module silent", ... or NULL */
+} cali_lora_status_t;
+
+/**
+ * @brief Write `device.lora`.
+ * @param j The writer at a value.
+ * @param st The status.
+ * @param now_s Uptime s.
+ */
+void cali_lora_status_json(cali_json_t *j, const cali_lora_status_t *st, uint32_t now_s);
+
+/**
+ * @brief The switch (lazy NVS read).
+ * @return 1 when on.
+ */
+int cali_exp_lora(void);
+/**
+ * @brief Store the switch; logs `exp: lora on|off`.
+ * @param on The switch.
+ * @return 0, or -1 when NVS failed.
+ */
+int cali_exp_lora_set(int on);
+
+/**
+ * @brief The owner-task tick: every CALI_LORA_SNAP_MS a snapshot to the task, and its status back.
+ * @param now_ms Uptime.
+ */
+void cali_lora_tick(uint64_t now_ms);
+/**
+ * @brief Write `device.lora` from the last status (only call while the switch is on).
+ * @param j The writer.
+ */
+void cali_lora_json(cali_json_t *j);
+/**
+ * @brief Console `lora on|off|status|keys <deveui> <joineui> <appkey>` (hex).
+ * @param args  The text after "lora".
+ * @return 0.
+ */
+int cali_lora_console(const char *args);
+
+/* ---- the port: lora_esp.c (cali_lora) on the device, lora_port_none.c on the host ---- */
+
+/**
+ * @brief Hand a snapshot to the LoRa task (it keeps the newest).
+ * @param s The snapshot.
+ */
+void cali_lora_port_post(const cali_lora_snap_t *s);
+/**
+ * @brief The task's newest status.
+ * @param out Out.
+ * @return 1 when there is one.
+ */
+int cali_lora_port_status(cali_lora_status_t *out);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* CALI_LORA_H */
