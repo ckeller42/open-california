@@ -1765,3 +1765,47 @@ def test_menu_lists_device_status_before_the_first_answer(base_url):
         for r in held:
             r.abort()
         browser.close()
+
+
+def test_heater_start_confirm_only_on_a_real_start(fresh_url, error_gated_page):
+    """#514: the fuel-burner confirm fires only for a START (Immediate heating ON); level, run time,
+    start time and OFF write with no dialog (ui/screens/air-heater.yaml). The level slider clamps the
+    mock's off-scale HeatingLevel 0 to its min and reads "—", never "0"."""
+    with error_gated_page(fresh_url) as pg:
+        msgs = []
+
+        def on_dialog(d):
+            msgs.append(d.message)
+            d.accept()
+
+        pg.on("dialog", on_dialog)
+        pg.get_by_text("Air heater", exact=True).first.click()
+        assert _state(fresh_url, pg)["airheater"]["level"] == 0  # the mock's off-scale seed
+        lvl = (
+            pg.locator(".row")
+            .filter(has=pg.locator('input[type="range"]'))
+            .filter(has_text="Heating temperature")
+        )
+        expect(lvl.locator('input[type="range"]')).to_have_value("1")
+        expect(lvl.locator(".sval")).to_have_text("—")
+        expect(pg.get_by_text("Level 0")).to_have_count(0)
+
+        lvl.locator('input[type="range"]').fill("3")
+        _poll(pg, fresh_url, lambda st: st["airheater"]["level"] == 3, "level 3")
+        rt = pg.locator(".row").filter(has=pg.locator('input[type="range"]')).filter(has_text="Run time")
+        rt.locator('input[type="range"]').fill("30")
+        _poll(pg, fresh_url, lambda st: st["airheater"]["running_time"] == 30, "run time 30")
+        pg.locator('input[type="time"]').fill("07:30")
+        _poll(pg, fresh_url, lambda st: st["airheater"]["timer_hour"] == 7, "start time 07:30")
+        assert msgs == []  # no write so far starts the burner
+
+        power = pg.get_by_role("switch", name="Immediate heating")
+        power.click()
+        _poll(pg, fresh_url, lambda st: st["airheater"]["normal"] is True, "heater on")
+        assert (
+            len(msgs) == 1 and "fuel-burning" in msgs[0] and "{w}" not in msgs[0] and "power" not in msgs[0]
+        )
+        expect(power).to_have_attribute("aria-checked", "true", timeout=15000)
+        power.click()
+        _poll(pg, fresh_url, lambda st: st["airheater"]["normal"] is False, "heater off")
+        assert len(msgs) == 1  # OFF asks nothing
