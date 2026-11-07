@@ -21,20 +21,23 @@ DE = ROOT / "calictl" / "webui" / "strings.de.js"
 REMOTE_DE = ROOT / "calictl" / "webui" / "strings.remote.de.js"  # the remote app only, merged into STRINGS_DE
 
 
-def _de_keys():
-    """The keys of window.STRINGS_DE, via node so concatenated/computed keys resolve natively."""
+def _de_keys(*files):
+    """The keys of window.STRINGS_DE after loading ``files`` (default: both catalogs), via node so
+    concatenated/computed keys resolve natively."""
     node = shutil.which("node")
     if not node:
         pytest.skip("node not available")
+    files = files or (DE, REMOTE_DE)
+    loads = "".join("require(process.argv[%d]);" % (i + 1) for i in range(len(files)))
     out = subprocess.check_output(
         [
             node,
             "-e",
-            "global.window={};require(process.argv[1]);require(process.argv[2]);"
-            "process.stdout.write(JSON.stringify(Object.keys(window.STRINGS_DE)))",
-            str(DE),
-            str(REMOTE_DE),
-        ],
+            "global.window={};"
+            + loads
+            + "process.stdout.write(JSON.stringify(Object.keys(window.STRINGS_DE)))",
+        ]
+        + [str(f) for f in files],
         text=True,
     )
     return set(json.loads(out))
@@ -45,14 +48,31 @@ def _de_keys():
 _T = re.compile(r'\b[tT]\(\s*"((?:[^"\\]|\\.)*)"\s*\)')
 _TF = re.compile(r'\btf\(\s*"((?:[^"\\]|\\.)*)"\s*,')
 
+# app.js keys rendered only in remote mode (REMOTE branches): their German lives in strings.remote.de.js, which the
+# satellite's bundle does not carry. Every other app.js key must be in strings.de.js itself.
+APP_REMOTE_ONLY = {
+    "LoRa · {ago}",
+    "LoRa — display only",
+    "Values via LoRa, {ago}",
+    "Set up LoRa",
+    "Scan the van's code",
+    "Remove this van",
+}
+
+
+def _lits(path):
+    src = path.read_text(encoding="utf-8")
+    return {k for k in set(_T.findall(src)) | set(_TF.findall(src)) if k}  # drop the empty string
+
 
 def test_every_simple_t_key_has_a_german_translation():
-    keys = _de_keys()
-    src = APP.read_text(encoding="utf-8") + REMOTE.read_text(encoding="utf-8")
-    lits = set(_T.findall(src)) | set(_TF.findall(src))
-    lits = {k for k in lits if k}  # drop the empty string
-    missing = sorted(k for k in lits if k not in keys)
-    assert not missing, "t()/tf() keys with no strings.de.js entry: " + repr(missing)
+    local, both = _de_keys(DE), _de_keys()
+    app = _lits(APP)
+    missing = sorted(k for k in app - APP_REMOTE_ONLY if k not in local)
+    assert not missing, "app.js t()/tf() keys with no strings.de.js entry: " + repr(missing)
+    missing = sorted(k for k in (app & APP_REMOTE_ONLY) | _lits(REMOTE) if k not in both)
+    assert not missing, "remote t()/tf() keys with no German entry: " + repr(missing)
+    assert APP_REMOTE_ONLY <= app, "APP_REMOTE_ONLY names a key app.js no longer uses"
 
 
 def test_de_values_are_nonempty_strings():
