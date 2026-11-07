@@ -127,10 +127,16 @@ firmware jobs, and — on push to `main` only — `docs.yml` (the same build + P
 The `docs` job (doxygen + the `sphinx -W` site build on every PR) runs locally as `tools/ci.sh docs`.
 Test layers + harnesses: `docs/simulation-and-testing.md`.
 
-**Required checks (keep stable; verify in repo settings):** `test (3.11)`, `test (3.12)`,
-`test (3.13)`, `pre-commit`, `no-vendor-material`, `install-script`, `docs`, `codec-parity`,
-`gui-e2e`, `firmware-host-e2e`, `firmware-build`, `firmware-qemu`. `pairing-real-stack` runs but is
-not required yet. Never rename a job key in `ci.yml` (or give the matrix job a `name:`); branch
+**Required checks — the branch ruleset is the source of truth, verify from the API not from memory**
+(`gh api repos/ckeller42/open-california/rulesets/25779748`, "main: PR, resolved conversations, green
+CI"). The required status checks are: `test (3.11)`, `test (3.12)`, `test (3.13)`, `pre-commit`,
+`firmware-build`, `firmware-host-e2e`, `gui-e2e`, `docs`, `CodeRabbit`, `docs-touched`. An exhausted
+`CodeRabbit` allotment reports `skipping`, and a skipped required check does **not** block a merge —
+an unresolved review thread does. The same ruleset holds `required_review_thread_resolution: true`,
+`required_approving_review_count: 0`, `require_extra_approval_for_unattributed_changes: true`, squash
+as the only merge method, and no branch deletion / no force-push. `no-vendor-material`,
+`install-script`, `codec-parity`, `firmware-qemu` and `pairing-real-stack` run on every PR but are
+**not** required. Never rename a job key in `ci.yml` (or give the matrix job a `name:`); branch
 protection matches these strings. Workflows: every `uses:` is SHA-pinned with a `# vX.Y.Z` comment,
 `persist-credentials: false` on checkout (except `screenshots.yml`, which pushes), a
 `timeout-minutes` on every job, and write scopes only on the job that needs them.

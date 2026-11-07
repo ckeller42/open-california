@@ -143,6 +143,27 @@ int cali_sensors_rename(uint16_t id, const char *alias);
 int cali_sensors_value(const char *alias, int field, int32_t *centi, uint64_t *at_ms);
 
 /**
+ * @brief The sum of one field over every configured sensor of a type, for the house load
+ *        (R_FW_ENERGY_COUNTERS).
+ * @param type        The type id, e.g. "victron_mppt".
+ * @param field       The type's field index (victron_mppt: 0 battery_current).
+ * @param now_ms      Uptime, ms.
+ * @param max_age_ms  The oldest reading that counts.
+ * @param sum         Out: the sum (0 when none is configured, and when the result is -1).
+ * @return The number of configured sensors of that type, or -1 when one has no reading of the field
+ *         at most max_age_ms old.
+ */
+int cali_sensors_type_sum(const char *type, int field, uint64_t now_ms, uint64_t max_age_ms, double *sum);
+
+/**
+ * @brief The last reading of the first configured sensor of a type, for the LoRa uplink (R_FW_LORA).
+ * @param type  The type id.
+ * @param out   Out: the reading (`n` 0 before the first).
+ * @return 0, or -1 when no sensor of that type is configured.
+ */
+int cali_sensors_first(const char *type, cali_sensor_reading_t *out);
+
+/**
  * @brief The type of a configured sensor, by alias.
  * @param alias  The sensor's alias.
  * @return The type id ("govee", "victron_mppt", "victron_battery"), or NULL for an alias that is not configured.

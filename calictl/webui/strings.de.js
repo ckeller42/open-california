@@ -218,7 +218,7 @@ window.STRINGS_DE = {
   "⚠ Battery voltage too low — charge the second battery or connect external power": "⚠ Batteriespannung zu niedrig — Zweitbatterie laden oder externe Stromquelle anschließen",
   "⚠ Low fuel — the heater switched off, please refuel": "⚠ Kraftstoffstand niedrig — die Heizung wurde abgeschaltet, bitte tanken",
   "⚠ Auxiliary air heater fault — please contact your workshop": "⚠ Störung der Standheizung — bitte Werkstatt kontaktieren",
-  "⚠ Emission limit exceeded — the heater switched off, drive ≥ 5 km/h to re-enable": "⚠ Emissionsgrenze überschritten — die Heizung wurde abgeschaltet, ab 5 km/h wieder einschaltbar",
+  "⚠ Max. operating time reached — the heater switched off, drive ≥ 5 km/h to re-enable": "⚠ Max. Betriebsdauer erreicht — die Heizung wurde abgeschaltet, ab 5 km/h wieder einschaltbar",
   "⚠ Heater deactivated — not while the engine or the auxiliary water heater is running": "⚠ Standheizung deaktiviert — nicht bei laufendem Motor oder aktiver Wasser-Zusatzheizung",
   "⚠ Auxiliary air heater deactivated due to engine running.": "⚠ Luftstandheizung durch Motorlauf deaktiviert.",
   "⚠ Auxiliary air heater deactivated due to activation of the auxiliary heater.": "⚠ Luftstandheizung deaktiviert durch Aktivierung der Standheizung.",
