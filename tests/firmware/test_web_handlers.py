@@ -48,13 +48,13 @@ from .api_shape import (
     SENSORS_KEYS,
     STATE_DIAG_KEYS,
     STATE_KEYS,
+    STATE_WIFI_KEYS,
     THERMOSTAT_API_KEYS,
     THERMOSTAT_STATE_KEYS,
     THERMOSTAT_STATUS_KEYS,
     TIME_DIAG_KEYS,
     TIME_KEYS,
     WIFI_GET_KEYS,
-    WIFI_KEYS,
 )
 from .test_sensors import KEY
 
@@ -102,6 +102,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "json.c"),
             str(CORE / "snapshot.c"),
             str(CORE / "status.c"),
+            str(CORE / "ap_identity.c"),
             str(CORE / "ota.c"),
             str(CORE / "time.c"),
             str(CORE / "sdlog.c"),
@@ -230,7 +231,7 @@ def test_api_state_shape(web_cli):
     assert set(body) == STATE_KEYS and body["fn"]["cooler"]["Installed"] == 1
     assert set(body["device"]) == DEVICE_KEYS
     assert set(body["device"]["pairing"]) == PAIRING_KEYS and set(body["device"]["link"]) == LINK_KEYS
-    assert set(body["device"]["wifi"]) == WIFI_KEYS
+    assert set(body["device"]["wifi"]) == STATE_WIFI_KEYS
     assert body["device"]["ota"] == {
         "state": "idle",
         "available_sha": None,
@@ -274,7 +275,13 @@ def test_api_state_shape(web_cli):
         "rest_next_s": None,
         "last_snap_age_ms": d["uptime_ms"] - 4000,
     }
-    assert d["wifi"] == {"mode": "station", "ssid": "minsel", "ip": "192.168.1.23", "rssi": -61}
+    assert d["wifi"] == {
+        "mode": "station",
+        "ssid": "minsel",
+        "ip": "192.168.1.23",
+        "rssi": -61,
+        "ap_ssid": None,
+    }
 
 
 def test_api_state_diag_adds_the_diagnostics_only_on_request(web_cli):
@@ -312,7 +319,7 @@ _PIN_SETUP = [
 ]
 EXPECTED_DEVICE_TAIL = (
     '"device":{"pairing":{"state":"idle","address":"C0:FF:EE:CA:11:F0"},"link":{"up":true,'
-    '"ready":false,"rest":false,"redial":false,"rest_next_s":null,"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
+    '"ready":false,"rest":false,"redial":false,"rest_next_s":null,"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"ap_ssid":null},"setup":{"pending":false},'
     '"control":{"writes":true},"uptime_ms":5010,"fw":"test",'
     '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null,"channel":"stable"},'
     '"time":{"source":"none","synced":false,"boot":0},'
@@ -373,7 +380,13 @@ def test_api_state_nulls(web_cli):
         "rest_next_s": None,
         "last_snap_age_ms": None,
     }
-    assert body["device"]["wifi"] == {"mode": "setup", "ssid": None, "ip": None, "rssi": None}
+    assert body["device"]["wifi"] == {
+        "mode": "setup",
+        "ssid": None,
+        "ip": None,
+        "rssi": None,
+        "ap_ssid": "calictl-esp-C0FE",
+    }
 
 
 def test_api_state_link_up_is_the_real_link_not_the_kept_bond(web_cli):
@@ -448,6 +461,110 @@ def test_api_state_overflow_is_500_and_logged(web_cli_tiny):
 
 
 # ---- /api/wifi -------------------------------------------------------------------------------
+
+_HOTSPOT = ["wifi setup_ap", "joined 0"]
+_CREDS = '{"ssid":"van","psk":"secret123"}'
+
+
+def script(cli, *steps):
+    """Run ``steps`` (driver lines, or (method, path, body) requests) in ONE process (its kv store
+    persists across them); returns the responses and the other output lines."""
+    lines = [req(*x) if isinstance(x, tuple) else x.encode() for x in steps]
+    return drive(cli, lines)
+
+
+def pending(resp):
+    return resp.json()["device"]["setup"]["pending"]
+
+
+def test_wifi_saved_from_the_hotspot_marks_setup_pending(web_cli):
+    (before, saved, after), _ = script(
+        web_cli, *_HOTSPOT, ("GET", "/api/state"), ("POST", "/api/wifi", _CREDS), ("GET", "/api/state")
+    )
+    assert (pending(before), saved.status, pending(after)) == (False, 200, True)
+
+
+def test_wifi_changed_in_station_mode_does_not(web_cli):
+    (saved, after), _ = script(
+        web_cli, "wifi online", "joined 1", ("POST", "/api/wifi", _CREDS), ("GET", "/api/state")
+    )
+    assert saved.status == 200 and pending(after) is False
+
+
+def test_a_failed_wifi_save_from_the_hotspot_does_not_mark_it(web_cli):
+    (bad, after), _ = script(
+        web_cli, *_HOTSPOT, ("POST", "/api/wifi", '{"ssid":"","psk":"secret123"}'), ("GET", "/api/state")
+    )
+    assert bad.status == 400 and pending(after) is False
+
+
+def test_a_field_unit_without_the_key_is_not_pending(web_cli):
+    (state,), _ = script(web_cli, "wifi online", "joined 1", ("GET", "/api/state"))
+    assert pending(state) is False
+
+
+@pytest.mark.parametrize("mode", ["wifi setup_ap", "wifi online"])
+def test_setup_done_clears_it_in_any_mode(web_cli, mode):
+    (_, done, after), _ = script(
+        web_cli,
+        *_HOTSPOT,
+        ("POST", "/api/wifi", _CREDS),
+        mode,
+        ("POST", "/api/setup", '{"done":true}'),
+        ("GET", "/api/state"),
+    )
+    assert done.status == 200 and done.json() == {"ok": True} and pending(after) is False
+
+
+def test_pending_stays_correct_across_many_state_reads(web_cli):
+    """The flag is kept in RAM (the display reads it every 200 ms): right after a set, after /api/setup."""
+    gets = [("GET", "/api/state")] * 6
+    rs, _ = script(
+        web_cli,
+        *_HOTSPOT,
+        ("POST", "/api/wifi", _CREDS),
+        *gets,
+        ("POST", "/api/setup", '{"done":true}'),
+        *gets,
+    )
+    flags = [pending(r) for r in rs[1:7] + rs[8:]]
+    assert flags == [True] * 6 + [False] * 6
+
+
+def test_an_unreadable_flag_is_not_cached_as_not_pending(web_cli):
+    """A corrupt record reads as not pending for that call only; once it is valid the next read sees it."""
+    rs, _ = script(
+        web_cli, "kvhex setup_qr 0101", ("GET", "/api/state"), "kvhex setup_qr 01", ("GET", "/api/state")
+    )
+    assert [pending(r) for r in rs] == [False, True]
+
+
+@pytest.mark.parametrize("body", ['{"done":false}', "{}", '{"done":true,"x":1}', "nope", '{"done":1}'])
+def test_setup_other_bodies_are_400_and_keep_the_flag(web_cli, body):
+    (_, bad, after), _ = script(
+        web_cli, *_HOTSPOT, ("POST", "/api/wifi", _CREDS), ("POST", "/api/setup", body), ("GET", "/api/state")
+    )
+    assert bad.status == 400 and pending(after) is True
+
+
+def test_setup_is_post_only(web_cli):
+    r, _ = one(web_cli, "GET", "/api/setup")
+    assert r.status == 405
+
+
+def test_state_names_the_hotspot_but_never_its_password(web_cli):
+    (state,), other = script(web_cli, *_HOTSPOT, ("GET", "/api/state"), "kv ap_psk")
+    psk = next(x[3:] for x in other if x.startswith("KV "))
+    assert state.json()["device"]["wifi"]["ap_ssid"] == "calictl-esp-C0FE"
+    assert psk != "<missing>" and psk not in state.body.decode()
+    (st,), _ = script(web_cli, "wifi online", "joined 1", ("GET", "/api/state"))
+    assert st.json()["device"]["wifi"]["ap_ssid"] is None
+
+
+def test_diag_state_never_carries_the_hotspot_password_either(web_cli):
+    (state,), other = script(web_cli, *_HOTSPOT, ("GET", "/api/state?diag=1"), "kv ap_psk")
+    psk = next(x[3:] for x in other if x.startswith("KV "))
+    assert psk != "<missing>" and psk not in state.body.decode()
 
 
 def test_post_wifi_validates_and_stores(web_cli):

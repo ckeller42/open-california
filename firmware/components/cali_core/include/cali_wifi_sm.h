@@ -16,10 +16,10 @@
  * .. req:: WiFi provisioning — setup hotspot, captive portal, station join with retry, credentials in the kv store
  *    :id: R_FW_WIFI_PROVISION
  *
- *    A satellite with no saved WiFi opens a WPA2 setup hotspot (``calictl-esp-setup``, fixed
- *    passphrase, address ``192.168.4.1``) whose DNS answers every A query with its own address and whose
+ *    A satellite with no saved WiFi opens a WPA2 setup hotspot (``calictl-esp-XXXX`` from the MAC, a
+ *    random stored passphrase: cali_ap_identity(); address ``192.168.4.1``) whose DNS answers every A query with its own address and whose
  *    HTTP server redirects the OS captive-portal probe paths to the web UI (``http://192.168.4.1/``),
- *    which opens on its WiFi-setup screen, so a phone that joins is led to it. Credentials entered there (or with the console's ``wifi set``) are validated (SSID
+ *    which opens on its setup wizard, so a phone that joins is led to it. Credentials entered there (or with the console's ``wifi set``) are validated (SSID
  *    1-32 bytes, PSK 8-63 bytes — open networks unsupported), stored in the kv store (``wifi_ssid`` /
  *    ``wifi_psk``) and joined as a station; on success mDNS announces ``calictl-esp.local`` and the
  *    hotspot closes ``NET_AP_CLOSE_MS`` later. A failed join of credentials typed in the current setup

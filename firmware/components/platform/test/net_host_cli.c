@@ -1,9 +1,10 @@
 /* net_host_cli.c — line-protocol driver for tests/firmware/test_net_host.py ONLY; not part of the
  * ESP build. Drives the host cali_net (platform/host/net_host.c) through its table only.
  *
- * Usage: net_host_cli FAKE_WIFI_SCRIPT (may be missing: no networks), then lines on stdin:
+ * Usage: net_host_cli FAKE_WIFI_SCRIPT [KV_DIR] (the script may be missing: no networks; KV_DIR holds the
+ * hotspot password, needed by a bare "ap_start"), then lines on stdin:
  *   sta_start SSID PSK | sta_stop | scan    the WiFi calls (PSK "-" = open)
- *   ap_start [SSID PSK] | ap_stop           default SSID/PSK = NET_AP_SSID / NET_AP_PSK
+ *   ap_start [SSID PSK] | ap_stop           default SSID/PSK = cali_ap_identity()
  *   poll N                                  advance the virtual clock by N ms, cali_net_host_poll()
  *   rssi                                    prints "RSSI <dBm>"
  *   mark                                    prints "MARK" (orders output against events)
@@ -24,7 +25,9 @@
 #include <string.h>
 #include <time.h>
 
+#include "cali_ap_identity.h"
 #include "cali_net_host.h"
+#include "cali_platform.h"
 
 static const char *const EV_NAMES[] = {"STA_GOT_IP", "STA_LOST", "STA_FAILED",
                                        "AP_STARTED", "AP_STOPPED", "SCAN_DONE"};
@@ -125,11 +128,11 @@ int main(int argc, char **argv) {
     const cali_net_t *net = cali_net_host();
 
     setvbuf(stdout, NULL, _IOLBF, 0);
-    if (argc != 2) {
-        fprintf(stderr, "usage: net_host_cli FAKE_WIFI_SCRIPT\n");
+    if (argc < 2 || argc > 3) {
+        fprintf(stderr, "usage: net_host_cli FAKE_WIFI_SCRIPT [KV_DIR]\n");
         return 2;
     }
-    if (cali_net_host_init(argv[1]) != 0) return 2;
+    if ((argc == 3 && cali_platform_init(argv[2]) != 0) || cali_net_host_init(argv[1]) != 0) return 2;
     net->set_sink(sink, NULL);
 
     while (fgets(line, sizeof line, stdin)) {
@@ -141,8 +144,11 @@ int main(int argc, char **argv) {
         if (strcmp(cmd, "sta_start") == 0) rc = net->sta_start(a, psk);
         else if (strcmp(cmd, "sta_stop") == 0) rc = net->sta_stop();
         else if (strcmp(cmd, "scan") == 0) rc = net->scan();
-        else if (strcmp(cmd, "ap_start") == 0)
-            rc = n >= 3 ? net->ap_start(a, psk) : net->ap_start(NET_AP_SSID, NET_AP_PSK);
+        else if (strcmp(cmd, "ap_start") == 0) {
+            char id_ssid[NET_SSID_MAX + 1], id_psk[NET_PSK_MAX + 1];
+            if (n >= 3) rc = net->ap_start(a, psk);
+            else rc = cali_ap_identity(id_ssid, id_psk) < 0 ? -1 : net->ap_start(id_ssid, id_psk);
+        }
         else if (strcmp(cmd, "ap_stop") == 0) rc = net->ap_stop();
         else if (strcmp(cmd, "poll") == 0) {
             unsigned long dt = 0;

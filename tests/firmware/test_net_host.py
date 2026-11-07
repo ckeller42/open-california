@@ -44,6 +44,7 @@ def net_cli(tmp_path_factory):
             str(COMPONENTS / "cali_core" / "include"),
             "-I",
             str(ROOT / "csrc"),
+            str(COMPONENTS / "cali_core" / "ap_identity.c"),
             str(PLATFORM / "host" / "platform_host.c"),
             str(PLATFORM / "host" / "net_host.c"),
             str(PLATFORM / "test" / "net_host_cli.c"),
@@ -58,7 +59,12 @@ def net_cli(tmp_path_factory):
 def run(net_cli, script, commands):
     """Run one net_host_cli process with fake-wifi ``script`` and ``commands`` on stdin; stdout."""
     r = subprocess.run(
-        [str(net_cli), str(script)], input=commands, capture_output=True, text=True, timeout=30, check=True
+        [str(net_cli), str(script), str(Path(script).parent / "kv")],
+        input=commands,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
     )
     return r.stdout
 
