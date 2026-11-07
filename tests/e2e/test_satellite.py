@@ -352,6 +352,68 @@ def test_device_is_the_recovery_page_with_a_link_to_the_ui(stub, error_gated_pag
             expect(pg.locator("#ssid option").first).to_be_attached()
 
 
+def test_recovery_page_names_the_join_error_in_words(stub, error_gated_page):
+    """The mode line maps the firmware's raw ``last_error`` code to words, EN + DE (#516)."""
+    stub.mode = "setup"
+    stub.fixtures["setup"]["/api/wifi"]["last_error"] = "auth"
+    for locale, words in (("en-US", "(wrong password)"), ("de-DE", "(falsches Passwort)")):
+        with error_gated_page(stub.base + "/device", locale=locale) as pg:
+            expect(pg.locator("#now")).to_contain_text(words)
+            expect(pg.locator("#now")).not_to_contain_text("auth")
+
+
+def test_recovery_page_says_it_searches_until_the_scan_answers(stub, error_gated_page):
+    """An empty network list shows "Searching for networks…" until /api/wifi answers (#516)."""
+    stub.mode = "setup"
+    with error_gated_page(stub.base + "/device") as pg:
+        expect(pg.locator("#ssid option", has_text="HomeNet")).to_be_attached()
+        held = []
+        pg.route("**/api/wifi", lambda r: held.append(r))
+        pg.evaluate("document.getElementById('ssid').replaceChildren(); scan()")
+        expect(pg.locator("#ssid option")).to_have_text(["Searching for networks…"])
+        expect(pg.locator("#name")).to_be_hidden()
+        for r in held:
+            r.continue_()
+        pg.unroute("**/api/wifi")
+        expect(pg.locator("#ssid option", has_text="HomeNet")).to_be_attached()
+        expect(pg.locator("#ssid option", has_text="Searching")).to_have_count(0)
+
+
+def test_recovery_page_disables_connect_while_it_watches_the_join(stub, error_gated_page):
+    """Connect is disabled from submit until the join watch ends: one POST per tap (#516)."""
+    stub.mode = "setup"
+    with error_gated_page(stub.base + "/device") as pg:
+        expect(pg.locator("#ssid option", has_text="HomeNet")).to_be_attached()
+        pg.locator("#ssid").select_option("HomeNet")
+        pg.locator("#psk").fill("correct horse")
+        pg.locator("#go").click()
+        expect(pg.locator("#go")).to_be_disabled()
+        assert stub.wifi_posts == [{"ssid": "HomeNet", "psk": "correct horse"}]
+        stub.fixtures["setup"]["/api/wifi"].update(mode="station", ssid="HomeNet", ip="192.168.1.5")
+        expect(pg.locator("#go")).to_be_enabled(timeout=8000)
+        assert len(stub.wifi_posts) == 1
+
+
+def test_recovery_page_meets_contrast_and_touch_target_sizes(stub, error_gated_page):
+    """Light theme: the text colours reach 4.5:1 and the password toggle + UI link are 44 px tall (#516)."""
+    stub.mode = "setup"
+    with error_gated_page(stub.base + "/device", color_scheme="light") as pg:
+        expect(pg.locator("#ssid option").first).to_be_attached()
+        got = pg.evaluate(
+            """() => {
+              const c = (sel) => getComputedStyle(document.querySelector(sel)).color;
+              const msg = document.getElementById("msg"); msg.className = "bad";
+              return {why: c("#why"), rescan: c("#rescan"), app: c("#app"), bad: c("#msg"),
+                      show: document.querySelector("label.chk").getBoundingClientRect().height,
+                      link: document.getElementById("app").getBoundingClientRect().height};
+            }"""
+        )
+    assert got["why"] == "rgb(95, 102, 115)"  # --muted #5f6673
+    assert got["rescan"] == got["app"] == "rgb(36, 89, 201)"  # --accent-text #2459c9
+    assert got["bad"] == "rgb(178, 59, 50)"  # --error-text #b23b32
+    assert got["show"] >= 44 and got["link"] >= 44, got
+
+
 def test_devicestatus_link_opens_device_status_and_stays_in_the_url(stub, error_gated_page):
     """``/#devicestatus`` opens Device status (its Camper-unit card with Unpair…); the hash stays, so a
     reload stays there too."""
