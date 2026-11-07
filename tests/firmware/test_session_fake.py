@@ -1225,6 +1225,16 @@ def test_console_lines(fake):
     ]
 
 
+def test_console_lora_hands_over_the_args(fake):
+    out = run(fake, "> lora status", "> lora", "> lora\tkeys a b c", "> lorax", "> quit")
+    assert [line for line in out if line.startswith("LOG")] == [
+        "LOG lora args [status]",
+        "LOG lora args []",
+        "LOG lora args [keys a b c]",
+        "LOG unknown command: lorax",
+    ]
+
+
 def test_link_drop_mid_read_all_reconnects_and_reads_afresh(fake):
     """The link drops between two READs of a read-all: nothing more goes to the dead link (no read,
     no heartbeat — also not for a late READ completion), no SNAP of the half-read set, a reconnect

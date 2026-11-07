@@ -336,6 +336,9 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.firmware.test_sensors
 .. automodule:: tests.firmware.test_sensors_parity
 .. automodule:: tests.firmware.test_sensors_e2e
+.. automodule:: tests.firmware.test_energy
+.. automodule:: tests.firmware.test_lora
+.. automodule:: tests.test_gen_lora_dict
 .. automodule:: calictl.esp_ingest
 .. automodule:: tests.test_esp_ingest
 .. automodule:: tests.test_esplab_sensors_setup
