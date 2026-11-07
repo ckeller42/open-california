@@ -6,6 +6,7 @@ window.STRINGS_DE = {
   "Vehicle": "Fahrzeug",
   "live": "live",
   "offline": "offline",
+  "unit offline": "Einheit offline",
   "connecting…": "verbinde…",
   "unreachable": "nicht erreichbar",
   "Sending…": "Wird gesendet…",

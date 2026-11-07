@@ -1210,7 +1210,7 @@ function backendName() {
 }
 
 /** @type {Record<ReturnType<typeof linkState>, [string, string]>} every link state (tsc checks the set) */
-const LINK_PILL = { live: ["live", "ok"], asleep: ["offline", "warn"], never: ["offline", "warn"],
+const LINK_PILL = { live: ["live", "ok"], asleep: ["unit offline", "warn"], never: ["unit offline", "warn"],
   unpaired: ["not paired", ""],
   connecting: ["connecting…", ""], unreachable: ["unreachable", "error"],
   satellite: ["🛰 Satellite mode", ""], rest: ["power saving", ""], redial: ["reconnecting…", ""], lora: ["LoRa", ""] };

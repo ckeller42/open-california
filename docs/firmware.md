@@ -2264,7 +2264,8 @@ collected here. `firmware/README.md` has the human-readable version of the same 
 
    One link state shall drive both the status pill and one persistent ``role=status`` banner above
    the page: *live* (no banner); *asleep* (the backend answered, the unit is offline: amber "van
-   asleep" with the last data's time and age); *unpaired* (offline, no data ever and the backend
+   asleep" banner with the last data's time and age, pill "unit offline" / DE "Einheit offline" —
+   naming the camper unit, so the pill tells a sleeping unit from an unreachable backend at a glance); *unpaired* (offline, no data ever and the backend
    reports no paired unit: neutral "Not paired yet — no data", pill "not paired", never "asleep");
    *connecting* (no answer yet in this page life, e.g. a
    restored snapshot: neutral "Connecting…", never red); *unreachable* (no answer for 15 s, timed
