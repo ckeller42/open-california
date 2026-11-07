@@ -1092,7 +1092,7 @@ def _contrast(a, b):
 
 
 def test_light_theme_pill_and_banner_contrast_and_pill_size(stub, error_gated_page):
-    """Light theme: the pill's texts (live, offline, power saving, busy) and the offline banner reach
+    """Light theme: the pill's texts (live, unit offline, power saving, busy) and the offline banner reach
     4.5:1 (WCAG 1.4.3), and the offline pill keeps the pill's size (the generic ``.warn`` rule
     must not grow it)."""
     link = stub.fixtures["satellite"]["/api/state"]["device"]["link"]
@@ -1103,7 +1103,7 @@ def test_light_theme_pill_and_banner_contrast_and_pill_size(stub, error_gated_pa
         h0 = status.bounding_box()["height"]
         seen = [status.evaluate("e => getComputedStyle(e).color")]
         link.update(up=False, ready=False, last_snap_age_ms=600000)
-        expect(status).to_have_text("offline")
+        expect(status).to_have_text("unit offline")
         assert status.bounding_box()["height"] == h0
         seen.append(status.evaluate("e => getComputedStyle(e).color"))
         banner = pg.locator("#conn.offline")
