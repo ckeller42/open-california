@@ -5,20 +5,20 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Satellite WiFi</title>
 <style>
-:root{--bg:#eef1f5;--fg:#1a1d24;--muted:#6b7280;--card:#fff;--border:#e2e6ee;--accent:#2f6fed;--error:#d0453b}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1116;--fg:#eef0f4;--muted:#9aa1b0;--card:#1a1d25;--border:#262a34;--error:#ef6b62}}
+:root{--bg:#eef1f5;--fg:#1a1d24;--muted:#5f6673;--card:#fff;--border:#e2e6ee;--accent:#2f6fed;--accent-text:#2459c9;--error:#d0453b;--error-text:#b23b32}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1116;--fg:#eef0f4;--muted:#9aa1b0;--card:#1a1d25;--border:#262a34;--error:#ef6b62;--accent-text:var(--accent);--error-text:var(--error)}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:480px;margin:auto;padding:16px}
 h1{font-size:20px;margin:0}
 form{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:12px 0}
-.muted{color:var(--muted)}.bad{color:var(--error)}
+.muted{color:var(--muted)}.bad{color:var(--error-text)}
 label{display:block;margin:10px 0 4px}
 select,input,button{font:inherit;width:100%;min-height:44px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg)}
-button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px}
-#rescan{background:none;color:var(--accent)}
-input[type=checkbox]{width:auto;min-height:0;margin-right:6px}
-a{color:var(--accent)}[hidden]{display:none}
+button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px}button:disabled{opacity:.6}
+#rescan{background:none;color:var(--accent-text)}
+input[type=checkbox]{width:auto;min-height:0;margin-right:6px}.chk{display:flex;align-items:center;min-height:44px;margin:0}
+a{color:var(--accent-text)}#app{display:inline-block;min-height:44px;padding:10px 0}[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -30,7 +30,7 @@ a{color:var(--accent)}[hidden]{display:none}
 <label for="ssid" id="l-ssid"></label><select id="ssid"></select>
 <input id="name" autocomplete="off" autocapitalize="none" spellcheck="false" hidden>
 <label for="psk" id="l-psk"></label><input id="psk" type="password" autocomplete="off">
-<label><input id="show" type="checkbox"><span id="l-show"></span></label>
+<label class="chk"><input id="show" type="checkbox"><span id="l-show"></span></label>
 <button id="go"></button><button id="rescan" type="button"></button>
 </form>
 <p id="msg" aria-live="polite"></p>
@@ -41,13 +41,15 @@ a{color:var(--accent)}[hidden]{display:none}
 const L = {
   en: {h: "Satellite WiFi", why: "A way back onto WiFi if the camper UI does not load.", ssid: "Network", other: "Other network…",
     name: "Network name", psk: "Password", show: "Show password", go: "Connect", rescan: "Search again", app: "Open the camper UI",
-    station: "Connected to {s} · {ip}", setup: "Setup hotspot: not on a WiFi network", off: "WiFi off", fail: "last join failed",
+    station: "Connected to {s} · {ip}", setup: "Setup hotspot: not on a WiFi network", off: "WiFi off", fail: "last join failed", searching: "Searching for networks…",
+    e_auth: "wrong password", e_not_found: "network not found", e_other: "could not join",
     bad_ssid: "Choose a network (1–32 characters).", bad_psk: "The password needs 8–63 characters.",
     store: "Could not save the WiFi settings.", rejected: "The satellite rejected the request.", none: "No answer from the satellite.",
     ok: "Saved — the satellite joins {s} now. Join it with this phone too, then open"},
   de: {h: "Satellit-WLAN", why: "Ein Weg zurück ins WLAN, falls die Camper-Oberfläche nicht lädt.", ssid: "Netzwerk", other: "Anderes Netzwerk…",
     name: "Netzwerkname", psk: "Passwort", show: "Passwort anzeigen", go: "Verbinden", rescan: "Erneut suchen", app: "Camper-Oberfläche öffnen",
-    station: "Verbunden mit {s} · {ip}", setup: "Einrichtungs-Hotspot: in keinem WLAN", off: "WLAN aus", fail: "letzte Verbindung fehlgeschlagen",
+    station: "Verbunden mit {s} · {ip}", setup: "Einrichtungs-Hotspot: in keinem WLAN", off: "WLAN aus", fail: "letzte Verbindung fehlgeschlagen", searching: "Suche Netzwerke…",
+    e_auth: "falsches Passwort", e_not_found: "Netzwerk nicht gefunden", e_other: "Verbindung nicht möglich",
     bad_ssid: "Wähle ein Netzwerk (1–32 Zeichen).", bad_psk: "Das Passwort braucht 8–63 Zeichen.",
     store: "Die WLAN-Einstellungen konnten nicht gespeichert werden.", rejected: "Der Satellit hat die Anfrage abgelehnt.", none: "Keine Antwort vom Satelliten.",
     ok: "Gespeichert — der Satellit verbindet sich jetzt mit {s}. Verbinde auch dieses Telefon damit und öffne"}};
@@ -65,7 +67,7 @@ async function read(scan = false) {
   try {
     const w = await (await fetch("/api/wifi", {cache: "no-store"})).json();
     $("now").textContent = S[w.mode].replace("{s}", w.ssid).replace("{ip}", w.ip)
-      + (w.mode !== "station" && w.last_error ? " · " + S.fail + " (" + w.last_error + ")" : "");
+      + (w.mode !== "station" && w.last_error ? " · " + S.fail + " (" + (S["e_" + w.last_error] || S.e_other) + ")" : "");
     if (!scan) return w;
     const sel = $("ssid"), keep = sel.value;
     sel.replaceChildren(...w.scan.filter((/** @type {any} */ a) => a.secure)
@@ -75,10 +77,18 @@ async function read(scan = false) {
     return w;
   } catch (e) { $("now").textContent = S.none; return null; }
 }
-const scan = () => { read(true); setTimeout(read, 4000, true); };
+const scan = () => {
+  const sel = $("ssid");   // an empty list reads as broken: say it is searching until the first answer
+  if (!sel.childElementCount) { const o = new Option(S.searching, ""); o.disabled = true; sel.replaceChildren(o); }
+  read(true); setTimeout(read, 4000, true);
+};
 $("rescan").onclick = scan;
 $("f").onsubmit = async (ev) => {
   ev.preventDefault();
+  $("go").disabled = true;   // one join at a time: enabled again when the watch below ends
+  try { await join(); } finally { $("go").disabled = false; }
+};
+async function join() {
   const ssid = $("ssid").value || $("name").value.trim(), psk = $("psk").value, msg = $("msg");
   msg.className = "bad";
   if (!ssid || ssid.length > 32) { msg.textContent = S.bad_ssid; return; }
@@ -98,7 +108,7 @@ $("f").onsubmit = async (ev) => {
       if (w && w.mode === "station" && w.ssid === ssid) break;
     }
   } catch (e) { msg.textContent = S.none; }
-};
+}
 scan();
 </script>
 </body>

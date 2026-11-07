@@ -187,9 +187,9 @@ UI_LABELS = {
         "solar_power": "Solar power",
     },
     "general": {
-        "amb_sw_version": "Firmware (amb · cm · comm)",
-        "cm_sw_version": "Firmware (amb · cm · comm)",
-        "comm_version": "Firmware (amb · cm · comm)",
+        "amb_sw_version": "Firmware",
+        "cm_sw_version": "Firmware",
+        "comm_version": "Firmware",
     },
     "roof": {"position": "Position", "safety_valid": "Safety valid"},
     "vehicle": {

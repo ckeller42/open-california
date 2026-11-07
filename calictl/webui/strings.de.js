@@ -135,6 +135,7 @@ window.STRINGS_DE = {
   "Interior lighting": "Innenlicht",
   "Wake-up light": "Wecklicht",
   "Wake-up time": "Weckzeit",
+  "Wake-up brightness": "Weckhelligkeit",
   "{n} min": "{n} Min.",
   "Wake-up settings not known yet — the unit has not reported them":
     "Wecklicht-Einstellungen noch nicht bekannt — die Einheit hat sie nicht gemeldet",
@@ -243,8 +244,8 @@ window.STRINGS_DE = {
   "⚠ Grey water tank is full. Please empty.": "⚠ Grauwassertank ist voll. Bitte entleeren.",
   "⚠ Fill level sensor in waste water tank. Please visit a workshop.": "⚠ Füllstandsensor im Abwassertank. Bitte Werkstatt aufsuchen.",
   "⚠ General grey water error. Please visit a workshop.": "⚠ Allgemeiner Grauwasserfehler. Bitte Werkstatt aufsuchen.",
-  "Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?":
-    "Kraftstoffbetriebene Luftstandheizung starten ({w})? Nicht live-verifiziert. Fortfahren?",
+  "Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?":
+    "Kraftstoffbetriebene Luftstandheizung starten? Nicht live-verifiziert. Fortfahren?",
 
   // --- water ---------------------------------------------------------------------------------
   "Fresh water": "Frischwasser",
@@ -321,9 +322,11 @@ window.STRINGS_DE = {
   "open": "öffnen",
   "close": "schließen",
   "stop": "stopp",
-  "Roof {dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?":
-    "Dach {dir}: halten, um das Aufstelldach zu bewegen (an diesem Fahrzeug UNVERIFIZIERT). "
-    + "Loslassen zum Stoppen. Weg frei?",
+  "Press and hold Open or Close: the roof moves while you hold and stops when you release. Keep the vehicle in view and avoid distraction during operation.":
+    "Öffnen oder Schließen gedrückt halten: Das Dach bewegt sich, solange Sie halten, und stoppt beim "
+    + "Loslassen. Behalten Sie das Fahrzeug im Blick und lassen Sie sich während der Bedienung nicht ablenken.",
+  "Please switch on the ignition to operate the pop-up roof.":
+    "Bitte schalten Sie die Zündung ein, um das Aufstelldach zu bedienen.",
 
   // --- vehicle -------------------------------------------------------------------------------
   "Ignition": "Zündung",
@@ -333,7 +336,6 @@ window.STRINGS_DE = {
   "pitch": "Nick",
   "Signal unavailable. Ignition is off.": "Signal nicht verfügbar. Zündung ist aus.",
   "Vehicle clock": "Fahrzeuguhr",
-  "Firmware (amb · cm · comm)": "Firmware (Umg. · CM · Komm)",
   "  ⚠ untested": "  ⚠ ungetestet",
   "  ✓ tested": "  ✓ getestet",
 
@@ -385,6 +387,9 @@ window.STRINGS_DE = {
   "power saving": "Energiesparen",
   "reconnecting…": "verbinde neu…",
   "Connecting…": "Verbinde …",
+  "Disconnecting…": "Trenne …",
+  "Couldn't change the Bluetooth connection": "Bluetooth-Verbindung konnte nicht geändert werden",
+  "Dismiss": "Ausblenden",
   "⚠ {name} not reachable since {since}. Last data {clock} ({ago}).":
     "⚠ {name} nicht erreichbar seit {since}. Letzte Daten {clock} ({ago}).",
   "⚠ {name} not reachable since {since}.": "⚠ {name} nicht erreichbar seit {since}.",
@@ -685,10 +690,10 @@ window.STRINGS_DE = {
   "Connect to your WiFi": "Mit deinem WLAN verbinden",
   "Device status ›": "Gerätestatus ›",
   "Clock": "Uhr",
-  "synced (SNTP) · boot {boot}": "synchronisiert (SNTP) · Start Nr. {boot}",
-  "not synced yet · boot {boot}": "noch nicht synchronisiert · Start Nr. {boot}",
-  "no source · boot {boot}": "keine Zeitquelle · Start Nr. {boot}",
-  "from the camper unit · boot {boot}": "von der Camper-Einheit · Start Nr. {boot}",
+  "synced": "synchronisiert",
+  "not synced yet": "noch nicht synchronisiert",
+  "no source": "keine Zeitquelle",
+  "from the camper unit": "von der Camper-Einheit",
   "Send usage data: on": "Nutzungsdaten senden: an",
   "Send usage data: off": "Nutzungsdaten senden: aus",
   "Sensors: on": "Sensoren: an",
@@ -855,6 +860,8 @@ window.STRINGS_DE = {
   "AUTO": "AUTO",
   "Colder": "Kälter",
   "Warmer": "Wärmer",
+  "Now": "Jetzt",
+  "Target": "Ziel",
   "Thermometer": "Thermometer",
   "Regulate on": "Regeln nach",
   "Backup": "Reserve",

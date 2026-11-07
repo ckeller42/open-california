@@ -307,6 +307,23 @@ def test_command_precondition_roof_move_blocked_but_stop_never_is():
     assert control.command_precondition("roof", "open", None, state(1, installed=0)) is None
 
 
+def test_command_precondition_roof_move_needs_the_ignition():
+    """#513: open/close are refused while the unit reports terminal 15 OFF (the app's "Switch on
+    the ignition" dialog); an unknown ignition allows, and STOP is never gated."""
+    from calictl import control
+
+    def state(t15):
+        return {"roof": {"Installed": 1, "InfoPopUp": 0, "Position": 0}, "vehicle": {"TerminalOneFive": t15}}
+
+    for what in ("open", "close"):
+        assert (
+            control.command_precondition("roof", what, None, state(0)) == control.REASON_ROOF_NEEDS_IGNITION
+        )
+        assert control.command_precondition("roof", what, None, state(1)) is None
+        assert control.command_precondition("roof", what, None, {"roof": {"Position": 0}}) is None
+    assert control.command_precondition("roof", "stop", None, state(0)) is None
+
+
 def test_favourite_gate_refuses_only_a_known_empty_slot():
     """
     .. test:: Activating a favourite is refused only when the unit reported it empty

@@ -377,7 +377,8 @@ def test_front_door_lights_switch_follows_the_unit_screen(page, base_url):
 
 def test_cooler_quiet_and_timer_controls_follow_power(page):
     # The app's own gates: quiet mode is only settable while the refrigerator box is ON; the
-    # cooling timer only while it is OFF. Both rows grey (.ctl-off) with the reason as tooltip.
+    # cooling timer only while it is OFF. Both rows grey (.ctl-off); the reason is a visible line
+    # under the row and the control's accessible description, never only a title (no tooltip on a tap).
     page.get_by_text("Cooler", exact=True).first.click()
     power = page.get_by_role("switch", name="Refrigerator box")
     quiet = page.locator("select").first  # the Quiet mode <select>
@@ -396,8 +397,85 @@ def test_cooler_quiet_and_timer_controls_follow_power(page):
     set_power(True)
     expect(quiet).to_be_enabled()
     expect(start_timer).to_be_disabled()
+    off_first = "Switch the refrigerator box off first"
+    expect(page.locator(".ctl-why", has_text=off_first)).to_have_count(2)  # "Cooling starts at" + "Timer"
+    expect(page.locator(".ctl-why", has_text=off_first).first).to_be_visible()
+    expect(start_timer).to_have_accessible_description(off_first)
     expect(power).to_be_enabled()  # the power switch itself is never gated
     set_power(was_on)  # leave the shared mock as we found it
+
+
+def test_a_faulting_tile_names_its_fault(page, base_url):
+    """A tile's fault is in its accessible name, not only in a title (a title never shows on a tap
+    and VoiceOver does not speak it). The unit's report is patched in: the mock has no water fault."""
+
+    def patch(route):
+        r = route.fetch()
+        body = r.json()
+        body.setdefault("water", {})["fresh_alert"] = "pump_protection"
+        route.fulfill(response=r, json=body)
+
+    page.route("**/api/state", patch)
+    page.goto(base_url)
+    tile = page.locator(".tile", has_text="Water").first
+    expect(tile.locator(".tbadge")).to_have_count(1)
+    expect(tile).to_have_accessible_name(
+        re.compile(r"^Water\. .*⚠ Pump protection is active\. Please fill up fresh water\.$")
+    )
+
+
+def test_time_control_keeps_the_sent_value_while_in_flight(page, base_url):
+    """A time control reads through the optimistic overlay: while the command is in flight, a poll's
+    re-render keeps the time the owner set (it used to snap back to the old value until the next poll
+    after the command). Then the unit's own report carries it."""
+    page.on("dialog", lambda d: d.accept())
+    if _state(base_url, page)["airheater"].get("timer_armed"):  # shared mock: leave the timer unarmed
+        assert page.request.post(
+            base_url + "/api/command", data={"function": "airheater", "what": "timer_cancel", "value": None}
+        ).ok
+        _poll(page, base_url, lambda st: not st["airheater"]["timer_armed"], "heater timer unarmed")
+    st = _state(base_url, page)["airheater"]
+    new = "07:30" if (st.get("timer_hour"), st.get("timer_min")) != (7, 30) else "08:45"
+    old = (st.get("timer_hour") or 0, st.get("timer_min") or 0)
+    held = []
+    page.route("**/api/command", lambda route: held.append(route))  # hold the command in flight
+    try:
+        page.get_by_text("Air heater", exact=True).first.click()
+        start_at = page.locator('input[type="time"]')
+        expect(start_at).to_be_enabled(timeout=15000)
+        start_at.fill(new)
+        expect(page.locator("#status")).to_have_text("Sending…")
+        with page.expect_response("**/api/state"):  # one poll (and its re-render) while the command is held
+            pass
+        page.wait_for_timeout(100)
+        assert start_at.input_value() == new  # not the stale unit value
+        assert len(held) == 1
+        held[0].continue_()
+        held.clear()
+        page.unroute("**/api/command")
+        hh, mm = (int(x) for x in new.split(":"))
+        _poll(
+            page,
+            base_url,
+            lambda st: (st["airheater"]["timer_hour"], st["airheater"]["timer_min"]) == (hh, mm),
+            "unit-reported heater start time " + new,
+        )
+        expect(start_at).to_have_value(new)
+    finally:  # leave the shared mock as we found it, also after a failed assertion
+        for r in held:
+            r.continue_()
+        page.unroute("**/api/command")
+        expect(page.locator("#status")).not_to_have_text("Sending…", timeout=15000)  # released command done
+        assert page.request.post(
+            base_url + "/api/command",
+            data={"function": "airheater", "what": "timer", "value": "%02d:%02d" % old, "confirm": True},
+        ).ok
+        _poll(
+            page,
+            base_url,
+            lambda st: (st["airheater"]["timer_hour"], st["airheater"]["timer_min"]) == old,
+            "restored",
+        )
 
 
 def test_heater_continuous_switch_off_only(page):
@@ -453,11 +531,16 @@ def test_roof_screen_renders_move_buttons(page):
     # Regression guard for #174: roofControls() referenced an undeclared `btns` and threw a
     # ReferenceError on every Roof render — shipped to buspi because the mock had no pop-top, so
     # CI never executed the function. With a fitted roof seeded (Position closed, no InfoPopUp
-    # alert) the screen must render all three controls, and with no alert none may be blocked.
+    # alert) the screen must render all three controls. #513: the shared mock is parked with the
+    # ignition OFF, so Open/Close are greyed with the app's ignition text; Stop always works.
     page.get_by_text("Roof", exact=True).first.click()
     for name in ("open", "close", "stop"):
         expect(page.get_by_role("button", name=name)).to_be_visible()
-        expect(page.get_by_role("button", name=name)).to_be_enabled()
+    expect(page.get_by_role("button", name="stop")).to_be_enabled()
+    page.get_by_role("checkbox").check()  # even armed, no ignition = no move
+    for name in ("open", "close"):
+        expect(page.get_by_role("button", name=name)).to_be_disabled()
+    expect(page.get_by_text("Please switch on the ignition to operate the pop-up roof.")).to_be_visible()
     expect(page.get_by_text("Alert")).to_be_visible()  # readouts rendered too
 
 
@@ -519,39 +602,134 @@ def test_every_screen_has_a_help_sheet_en_and_de(base_url, error_gated_page):
         assert de[v] != en[v], "%s help has no German translation" % v
 
 
-def test_roof_hold_release_sends_stop(page):
-    # The hold-to-move contract: pressing Open streams the move, RELEASING must send STOP. Before the
-    # fix, command() re-rendered synchronously, detaching the held button, so its closure-scoped
-    # pointerup never fired and no STOP went out (the roof kept moving until the server's Position
-    # auto-stop). The release is now caught at document level and the screen is not rebuilt while a
-    # move is held. Assert the actual /api/command traffic: a roof "open" on press, "stop" on release.
-    page.on("dialog", lambda d: d.accept())  # the "path clear?" confirm
+@pytest.fixture
+def ignition_page(tmp_path, error_gated_page):
+    """A page on a dedicated daemon whose mock unit has the ignition ON (the roof moves only then;
+    the shared daemon stays parked, which the camping tests need)."""
+    port = _free_port()
+    proc, url = _start_daemon(
+        port,
+        {
+            "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+            "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+            "CALICTL_MOCK_SEED": json.dumps({"vehicle": {"TerminalOneFive": 1}}),
+        },
+    )
+    try:
+        with error_gated_page(url) as pg:
+            yield pg
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+
+
+def _roof_cmds(page):
+    """Record the roof /api/command bodies the page sends, in order."""
+    sent = []
+
+    def on_request(req):
+        if "/api/command" in req.url and req.method == "POST" and '"roof"' in (req.post_data or ""):
+            sent.append(json.loads(req.post_data)["what"])
+
+    page.on("request", on_request)
+    return sent
+
+
+def _roof_stop_cleanup(page):
+    # Never leave the mock daemon mid-move: a failed assertion would otherwise hold the serve lock.
+    page.mouse.up()
+    origin = page.url.split("/", 3)[0] + "//" + page.url.split("/", 3)[2]
+    page.request.post(
+        origin + "/api/command", data={"function": "roof", "what": "stop", "value": None, "confirm": True}
+    )
+
+
+def test_roof_hold_moves_until_release_then_stops(ignition_page):
+    """#513: a press-and-hold is a SUSTAINED move. The safety acknowledgement is the arming box,
+    given once before the gesture — a confirm() inside pointerdown made the user lift the finger,
+    and that pointercancel sent STOP at once. Holding (no pointerup) must send one "open" and no
+    "stop", and the daemon must keep streaming that move (its POST stays open) until the release."""
+    page = ignition_page
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
     page.get_by_text("Roof", exact=True).first.click()
     open_btn = page.get_by_role("button", name="open")
+    expect(open_btn).to_be_disabled()  # not armed yet
+    page.get_by_role("checkbox").check()
     expect(open_btn).to_be_enabled()
-
-    def is_cmd(req, what):
-        return (
-            "/api/command" in req.url
-            and req.method == "POST"
-            and '"roof"' in (req.post_data or "")
-            and ('"%s"' % what) in (req.post_data or "")
-        )
-
+    sent = _roof_cmds(page)
+    answered = []
+    page.on(
+        "response",
+        lambda r: "/api/command" in r.url and answered.append(json.loads(r.request.post_data)["what"]),
+    )
     open_btn.hover()
     try:
-        with page.expect_request(lambda r: is_cmd(r, "open"), timeout=10000):
+        with page.expect_request(
+            lambda r: "/api/command" in r.url and '"open"' in (r.post_data or ""), timeout=10000
+        ):
             page.mouse.down()
-        with page.expect_request(lambda r: is_cmd(r, "stop"), timeout=10000):
-            page.mouse.up()
+        time.sleep(3)  # hold
+        assert sent == ["open"], sent  # sustained: no STOP while held
+        assert not dialogs, dialogs  # no blocking dialog inside the gesture
+        assert answered == [], answered  # the daemon still streams the move
+        with page.expect_response(
+            lambda r: "/api/command" in r.url and '"open"' in (r.request.post_data or ""), timeout=10000
+        ):
+            page.mouse.up()  # the release sends STOP, which ends the streamed move
+        assert sent[:2] == ["open", "stop"], sent
     finally:
-        # Never leave the module-scoped mock daemon mid-move: a failed assertion above would
-        # otherwise hold the serve lock and stall every later test's command ("Sending…" forever).
-        page.mouse.up()
-        origin = page.url.split("/", 3)[0] + "//" + page.url.split("/", 3)[2]
-        page.request.post(
-            origin + "/api/command", data={"function": "roof", "what": "stop", "value": None, "confirm": True}
-        )
+        _roof_stop_cleanup(page)
+
+
+def test_roof_stop_button_interrupts_a_held_move(ignition_page):
+    """#513: the visible Stop goes out of band. Routed through the single-flight command queue it
+    would wait behind the in-flight "open" (which streams the whole move) and never go out."""
+    page = ignition_page
+    page.get_by_text("Roof", exact=True).first.click()
+    page.get_by_role("checkbox").check()
+    open_btn = page.get_by_role("button", name="open")
+    expect(open_btn).to_be_enabled()
+    open_btn.hover()
+    try:
+        with page.expect_request(
+            lambda r: "/api/command" in r.url and '"open"' in (r.post_data or ""), timeout=5000
+        ):
+            page.mouse.down()
+        # a second pointer on Stop (multi-touch): a JS click, the mouse is still holding Open
+        with page.expect_request(
+            lambda r: "/api/command" in r.url and '"stop"' in (r.post_data or ""), timeout=1500
+        ):
+            page.evaluate(
+                "[...document.querySelectorAll('#app button')].find(b => b.textContent === 'Stop').click()"
+            )
+    finally:
+        _roof_stop_cleanup(page)
+
+
+def test_roof_keyboard_hold(ignition_page):
+    """#513 (WCAG 2.1.1): a focused Open moves while Space is held and stops on its release."""
+    page = ignition_page
+    page.get_by_text("Roof", exact=True).first.click()
+    page.get_by_role("checkbox").check()
+    open_btn = page.get_by_role("button", name="open")
+    expect(open_btn).to_be_enabled()
+    open_btn.focus()
+    try:
+        with page.expect_request(
+            lambda r: "/api/command" in r.url and '"open"' in (r.post_data or ""), timeout=5000
+        ):
+            page.keyboard.down(" ")
+        with page.expect_request(
+            lambda r: "/api/command" in r.url and '"stop"' in (r.post_data or ""), timeout=5000
+        ):
+            page.keyboard.up(" ")
+    finally:
+        page.keyboard.up(" ")
+        _roof_stop_cleanup(page)
 
 
 def test_roof_page_opens_and_leaves_the_roof_view(page):
@@ -637,6 +815,40 @@ def test_session_pill_shows_live(page, base_url):
     assert "Live" in txt
 
 
+def test_session_pill_shows_busy_then_a_persistent_error(page, base_url):
+    """#511: a tap on the session pill says what runs ("Disconnecting…", disabled — a state poll does
+    not re-enable it), and a failed POST leaves an error toast that outlives the 4 s confirmations
+    and goes only when dismissed (here: the keyboard, on its ✕ button).
+
+    .. test:: A write in flight disables its control; its failure stays until dismissed
+       :id: T_UI_VISIBLE_FAILURES
+       :links: R_UI_VISIBLE_FAILURES
+    """
+    held = []
+    page.route("**/api/session", lambda r: held.append(r))  # hold the POST on the wire
+    page.goto(base_url)
+    pill = page.locator(".session-pill")
+    expect(pill).to_contain_text("Live", timeout=20000)
+    pill.click()
+    expect(pill).to_have_text("Disconnecting…")
+    expect(pill).to_be_disabled()
+    page.wait_for_timeout(2500)  # a state poll re-renders the pill
+    expect(pill).to_have_text("Disconnecting…")
+    expect(pill).to_be_disabled()
+    assert len(held) == 1
+    # 200 + an error body: no "Failed to load resource" console line for the error gate
+    held[0].fulfill(status=200, content_type="application/json", body='{"error": "session_failed"}')
+    toast = page.locator("#toasts .toast.error")
+    expect(toast).to_have_text("Couldn't change the Bluetooth connection")
+    page.wait_for_timeout(4500)  # past the 4 s a confirmation toast lives
+    expect(toast).to_be_visible()
+    page.evaluate("toast(\"Couldn't change the Bluetooth connection\", 'error')")  # the same failure again
+    expect(toast).to_have_count(1)  # replaces the earlier one: retries never pile up
+    toast.get_by_role("button", name="Dismiss").focus()
+    page.keyboard.press("Enter")
+    expect(toast).to_have_count(0)
+
+
 def test_command_latency_is_subsecond(page, base_url):
     """The persistent session's payoff: a control write applies in well under a second
     (the e2e daemon runs with real ARM_DELAY defaults; only a live session makes this pass)."""
@@ -685,7 +897,9 @@ def _complete_bonding(page):
     expect(passkey).to_be_visible(timeout=10000)
     passkey.fill(str(FakePairingTransport.RIGHT_PASSKEY))
     page.get_by_role("button", name="Send").click()
-    expect(page.get_by_text("✓ Paired — " + FakePairingTransport.FOUND_ADDR)).to_be_visible(timeout=10000)
+    expect(
+        page.locator("#pairing-card").get_by_text("✓ Paired — " + FakePairingTransport.FOUND_ADDR)
+    ).to_be_visible(timeout=10000)
 
 
 def test_pairing_wizard_reaches_bonded(pairing_page):
@@ -710,9 +924,11 @@ def test_pairing_checklist_before_connect(pairing_page):
     assert "Home Assistant" in text  # other scanners on the Pi
 
 
-def test_a_failed_pairing_request_toasts_translated_text_not_an_enum(tmp_path):
+def test_a_failed_pairing_request_stays_in_the_card_as_translated_text(tmp_path):
     """A POST /api/pairing that returns an error body (e.g. HTTP 500 {"error":"pairing_failed"}
-    when the daemon bridge times out) must toast translated text, never the raw enum."""
+    when the daemon bridge times out) shows translated text, never the raw enum, as a row in the
+    pairing card that stays (#511: not a 4 s toast). While the POST runs "Pair now" is disabled:
+    one request per tap."""
     port = _free_port()
     proc, url = _start_daemon(
         port,
@@ -726,20 +942,27 @@ def test_a_failed_pairing_request_toasts_translated_text_not_an_enum(tmp_path):
         with sync_playwright() as p:
             page = p.chromium.launch().new_page()
 
-            def _fail_post(route):
+            held = []
+
+            def _hold_post(route):
                 if route.request.method == "POST":
-                    route.fulfill(
-                        status=500, content_type="application/json", body='{"error": "pairing_failed"}'
-                    )
+                    held.append(route)
                 else:
                     route.continue_()
 
-            page.route("**/api/pairing", _fail_post)
+            page.route("**/api/pairing", _hold_post)
             page.goto(url)
             _open_and_start_pairing(page)
-            toast = page.locator("#toasts .toast")
-            expect(toast).to_contain_text("did not answer the pairing request", timeout=10000)
-            assert "pairing_failed" not in toast.inner_text()
+            expect(page.get_by_role("button", name="Pair now")).to_be_disabled()
+            assert len(held) == 1
+            held[0].fulfill(status=500, content_type="application/json", body='{"error": "pairing_failed"}')
+            err = page.locator("#pairing-req-error")
+            expect(err).to_contain_text("did not answer the pairing request", timeout=10000)
+            assert "pairing_failed" not in err.inner_text()
+            expect(page.locator("#toasts .toast")).to_have_count(0)
+            page.wait_for_timeout(4500)
+            expect(err).to_be_visible()
+            expect(page.get_by_role("button", name="Pair now")).to_be_enabled()
     finally:
         proc.terminate()
 
@@ -880,6 +1103,51 @@ def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
     expect(page.get_by_role("button", name="Try again")).to_be_visible(timeout=10000)
     assert "pairing_failed" not in page.locator("#app").inner_text()  # friendly text, not the raw enum
     assert "Pairing was refused" in page.locator("#app").inner_text()
+
+
+def test_pairing_passkey_is_labelled_focused_and_steps_are_announced(pairing_page):
+    """#517: the passkey field is named by its instruction and focused on entry; each wizard step
+    is written to the stable `#sr-status` live region, which lives outside the re-rendered #app."""
+    page = pairing_page
+    live = page.locator("#sr-status")
+    expect(live).to_have_attribute("aria-live", "polite")
+    assert page.locator("#app #sr-status").count() == 0
+    _open_and_start_pairing(page)
+    passkey = page.locator("#pairing-passkey")
+    expect(passkey).to_be_focused(timeout=10000)
+    instr = page.locator("#pairing-passkey-instr").inner_text()
+    expect(page.get_by_role("textbox", name=instr)).to_have_id("pairing-passkey")
+    expect(live).to_have_text(instr)
+    passkey.fill(str(FakePairingTransport.RIGHT_PASSKEY))
+    page.get_by_role("button", name="Send").click()
+    expect(live).to_contain_text("Paired", timeout=10000)
+
+
+def test_help_sheet_is_named_and_returns_focus_to_menu(page):
+    """#517: the Help dialog is named by its heading; closing it puts focus back on ⋮, not the page top."""
+    page.click("#menu")
+    page.locator(".menupop").get_by_role("menuitem", name="Help", exact=True).click()
+    sheet = page.get_by_role("dialog", name=re.compile(r"^Help · "))
+    expect(sheet).to_be_visible()
+    sheet.get_by_role("button", name="Close").click()
+    expect(sheet).to_have_count(0)
+    expect(page.locator("#menu")).to_be_focused()
+    # the language switch rebuilds the screen: focus stays on ⋮ too
+    page.click("#menu")
+    page.locator(".menupop").get_by_role("menuitem", name="Deutsch", exact=True).click()
+    expect(page.locator("#menu")).to_be_focused()
+
+
+def test_main_landmark_and_german_accessible_names(base_url, error_gated_page):
+    """#517: #app is the <main> landmark; control names follow the language like the visible labels."""
+    with error_gated_page(base_url, locale="de-DE") as pg:
+        expect(pg.get_by_role("main")).to_have_id("app")
+        pg.evaluate("v => goto(v)", "lighting")
+        expect(pg.get_by_role("switch", name="Alle Lichter", exact=True)).to_be_visible()
+        _lighting_settings(pg)
+        expect(pg.get_by_role("switch", name="Wecklicht", exact=True)).to_be_visible()
+        expect(pg.get_by_label("Weckhelligkeit", exact=True)).to_be_visible()
+        expect(pg.get_by_label("Leselichter", exact=False).first).to_be_visible()
 
 
 def test_pairing_hidden_until_opened_from_menu(unconfigured_pairing_page):
@@ -1623,6 +1891,8 @@ def test_level_indicator_shows_the_apps_two_gauges(page, base_url):
     expect(gauges.nth(0).locator(".lg-label")).to_have_text("Roll")
     expect(gauges.nth(1).locator(".lg-label")).to_have_text("Pitch")
     expect(gauges.nth(1).locator("svg")).to_have_attribute("aria-label", "Pitch 1.5°")
+    # #517: the accessible name keeps the sign (the visible number is absolute)
+    expect(gauges.nth(0).locator("svg")).to_have_attribute("aria-label", "Roll -1.1°")
     expect(gauges.nth(1).locator("svg")).not_to_have_class("lg-svg ok")  # 1.5° is not level
     side = gauges.nth(1).locator(".lg-logo").get_attribute("d")
     assert "M98 74.5" in side  # the closed pop-top shell, not the raised tent
@@ -1658,6 +1928,29 @@ def test_energy_card_hides_power_sources_the_van_does_not_have(page, base_url):
     expect(card.get_by_text("Vehicle power", exact=True)).to_be_visible()
     expect(card.get_by_text("Solar power", exact=True)).to_have_count(0)
     assert "not installed" not in card.inner_text()
+
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_copy_names_the_second_battery_and_hides_firmware_jargon(base_url, error_gated_page, locale):
+    """The Energy tile names the leisure battery as its card does ("Second battery", not a bare
+    "Battery" beside the starter battery); the Vehicle screen's Firmware row shows tested/untested
+    and keeps the unit's amb · cm · comm sub-versions behind Details."""
+    de = locale == "de-DE"
+    with error_gated_page(base_url, locale=locale) as pg:
+        tile = pg.locator(".tile", has_text="Energie" if de else "Energy")
+        expect(tile.locator(".tv")).to_have_text(
+            re.compile(("Zweitbatterie" if de else "Second battery") + r" \d+%")
+        )
+        pg.locator(".tile").last.click()  # Vehicle / Fahrzeug
+        app = pg.locator("#app")
+        expect(app.get_by_text("Firmware", exact=True)).to_be_visible()
+        expect(app.get_by_text("getestet" if de else "tested", exact=False).first).to_be_visible()
+        assert "amb · cm · comm" not in app.inner_text()
+        expect(app.get_by_text("amb 0410 · cm 0207 · comm 2")).to_be_hidden()
+        app.locator("summary", has_text="Details").click()
+        expect(app.get_by_text("amb 0410 · cm 0207 · comm 2")).to_be_visible()
+        pg.wait_for_timeout(2500)  # one poll re-renders the screen: the disclosure stays open
+        expect(app.get_by_text("amb 0410 · cm 0207 · comm 2")).to_be_visible()
 
 
 def test_calictl_page_has_no_house_load_row(page, base_url):
@@ -1777,3 +2070,112 @@ def test_calictl_ignores_the_satellite_setup_wizard(base_url, error_gated_page, 
         expect(pg.locator("#title")).to_have_text("Open California")
         pg.wait_for_timeout(1500)
         assert not [u for u in seen if "/api/setup" in u]
+
+
+def test_heater_start_confirm_only_on_a_real_start(fresh_url, error_gated_page):
+    """#514: the fuel-burner confirm fires only for a START (Immediate heating ON); level, run time,
+    start time and OFF write with no dialog (ui/screens/air-heater.yaml). The level slider clamps the
+    mock's off-scale HeatingLevel 0 to its min and reads "—", never "0"."""
+    with error_gated_page(fresh_url) as pg:
+        msgs = []
+
+        def on_dialog(d):
+            msgs.append(d.message)
+            d.accept()
+
+        pg.on("dialog", on_dialog)
+        pg.get_by_text("Air heater", exact=True).first.click()
+        assert _state(fresh_url, pg)["airheater"]["level"] == 0  # the mock's off-scale seed
+        lvl = (
+            pg.locator(".row")
+            .filter(has=pg.locator('input[type="range"]'))
+            .filter(has_text="Heating temperature")
+        )
+        expect(lvl.locator('input[type="range"]')).to_have_value("1")
+        expect(lvl.locator(".sval")).to_have_text("—")
+        expect(pg.get_by_text("Level 0")).to_have_count(0)
+
+        lvl.locator('input[type="range"]').fill("3")
+        _poll(pg, fresh_url, lambda st: st["airheater"]["level"] == 3, "level 3")
+        rt = pg.locator(".row").filter(has=pg.locator('input[type="range"]')).filter(has_text="Run time")
+        rt.locator('input[type="range"]').fill("30")
+        _poll(pg, fresh_url, lambda st: st["airheater"]["running_time"] == 30, "run time 30")
+        pg.locator('input[type="time"]').fill("07:30")
+        _poll(pg, fresh_url, lambda st: st["airheater"]["timer_hour"] == 7, "start time 07:30")
+        assert msgs == []  # no write so far starts the burner
+
+        power = pg.get_by_role("switch", name="Immediate heating")
+        power.click()
+        _poll(pg, fresh_url, lambda st: st["airheater"]["normal"] is True, "heater on")
+        assert (
+            len(msgs) == 1 and "fuel-burning" in msgs[0] and "{w}" not in msgs[0] and "power" not in msgs[0]
+        )
+        expect(power).to_have_attribute("aria-checked", "true", timeout=15000)
+        power.click()
+        _poll(pg, fresh_url, lambda st: st["airheater"]["normal"] is False, "heater off")
+        assert len(msgs) == 1  # OFF asks nothing
+
+
+def test_tile_grid_reflows_to_one_column_for_large_text(base_url, error_gated_page):
+    """Dynamic Type: at phone width the tiles sit in two columns; with large accessibility text
+    (root font at 200 %) the grid drops to one column and nothing overflows the page width."""
+
+    def columns(pg):
+        return pg.evaluate(
+            "getComputedStyle(document.querySelector('.tilegrid')).gridTemplateColumns.split(' ').length"
+        )
+
+    with error_gated_page(base_url, viewport={"width": 390, "height": 844}) as pg:
+        expect(pg.locator(".tilegrid .tile").first).to_be_visible()
+        assert columns(pg) == 2
+        for size in ("200%", "310%"):  # 310 % ~ iOS's largest accessibility size
+            pg.evaluate("s => { document.documentElement.style.fontSize = s; }", size)
+            assert columns(pg) == 1, size
+            wide = pg.evaluate(
+                "() => { const w = document.documentElement.clientWidth;"
+                " return [...document.querySelectorAll('body *')]"
+                ".filter(e => e.getBoundingClientRect().right > w + 0.5).map(e => e.id || e.className); }"
+            )
+            assert not wide, (size, wide)
+
+
+def test_controls_have_44px_targets_and_the_session_pill_does_not_stretch(page):
+    """Apple HIG 44 pt floors on the Cooler screen (switch hit band, <select>, segment and action
+    buttons); the session pill hugs its text in light-mode AA green instead of spanning #app."""
+    pill = page.locator(".session-pill")
+    expect(pill).to_have_class(re.compile(r"\bok\b"), timeout=20000)
+    assert pill.evaluate(
+        "p => p.getBoundingClientRect().width < document.getElementById('app').clientWidth / 2"
+    )
+    assert pill.evaluate("p => getComputedStyle(p).color") == "rgb(30, 122, 67)"  # --ok-text
+    page.get_by_text("Cooler", exact=True).first.click()
+    sw = page.get_by_role("switch", name="Refrigerator box")
+    box = sw.bounding_box()
+    assert box
+    cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    for dy in (-21, 21):  # the ::before band reaches 22 px above and below the centre
+        assert page.evaluate(
+            "([x, y]) => document.elementFromPoint(x, y).classList.contains('switch')", [cx, cy + dy]
+        )
+    for sel, screen in ((".row select", None), (".seg", None), (".btnrow .btn", "Roof")):
+        if screen:
+            page.goto(page.url.split("#")[0])
+            page.get_by_text(screen, exact=True).first.click()
+        loc = page.locator(sel)
+        expect(loc.first).to_be_visible()
+        for i in range(loc.count()):
+            h = loc.nth(i).bounding_box()
+            assert h and h["height"] >= 44, (sel, i, h)
+
+
+def test_reduced_motion_calms_transitions(base_url, error_gated_page):
+    """prefers-reduced-motion: switch transitions stop; the spinner keeps turning, only slower."""
+    with error_gated_page(base_url, reduced_motion="reduce") as pg:
+        pg.get_by_text("Cooler", exact=True).first.click()
+        sw = pg.locator(".switch").first
+        expect(sw).to_be_visible()
+        assert sw.evaluate("s => getComputedStyle(s).transitionDuration") == "0s"
+        assert pg.evaluate(
+            "() => { const s = document.createElement('div'); s.className = 'spinner'; document.body.append(s);"
+            " const c = getComputedStyle(s); return [c.animationName, c.animationDuration]; }"
+        ) == ["spin", "2s"]

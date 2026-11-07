@@ -196,7 +196,7 @@ per-feature screens) from the same BLE-owning process — no extra connection, n
   Home Assistant / Grafana stack), never on the open internet. To reach it **remotely**, use
   Tailscale (see below) — a private, encrypted overlay — rather than port-forwarding.
 - Uninstalled features are hidden. Controls the unit refuses in the current state are **greyed
-  out with a reason** (hover/long-press the row): camping mode only when stationary (ignition
+  out with a reason** (shown under the row): camping mode only when stationary (ignition
   off); camping lights + rear USB only while camping mode is on; roof open/close while a roof
   alert blocks movement (roof moved too often, low battery, fault, roof open while the vehicle
   may move). The roof is **press-and-hold**: it moves while the button is held and stops the

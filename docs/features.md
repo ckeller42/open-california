@@ -239,9 +239,9 @@ Nothing to control.
 
 | Web UI label | Value | Unit |
 |---|---|---|
-| Firmware (amb · cm · comm) (Firmware (Umg. · CM · Komm)) | `amb_sw_version` | — |
-| Firmware (amb · cm · comm) (Firmware (Umg. · CM · Komm)) | `cm_sw_version` | — |
-| Firmware (amb · cm · comm) (Firmware (Umg. · CM · Komm)) | `comm_version` | — |
+| Firmware | `amb_sw_version` | — |
+| Firmware | `cm_sw_version` | — |
+| Firmware | `comm_version` | — |
 
 Nothing to control.
 

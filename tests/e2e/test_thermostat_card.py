@@ -218,6 +218,8 @@ def test_target_buttons_step_half_a_degree(stub, error_gated_page):
             pg.wait_for_timeout(100)
         assert stub.thermostat_posts == [{"target": 2150, "rev": 1}]
         expect(_card(pg).get_by_text("21.5 °C")).to_be_visible()
+        # #517: the rebuilt stepper cannot be a live region; the stable #sr-status reads the new target
+        expect(pg.locator("#sr-status")).to_have_text("Target 21.5 °C")
     finally:
         cm.__exit__(None, None, None)
 

@@ -255,7 +255,7 @@ def test_wizard_in_browser(host_fw, hci_unit, tmp_path, locale, hotspot, words):
         page.locator("#pairing-passkey").wait_for(timeout=40000)
         page.locator("#pairing-passkey").fill("%06d" % hci_unit.call(hci_unit.unit.next_passkey))
         page.get_by_role("button", name=send).click()
-        page.get_by_text(paired + IDENTITY).wait_for(timeout=40000)
+        page.locator("#pairing-card").get_by_text(paired + IDENTITY).wait_for(timeout=40000)
         browser.close()
     assert not errors, errors
     fw.expect("SNAP", timeout=40)

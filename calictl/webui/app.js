@@ -183,7 +183,7 @@
  * @typedef {{ what: string, label: string, confirm?: ConfirmSpec, disabled?: (s: FnState) => (boolean|string|undefined) }} ControlBase
  * @typedef {ControlBase & { kind: 'toggle', state: keyof FnState, invert?: boolean }} ToggleControl  invert: the switch shows the
  *   opposite of `state` (the unit's own wording); the command still sends the value for `state`
- * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, step?: number, unit?: string }} SliderControl
+ * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, step?: number, unit?: string, fmt?: (v: number) => string }} SliderControl
  * @typedef {ControlBase & { kind: 'select', options: SelectOption[], current?: (s: FnState) => (string|null|undefined) }} SelectControl
  * @typedef {ControlBase & { kind: 'hour', current?: (s: FnState) => number }} HourControl
  * @typedef {ControlBase & { kind: 'time', current?: (s: FnState) => (string|null) }} TimeControl
@@ -251,6 +251,7 @@ function setLang(l) {
   try { localStorage.setItem("calictl.lang", l); } catch (e) { /* storage blocked */ }
   closeMenu();
   render();
+  menuEl.focus();   // the menu item that called this is gone: keep focus on ⋮, not the page top
 }
 
 // --- topbar context menu (UX: pairing chrome lives here, not in the main flow) ---------------
@@ -722,6 +723,7 @@ function openHelp() {
   const d = document.createElement("dialog");
   d.className = "help";
   const head = document.createElement("h2");
+  head.id = "help-title"; d.setAttribute("aria-labelledby", head.id);
   head.textContent = t("Help") + " · " + titleEl.textContent;
   d.appendChild(head);
   for (const para of /** @type {string} */ (t(h[1])).split("\n\n")) {
@@ -736,7 +738,7 @@ function openHelp() {
   close.onclick = () => d.close();
   d.append(a, close);
   d.onclick = (ev) => { if (ev.target === d) d.close(); };   // tap on the backdrop closes
-  d.onclose = () => d.remove();
+  d.onclose = () => { d.remove(); menuEl.focus(); };   // closeMenu() dropped the opener: back to ⋮
   document.body.appendChild(d);   // outside #app: survives the 2 s re-render
   d.showModal();
 }
@@ -837,9 +839,9 @@ const FEATURES = {
   },
   airheater: {
     title: "Air heater", icon: "heater",
-    // Fuel-burning: every START prompts. Turning continuous heating OFF is the one write here that
-    // can't arm anything, and it has its own prompt below — no feature-level one on top.
-    confirm: (w, v) => (w === "permanent" || w === "timer_cancel" ? null : tf("Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?", { w: w })),
+    // Fuel-burning: only a real START prompts — Immediate heating ON and arming the timer. Level,
+    // run time, start time and every OFF write no dialog (ui/screens/air-heater.yaml).
+    confirm: (w, v) => ((w === "power" && v === "on") || w === "timer_start" ? t("Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?") : null),
     controls: [
       // "Immediate heating" = NormalOperation (start now, for `runtime` minutes). Never greyed (app
       // 5.4.0): under ErrorCode 5 the server refuses ON with the app's dialog text; under continuous
@@ -855,7 +857,8 @@ const FEATURES = {
         confirm: (v) => (v === "off" ? t("Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?") : null) },
       // The app's temperature scale is 1–9 + "HI" (level 10); its run-time slider spans 10–120 min
       // (both observed on the app's heater page, tools/applab 2026-09-16).
-      { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: CTL_AIRHEATER_LEVEL_RANGE[0], max: CTL_AIRHEATER_LEVEL_RANGE[1] },
+      { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: CTL_AIRHEATER_LEVEL_RANGE[0], max: CTL_AIRHEATER_LEVEL_RANGE[1],
+        fmt: (/** @type {number} */ v) => (v >= 10 ? "HI" : String(v)) },
       // App 5.4.0 (2026-10-11): 10-min steps, greyed under continuous heating; a change while heating
       // asks first (the app then writes OFF, RunningTime, ON — calictl writes RunningTime only).
       { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 10, max: 120, step: 10, unit: "min",
@@ -874,7 +877,7 @@ const FEATURES = {
         confirm: (b, s) => (b.what === "timer_start" && s && s.permanent ? t("Continuous heating will turn off when the timer ends. Would you like to proceed?") : null) },
     ],
     readouts: [
-      { label: "Heating temperature", get: (s) => (s.level == null ? "—" : s.level >= 10 ? "HI" : `${t("Level")} ${s.level}`) },
+      { label: "Heating temperature", get: (s) => (s.level == null || s.level < 1 ? "—" : s.level >= 10 ? "HI" : `${t("Level")} ${s.level}`) },
       { label: "Run time", get: (s) => withUnit(s.running_time, "min") },
       // RunningTimeinAction only counts down while heating; parked it just echoes the configured
       // run time (60 = 60 live), which would read as "60 min left" on an idle heater.
@@ -969,7 +972,7 @@ const FEATURES = {
         : s.age_min != null ? `${s.age_min} min` : "—") },
     ],
     // Starter-battery staleness is the "Starter data age" row; the why lives in the Help (⋮, #314).
-    summary: (s) => (s.soc2_pct != null ? `${t("Battery")} ${s.soc2_pct}%` : ""),
+    summary: (s) => (s.soc2_pct != null ? `${t("Second battery")} ${s.soc2_pct}%` : ""),
   },
   roof: {
     title: "Roof", icon: "caravan", roof: true,
@@ -999,12 +1002,24 @@ const FEATURES = {
           : levelGauges(s.level_roll, s.level_pitch, roofIsUp())) },
       { label: "Vehicle clock", get: (s) => s.car_clock ?? "—", tick: true },
       { ext: "govee" },
-      { label: "Firmware (amb · cm · comm)",
+      // the unit's three sub-versions are jargon: behind a disclosure, never shown by default
+      { label: "Firmware",
         get: () => {
           const fw = (STATE._meta && STATE._meta.firmware) || {};
           if (fw.amb_sw_version == null && fw.comm_version == null) return "—";
-          return `${fw.amb_sw_version ?? "?"} · ${fw.cm_sw_version ?? "?"} · ${fw.comm_version ?? "?"}`
-            + (fw.untested ? t("  ⚠ untested") : t("  ✓ tested"));
+          return String(fw.untested ? t("  ⚠ untested") : t("  ✓ tested")).trim();
+        },
+        widget: () => {
+          const fw = (STATE._meta && STATE._meta.firmware) || {};
+          if (fw.amb_sw_version == null && fw.comm_version == null) return null;
+          const det = document.createElement("details"); det.className = "note";
+          det.open = fwDetailsOpen;
+          det.ontoggle = () => { fwDetailsOpen = det.open; };   // survives a re-render
+          const sum = document.createElement("summary"); sum.textContent = /** @type {string} */ (t("Details"));
+          const code = document.createElement("code");
+          code.textContent = `amb ${fw.amb_sw_version ?? "?"} · cm ${fw.cm_sw_version ?? "?"} · comm ${fw.comm_version ?? "?"}`;
+          det.append(sum, code);
+          return det;
         } },
     ],
     warn: () => lowSensorBatteries(),
@@ -1093,10 +1108,20 @@ const CMD_LINK_WAIT_MS = 45000;
  * @param {number} [ms]
  */
 function toast(msg, kind, ms = 4000) {
-  const d = document.createElement("div");
+  const d = document.createElement("div"), box = /** @type {HTMLElement} */ (document.getElementById("toasts"));
   d.className = "toast" + (kind ? " " + kind : "");
   d.textContent = /** @type {string} */ (t(msg));
-  (/** @type {HTMLElement} */ (document.getElementById("toasts"))).appendChild(d);
+  if (kind === "error")   // a repeated failure replaces its earlier toast: the stack never grows with retries
+    for (const o of Array.from(box.querySelectorAll(".toast.error"))) if (o.firstChild && o.firstChild.textContent === d.textContent) o.remove();
+  box.appendChild(d);
+  if (kind === "error") {   // the failure reason: stays until the owner dismisses it (tap, or the ✕ button)
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "toast-x";
+    x.setAttribute("aria-label", /** @type {string} */ (t("Dismiss")));
+    d.appendChild(x);
+    d.onclick = () => d.remove();
+    return d;
+  }
   if (ms) setTimeout(() => d.remove(), ms);   // 0 = stays until removed
   return d;
 }
@@ -1606,6 +1631,8 @@ function clockText(epochSec) {
 // disconnect. When the session is merely idle in auto mode the daemon is still polling normally —
 // showing a "Connect" button there falsely reads as "no connection", so we hide it (the fast path
 // warms automatically the moment you interact). The main status pill still shows live/offline.
+/** the /api/session action on the wire ("" = none) */
+let sessionBusy = "";
 function sessionToggle() {
   const m = /** @type {Meta} */ (STATE._meta || {});
   const mode = m.session_mode, st = m.session;
@@ -1616,6 +1643,7 @@ function sessionToggle() {
   else if (st === "connecting" || st === "degraded") { spec = { cls: "busy", text: "🟡 Connecting" }; action = "disconnect"; }
   else if (st === "asleep") { spec = { cls: "", text: "⚪ Asleep — tap to wake" }; action = "connect"; }
   else return null;   // idle in auto mode while polling normally — not a disconnection, don't imply one
+  if (sessionBusy) spec = { cls: "busy", text: sessionBusy === "connect" ? "Connecting…" : "Disconnecting…" };   // a poll keeps it
   const el = document.createElement("button");
   el.type = "button";
   el.className = "session-pill" + (spec.cls ? " " + spec.cls : "");
@@ -1624,12 +1652,18 @@ function sessionToggle() {
     ? "Connect the fast BLE session (warm it before controlling)"
     : "Disconnect — release this session now (it also auto-releases when idle)"));
   el.setAttribute("aria-label", el.title);
+  el.disabled = !!sessionBusy;   // one POST per tap, also across the re-renders while it runs
   el.onclick = async () => {
-    el.disabled = true;
+    sessionBusy = action;
+    el.disabled = true; el.className = "session-pill busy";
+    el.textContent = /** @type {string} */ (t(action === "connect" ? "Connecting…" : "Disconnecting…"));
+    let res = null;
     try {
-      await api("/api/session", { method: "POST", headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ action }) });
-    } catch (e) { /* the state refresh below reflects whatever actually happened */ }
+      res = await api("/api/session", { method: "POST", headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ action }) });
+    } catch (e) { /* res stays null */ }
+    sessionBusy = "";
+    if (!res || res.error) toast("Couldn't change the Bluetooth connection", "error");
     await refreshState(true);
   };
   return el;
@@ -1715,7 +1749,7 @@ function levelGauge(deg, van, label) {
   g.className = "lg-gauge";
   g.innerHTML =
     `<svg viewBox="0 0 ${2 * C} ${2 * C}" class="lg-svg${ok ? " ok" : ""}" role="img" ` +
-    `aria-label="${label} ${fmtLevel(deg)}">` +
+    `aria-label="${label} ${deg.toFixed(1)}°">` +
     `<circle cx="${C}" cy="${C}" r="76" class="lg-ring"/>` +
     `<circle cx="${C}" cy="${C}" r="${FACE}" class="lg-face"/>` + ticks +
     `<g transform="${turn}">` +
@@ -1763,12 +1797,22 @@ function roofIsUp() {
 // dashboard poll stays at 2 s. See .superpowers/sdd/2026-08-31-guided-pairing.
 let pairingOpen = false;
 let pairingReady = false;              // "I'm on that screen" checkbox
+let fwDetailsOpen = false;             // the Vehicle screen's Firmware "Details" disclosure
 let pairingAdvOpen = false;            // the bonded step's "Advanced" disclosure (calictl only)
 // True for the brief window between opening the wizard and the fresh `pairingFetch()` landing,
 // but ONLY when the cached PAIRING snapshot might be stale (see openPairingWizard): renders a
 // neutral loading step instead of flashing a leftover passkey/bonded/error/etc. step from a
 // flow the server has since moved on from (e.g. it restarted while this tab stayed open).
 let pairingLoading = false;
+let pairingBusy = false;               // a POST /api/pairing is on the wire
+let pairingReqError = "";              // the last failed request's text (EN key), shown in the card
+/** The wizard step last read out in `#sr-status` (the card is rebuilt each poll, so it cannot be the live region). */
+let pairingSaid = /** @type {?string} */ (null);
+/** Read `text` out once via the stable `#sr-status` live region (outside #app: survives a re-render).
+ * @param {string} text */
+function announce(text) {
+  (/** @type {HTMLElement} */ (document.getElementById("sr-status"))).textContent = text;
+}
 /** @type {{state:string, attempts:number, error:string|null, address:string|null, radio_busy?: boolean}|null} */
 let PAIRING = null;
 let pairingFetched = false;            // the one-off load-time fetch (refreshState) has run
@@ -1795,7 +1839,8 @@ function startPairingPoll() {
     pairingPolling = true;
     try { await pairingFetch(); } finally { pairingPolling = false; }
     const ae = document.activeElement;
-    if (!(ae && ae.id === "pairing-passkey")) {      // don't clobber the user mid-type
+    // don't clobber the user mid-type (the field is focused on entry), but leave a step that has ended
+    if (!(ae && ae.id === "pairing-passkey" && PAIRING && PAIRING.state === "waiting_passkey")) {
       if (wizardView()) render();                    // the card only shows on Home and WiFi setup
     }
     if (PAIRING && PAIRING_TERMINAL_STATES.has(PAIRING.state)) stopPairingPoll();
@@ -1850,18 +1895,25 @@ const SAT_PAIRING_ERROR_HINT = {
  * @param {boolean} [confirmFlag]
  */
 async function pairingAction(action, value, confirmFlag) {
+  if (pairingBusy) return;   // one POST per tap: the card's buttons are disabled while it runs
   if (action === "start" || action === "reset") startPairingPoll();  // re-arm: a new flow begins
   /** @type {Record<string, any>} */
   const body = { action };
   if (value !== undefined) body.value = value;
   if (confirmFlag) body.confirm = true;
-  let res;
+  pairingBusy = true; pairingReqError = "";
+  render();
+  let res = null;
   try {
-    res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  } catch (e) { toast("Pairing request failed", "error"); return; }
+    // above the daemon's 30 s pairing bridge: a stalled POST frees the card's buttons (Cancel) again
+    res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+                                      signal: AbortSignal.timeout(35000) });
+  } catch (e) { /* res stays null */ }
+  pairingBusy = false;
   if (res && res.state) PAIRING = res;              // a real snapshot -> adopt it
-  // never a raw error enum: known request errors get their own text, anything else the generic one
-  else toast(PAIRING_REQUEST_ERROR_MSG[(res && res.error) || ""] || "Pairing request failed", "warn");
+  // never a raw error enum: known request errors get their own text, anything else the generic one.
+  // A row in the card, not a toast: it stays until the next request.
+  else pairingReqError = PAIRING_REQUEST_ERROR_MSG[(res && res.error) || ""] || "Pairing request failed";
   render();
 }
 
@@ -1916,7 +1968,7 @@ function pairingCard() {
   head.appendChild(hlbl);
   const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
   closeBtn.textContent = /** @type {string} */ (t("Close"));
-  closeBtn.onclick = () => { pairingOpen = false; pairingLoading = false; stopPairingPoll(); render(); };
+  closeBtn.onclick = () => { pairingOpen = false; pairingLoading = false; pairingReqError = ""; pairingSaid = null; stopPairingPoll(); render(); };
   if (view !== "setup") head.appendChild(closeBtn);   // the setup wizard has its own Skip
   card.appendChild(head);
 
@@ -1933,10 +1985,16 @@ function pairingCard() {
   }
 
   const p = PAIRING || { state: "idle", attempts: 0, error: null, address: null };
+  let say = /** @type {string} */ (hlbl.textContent);   // the step text read out on a state change
   if (p.radio_busy) {
     const busy = document.createElement("div"); busy.className = "warn"; busy.id = "pairing-radio-busy";
     busy.textContent = /** @type {string} */ (t("Another app on this Pi keeps Bluetooth scanning — pairing will likely fail until it stops (for example the Home Assistant Bluetooth integration)."));
     card.appendChild(busy);
+  }
+  if (pairingReqError) {
+    const err = document.createElement("div"); err.className = "warn"; err.id = "pairing-req-error";
+    err.textContent = /** @type {string} */ (t(pairingReqError));
+    card.appendChild(err);
   }
   const sat = satellite();
   if (p.state === "idle") {
@@ -1962,7 +2020,7 @@ function pairingCard() {
     card.appendChild(crow);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const startBtn = document.createElement("button"); startBtn.type = "button"; startBtn.className = "btn";
-    startBtn.textContent = /** @type {string} */ (t("Pair now")); startBtn.disabled = !pairingReady;
+    startBtn.textContent = /** @type {string} */ (t("Pair now")); startBtn.disabled = !pairingReady || pairingBusy;
     startBtn.onclick = () => pairingAction("start");
     btns.appendChild(startBtn);
     card.appendChild(btns);
@@ -1971,22 +2029,27 @@ function pairingCard() {
     row.appendChild(spinner());
     const lbl = document.createElement("span"); lbl.className = "lbl";
     lbl.textContent = /** @type {string} */ (t(p.state === "scanning" ? "Searching…" : "Connecting to the unit…"));
+    say = lbl.textContent;
     row.appendChild(lbl);
     card.appendChild(row);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const cancelBtn = document.createElement("button"); cancelBtn.type = "button"; cancelBtn.className = "btn";
     cancelBtn.textContent = /** @type {string} */ (t("Cancel"));
     cancelBtn.onclick = () => pairingAction("cancel");
+    cancelBtn.disabled = pairingBusy;
     btns.appendChild(cancelBtn);
     card.appendChild(btns);
   } else if (p.state === "waiting_passkey") {
-    const instr = document.createElement("div"); instr.className = "note";
+    const instr = document.createElement("div"); instr.className = "note"; instr.id = "pairing-passkey-instr";
     instr.textContent = /** @type {string} */ (t("Enter the passcode now shown on the camper unit (it replaced ---). A fresh code each attempt."));
     card.appendChild(instr);
+    say = instr.textContent;
     const row = document.createElement("div"); row.className = "row";
     const inp = document.createElement("input");
     inp.type = "text"; inp.inputMode = "numeric"; inp.pattern = "[0-9]{6}"; inp.maxLength = 6;
     inp.id = "pairing-passkey";
+    inp.setAttribute("aria-labelledby", instr.id);
+    if (pairingSaid !== p.state) queueMicrotask(() => inp.focus());   // on entry; render() attaches the card first
     inp.placeholder = "123456";
     row.appendChild(inp);
     const sendBtn = document.createElement("button"); sendBtn.type = "button"; sendBtn.className = "btn";
@@ -1996,6 +2059,7 @@ function pairingCard() {
       if (!/^[0-9]{6}$/.test(v)) { toast("The passcode has 6 digits", "warn"); return; }
       pairingAction("passkey", v);
     };
+    sendBtn.disabled = pairingBusy;
     row.appendChild(sendBtn);
     card.appendChild(row);
   } else if (p.state === "pairing" || p.state === "verifying" || p.state === "resetting") {
@@ -2003,12 +2067,14 @@ function pairingCard() {
     row.appendChild(spinner());
     const lbl = document.createElement("span"); lbl.className = "lbl";
     lbl.textContent = /** @type {string} */ (t(p.state === "pairing" ? "Pairing…" : p.state === "verifying" ? "Verifying…" : "Resetting…"));
+    say = lbl.textContent;
     row.appendChild(lbl);
     card.appendChild(row);
   } else if (p.state === "bonded") {
     const ok = document.createElement("div"); ok.className = "note";
     ok.textContent = p.address ? (t("✓ Paired — ") + p.address) : /** @type {string} */ (t("paired — address cache unavailable (see logs)"));
     card.appendChild(ok);
+    say = /** @type {string} */ (ok.textContent);
     if (p.address && sat) {
       const saved = document.createElement("div"); saved.className = "note";
       saved.textContent = /** @type {string} */ (t("Saved on the satellite — survives a restart. No further action needed."));
@@ -2034,6 +2100,7 @@ function pairingCard() {
     errRow.textContent = /** @type {string} */ (t("Error: "))
       + (/** @type {string} */ (t(PAIRING_ERROR_MSG[perr])) || /** @type {string} */ (t(PAIRING_ERROR_FALLBACK)));
     card.appendChild(errRow);
+    say = errRow.textContent;
     const hint = (sat && SAT_PAIRING_ERROR_HINT[perr]) || PAIRING_ERROR_HINT[perr];
     if (hint) {
       const hintRow = document.createElement("div"); hintRow.className = "note";
@@ -2044,6 +2111,7 @@ function pairingCard() {
     const retryBtn = document.createElement("button"); retryBtn.type = "button"; retryBtn.className = "btn";
     retryBtn.textContent = /** @type {string} */ (t("Try again"));
     retryBtn.onclick = () => pairingAction("start");
+    retryBtn.disabled = pairingBusy;
     btns.appendChild(retryBtn);
     card.appendChild(btns);
   }
@@ -2054,9 +2122,11 @@ function pairingCard() {
     const resetBtn = document.createElement("button"); resetBtn.type = "button"; resetBtn.className = "btn";
     resetBtn.textContent = /** @type {string} */ (t("Unpair…"));
     resetBtn.onclick = () => unpair();
+    resetBtn.disabled = pairingBusy;
     rbtns.appendChild(resetBtn);
     card.appendChild(rbtns);
   }
+  if (pairingSaid !== p.state) { pairingSaid = p.state; announce(say); }
   return card;
 }
 
@@ -2138,8 +2208,7 @@ function batteryText(b) {
 
 // device.time -> the Clock row (R_FW_TIME)
 /** @type {Record<string, string>} */
-const SAT_CLOCK = { synced: "synced (SNTP) · boot {boot}", waiting: "not synced yet · boot {boot}",
-  none: "no source · boot {boot}", unit: "from the camper unit · boot {boot}" };
+const SAT_CLOCK = { synced: "synced", waiting: "not synced yet", none: "no source", unit: "from the camper unit" };
 
 // The camper unit's connection, in linkState()'s words (the pill + banner): online / asleep / not paired
 /** @type {Record<ReturnType<typeof linkState>, string>} every link state (tsc checks the set) */
@@ -2204,9 +2273,9 @@ function renderDeviceStatus() {
       [w.ssid, w.ip, typeof w.rssi === "number" ? w.rssi + " dBm" : ""].filter(Boolean).join(" · ")));
     if (sat.uptime_ms != null)
       card.appendChild(sumRow(/** @type {string} */ (t("Uptime")), uptimeText(sat.uptime_ms + (Date.now() - stateAt))));
-    const tm = sat.time;   // the clock the SD log stamps with (R_FW_TIME), with the boot number
-    if (tm) card.appendChild(sumRow(/** @type {string} */ (t("Clock")), tf(SAT_CLOCK[tm.source === "none" || tm.source === "unit"
-      ? tm.source : tm.synced ? "synced" : "waiting"], { boot: tm.boot })));
+    const tm = sat.time;   // the clock the SD log stamps with (R_FW_TIME); its boot number only in Diagnostics ›
+    if (tm) card.appendChild(sumRow(/** @type {string} */ (t("Clock")), /** @type {string} */ (t(SAT_CLOCK[tm.source === "none" || tm.source === "unit"
+      ? tm.source : tm.synced ? "synced" : "waiting"]))));
     if (sat.sd) card.appendChild(sumRow(/** @type {string} */ (t("Storage")), sdText(sat.sd)));
     const batt = sat.battery && batteryText(sat.battery);
     if (batt) card.appendChild(sumRow(/** @type {string} */ (t("Battery")), batt));
@@ -2224,7 +2293,7 @@ function renderDeviceStatus() {
 // screen is open refreshState asks with ?diag=1. By the device object that holds them, as web.c sends
 // them: null = every member of that object.
 /** @type {[string, string[]|null][]} */
-const SAT_DIAG = [["res", null], ["sd", ["last_seq"]], ["time", ["up"]], ["ble", ["probing", "unit_adv_seen_ms_ago"]],
+const SAT_DIAG = [["res", null], ["sd", ["last_seq"]], ["time", ["up", "boot"]], ["ble", ["probing", "unit_adv_seen_ms_ago"]],
   ["display", ["lux", "prox", "motion", "dfs", "pm"]]];
 
 function renderSatDiag() {
@@ -2300,7 +2369,7 @@ const satCard = (id, title, ...kids) => h("section", { class: "card dcard", id: 
 const satSwitchRow = (id) => h("div", { class: "row" }, h("span", { class: "lbl", id: id + "-status" }),
   h("button", { type: "button", class: "switch", role: "switch", id: id + "-toggle", "aria-labelledby": id + "-status" }));
 /** A row's error line. @param {string} id */
-const satMsg = (id) => h("p", { class: "warn", id: id });
+const satMsg = (id) => h("p", { class: "warn", id: id, "aria-live": "polite" });
 
 /** The WiFi box (both screens): online "Connected to <ssid> · ip · dBm" + Change network…; the join
  * form over the hotspot, after Change network…, or while a hotspot join runs; the Switching panel. */
@@ -2518,7 +2587,7 @@ function buildSetup() {
     start.onclick = () => pairingAction("start");
     card.append(h("div", { id: "setup-pair-intro" },
       p(T("Close the California app. On the camper unit open Einstellungen → Bluetooth → Gerät verbinden, then press Pair now.")),
-      setupBtns(start)),
+      h("p", { class: "warn", id: "setup-pair-err", "aria-live": "polite" }), setupBtns(start)),
       h("p", { class: "note", id: "setup-count", "aria-live": "off" }), h("div", { id: "setup-paircard" }),
       p("", "setup-paired"), setupBtns(setupNext("Next", "victron", "primary", "setup-pair-next"),
         setupSkip("victron", () => { setupPairSkipped = true; }, "setup-pair-skip")));
@@ -2586,6 +2655,8 @@ function setupUpdate(m, s) {
     const p = PAIRING, paired = !!m.paired || !!(p && p.state === "bonded");
     const live = !!p && p.state !== "idle";
     sq("setup-pair-intro").hidden = paired || live;
+    sq("setup-pair-err").textContent = pairingReqError ? T(pairingReqError) : "";   // a failed request stays (R_UI_VISIBLE_FAILURES)
+    /** @type {HTMLButtonElement} */ (sq("setup-pair-start")).disabled = pairingBusy;
     const ae = document.activeElement;
     if (!(ae && ae.id === "pairing-passkey")) {   // never under a code being typed
       const pc = live ? pairingCard() : null;
@@ -2700,7 +2771,7 @@ function satRow(id, parts, on, st) {
   const b = /** @type {HTMLButtonElement} */ (sq(id + "-toggle"));
   sq(id + "-status").textContent = [...parts, st ? "" : T(SAT_STATION_ONLY)].filter(Boolean).join(" · ");
   b.hidden = !st;
-  b.disabled = false;
+  b.disabled = b.classList.contains("pending");   // a poll never re-enables a switch whose write still runs
   b.setAttribute("aria-checked", String(on));
 }
 
@@ -2709,10 +2780,11 @@ function satRow(id, parts, on, st) {
 async function satToggle(path, id, err, key, msgId) {
   const b = /** @type {HTMLButtonElement} */ (sq(id + "-toggle")), msg = sq(msgId), on = b.getAttribute("aria-checked") !== "true";
   msg.textContent = "";
-  b.disabled = true;   // one POST per tap
+  b.disabled = true; b.classList.add("pending");   // one POST per tap
   ux({ type: "control", fn: "satellite", control: uxId(id) });
   let ok = false;
   try { ok = !!(await satFetch(path, { [key]: on })).body.ok; } catch (e) { /* ok stays false */ }
+  b.classList.remove("pending");
   if (!ok) msg.textContent = T(err);
   await refreshState(true);
   if (satDom) b.disabled = false;
@@ -2986,8 +3058,9 @@ function satConnect() {
 /** POST /api/wifi and watch the join. @param {string} ssid @param {string} psk
  * @param {boolean} hotspot over the hotspot a lost answer is retried once; online it means the satellite already left */
 async function satJoin(ssid, psk, hotspot) {
-  const msg = sq("setup-msg");
+  const msg = sq("setup-msg"), connect = /** @type {HTMLButtonElement} */ (sq("connect"));
   const send = () => satFetch("/api/wifi", { ssid: ssid, psk: psk }, NET_CONNECT_TIMEOUT_MS);
+  connect.disabled = true; connect.classList.add("pending");   // one join per tap, the retry included
   try {
     let r = null;
     try { r = await send(); } catch (e) {
@@ -3020,7 +3093,7 @@ async function satJoin(ssid, psk, hotspot) {
     msg.className = "warn";
     msg.textContent = T("No answer from the satellite.");
     sq("wifi-switch").hidden = true;
-  }
+  } finally { connect.disabled = false; connect.classList.remove("pending"); }
 }
 
 /** One look at GET /api/wifi while a join runs (every NET_PAGE_POLL_MS until it ends). */
@@ -3443,7 +3516,13 @@ function renderDashboard() {
     tile.innerHTML = (alertMsg ? `<div class="tbadge">⚠</div>` : "") +
       `<div class="ti">${iconSvg(f.icon)}</div><div class="tt">${t(f.title)}</div>` +
       `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>`;
-    if (alertMsg) tile.title = alertMsg;
+    if (alertMsg) {
+      const msg = /** @type {string} */ (t(alertMsg));
+      tile.title = msg;   // pointer hover; touch and VoiceOver get the cause from the accessible name
+      const val = tile.querySelector(".tv")?.textContent || "";   // keep the value in the name too
+      // a fault the value already names (cooler, heater, roof) is not spoken twice
+      tile.setAttribute("aria-label", [t(f.title), val, val.includes(msg) ? "" : msg].filter(Boolean).join(". "));
+    }
     tile.onclick = () => goto(fn);
     grid.appendChild(tile);
   }
@@ -3496,7 +3575,7 @@ function renderLighting(s) {
   mrow.appendChild(mlbl);
   if (pending_is("lighting", "power")) mrow.appendChild(spinner());
   const msw = document.createElement("button"); msw.className = "switch";
-  msw.setAttribute("role", "switch"); msw.setAttribute("aria-label", "All lights");
+  msw.setAttribute("role", "switch"); msw.setAttribute("aria-label", /** @type {string} */ (t("All lights")));
   msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = readOnly();
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
   mrow.appendChild(msw); mc.appendChild(mrow);
@@ -3557,7 +3636,7 @@ function renderLighting(s) {
       // clamp the thumb (11 ≈ full) but zero it for the no-reading markers; label shows the truth
       inp.value = /** @type {any} */ (val >= 13 ? 0 : Math.min(val, LIGHT_MAX));
       inp.disabled = readOnly() || roofBlocked;
-      inp.setAttribute("aria-label", grp.group + " " + lamp.label + " brightness");
+      inp.setAttribute("aria-label", t(grp.group) + " " + t(lamp.label) + " " + t("Brightness"));
       const out = document.createElement("span"); out.className = "sval";
       out.textContent = brightnessText(val);
       inp.oninput = () => (out.textContent = inp.value);
@@ -3616,7 +3695,7 @@ function renderLighting(s) {
   wrow.appendChild(wl);
   if (pending_is("lighting", "wakeup")) wrow.appendChild(spinner());
   const wsw = document.createElement("button"); wsw.className = "switch";
-  wsw.setAttribute("role", "switch"); wsw.setAttribute("aria-label", "Wake-up light");
+  wsw.setAttribute("role", "switch"); wsw.setAttribute("aria-label", /** @type {string} */ (t("Wake-up light")));
   wsw.setAttribute("aria-checked", wk && wk.enabled ? "true" : "false"); wsw.disabled = wkOff;
   wsw.onclick = () => wakeCmd({ on: !(wk && wk.enabled) });
   wrow.appendChild(wsw); wf.appendChild(wrow);
@@ -3624,13 +3703,13 @@ function renderLighting(s) {
   const tl = document.createElement("span"); tl.className = "lbl"; tl.textContent = /** @type {string} */ (t("Wake-up time"));
   const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time
     : (typeof wkOpt === "string" && wkOpt.split(/\s+/).find((x) => x.includes(":"))) || "";   // empty, never 00:00
-  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = readOnly();   // live even while unknown (R5 pull)
+  tin.setAttribute("aria-label", /** @type {string} */ (t("Wake-up time"))); tin.disabled = readOnly();   // live even while unknown (R5 pull)
   tin.onchange = () => { if (tin.value) wakeCmd({ time: tin.value }); };
   trow.append(tl, tin); wf.appendChild(trow);
   const rrow = document.createElement("div"); rrow.className = "row";
   const rl = document.createElement("span"); rl.className = "lbl"; rl.textContent = /** @type {string} */ (t("Lead time"));
   const rsel = document.createElement("select"); rsel.disabled = wkOff;
-  rsel.setAttribute("aria-label", "Lead time");
+  rsel.setAttribute("aria-label", /** @type {string} */ (t("Lead time")));
   for (const m of [0, 10, 20, 30]) {
     const o = document.createElement("option"); o.value = /** @type {any} */ (m); o.textContent = tf("{n} min", { n: m });
     o.selected = (wk ? wk.ramp : 0) === m; rsel.appendChild(o);
@@ -3641,7 +3720,7 @@ function renderLighting(s) {
   const bl = document.createElement("span"); bl.className = "lbl"; bl.textContent = /** @type {string} */ (t("Brightness"));
   const bin = document.createElement("input"); bin.type = "range"; bin.min = /** @type {any} */ (0); bin.max = /** @type {any} */ (LIGHT_MAX);
   bin.value = /** @type {any} */ (wk ? wk.brightness : 0); bin.disabled = wkOff;
-  bin.setAttribute("aria-label", "Wake-up brightness");
+  bin.setAttribute("aria-label", /** @type {string} */ (t("Wake-up brightness")));
   bin.onchange = () => wakeCmd({ brightness: Number(bin.value) });
   brow.append(bl, bin); wf.appendChild(brow);
   const arow = document.createElement("div"); arow.className = "row areas";
@@ -3802,6 +3881,9 @@ function renderControl(fn, c, s) {
       : (typeof offReason === "string" ? t(offReason) : "");
     if (why) row.title = why;
   }
+  // The state's reason also shows as text under the row: a title never shows on a touch tap and
+  // VoiceOver does not speak it. (Read-only mode keeps only the title: it is the same on every row.)
+  const whyText = !readOnly() && typeof offReason === "string" ? /** @type {string} */ (t(offReason)) : "";
   // fire() applies a per-control "not verified" confirm (c.confirm) on top of the feature-level
   // one in act(); c.confirm(value) returns the prompt, or null/false to skip.
   /** @param {string|number} val */
@@ -3815,13 +3897,18 @@ function renderControl(fn, c, s) {
     const on = c.invert ? !lit : lit;
     const sw = document.createElement("button");
     sw.className = "switch" + (isPending ? " pending" : "");
-    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", c.label);
+    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", /** @type {string} */ (t(c.label)));
     sw.setAttribute("aria-checked", on ? "true" : "false");
     sw.disabled = ro;
     sw.onclick = () => fire(lit ? "off" : "on");
     row.appendChild(sw);
   } else if (c.kind === "slider") {
-    const val = optNum(fn, c.what, /** @type {number} */ (s[c.state] != null ? s[c.state] : c.min));
+    // Clamp to [min, max]: a value off the scale (the unit's HeatingLevel 0) parks the thumb at min
+    // and reads "—", never "0" below the control's own minimum.
+    const raw = optNum(fn, c.what, /** @type {number} */ (s[c.state] != null ? s[c.state] : c.min));
+    const val = Math.min(c.max, Math.max(c.min, raw));
+    /** @param {number|string} v */
+    const shown = (v) => (c.fmt ? c.fmt(Number(v)) : v) + (c.unit ? " " + c.unit : "");
     const inp = document.createElement("input");
     inp.type = "range";
     inp.min = /** @type {any} */ (c.min);
@@ -3831,8 +3918,8 @@ function renderControl(fn, c, s) {
     inp.disabled = ro;
     const out = document.createElement("span");
     out.className = "sval";
-    out.textContent = val + (c.unit ? " " + c.unit : "");
-    inp.oninput = () => (out.textContent = inp.value + (c.unit ? " " + c.unit : ""));
+    out.textContent = raw === val ? shown(val) : "—";
+    inp.oninput = () => (out.textContent = shown(inp.value));
     inp.onchange = () => fire(Number(inp.value));
     row.appendChild(inp);
     row.appendChild(out);
@@ -3868,7 +3955,9 @@ function renderControl(fn, c, s) {
     const inp = document.createElement("input");
     inp.type = "time";
     inp.disabled = ro;
-    if (c.current && c.current(s)) inp.value = /** @type {string} */ (c.current(s));
+    // through the optimistic overlay: a re-render while the command is in flight keeps the sent time
+    const cur = optSel(fn, c.what, c.current ? c.current(s) : null);
+    if (cur) inp.value = /** @type {string} */ (cur);
     inp.onchange = () => { if (inp.value) fire(inp.value); };
     row.appendChild(inp);
   } else if (c.kind === "buttons") {             // momentary action buttons (cooler on/off timer)
@@ -3888,6 +3977,14 @@ function renderControl(fn, c, s) {
       grp.appendChild(btn);
     }
     row.appendChild(grp);
+  }
+  if (whyText) {
+    const why = document.createElement("div");
+    why.className = "ctl-why";
+    why.id = "why-" + fn + "-" + c.what;
+    why.textContent = whyText;
+    row.appendChild(why);
+    for (const el of row.querySelectorAll("button, input, select")) el.setAttribute("aria-describedby", why.id);
   }
   return row;
 }
@@ -4296,6 +4393,7 @@ function thermostatCard() {
   // t_ref → target, −/+ 0.5 °C
   const tr = document.createElement("div");
   tr.className = "row";
+  tr.appendChild(thermoEl("sr-only", /** @type {string} */ (t("Now"))));
   tr.appendChild(thermoEl("big", st.t_ref != null ? (st.t_ref / 100).toFixed(1) + " °C" : "—"));
   tr.appendChild(thermoEl("lbl", "→"));
   const want = thermoWant ?? th.target;
@@ -4306,10 +4404,14 @@ function thermostatCard() {
     b.setAttribute("aria-label", /** @type {string} */ (t(label)));
     const nt = want + d;
     b.disabled = readOnly() || nt < THERMO_MIN || nt > THERMO_MAX;
-    b.onclick = () => { thermoWant = nt; thermoPost({ target: nt }); render(); };
+    b.onclick = () => {
+      thermoWant = nt; thermoPost({ target: nt }); render();
+      announce(t("Target") + " " + (nt / 100).toFixed(1) + " °C");   // the stepper's value is rebuilt: no live region of its own
+    };
     return b;
   };
   tr.appendChild(step("Colder", "−", -THERMO_STEP));
+  tr.appendChild(thermoEl("sr-only", /** @type {string} */ (t("Target"))));
   tr.appendChild(thermoEl("sval", (want / 100).toFixed(1) + " °C"));
   tr.appendChild(step("Warmer", "+", THERMO_STEP));
   card.appendChild(tr);
@@ -4406,6 +4508,10 @@ let roofHold = null;
  * server handles roof STOP lock-free (`_roof_stop`), so it goes straight to the API. */
 function roofRelease() {
   if (!roofHold) return;
+  roofStop();
+}
+/** Send roof STOP out of band (see roofRelease) and repaint — the release AND the Stop button. */
+function roofStop() {
   roofHold = null;
   api("/api/command", {
     method: "POST",
@@ -4414,9 +4520,15 @@ function roofRelease() {
   }).catch((e) => toast("Roof STOP failed: " + String(e), "error"));
   render();                        // the held button may now be repainted
 }
-// Any release anywhere ends the move — the vehicle's own hold-to-move contract.
+// Any release anywhere ends the move — the vehicle's own hold-to-move contract (keyup: the
+// keyboard hold on a focused Open/Close button).
 document.addEventListener("pointerup", roofRelease);
 document.addEventListener("pointercancel", roofRelease);
+document.addEventListener("keyup", roofRelease);
+// The safety acknowledgement (the app's "check before opening" list), given ONCE per visit of the
+// roof page and outside the gesture: a confirm() inside pointerdown made the user lift the finger,
+// and that pointercancel stopped the move at once. Cleared whenever the page is left or hidden.
+let roofArmed = false;
 
 // The roof VIEW (CAPTURE 2026-10-10): while the real app's roof screen is open it streams STOP frames
 // with its SafetyCounter, so a press moves on an already-validated counter (no ~3 s withhold). The
@@ -4435,6 +4547,7 @@ function roofViewPost(action) {
 }
 function roofViewSync() {
   const on = view === "roof" && isCalictl() && !readOnly() && document.visibilityState === "visible";
+  if (!on) roofArmed = false;
   if (on && Date.now() - roofViewAt >= ROOF_VIEW_REFRESH_MS) {
     roofViewAt = Date.now();
     roofViewPost("view");
@@ -4465,34 +4578,58 @@ function roofControls(s) {
   // app), so gate on an explicit set rather than "any alert". STOP stays available (release).
   // `s.alert` / `s.position_name` are the decoded InfoPopUp + Position (semantics.roof).
   const moveBlocked = ROOF_MOVE_BLOCK.has(/** @type {string} */ (s.alert)) || s.position_name === "error";
+  // The roof moves only with the ignition on (the app's "Switch on the ignition" dialog).
+  const noIgnition = !ignitionOn(s);
+  const arm = document.createElement("label");
+  arm.className = "note";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = roofArmed;
+  box.disabled = readOnly() || satellite();
+  box.id = "roof-arm";
+  box.onchange = () => {
+    roofArmed = box.checked;
+    render();                      // re-gate Open/Close; keep the keyboard focus on the box
+    /** @type {HTMLElement|null} */ (document.getElementById("roof-arm"))?.focus();
+  };
+  arm.append(box, " ", /** @type {string} */ (t(ROOF_ALERT_MSG.open_checklist)));
+  card.appendChild(arm);
+  const hint = document.createElement("div");
+  hint.className = "note";
+  hint.textContent = /** @type {string} */ (t("Press and hold Open or Close: the roof moves while you hold "
+    + "and stops when you release. Keep the vehicle in view and avoid distraction during operation."));
+  card.appendChild(hint);
   const btns = document.createElement("div");
   btns.className = "btnrow";
   for (const dir of ["open", "close", "stop"]) {
     const b = document.createElement("button");
     b.className = "btn";
     b.textContent = cap(/** @type {string} */ (t(dir)));   // sentence case: "Open", "Öffnen"
-    const blocked = dir !== "stop" && moveBlocked;
+    const blocked = dir !== "stop" && (moveBlocked || noIgnition || !roofArmed);
     b.disabled = readOnly() || blocked || satellite();
-    if (blocked) b.title = /** @type {string} */ (t(ROOF_ALERT_MSG[/** @type {string} */ (s.alert)] || "Roof move blocked"));
+    if (blocked && !moveBlocked) b.title = /** @type {string} */ (t(noIgnition ? ROOF_NO_IGNITION : ROOF_ALERT_MSG.open_checklist));
+    if (moveBlocked && dir !== "stop") b.title = /** @type {string} */ (t(ROOF_ALERT_MSG[/** @type {string} */ (s.alert)] || "Roof move blocked"));
     if (satellite()) b.title = /** @type {string} */ (t(ELSEWHERE));
     if (pending_is("roof", dir)) b.appendChild(spinner());
     if (dir === "stop") {
-      b.onclick = () => command("roof", "stop", null);
+      b.onclick = roofStop;          // out of band: a queued STOP would wait behind the move
     } else {
       // PRESS-AND-HOLD: the pop-top moves only while the button is held; releasing sends STOP
       // (interrupts the in-flight move server-side via _roof_stop). Mirrors the vehicle's own
       // hold-to-move control. Still UNVERIFIED end-to-end on this van.
-      /** @param {PointerEvent} ev */
+      // Never a confirm() here: it makes the user lift the finger, and that release stops the move.
+      /** @param {Event} ev */
       const start = (ev) => {
         ev.preventDefault();
         if (readOnly() || roofHold || blocked || satellite()) return;
         if (Date.now() - roofLastMoveStart < ROOF_REPRESS_MS) return;  // debounce a too-quick re-press
-        if (!confirm(tf("Roof {dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?", { dir: t(dir) }))) return;
         roofHold = dir;                 // set BEFORE command(): it gates render() and the release
         roofLastMoveStart = Date.now();
         command("roof", dir, null);
       };
       b.addEventListener("pointerdown", start);
+      // keyboard / Switch Control: hold Space or Enter (the document keyup releases)
+      b.addEventListener("keydown", (ev) => { if ((ev.key === " " || ev.key === "Enter") && !ev.repeat) start(ev); });
       // pointerup/pointercancel are handled ONCE at document level (roofRelease) so a release
       // always sends STOP even if this node was replaced meanwhile; sliding off the button
       // also ends the move, like letting go of the vehicle's own switch.
@@ -4501,8 +4638,14 @@ function roofControls(s) {
     btns.appendChild(b);
   }
   card.appendChild(btns);
+  if (noIgnition && !moveBlocked) {
+    const n = document.createElement("div"); n.className = "note";
+    n.textContent = /** @type {string} */ (t(ROOF_NO_IGNITION));
+    card.appendChild(n);
+  }
   return card;
 }
+const ROOF_NO_IGNITION = "Please switch on the ignition to operate the pop-up roof.";
 
 // Live values: poll the state every 2 s while the page is visible. A hidden tab stops polling, so
 // buspi's daemon sees the UI go idle and drops back from its watched cadence (5 s reads on a held
