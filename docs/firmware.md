@@ -944,8 +944,8 @@ record buffer) and the lwIP/WiFi buffers (`CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP`
 buffers) in PSRAM. With IDF's defaults they live in internal RAM, and large `/` and `/api/log`
 responses plus a download exhaust the internal heap (a failed download, dropped `/api/log` pages)
 while the 8 MB PSRAM sits unused ([evidence ledger](business-logic/evidence-ledger.md)).
-AES runs in software (`CONFIG_MBEDTLS_HARDWARE_AES=n`): the hardware AES would need internal DMA
-bounce buffers (up to 8 KB in and out) for each TLS record in PSRAM, and with about 21–26 KB of
+AES runs in software (`CONFIG_MBEDTLS_HARDWARE_AES=n`): the hardware AES would need internal
+{term}`DMA bounce buffers <DMA bounce buffer>` (up to 8 KB in and out) for each TLS record in PSRAM, and with about 21–26 KB of
 internal heap free that allocation fails and the download stops at 0 % (`esp-aes: Failed to
 allocate memory`, then `ota error: download`). At 240 MHz software AES is as fast.
 
