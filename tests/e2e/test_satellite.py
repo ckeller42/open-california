@@ -1877,6 +1877,8 @@ def test_a_low_sensor_battery_badges_the_vehicle_tile(stub, error_gated_page, ba
             return
         expect(tile.locator(".tbadge")).to_have_count(1)
         expect(tile).to_have_attribute("title", badge)
+        # the cause is in the accessible name too: a title never shows on a tap, VoiceOver skips it
+        expect(tile).to_have_accessible_name(re.compile(r"^Vehicle\. .+\. " + re.escape(badge) + "$"))
         _open(pg, "Vehicle")
         expect(pg.locator(".warn")).to_have_text(badge)
 

@@ -377,7 +377,8 @@ def test_front_door_lights_switch_follows_the_unit_screen(page, base_url):
 
 def test_cooler_quiet_and_timer_controls_follow_power(page):
     # The app's own gates: quiet mode is only settable while the refrigerator box is ON; the
-    # cooling timer only while it is OFF. Both rows grey (.ctl-off) with the reason as tooltip.
+    # cooling timer only while it is OFF. Both rows grey (.ctl-off); the reason is a visible line
+    # under the row and the control's accessible description, never only a title (no tooltip on a tap).
     page.get_by_text("Cooler", exact=True).first.click()
     power = page.get_by_role("switch", name="Refrigerator box")
     quiet = page.locator("select").first  # the Quiet mode <select>
@@ -396,8 +397,67 @@ def test_cooler_quiet_and_timer_controls_follow_power(page):
     set_power(True)
     expect(quiet).to_be_enabled()
     expect(start_timer).to_be_disabled()
+    off_first = "Switch the refrigerator box off first"
+    expect(page.locator(".ctl-why", has_text=off_first)).to_have_count(2)  # "Cooling starts at" + "Timer"
+    expect(page.locator(".ctl-why", has_text=off_first).first).to_be_visible()
+    expect(start_timer).to_have_accessible_description(off_first)
     expect(power).to_be_enabled()  # the power switch itself is never gated
     set_power(was_on)  # leave the shared mock as we found it
+
+
+def test_a_faulting_tile_names_its_fault(page, base_url):
+    """A tile's fault is in its accessible name, not only in a title (a title never shows on a tap
+    and VoiceOver does not speak it). The unit's report is patched in: the mock has no water fault."""
+
+    def patch(route):
+        r = route.fetch()
+        body = r.json()
+        body.setdefault("water", {})["fresh_alert"] = "pump_protection"
+        route.fulfill(response=r, json=body)
+
+    page.route("**/api/state", patch)
+    page.goto(base_url)
+    tile = page.locator(".tile", has_text="Water").first
+    expect(tile.locator(".tbadge")).to_have_count(1)
+    expect(tile).to_have_accessible_name(
+        re.compile(r"^Water\. .*⚠ Pump protection is active\. Please fill up fresh water\.$")
+    )
+
+
+def test_time_control_keeps_the_sent_value_while_in_flight(page, base_url):
+    """A time control reads through the optimistic overlay: while the command is in flight, a poll's
+    re-render keeps the time the owner set (it used to snap back to the old value until the next poll
+    after the command). Then the unit's own report carries it."""
+    page.on("dialog", lambda d: d.accept())
+    if _state(base_url, page)["airheater"].get("timer_armed"):  # shared mock: leave the timer unarmed
+        assert page.request.post(
+            base_url + "/api/command", data={"function": "airheater", "what": "timer_cancel", "value": None}
+        ).ok
+        _poll(page, base_url, lambda st: not st["airheater"]["timer_armed"], "heater timer unarmed")
+    st = _state(base_url, page)["airheater"]
+    new = "07:30" if (st.get("timer_hour"), st.get("timer_min")) != (7, 30) else "08:45"
+    held = []
+    page.route("**/api/command", lambda route: held.append(route))  # hold the command in flight
+    page.get_by_text("Air heater", exact=True).first.click()
+    start_at = page.locator('input[type="time"]')
+    expect(start_at).to_be_enabled(timeout=15000)
+    start_at.fill(new)
+    expect(page.locator("#status")).to_have_text("Sending…")
+    with page.expect_response("**/api/state"):  # one poll (and its re-render) while the command is held
+        pass
+    page.wait_for_timeout(100)
+    assert start_at.input_value() == new  # not the stale unit value
+    assert len(held) == 1
+    held[0].continue_()
+    page.unroute("**/api/command")
+    hh, mm = (int(x) for x in new.split(":"))
+    _poll(
+        page,
+        base_url,
+        lambda st: (st["airheater"]["timer_hour"], st["airheater"]["timer_min"]) == (hh, mm),
+        "unit-reported heater start time " + new,
+    )
+    expect(start_at).to_have_value(new)
 
 
 def test_heater_continuous_switch_off_only(page):
