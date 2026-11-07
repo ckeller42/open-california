@@ -264,7 +264,7 @@ def campingmode(d: dict) -> dict:
         "usb_charger": bool(d.get("UsbCharger")),  # raw field, normal: on=1
         # DERIVED truth: the rear USB is physically OFF whenever master is off, even though the
         # UsbCharger field keeps reading 1 (owner-confirmed 2026-08-19). Gate the raw field by
-        # master so consumers (UI/MQTT/HA) get "is USB actually powered", not the latched field.
+        # master so consumers (UI/Influx) get "is USB actually powered", not the latched field.
         "usb_powered": master and bool(d.get("UsbCharger")),
         # inverted+combined AND only meaningful while master on (fields default to 0
         # when camping is off, which would otherwise read as a false "lit").
@@ -688,6 +688,22 @@ def interpret(function: str, decoded: dict) -> dict:
     """Raw decoded fields -> human-meaningful dict. Falls back to a generic
     Installed+raw view for functions without a dedicated interpreter."""
     return INTERPRETERS.get(function, _generic)(decoded)
+
+
+def flatten(interp: dict, prefix: str = "") -> dict:
+    """Flatten a nested interpretation to one level: water ``fresh.percent`` -> ``fresh_percent``.
+
+    :param interp: the result of :func:`interpret`.
+    :param prefix: prepended to every key (used by the recursion).
+    :returns: ``{flat_key: value}``.
+    """
+    out = {}
+    for k, v in interp.items():
+        if isinstance(v, dict):
+            out.update(flatten(v, "%s%s_" % (prefix, k)))
+        else:
+            out["%s%s" % (prefix, k)] = v
+    return out
 
 
 # Firmware versions (AmbSwVersion) on which the app adds +2 to the DC-DC current. Verified against

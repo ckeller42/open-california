@@ -262,7 +262,7 @@ def _cooler_values(state: dict, **changes) -> dict:
 # Cooler Mode enum (vf/c.java: readback J0()=Mode==2, P1()=Mode==4): 0=normal (quiet off),
 # 2=manual quiet, 4=timer-based quiet. Staged by vf/c.f(this, <n>) via T1(0)/x0(2)/k0(4).
 COOLER_MODES = {"normal": 0, "quiet": 2, "timer_quiet": 4}
-COOLER_LEVEL_RANGE = (1, 5)  # settable cooling levels (inclusive); HA + the web UI slider read it
+COOLER_LEVEL_RANGE = (1, 5)  # settable cooling levels (inclusive); the web UI slider reads it
 
 
 def _cooler(funcs, what, value, last):
@@ -420,7 +420,7 @@ LIGHT_ZONES = {
 _ROOF_CLOSED_POSITIONS = (0, 14)  # matches semantics._ROOF_POS closed values
 AIRHEATER_MAX_RUNTIME_MIN = 120  # the app's cap on immediate heating (its heating info page)
 AIRHEATER_MIN_RUNTIME_MIN = 10  # the app's run-time slider never goes lower (index 1-12 x 10 min)
-AIRHEATER_LEVEL_RANGE = (1, 10)  # app-settable HeatingLevel (10 = HI); HA + the web UI slider read it
+AIRHEATER_LEVEL_RANGE = (1, 10)  # app-settable HeatingLevel (10 = HI); the web UI slider reads it
 # OperationModeAirHeater is the departure-timer arm (app-observed 2026-09-16, tools/applab):
 # 7 = the app's leave-unchanged sentinel in every frame that doesn't target it, 3 = timer armed
 # (rf/b.java a2()), 0 = cancelled (j4()). OperationModeCombined names the device the timer drives
@@ -576,7 +576,7 @@ def command_precondition(function, what, value, states):
             return REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF
     # The mirror of the above: the quiet mode and its schedule are only settable while the fridge is
     # ON (the app greys those rows when it is off — APP-OBSERVED, `evidence-ledger.md`). Without this
-    # the CLI/API/HA paths could send what the app never sends; the web UI already greys them.
+    # the CLI/API paths could send what the app never sends; the web UI already greys them.
     if function == "cooler" and what in ("mode", "night_on", "night_off"):
         if (states.get("cooler") or {}).get("State") == 0:  # fridge currently OFF
             return REASON_QUIET_NEEDS_FRIDGE_ON
@@ -831,7 +831,7 @@ def _lighting(funcs, what, value, last):
             "ProfileNumber": pn,
             **{z: LIGHT_UNCHANGED for z in zone_fields},
         }
-    elif what in ("all", "brightness"):  # "brightness" = the Home Assistant number entity (mqtt)
+    elif what in ("all", "brightness"):  # "brightness" = an alias of "all"
         # not an app action (the app is per-zone) — our convenience: every REAL lamp to one level
         vals = {**base, **_all_real_zones(zone_fields, _b(value))}
     else:  # a single zone (friendly key or BrightnessL field)
@@ -924,7 +924,7 @@ def _airheater(funcs, what, value, last):
         # RunningTime, minutes (rf/b.java:199 D4() writes the raw int). The app caps the run time at
         # 120 min — its own heating info page says immediate heating is "limited to 120 minutes"
         # (the fuel-burning heater's emissions limit; the unit raises ErrorCode 4
-        # HEATING_TIME_EXCEEDED past it). Enforce the same bound here so CLI/API/HA can't ask for
+        # HEATING_TIME_EXCEEDED past it). Enforce the same bound here so CLI/API can't ask for
         # what the app never sends; 255 is the field WIDTH, not a valid request.
         rt = _int_range(
             value, AIRHEATER_MIN_RUNTIME_MIN, AIRHEATER_MAX_RUNTIME_MIN, "airheater runtime (minutes)"

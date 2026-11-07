@@ -333,7 +333,7 @@ def test_out_of_range_surfaces_through_actuate(mock):
 
 
 def test_poll_writes_only_installed_functions_to_influx(mock, monkeypatch):
-    """Influx should store only INSTALLED functions (same set MQTT publishes). The uninstalled
+    """Influx should store only INSTALLED functions. The uninstalled
     ones (satellite / living-room heater / roof-A/C / stairs / generalpurposesignals) emit only
     raw pass-through fields (WordZeroFour, System, ...) — noise that must not reach the dashboard."""
     from calictl import influx, serve
@@ -376,7 +376,7 @@ def test_serve_on_command_actuates(mock):
 
 def test_serve_refuses_a_roof_move_under_a_blocking_alert_but_never_a_stop(mock, monkeypatch):
     """The roof branch of on_command short-circuits to _roof_move, so it used to skip the
-    precondition check at the bottom entirely — /api/command, the CLI and HA could drive the roof
+    precondition check at the bottom entirely — /api/command and the CLI could drive the roof
     under a blocking InfoPopUp that the GUI greys. The gate now runs BEFORE the session nudge, so a
     blocked move never reaches _roof_move (and never wakes the unit). STOP is the safety action and
     must still get through untouched."""

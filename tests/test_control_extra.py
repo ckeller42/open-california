@@ -216,7 +216,7 @@ def test_command_precondition_cooler_timer_needs_fridge_off():
 
 
 def test_command_precondition_mirrors_the_remaining_web_ui_gates():
-    """The web UI greys state-forbidden controls, but those gates are client-side: the CLI/API/HA
+    """The web UI greys state-forbidden controls, but those gates are client-side: the CLI/API
     paths bypass them. These three families are the ones the UI grays and the server must refuse too
     — quiet mode needs the fridge ON (the mirror of the timer gate above), camping lights/USB need
     the camping master ON (the rear USB is physically dead without it, #111), and the energy-mode

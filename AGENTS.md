@@ -3,7 +3,7 @@
 Reverse-engineered control + monitoring for the **VW California T7 Camper Unit** over
 BLE (own-vehicle interoperability). Reads all vehicle telemetry; control *writes* work
 (armed by the `1003` liveness heartbeat — see Known state). Runs on a Raspberry Pi (`buspi`),
-feeding **Home Assistant** (MQTT) and **Grafana** (InfluxDB).
+feeding **Grafana** (InfluxDB) and its own web UI.
 
 **New here? Read [`docs/architecture.md`](docs/architecture.md)** for the data-flow overview (BLE → decode →
 semantics → sinks). This file is the agent-facing rules + operational state; it is not the tutorial.
@@ -12,7 +12,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 
 | Path | What |
 |---|---|
-| `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `web`/`mqtt`/`influx` (sinks), `control`/`overrides` (frames), `session`/`observer`/`automation`/`firmware`/`anchors`, `freshness` (stale-read guards), `history` (JSONL helpers for the per-poll outcome log), `postcheck` (post-write applied-check), `pairing`/`pairing_bluez` (guided-pairing SM + BlueZ transport), `log`, `trace` (BLE trace recorder), `cli` |
+| `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `web`/`influx` (sinks), `control`/`overrides` (frames), `session`/`observer`/`automation`/`firmware`/`anchors`, `freshness` (stale-read guards), `history` (JSONL helpers for the per-poll outcome log), `postcheck` (post-write applied-check), `pairing`/`pairing_bluez` (guided-pairing SM + BlueZ transport), `log`, `trace` (BLE trace recorder), `cli` |
 | `protocol/dictionary.yaml` | extracted field map (14 functions, state+control); source of truth for bit layout |
 | `protocol/signals.yaml` | the **signal catalog** — surface/omit decision + provenance per field |
 | `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `run_against_mock` (real CLI/`serve` over the mock), `trace_compare` (real-unit trace vs the mock), `fake_unit_peripheral` (the mock as a **Bumble BLE peripheral** with real SMP passkey pairing — shared by `applab`, `tests/test_pairing_link.py` and the `tests/realstack/` VM rig), `applab/` (the **real app** in an emulator against that peripheral — screens in any state + app-vs-calictl frame diffs; see its README; `applab/phone/` = HCI-snoop decoders for the owner's REAL phone, skill `phone-app-lab`), `esplab/` (CoreS3 bench helpers: `flash.sh` from `flasher_args.json`, `esp_cmd.py` no-reset console, `--tail SECONDS` timestamps its log; `thinky-bench` skill), `gen_c_dict` + `gen_codec_vectors` (C codec header + golden vectors, `--check` in CI), `check_vendor_material` + `check_import_clean` (guards shared by the pre-commit hooks + CI), `hooks/` (Claude Code hook scripts) |
@@ -20,14 +20,14 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `docs/business-logic/` | RE notes (control recipes, feature gating, the write gate, signal catalog + scales) — the full provenance behind the terse "Known state" below |
 | `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
 | `ui/` | GUI specs (`screens/*.yaml`) — **authoritative for app UI semantics** — + `prototype.html` (an RE preview, not the served UI). VW icons are **never committed** (`ui/assets/` untracked; placeholders without them). |
-| `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
+| `calictl/deploy/` | systemd unit, Grafana dashboard, `push_dashboard.py` |
 | `firmware/` | ESP32-S3 satellite (#154): `cali_core` (platform-free C: pairing, session, `control` twin of `calictl.control`, WiFi, HTTP, web endpoints), `cali_ble_nimble`, `platform`, `web/` (edit `index.html` = the `/device` recovery page, `strings.json` = the display's texts; `gen_c_dict` renders the rest), `host`/`qemu`/`main` builds. No roof. Features + requirements: `docs/firmware.md` |
 
 ## Hard rules (don't break these)
 
-- **Runtime `calictl/*` is stdlib-only at import.** `bleak`, `paho.mqtt`, `influxdb_client`,
+- **Runtime `calictl/*` is stdlib-only at import.** `bleak`, `influxdb_client`,
   `yaml` are imported **lazily inside functions**, never at module top. Tooling in `tools/`
-  may use PyYAML. Tests rely on this (they run without BLE/MQTT installed).
+  may use PyYAML. Tests rely on this (they run without BLE/InfluxDB installed).
 - **`serve` is the single BLE owner.** `hci0` on buspi is shared with other readers
   (Anker/Victron/Govee). Never open a second BLE connection from the daemon path; the
   `asyncio.Lock` in `serve.py` (created **inside** the running loop) serializes all access.

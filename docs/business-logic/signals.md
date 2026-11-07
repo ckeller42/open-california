@@ -96,9 +96,8 @@ GUI or getter); `*InfoPopUp` (UI-transient); fault/warning bits (aggregated into
 feature-availability `*Installed` flags (surfaced as `installed`); granular timer detail; and
 all **control** fields (definitions captured; command surfacing deferred).
 
-**Delivery:** all 87 surfaced signals flow to InfluxDB (broad, via `numeric_fields`); a
-curated subset is exposed as Home Assistant entities (`mqtt.ENTITY_SPECS`); not-installed
-functions are `Installed`-gated, so they appear only on vans that have them.
+**Delivery:** all 87 surfaced signals flow to InfluxDB (broad, via `numeric_fields`) and
+the web UI's `/api/state`; not-installed functions are `Installed`-gated, so they appear only on vans that have them.
 
 Sources: [VW California owner manuals](https://en.volkswagenclub.net/manuals.php?ddlb_model=45),
 [VW California Owners Club — user manuals](https://vwcaliforniaclub.com/resources/categories/california-user-manuals.7/).
@@ -128,9 +127,8 @@ wrong. Two compounding causes:
 
 **Fix applied.** `lights_on = master and InteriorLight == 0 and OutsideLight == 0` (combined,
 inverted, master-gated); `usb_charger`/`master_on` unchanged (normal); `OutsideLight` omitted
-(tied to `InteriorLight`); catalog scale marked `inverted-combined`; HA entity → single
-"Camping Lights". The read-only "Rear USB Ports" indicator (HA binary_sensor + the Grafana
-"Rear USB power" stat) reads the DERIVED `usb_powered`, not the raw `usb_charger` (see next).
+(tied to `InteriorLight`); catalog scale marked `inverted-combined`; one "Camping Lights"
+value. The read-only "Rear USB power" indicator (the Grafana stat) reads the DERIVED `usb_powered`, not the raw `usb_charger` (see next).
 
 **USB is PHYSICALLY master-gated (owner-confirmed 2026-08-19).** The `usb_charger` field is only
 the retained SETTING bit — it stays `1` even when camping master is off, but the **rear USB ports
@@ -138,13 +136,11 @@ are then physically dead**. So `usb_charger` alone is a misleading "is USB power
 power is `master_on AND usb_charger`. This showed up in the engine-start observation: when the unit
 sheds camping (`master_on`→0), `usb_charger` does *not* transition, yet the ports lose power.
 **Implemented (#109):** `semantics.campingmode` now emits `usb_powered = master_on and usb_charger`
-(alongside the raw `usb_charger`). **The two sinks currently disagree on which one the USB toggle
-shows** (open decision, 2026-09-16): the web UI's Rear-USB switch displays `usb_powered`
+(alongside the raw `usb_charger`). The web UI's Rear-USB switch displays `usb_powered`
 (`webui/app.js`, since #174 — it is greyed while master is off, so it reads "off" like the ports),
-while the Home Assistant switch (`mqtt.py` state_key) and the write post-check (`postcheck.py`)
-still key on the retained setting `usb_charger`. With master off the same toggle therefore reads
-OFF in the web UI and ON in HA. Pick one truth (probably `usb_powered` for display and
-`usb_charger` for the post-check, which verifies the SETTING was written). The read-only power
+while the write post-check (`postcheck.py`) keys on the retained setting `usb_charger`, which
+verifies the SETTING was written. (The Home Assistant switch that also showed `usb_charger` was
+removed with the MQTT sink on 2026-11-07.) The read-only power
 indicators surface `usb_powered`. Corollary of the master gate:
 since camping mode itself is **refused while
 driving** (the stationary gate, `control-and-actuation.md` §4), rear USB **cannot** be kept powered

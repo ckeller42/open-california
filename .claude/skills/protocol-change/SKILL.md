@@ -15,7 +15,7 @@ order of operations so you fix things forward instead of chasing red CI.
 |---|---|---|
 | `protocol/dictionary.yaml` | golden vectors + C header + semantics/control vectors (below) + a catalog decision per new field | `codec-parity` CI, `codec-fresh` pre-commit hook, `test_signal_coverage` |
 | `calictl/overrides.py` (offsets/ranges/frame bytes) | golden vectors + C header + semantics/control vectors | `codec-parity` CI, `codec-fresh` pre-commit hook |
-| `protocol/signals.yaml` (catalog) | semantics emit + dashboard/HA if surfacing changed | `test_signal_coverage`, auditor |
+| `protocol/signals.yaml` (catalog) | semantics emit + dashboard if surfacing changed | `test_signal_coverage`, auditor |
 
 ## Steps (in order)
 
@@ -38,7 +38,7 @@ order of operations so you fix things forward instead of chasing red CI.
    stubs new fields with a `TODO` reason to replace) (`surface` needs a `name`, `omit` needs a `reason`).
    A dropped/unaccounted field fails `tests/test_signal_coverage.py`.
 4. **If a SURFACED signal changed**: emit it in `calictl/semantics.py`, then follow
-   the `add-signal` skill (dashboard + HA + auditor). Grafana dashboards do NOT
+   the `add-signal` skill (dashboard + auditor). Grafana dashboards do NOT
    auto-update.
 5. **Run the guardrails**:
 

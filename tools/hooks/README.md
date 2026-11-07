@@ -34,7 +34,7 @@ Test: `echo '{"tool_input":{"file_path":"decompile/x.smali"}}' | python3 tools/h
 
 A **PostToolUse** hook: Grafana dashboards do NOT auto-update when BLE signals
 change. When a signal-defining file (`calictl/semantics.py`, `protocol/signals.yaml`,
-`calictl/mqtt.py`, `calictl/influx.py`) is edited, it injects a reminder to update
+`calictl/influx.py`) is edited, it injects a reminder to update
 `calictl/deploy/camper-dashboard.json` and push it to the Pi + Grafana Cloud via
 `calictl/deploy/push_dashboard.py`, then re-run `python3 -m tools.audit_signals --report`.
 

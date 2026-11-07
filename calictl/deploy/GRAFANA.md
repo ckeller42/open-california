@@ -7,7 +7,7 @@ buspi already runs **InfluxDB 2** (`:8086`, org `home`, bucket `buspi`) and
 
 There is no separate reader service: the one BLE-owning daemon, `calictl serve`
 (`calictl.service`), writes to InfluxDB on every poll **when `INFLUXDB_TOKEN` is set** in its
-environment file — alongside MQTT and the web UI, same process, one connection.
+environment file — alongside the web UI, same process, one connection.
 
 ```bash
 # in the daemon's env file (/etc/opencalifornia/calictl.env for an install.sh host,

@@ -51,8 +51,8 @@ def dictionary_keys(funcs) -> set:
 
 
 def emitted_state_names(fn, funcs) -> set:
-    from calictl import mqtt, semantics
+    from calictl import semantics
 
     func = funcs[fn]
     zero = {sf.name: 0 for sf in func.state_fields if sf.placed}
-    return set(mqtt.flatten(semantics.interpret(fn, zero)))
+    return set(semantics.flatten(semantics.interpret(fn, zero)))

@@ -1,6 +1,6 @@
 [Unit]
-Description=VW California Camper Unit (BLE) -> InfluxDB + MQTT (Home Assistant)
-After=bluetooth.target influxdb.service mosquitto.service network-online.target time-sync.target
+Description=VW California Camper Unit (BLE) -> InfluxDB + web UI
+After=bluetooth.target influxdb.service network-online.target time-sync.target
 Wants=bluetooth.target network-online.target time-sync.target
 
 [Service]

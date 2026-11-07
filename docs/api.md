@@ -79,11 +79,10 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.e2e.test_gui.test_favourite_save_is_not_an_activation
 ```
 
-## Sinks (MQTT / Home Assistant)
+## Sinks (InfluxDB)
 
 ```{eval-rst}
-.. autofunction:: calictl.mqtt.command_topics
-.. autofunction:: calictl.mqtt.render_discovery
+.. autofunction:: calictl.semantics.flatten
 ```
 
 ## Automation
@@ -168,7 +167,6 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.test_persistent_session
 .. automodule:: tests.test_roof
 .. automodule:: tests.test_history
-.. automodule:: tests.test_ha
 .. autofunction:: tests.e2e.test_gui.test_wakeup_light_time_and_switch_reach_the_unit
 .. autofunction:: tests.e2e.test_gui.test_door_contact_switch_round_trips
 .. autofunction:: tests.e2e.test_gui.test_front_door_lights_switch_follows_the_unit_screen
