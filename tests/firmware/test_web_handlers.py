@@ -37,6 +37,7 @@ from .api_shape import (
     EXPERIMENTAL_KEYS,
     EXT_ENTRY_KEYS,
     LINK_KEYS,
+    LORA_KEYS,
     OTA_KEYS,
     PAIRING_API_KEYS,
     PAIRING_KEYS,
@@ -56,6 +57,8 @@ from .api_shape import (
     TIME_KEYS,
     WIFI_GET_KEYS,
 )
+from .test_lora_setup import key as lora_key
+from .test_lora_setup import plaintext as lora_plaintext
 from .test_sensors import KEY
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -119,6 +122,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "sensors.c"),
             str(CORE / "energy.c"),
             str(CORE / "lora.c"),
+            str(CORE / "lora_setup.c"),
             str(CORE / "lora_port_none.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(CORE / "test" / "web_cli.c"),
@@ -2283,6 +2287,46 @@ def test_lora_switch_persists_and_shows_the_link_in_state(web_cli):
     assert json.loads(rs[0].body)["device"]["experimental"] == {"sensors": False, "lora": True}
 
 
+def test_state_lora_setup_fields_no_secrets(web_cli):
+    """device.lora reports the setup state; no key, in any form, reaches /api/state or the console.
+
+    .. test:: device.lora has setup, has_ttn_keys, dev_eui; AppKey, transfer key and TTN keys never appear
+       :id: T_FW_LORA_NO_SECRETS
+       :links: R_FW_LORA_SETUP
+    """
+    dev, tk = (bytes((b + i * 0x11) % 256 for i in range(n)) for b, n in ((1, 24), (2, 16)))  # dummies
+    ttn = lora_plaintext()  # the documented v1 layout: ver, cluster, app, dev, read key, command key
+    texts = (lora_key(3), lora_key(7))  # the NNSXS. text of the two packed keys in it
+    packed = (ttn[-116:-58], ttn[-58:])
+    secrets = [x.hex() for x in (dev[:16], tk, ttn, *packed)]
+    secrets += [x.upper() for x in secrets] + list(texts)
+    secrets += [t[i : i + 16] for t in texts for i in range(len(t) - 15)]  # any 16-char slice of a key text
+    rs, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/experimental", '{"lora":true}'),
+            b"kvhex lora_dev " + dev.hex().encode(),
+            b"kvhex lora_tk " + tk.hex().encode(),
+            req("GET", "/api/state"),
+            b"loracon status",
+            b"kvbig lora_ttn " + ttn.hex().encode(),
+            req("GET", "/api/state?diag=1"),
+            b"loracon status",
+        ],
+    )
+    for r, want in ((rs[1], ("keys_made", False)), (rs[2], ("ttn_keys", True))):
+        lora = json.loads(r.body)["device"]["lora"]
+        assert set(lora) == LORA_KEYS
+        assert (lora["setup"], lora["has_ttn_keys"], lora["dev_eui"]) == (*want, None)
+    text = rs[1].body.decode() + rs[2].body.decode() + "\n".join(other)
+    assert "setup keys_made" in text and "setup ttn_keys (TTN keys stored)" in text
+    assert len(ttn) > 100 and len(secrets) > 100
+    for sec in secrets:
+        assert sec not in text
+    assert "NNSXS." not in text
+
+
 @pytest.mark.parametrize(
     "setup,method,body,status,error",
     [
@@ -2303,6 +2347,71 @@ def test_lora_switch_persists_and_shows_the_link_in_state(web_cli):
 )
 def test_experimental_errors(web_cli, setup, method, body, status, error):
     r, _ = one(web_cli, method, "/api/experimental", body, setup=setup)
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+LORA_ON = [*STATION, "kvhex exp_lora 01"]
+
+
+def test_lora_forget_erases_keys_and_switches_off(web_cli):
+    """POST /api/lora {"forget":true,"confirm":true} erases every LoRa key and switches LoRa off.
+
+    .. test:: POST /api/lora forget: confirm gate, keys erased, switch off, device.lora gone
+       :id: T_FW_LORA_FORGET_API
+       :links: R_FW_LORA_SETUP
+    """
+    dev, tk = bytes(range(0, 0x100, 0x11))[:16] + bytes(8), bytes(range(1, 17))  # dummies
+    rs, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in LORA_ON),
+            b"kvhex lora_dev " + dev.hex().encode(),
+            b"kvhex lora_tk " + tk.hex().encode(),
+            req("POST", "/api/lora", '{"forget":true,"confirm":true}'),
+            req("GET", "/api/state"),
+            b"kv lora_dev",
+            b"kv lora_tk",
+            b"kv exp_lora",
+        ],
+    )
+    assert (rs[0].status, rs[0].json()) == (200, {"ok": True})
+    d = json.loads(rs[1].body)["device"]
+    assert d["experimental"]["lora"] is False and "lora" not in d
+    assert other[-3:-1] == ["KV <missing>", "KV <missing>"]  # lora_dev, lora_tk erased
+    assert "\x01" not in other[-1]  # exp_lora off (a stored 0 byte)
+
+
+def test_lora_console_forget(web_cli):
+    """The console `lora forget` does what POST /api/lora does, without a confirm and in any WiFi mode."""
+    rs, other = drive(
+        web_cli,
+        [b"kvhex exp_lora 01", b"kvhex lora_dev 00", b"kvhex lora_keys 00", b"loracon forget", b"kv lora_dev",
+         b"kv lora_keys", req("GET", "/api/state")],
+    )  # fmt: skip
+    assert "LOG lora: forgotten (keys erased, LoRa off)" in other
+    assert other[-2:] == ["KV <missing>", "KV <missing>"]
+    assert json.loads(rs[0].body)["device"]["experimental"]["lora"] is False
+
+
+@pytest.mark.parametrize(
+    "setup,method,body,status,error",
+    [
+        (LORA_ON, "GET", None, 405, "method"),
+        (LORA_ON, "POST", '{"forget":true}', 400, "confirm_required"),
+        (LORA_ON, "POST", '{"forget":true,"confirm":false}', 400, "confirm_required"),
+        (LORA_ON, "POST", '{"confirm":true,"forget":false}', 400, "bad_json"),
+        (LORA_ON, "POST", "{}", 400, "bad_json"),
+        (LORA_ON, "POST", '{"confirm":true}', 400, "bad_json"),
+        (LORA_ON, "POST", '{"forget":1,"confirm":true}', 400, "bad_json"),
+        (LORA_ON, "POST", '{"forget":true,"confirm":true,"keys":"00"}', 400, "bad_json"),
+        (LORA_ON, "POST", '{"forget":true,"confirm":true', 400, "bad_json"),
+        (STATION, "POST", '{"forget":true,"confirm":true}', 404, "disabled"),
+        (LORA_ON + ["kvfail 1"], "POST", '{"forget":true,"confirm":true}', 500, "store"),
+        (["wifi setup_ap", "kvhex exp_lora 01"], "POST", '{"forget":true,"confirm":true}', 403, "setup_mode"),
+    ],
+)
+def test_lora_errors(web_cli, setup, method, body, status, error):
+    r, _ = one(web_cli, method, "/api/lora", body, setup=setup)
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
 
 

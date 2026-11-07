@@ -477,6 +477,36 @@ def _set(member, key):
     return apply
 
 
+def lora_device(**over):
+    """``device.lora`` as the firmware reports it while ``exp_lora`` is on (R_FW_LORA, R_FW_LORA_SETUP):
+    a joined van, last uplink confirmed 7 min ago, set up. No key is ever in it."""
+    lora = {
+        "module": "present",
+        "joined": True,
+        "at_unanswered": 0,
+        "sf": 9,
+        "last_s": 420,
+        "airtime_ms_24h": 3300,
+        "airtime_charged_ms_24h": 3900,
+        "unconfirmed_sends": 1,
+        "downlinks_24h": 2,
+        "uplinks": [20, 3, 1],
+        "note": None,
+        "setup": "ttn_keys",
+        "has_ttn_keys": True,
+        "dev_eui": "70B3D57ED0012345",
+    }
+    lora.update(over)
+    return lora
+
+
+def _lora_forget(dev, body):
+    """POST /api/lora {"forget":true,"confirm":true}: the keys go, the switch goes off, device.lora is absent."""
+    if body.get("forget") and body.get("confirm"):
+        dev.setdefault("experimental", {})["lora"] = False
+        dev.pop("lora", None)
+
+
 # The satellite's settings endpoints (web.c) as the Satellite-settings screen posts them: what each
 # POST changes in device (/api/ota only starts work, the state moves on by itself).
 _SETTINGS = {
@@ -489,6 +519,7 @@ _SETTINGS = {
     "/api/display": lambda dev, body: dev["display"].update(body),
     "/api/ota": lambda dev, body: dev["ota"].update({k: v for k, v in body.items() if k == "channel"}),
     "/api/ble": _ble,
+    "/api/lora": _lora_forget,
 }
 
 
@@ -551,7 +582,7 @@ class EspStub:
     ``GET /api/sensors``. ``POST /api/wifi`` appends the body to ``wifi_posts`` and answers
     ``{"ok": true}`` (with ``joins = True`` a ``setup`` stub then turns ``station`` with ``device.setup.pending``;
     ``POST /api/setup {"done": true}`` clears it, recorded in ``posts`` too); a POST to a settings endpoint (``_SETTINGS``: auto camper, usage data,
-    experimental, display, OTA, BLE) is recorded in ``posts`` as ``(path, body)``, applied to the fixture's
+    experimental, display, OTA, BLE, LoRa forget) is recorded in ``posts`` as ``(path, body)``, applied to the fixture's
     ``device`` and answered ``{"ok": true}`` (``post_reply[path] = (status, body)`` answers that
     instead, changing nothing); ``down = True`` makes the stub answer nothing at all (the satellite left the
     network to join another one) until it is set back. ``GET /app`` is the UI bundle in every mode, and the

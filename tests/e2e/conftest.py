@@ -7,8 +7,10 @@ import pytest
 
 
 @contextlib.contextmanager
-def _error_gated_page(url, engine="chromium", **page_kw):
-    """``engine``: a Playwright browser type name (``chromium`` default, ``webkit``, ``firefox``)."""
+def _error_gated_page(url, engine="chromium", init_script=None, requests=None, allow_errors=(), **page_kw):
+    """``engine``: a Playwright browser type name (``chromium`` default, ``webkit``, ``firefox``);
+    ``init_script``: JS run before the page's own scripts; ``requests``: a list that gets every request's URL;
+    ``allow_errors``: texts of console errors the test expects (e.g. a failed request it provoked)."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
@@ -20,10 +22,14 @@ def _error_gated_page(url, engine="chromium", **page_kw):
             "console",
             lambda msg: (
                 js_errors.append("console.error: %s" % msg.text)
-                if msg.type == "error" and "favicon" not in msg.text
+                if msg.type == "error" and not any(a in msg.text for a in ("favicon", *allow_errors))
                 else None
             ),
         )
+        if init_script:
+            pg.add_init_script(init_script)
+        if requests is not None:
+            pg.on("request", lambda r: requests.append(r.url))
         pg.goto(url)
         try:
             yield pg

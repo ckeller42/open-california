@@ -9,3 +9,21 @@ int cali_lora_port_status(cali_lora_status_t *out) {
     *out = none;
     return 1;
 }
+
+int cali_lora_port_qr(char *out, size_t max) {
+    cali_lora_status_t st;
+    cali_lora_port_status(&st);
+    return (int)cali_lora_qr_text(out, max, &st, cali_exp_lora());
+}
+
+int cali_lora_port_setup_qr(char *out, size_t max) {
+    cali_lora_status_t st;
+    cali_lora_port_status(&st);
+    return (int)cali_lora_setup_qr_text(out, max, &st, cali_exp_lora());
+}
+
+void cali_lora_port_setup_request(void) {}
+
+int cali_lora_port_setup_pending(void) { return 0; }
+
+void cali_lora_port_forgotten(void) {}

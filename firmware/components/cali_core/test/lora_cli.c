@@ -5,6 +5,10 @@
  * Radio:     parse <line> | redact <line> | outcome <kind> <tx_done> | airtime <phy_len> <sf> | maxpl <sf>
  * Budget:    up <t_s> <ms> <confirmed> | used <t> | conf <t> | room <t> | dl <t> | interval <t> <sf> <len> <share> | backoff <n>
  * Status:    stjson <module> <joined> <unanswered> <sf> <last_s> <air> <charged> <unconf> <dl> <now_s>
+ * Setup:     stsetup <setup> <ttn> <eui> | setupopen | setupstate | forget | kvset <key> <hex> | kv <key>
+ *            qr <exp_on> <present> <eui|-> [max] (prints "QR <text>", "QR -" when none and the buffer is
+ *            zeroed, "QR dirty" when none and bytes stay) | sqr ... (the same for cali_lora_setup_qr_text) | ttnok <hex> |
+ *            notk (cali_lora_confirm_no_tk as hex)
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
  * Driven by tests/firmware/test_lora.py. Fakes: session frames, sensors, counters, clock, NVS, log. */
 #include <math.h>
@@ -22,9 +26,22 @@ static cali_sensor_reading_t s_mppt, s_bs;
 static int s_have_mppt, s_have_bs;
 static cali_energy_ctr_t s_ctr;
 static uint32_t s_boot = 1;
-static uint8_t s_kv[64];
-static size_t s_kv_len;
-static char s_kv_key[16];
+#define KV_N 8
+static struct { char key[16]; uint8_t val[CALI_LORA_TTN_MAX]; size_t len; int used; } s_kv[KV_N];
+static int s_kv_find(const char *key) {
+    for (int i = 0; i < KV_N; i++)
+        if (s_kv[i].used && !strcmp(s_kv[i].key, key)) return i;
+    return -1;
+}
+static int s_stsetup, s_stttn;
+static char s_steui[17];
+static char s_corrupt[16];   /* kvcorrupt <key>: reads of it return CALI_KV_CORRUPT */
+static int s_setfail;
+static unsigned s_rnd_calls;
+static void fake_rand(void *buf, size_t n) {   /* a counter: every call differs, every byte differs */
+    s_rnd_calls++;
+    for (size_t i = 0; i < n; i++) ((uint8_t *)buf)[i] = (uint8_t)(s_rnd_calls * 16 + i);
+}
 
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
     if (i >= CODEC_NCHARS || !s_len[i]) return 0;
@@ -41,15 +58,29 @@ const cali_energy_ctr_t *cali_energy_counters(void) { return &s_ctr; }
 uint32_t cali_time_boot(void) { return s_boot; }
 uint64_t cali_uptime_ms(void) { return 0; }
 int cali_kv_get(const char *key, void *buf, size_t *len) {
-    if (strcmp(key, s_kv_key) || *len < s_kv_len) return -1;
-    memcpy(buf, s_kv, s_kv_len);
-    *len = s_kv_len;
+    int i = s_kv_find(key);
+    if (!strcmp(key, s_corrupt)) return CALI_KV_CORRUPT;
+    if (i < 0) return CALI_KV_MISSING;
+    if (*len < s_kv[i].len) return -1;
+    memcpy(buf, s_kv[i].val, s_kv[i].len);
+    *len = s_kv[i].len;
     return CALI_KV_OK;
 }
 int cali_kv_set(const char *key, const void *buf, size_t len) {
-    snprintf(s_kv_key, sizeof s_kv_key, "%s", key);
-    memcpy(s_kv, buf, len);
-    s_kv_len = len;
+    if (s_setfail) return -1;
+    int i = s_kv_find(key);
+    for (int k = 0; i < 0 && k < KV_N; k++)
+        if (!s_kv[k].used) i = k;
+    if (i < 0 || len > sizeof s_kv[0].val || strlen(key) >= sizeof s_kv[0].key) return -1;
+    snprintf(s_kv[i].key, sizeof s_kv[i].key, "%s", key);
+    memcpy(s_kv[i].val, buf, len);
+    s_kv[i].len = len;
+    s_kv[i].used = 1;
+    return 0;
+}
+int cali_kv_erase(const char *key) {
+    int i = s_kv_find(key);
+    if (i >= 0) s_kv[i].used = 0;
     return 0;
 }
 void cali_log(const char *fmt, ...) {
@@ -62,6 +93,7 @@ void cali_log(const char *fmt, ...) {
 }
 void cali_lora_port_post(const cali_lora_snap_t *s) { printf("POST %d\n", s->enabled); }
 int cali_lora_port_status(cali_lora_status_t *out) { (void)out; return 0; }
+void cali_lora_port_forgotten(void) {}
 
 static size_t unhex(const char *h, uint8_t *out, size_t cap) {
     size_t n = 0;
@@ -85,13 +117,13 @@ static cali_rak_kind_t kind_of(const char *name) {
 }
 
 int main(void) {
-    static char line[512];
+    static char line[1024];
     static cali_lora_snap_t snap;
     static cali_lora_tracker_t trk;
     static cali_lora_budget_t bud;
     uint32_t picked = 0;
     while (fgets(line, sizeof line, stdin)) {
-        char cmd[16], a[160], b[64];
+        char cmd[16], a[800], b[64];
         unsigned u1, u2, u3, u4;
         unsigned long long ull;
         line[strcspn(line, "\r\n")] = 0;
@@ -167,6 +199,9 @@ int main(void) {
             cali_lora_budget_init(&bud);
         } else if (!strcmp(cmd, "backoff") && sscanf(rest, "%u", &u1) == 1) {
             printf("%u\n", (unsigned)cali_lora_join_backoff_s(u1));
+        } else if (!strcmp(cmd, "stsetup")) {   /* setup, has_ttn_keys, dev_eui for the next stjson */
+            s_steui[0] = 0;
+            sscanf(rest, "%d %d %16s", &s_stsetup, &s_stttn, s_steui);
         } else if (!strcmp(cmd, "stjson")) {
             cali_lora_status_t st = {0};
             unsigned joined, last, air, ch, unc, dl, now;
@@ -175,6 +210,8 @@ int main(void) {
                 continue;
             st.joined = joined, st.last_confirmed_s = last, st.airtime_ms = air, st.charged_ms = ch;
             st.unconfirmed = unc, st.downlinks = dl;
+            st.setup = s_stsetup, st.has_ttn_keys = s_stttn;
+            snprintf(st.dev_eui, sizeof st.dev_eui, "%s", s_steui);
             char buf[512];
             cali_json_t j;
             cali_json_begin(&j, buf, sizeof buf);
@@ -185,9 +222,45 @@ int main(void) {
             cali_lora_console(rest);
         } else if (!strcmp(cmd, "exp")) {
             printf("%d\n", cali_exp_lora());
-        } else if (!strcmp(cmd, "kv")) {   /* what NVS holds, as hex (the keys test) */
-            printf("%s ", s_kv_key);
-            hex(s_kv, s_kv_len);
+        } else if (!strcmp(cmd, "kv") && sscanf(rest, "%63s", b) == 1) {   /* a key's value as hex, or "-" (the keys tests) */
+            int i = s_kv_find(b);
+            printf("%s ", b);
+            if (i < 0) puts("-");
+            else hex(s_kv[i].val, s_kv[i].len);
+        } else if (!strcmp(cmd, "kvset") && sscanf(rest, "%63s %799s", b, a) == 2) {
+            uint8_t v[CALI_LORA_TTN_MAX];
+            cali_kv_set(b, v, unhex(a, v, sizeof v));
+        } else if (!strcmp(cmd, "kvcorrupt")) {
+            s_corrupt[0] = 0;
+            sscanf(rest, "%15s", s_corrupt);
+        } else if (!strcmp(cmd, "setfail") && sscanf(rest, "%u", &u1) == 1) {
+            s_setfail = (int)u1;
+        } else if (!strcmp(cmd, "setupopen")) {
+            printf("%d\n", cali_lora_setup_open(fake_rand));
+        } else if (!strcmp(cmd, "setupstate")) {
+            printf("%d\n", cali_lora_setup_state());
+        } else if (!strcmp(cmd, "forget")) {
+            printf("%d\n", cali_lora_forget());
+        } else if ((!strcmp(cmd, "qr") || !strcmp(cmd, "sqr")) && sscanf(rest, "%u %u %63s", &u1, &u2, b) == 3) {
+            cali_lora_status_t st = {.present = (int)u2};
+            snprintf(st.dev_eui, sizeof st.dev_eui, "%.16s", strcmp(b, "-") ? b : "");
+            char q[400];
+            unsigned max = sizeof q;
+            if (sscanf(rest, "%*u %*u %*s %u", &max) != 1 || max > sizeof q) max = sizeof q;
+            memset(q, 'X', sizeof q);
+            if ((cmd[0] == 's' ? cali_lora_setup_qr_text : cali_lora_qr_text)(q, max, &st, (int)u1)) {
+                printf("QR %s\n", q);
+            } else {
+                size_t i = 0;
+                while (i < max && !q[i]) i++;
+                puts(i == max ? "QR -" : "QR dirty");
+            }
+        } else if (!strcmp(cmd, "notk")) {   /* the confirmation for a fragment without a transfer key */
+            uint8_t c[5];
+            hex(c, cali_lora_confirm_no_tk(c));
+        } else if (!strcmp(cmd, "ttnok") && sscanf(rest, "%799s", a) == 1) {
+            uint8_t v[CALI_LORA_TTN_MAX + 8];
+            printf("%d\n", cali_lora_ttn_ok(v, unhex(a, v, sizeof v)));
         } else if (!strcmp(cmd, "tick") && sscanf(rest, "%llu", &ull) == 1) {
             cali_lora_tick(ull);
         }
