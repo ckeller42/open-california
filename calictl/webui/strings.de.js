@@ -243,8 +243,8 @@ window.STRINGS_DE = {
   "⚠ Grey water tank is full. Please empty.": "⚠ Grauwassertank ist voll. Bitte entleeren.",
   "⚠ Fill level sensor in waste water tank. Please visit a workshop.": "⚠ Füllstandsensor im Abwassertank. Bitte Werkstatt aufsuchen.",
   "⚠ General grey water error. Please visit a workshop.": "⚠ Allgemeiner Grauwasserfehler. Bitte Werkstatt aufsuchen.",
-  "Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?":
-    "Kraftstoffbetriebene Luftstandheizung starten ({w})? Nicht live-verifiziert. Fortfahren?",
+  "Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?":
+    "Kraftstoffbetriebene Luftstandheizung starten? Nicht live-verifiziert. Fortfahren?",
 
   // --- water ---------------------------------------------------------------------------------
   "Fresh water": "Frischwasser",

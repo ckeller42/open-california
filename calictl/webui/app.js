@@ -183,7 +183,7 @@
  * @typedef {{ what: string, label: string, confirm?: ConfirmSpec, disabled?: (s: FnState) => (boolean|string|undefined) }} ControlBase
  * @typedef {ControlBase & { kind: 'toggle', state: keyof FnState, invert?: boolean }} ToggleControl  invert: the switch shows the
  *   opposite of `state` (the unit's own wording); the command still sends the value for `state`
- * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, step?: number, unit?: string }} SliderControl
+ * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, step?: number, unit?: string, fmt?: (v: number) => string }} SliderControl
  * @typedef {ControlBase & { kind: 'select', options: SelectOption[], current?: (s: FnState) => (string|null|undefined) }} SelectControl
  * @typedef {ControlBase & { kind: 'hour', current?: (s: FnState) => number }} HourControl
  * @typedef {ControlBase & { kind: 'time', current?: (s: FnState) => (string|null) }} TimeControl
@@ -837,9 +837,9 @@ const FEATURES = {
   },
   airheater: {
     title: "Air heater", icon: "heater",
-    // Fuel-burning: every START prompts. Turning continuous heating OFF is the one write here that
-    // can't arm anything, and it has its own prompt below — no feature-level one on top.
-    confirm: (w, v) => (w === "permanent" || w === "timer_cancel" ? null : tf("Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?", { w: w })),
+    // Fuel-burning: only a real START prompts — Immediate heating ON and arming the timer. Level,
+    // run time, start time and every OFF write no dialog (ui/screens/air-heater.yaml).
+    confirm: (w, v) => ((w === "power" && v === "on") || w === "timer_start" ? t("Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?") : null),
     controls: [
       // "Immediate heating" = NormalOperation (start now, for `runtime` minutes). Never greyed (app
       // 5.4.0): under ErrorCode 5 the server refuses ON with the app's dialog text; under continuous
@@ -855,7 +855,8 @@ const FEATURES = {
         confirm: (v) => (v === "off" ? t("Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?") : null) },
       // The app's temperature scale is 1–9 + "HI" (level 10); its run-time slider spans 10–120 min
       // (both observed on the app's heater page, tools/applab 2026-09-16).
-      { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: CTL_AIRHEATER_LEVEL_RANGE[0], max: CTL_AIRHEATER_LEVEL_RANGE[1] },
+      { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: CTL_AIRHEATER_LEVEL_RANGE[0], max: CTL_AIRHEATER_LEVEL_RANGE[1],
+        fmt: (/** @type {number} */ v) => (v >= 10 ? "HI" : String(v)) },
       // App 5.4.0 (2026-10-11): 10-min steps, greyed under continuous heating; a change while heating
       // asks first (the app then writes OFF, RunningTime, ON — calictl writes RunningTime only).
       { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 10, max: 120, step: 10, unit: "min",
@@ -874,7 +875,7 @@ const FEATURES = {
         confirm: (b, s) => (b.what === "timer_start" && s && s.permanent ? t("Continuous heating will turn off when the timer ends. Would you like to proceed?") : null) },
     ],
     readouts: [
-      { label: "Heating temperature", get: (s) => (s.level == null ? "—" : s.level >= 10 ? "HI" : `${t("Level")} ${s.level}`) },
+      { label: "Heating temperature", get: (s) => (s.level == null || s.level < 1 ? "—" : s.level >= 10 ? "HI" : `${t("Level")} ${s.level}`) },
       { label: "Run time", get: (s) => withUnit(s.running_time, "min") },
       // RunningTimeinAction only counts down while heating; parked it just echoes the configured
       // run time (60 = 60 live), which would read as "60 min left" on an idle heater.
@@ -3871,7 +3872,12 @@ function renderControl(fn, c, s) {
     sw.onclick = () => fire(lit ? "off" : "on");
     row.appendChild(sw);
   } else if (c.kind === "slider") {
-    const val = optNum(fn, c.what, /** @type {number} */ (s[c.state] != null ? s[c.state] : c.min));
+    // Clamp to [min, max]: a value off the scale (the unit's HeatingLevel 0) parks the thumb at min
+    // and reads "—", never "0" below the control's own minimum.
+    const raw = optNum(fn, c.what, /** @type {number} */ (s[c.state] != null ? s[c.state] : c.min));
+    const val = Math.min(c.max, Math.max(c.min, raw));
+    /** @param {number|string} v */
+    const shown = (v) => (c.fmt ? c.fmt(Number(v)) : v) + (c.unit ? " " + c.unit : "");
     const inp = document.createElement("input");
     inp.type = "range";
     inp.min = /** @type {any} */ (c.min);
@@ -3881,8 +3887,8 @@ function renderControl(fn, c, s) {
     inp.disabled = ro;
     const out = document.createElement("span");
     out.className = "sval";
-    out.textContent = val + (c.unit ? " " + c.unit : "");
-    inp.oninput = () => (out.textContent = inp.value + (c.unit ? " " + c.unit : ""));
+    out.textContent = raw === val ? shown(val) : "—";
+    inp.oninput = () => (out.textContent = shown(inp.value));
     inp.onchange = () => fire(Number(inp.value));
     row.appendChild(inp);
     row.appendChild(out);
