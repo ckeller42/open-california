@@ -1797,7 +1797,9 @@ with it the router) is a later step.
   and firmware version) daily and after each join. The formatter returns raw fields only, so the
   reader interprets them with `semantics.js` like the WiFi path.
 - **Honest status:** airtime counts as on air only when the module confirms a send with
-  `+EVT:TX_DONE`; a send without it is charged to the budget but shown apart, and its port 3 functions
+  `+EVT:TX_DONE`; a send without it is charged to the budget but shown apart (so is each join request: 23 B, 1482 ms
+  at SF12; with no room the join waits, `note` "join waits: airtime budget"; without stored keys no
+  join is sent, `note` "no keys: console lora keys"), and its port 3 functions
   and port 4 stay pending. With 8 downlinks in the last 24 h no uplink goes out until one ages out. Three AT commands in a
   row without an answer reset the module and drop `joined`; while it stays silent the task retries every
   10 min. A spike bench run showed why: a hung module that the old firmware counted as "sending"

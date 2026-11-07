@@ -27,6 +27,7 @@
 #define RAK_BAUD 115200
 #define TX_DONE_MS 15000
 #define JOIN_WAIT_MS 30000
+#define JOIN_REQUEST_LEN 23u   /* PHY bytes of a LoRaWAN 1.0.x join request */
 #define SILENT_RETRY_S 600
 #define TASK_STACK 6144
 
@@ -177,10 +178,11 @@ static void hexs(char *out, const uint8_t *b, size_t n) {
 }
 
 /* The stored DevEUI/JoinEUI/AppKey into the module, each only when it differs; before every join
- * attempt, so `lora keys` takes effect without a reboot. */
-static void apply_keys(void) {
+ * attempt, so `lora keys` takes effect without a reboot. false = no stored keys (no join then). */
+static bool apply_keys(void) {
     uint8_t k[32];
     size_t n = sizeof k;
+    bool ok = false;
     if (cali_kv_get(CALI_LORA_KEYS_KEY, k, &n) == CALI_KV_OK && n == sizeof k) {
         char h[33];
         hexs(h, k, 8);
@@ -190,10 +192,12 @@ static void apply_keys(void) {
         hexs(h, k + 16, 16);
         set_if_differs("APPKEY", h);
         memset(h, 0, sizeof h);
+        ok = true;
     } else {
         s_st.note = "no keys: console lora keys";
     }
     memset(k, 0, sizeof k);
+    return ok;
 }
 
 /* Find and configure the module. false = it does not answer AT. */
@@ -221,8 +225,14 @@ static void join(void) {
     while (!s_st.joined && s_on && s_silent < CALI_LORA_SILENT_MAX) {
         s_st.note = "joining";
         publish();
-        apply_keys();
-        if (s_on && at("AT+JOIN=1:0:8:1", 2000).kind == CALI_RAK_OK) {
+        bool keys = apply_keys();
+        read_sf();
+        /* a join request is an uplink too: 23 B on air (MHDR, JoinEUI, DevEUI, DevNonce, MIC), charged
+         * to the airtime budget like any send; no room = no attempt, the backoff below waits */
+        uint32_t join_ms = cali_lora_airtime_ms(JOIN_REQUEST_LEN, (unsigned)s_st.sf);
+        bool room = cali_lora_uplink_room_ms(&s_bud, (uint32_t)(cali_uptime_ms() / 1000)) >= join_ms;
+        if (keys && room && s_on && at("AT+JOIN=1:0:8:1", 2000).kind == CALI_RAK_OK) {
+            cali_lora_uplink_add(&s_bud, (uint32_t)(cali_uptime_ms() / 1000), join_ms, 0);
             cali_rak_event_t e;
             TickType_t end = xTaskGetTickCount() + pdMS_TO_TICKS(JOIN_WAIT_MS);
             while (xTaskGetTickCount() < end && s_on) {
@@ -237,7 +247,7 @@ static void join(void) {
             return;
         }
         if (s_silent >= CALI_LORA_SILENT_MAX) return;   /* the watchdog in the task loop resets */
-        s_st.note = "join failed";
+        s_st.note = !keys ? "no keys: console lora keys" : !room ? "join waits: airtime budget" : "join failed";
         publish();
         /* the backoff: one second at a time, taking each new snapshot (the 1-deep queue is always full,
          * so a peek would return at once and spin) */
