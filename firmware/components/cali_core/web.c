@@ -20,6 +20,8 @@
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_sdlog.h"
+#include "cali_energy.h"
+#include "cali_lora.h"
 #include "cali_sensors.h"
 #include "cali_session.h"
 #include "cali_time.h"
@@ -324,11 +326,19 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_json_key(&j, "enabled");
     cali_json_bool(&j, ux_on());
     cali_json_obj_end(&j);
-    cali_json_key(&j, "experimental");   /* the sensor track switch (R_FW_EXPERIMENTAL) */
+    cali_json_key(&j, "experimental");   /* the sensor track and LoRa switches (R_FW_EXPERIMENTAL, R_FW_LORA) */
     cali_json_obj_begin(&j);
     cali_json_key(&j, "sensors");
     cali_json_bool(&j, cali_exp_sensors());
+    cali_json_key(&j, "lora");
+    cali_json_bool(&j, cali_exp_lora());
     cali_json_obj_end(&j);
+    cali_json_key(&j, "energy");   /* Wh since boot + the house load (R_FW_ENERGY_COUNTERS) */
+    cali_energy_json(&j);
+    if (cali_exp_lora()) {   /* the LoRa link (R_FW_LORA): absent while the switch is off */
+        cali_json_key(&j, "lora");
+        cali_lora_json(&j);
+    }
     cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
     cali_json_bool(&j, cali_session_water_held());
     uint64_t wg = cali_session_water_good_ms();   /* adopted on this boot; NVS restore has no time */
@@ -821,7 +831,10 @@ static int bool_field(cursor_t *c, int i, void *ctx) {
     return parse_bool(c, ctx);
 }
 
-static const char *const K_CHANNEL[] = {"channel"}, *const K_ENABLED[] = {"enabled"}, *const K_SENSORS[] = {"sensors"};
+static const char *const K_CHANNEL[] = {"channel"}, *const K_ENABLED[] = {"enabled"};
+/* POST /api/experimental: exactly one of the switches per body (R_FW_EXPERIMENTAL, R_FW_LORA) */
+static const char *const K_EXPERIMENTAL[] = {"sensors", "lora"};
+static int exp_field(cursor_t *c, int i, void *ctx) { return parse_bool(c, &((int *)ctx)[i]); }
 
 /* ---- POST /api/ota {"action":"check"|"install"} | {"channel":"stable"|"latest"} (R_FW_OTA): station
  * mode only, like /api/command. The channel is stored at once (the next check uses it), even on a
@@ -1442,19 +1455,22 @@ static void api_ux_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
 
 /* ---- POST /api/experimental {"sensors":<bool>}: the Satellite settings sensor-track switch, station only ---- */
 static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp) {
-    int on;
+    int v[2] = {0, 0}, seen = -1;
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
         SET_CONST(resp, 403, ERR_SETUP_MODE);
-    } else if (parse_body(req->body, req->body_len, K_SENSORS, 1, bool_field, &on) != 1) {
+    } else if ((seen = parse_body(req->body, req->body_len, K_EXPERIMENTAL, 2, exp_field, v)) != 1 && seen != 2) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
-    } else if (cali_exp_sensors_set(on) != 0) {
+    } else if ((seen == 1 ? cali_exp_sensors_set(v[0]) : cali_exp_lora_set(v[1])) != 0) {
         SET_CONST(resp, 500, ERR_STORE);
-    } else if (on) {
-        SET_CONST(resp, 200, "{\"ok\":true,\"sensors\":true}");
+    } else if (seen == 1) {
+        if (v[0]) SET_CONST(resp, 200, "{\"ok\":true,\"sensors\":true}");
+        else SET_CONST(resp, 200, "{\"ok\":true,\"sensors\":false}");
+    } else if (v[1]) {
+        SET_CONST(resp, 200, "{\"ok\":true,\"lora\":true}");
     } else {
-        SET_CONST(resp, 200, "{\"ok\":true,\"sensors\":false}");
+        SET_CONST(resp, 200, "{\"ok\":true,\"lora\":false}");
     }
 }
 
