@@ -484,7 +484,7 @@ function rsRepairQr(text) {
   const cfg = { ...r };
   const seam = rsSeam();
   if (seam) cfg.base = seam;
-  remoteSave(REMOTE_CFG_KEY, cfg);
+  if (!remoteSave(REMOTE_CFG_KEY, cfg)) { rsMsg = REMOTE_STORE_MSG; rsRefresh(); return; }   // as rsSetupQr: name the storage cause
   // the van shows this code once it has the keys: a setup still waiting here (a lost confirmation) is over
   try { localStorage.removeItem(REMOTE_SETUP_KEY); } catch (e) { /* storage blocked */ }
   rsMsg = "";

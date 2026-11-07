@@ -1339,6 +1339,7 @@ async function remotePoll() {
     // the van changed while the read was out (removed, a repair QR): its answer is dropped, the next tick reads anew
     if (e instanceof RemoteStale) { remoteAt = 0; throw e; }
     remoteProblem = "ttn";
+    remoteAt = Date.now() - REMOTE_POLL_MS + 30000;   // a failed read: try again in 30 s, not after the full interval
     // nothing on screen yet (no snapshot restored): the frames stored with the last read, with their ages
     const b = !STATE._meta && remoteCached(cfg, Date.now());
     if (b) { STATE = /** @type {State} */ (adaptSatellite(b, Date.now())); stateAt = Date.now(); render(); }
