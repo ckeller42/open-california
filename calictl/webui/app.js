@@ -3484,7 +3484,13 @@ function renderDashboard() {
     tile.innerHTML = (alertMsg ? `<div class="tbadge">⚠</div>` : "") +
       `<div class="ti">${iconSvg(f.icon)}</div><div class="tt">${t(f.title)}</div>` +
       `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>`;
-    if (alertMsg) tile.title = alertMsg;
+    if (alertMsg) {
+      const msg = /** @type {string} */ (t(alertMsg));
+      tile.title = msg;   // pointer hover; touch and VoiceOver get the cause from the accessible name
+      const val = tile.querySelector(".tv")?.textContent || "";   // keep the value in the name too
+      // a fault the value already names (cooler, heater, roof) is not spoken twice
+      tile.setAttribute("aria-label", [t(f.title), val, val.includes(msg) ? "" : msg].filter(Boolean).join(". "));
+    }
     tile.onclick = () => goto(fn);
     grid.appendChild(tile);
   }
@@ -3843,6 +3849,9 @@ function renderControl(fn, c, s) {
       : (typeof offReason === "string" ? t(offReason) : "");
     if (why) row.title = why;
   }
+  // The state's reason also shows as text under the row: a title never shows on a touch tap and
+  // VoiceOver does not speak it. (Read-only mode keeps only the title: it is the same on every row.)
+  const whyText = !readOnly() && typeof offReason === "string" ? /** @type {string} */ (t(offReason)) : "";
   // fire() applies a per-control "not verified" confirm (c.confirm) on top of the feature-level
   // one in act(); c.confirm(value) returns the prompt, or null/false to skip.
   /** @param {string|number} val */
@@ -3909,7 +3918,9 @@ function renderControl(fn, c, s) {
     const inp = document.createElement("input");
     inp.type = "time";
     inp.disabled = ro;
-    if (c.current && c.current(s)) inp.value = /** @type {string} */ (c.current(s));
+    // through the optimistic overlay: a re-render while the command is in flight keeps the sent time
+    const cur = optSel(fn, c.what, c.current ? c.current(s) : null);
+    if (cur) inp.value = /** @type {string} */ (cur);
     inp.onchange = () => { if (inp.value) fire(inp.value); };
     row.appendChild(inp);
   } else if (c.kind === "buttons") {             // momentary action buttons (cooler on/off timer)
@@ -3929,6 +3940,14 @@ function renderControl(fn, c, s) {
       grp.appendChild(btn);
     }
     row.appendChild(grp);
+  }
+  if (whyText) {
+    const why = document.createElement("div");
+    why.className = "ctl-why";
+    why.id = "why-" + fn + "-" + c.what;
+    why.textContent = whyText;
+    row.appendChild(why);
+    for (const el of row.querySelectorAll("button, input, select")) el.setAttribute("aria-describedby", why.id);
   }
   return row;
 }
