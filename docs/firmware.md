@@ -944,6 +944,10 @@ record buffer) and the lwIP/WiFi buffers (`CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP`
 buffers) in PSRAM. With IDF's defaults they live in internal RAM, and large `/` and `/api/log`
 responses plus a download exhaust the internal heap (a failed download, dropped `/api/log` pages)
 while the 8 MB PSRAM sits unused ([evidence ledger](business-logic/evidence-ledger.md)).
+AES runs in software (`CONFIG_MBEDTLS_HARDWARE_AES=n`): the hardware AES would need internal
+{term}`DMA bounce buffers <DMA bounce buffer>` (up to 8 KB in and out) for each TLS record in PSRAM, and with about 21–26 KB of
+internal heap free that allocation fails and the download stops at 0 % (`esp-aes: Failed to
+allocate memory`, then `ota error: download`). At 240 MHz software AES is as fast.
 
 ## Time (`R_FW_TIME`)
 
@@ -2031,8 +2035,8 @@ record's `stack_min`. Its high-water mark on the van is 5180 B free of 8192.
 
 **Memory and network.** `CONFIG_SPIRAM=y` (8 MB, quad, 80 MHz); mbedTLS and the lwIP/WiFi buffers
 in PSRAM (`CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`, `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP`, 8 static WiFi
-TX buffers) so the internal heap is not exhausted
-([Firmware update from GitHub](#firmware-update-from-github-r_fw_ota)); `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040`
+TX buffers) so the internal heap is not exhausted, and software AES (`CONFIG_MBEDTLS_HARDWARE_AES=n`,
+no internal DMA buffers) ([Firmware update from GitHub](#firmware-update-from-github-r_fw_ota)); `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040`
 (the UI transfer speed, [Endpoints](#network-wifi-setup-and-the-web-ui)); `CONFIG_LWIP_MAX_SOCKETS=6`;
 `CONFIG_ESP_WIFI_NVS_ENABLED=n` (the credentials are in the firmware's kv store);
 `CONFIG_LWIP_DHCP_GET_NTP_SRV=y` with two SNTP servers ([Time](#time-r_fw_time)).

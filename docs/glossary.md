@@ -34,6 +34,11 @@ EEPROM
   The Raspberry Pi 4 bootloader's settings store (`rpi-eeprom-config`); `WAKE_ON_GPIO=1` with
   `POWER_OFF_ON_HALT=0` keeps a halted Pi wakeable through GPIO3.
 
+DMA bounce buffer
+  A temporary copy in internal RAM that a hardware block such as the ESP32-S3's AES unit reads
+  from or writes to, because its DMA cannot use the data where it lies (in PSRAM). The driver
+  allocates it per operation, so it fails when the internal heap has no free block of that size.
+
 gpio-shutdown
   The Raspberry Pi device-tree overlay that turns a GPIO pulled low into a power-key press, so
   logind shuts the Pi down cleanly.
