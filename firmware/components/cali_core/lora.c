@@ -397,11 +397,18 @@ int cali_lora_setup_open(cali_lora_rand_fn rnd) {
     return rc;
 }
 
-int cali_lora_forget(void) {
-    int rc = cali_exp_lora_set(0) != 0 ? -1 : 0;   /* the switch first: a failing erase never leaves it on */
+int cali_lora_erase_keys(void) {
     static const char *const KEYS[] = {CALI_LORA_DEV_KEY, CALI_LORA_TK_KEY, CALI_LORA_TTN_KEY, CALI_LORA_KEYS_KEY};
+    int rc = 0;
     for (size_t i = 0; i < sizeof KEYS / sizeof *KEYS; i++)
         if (cali_kv_erase(KEYS[i]) != 0) rc = -1;
+    return rc;
+}
+
+int cali_lora_forget(void) {
+    int rc = cali_exp_lora_set(0) != 0 ? -1 : 0;   /* the switch first: a failing erase never leaves it on */
+    if (cali_lora_erase_keys() != 0) rc = -1;
+    cali_lora_port_forgotten();   /* the LoRa task erases again after a key write it may have had under way */
     return rc;
 }
 

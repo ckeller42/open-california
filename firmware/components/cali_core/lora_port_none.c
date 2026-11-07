@@ -25,3 +25,5 @@ int cali_lora_port_setup_qr(char *out, size_t max) {
 void cali_lora_port_setup_request(void) {}
 
 int cali_lora_port_setup_pending(void) { return 0; }
+
+void cali_lora_port_forgotten(void) {}

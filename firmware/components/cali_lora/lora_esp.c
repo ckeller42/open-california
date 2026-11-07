@@ -58,6 +58,7 @@ static volatile bool s_on;   /* the newest snapshot's switch, set by the owner t
  * value it served only after a successful open, so a request made during an open is never lost and a
  * failed open stays pending (retried on the next pass). */
 static atomic_uint s_setup_req, s_setup_done;
+static atomic_bool s_forgot;   /* cali_lora_forget() ran: the next pass with the switch off erases the keys again */
 #define SETUP_FAIL_LOG_MS 60000u   /* at most one "setup: store failed" line per minute while a request is pending */
 static cali_lora_xfer_t s_xfer;     /* the key transfer in progress (ciphertext only) */
 static uint8_t s_confirm[6];        /* the pending FPort-12 confirmation */
@@ -112,6 +113,8 @@ int cali_lora_port_setup_pending(void) { return setup_pending(); }
 void cali_lora_port_setup_request(void) {
     atomic_fetch_add(&s_setup_req, 1);
 }
+
+void cali_lora_port_forgotten(void) { atomic_store(&s_forgot, true); }
 
 /* ---- the AT driver ---- */
 
@@ -240,6 +243,14 @@ static void xfer_rx(const cali_rak_event_t *e) {
     }
     uint8_t tk_id[4];
     cali_lora_sha256_4(tk, sizeof tk, tk_id);
+    if (s_confirm_len && s_confirm[0] == 0 && memcmp(s_confirm_tk, tk_id, sizeof tk_id) == 0) {
+        /* this transfer key's transfer is done and its status 0 still waits to go out: a fragment now is the
+         * app's probe or resend of it, never a new transfer (the app sends a new one only with a new key) */
+        cali_log("lora: transfer fragment after the transfer finished: status 0 kept");
+        cali_wipe(tk, sizeof tk);
+        cali_wipe(tk_id, sizeof tk_id);
+        return;
+    }
     int r = cali_lora_xfer_rx(&s_xfer, e->payload, e->payload_len, tk, eui, cali_lora_aead_open_psa, plain,
                               &plain_len, confirm, &confirm_len);
     cali_wipe(tk, sizeof tk);
@@ -360,8 +371,12 @@ static int setup_open(void) {
     size_t nb = sizeof before, na = sizeof after;
     int had = cali_kv_get(CALI_LORA_DEV_KEY, before, &nb) == CALI_KV_OK && nb == sizeof before;
     static uint64_t s_fail_log_ms;   /* the last "store failed" line, 0 = none since the last good open */
-    int changed = -1;
-    if (cali_lora_setup_open(esp_fill_random) != 0) {
+    static bool s_new_appkey;        /* a failed open stored a new AppKey already: the open that succeeds rejoins */
+    int changed = -1, rc = cali_lora_setup_open(esp_fill_random);
+    bool differs = cali_kv_get(CALI_LORA_DEV_KEY, after, &na) == CALI_KV_OK && na == sizeof after &&
+                   (!had || memcmp(before, after, 16) != 0);
+    if (rc != 0) {
+        s_new_appkey |= differs;
         uint64_t now = cali_uptime_ms();   /* retried every pass (~1 s) while pending: one line per SETUP_FAIL_LOG_MS */
         if (!s_fail_log_ms || now - s_fail_log_ms >= SETUP_FAIL_LOG_MS) {
             cali_log("lora: setup: store failed");
@@ -369,8 +384,8 @@ static int setup_open(void) {
         }
     } else {
         s_fail_log_ms = 0;
-        changed = !had || cali_kv_get(CALI_LORA_DEV_KEY, after, &na) != CALI_KV_OK || na != sizeof after ||
-                  memcmp(before, after, 16) != 0;
+        changed = differs || s_new_appkey;
+        s_new_appkey = false;
         cali_log("lora: setup opened%s", changed ? " (new AppKey: join again)" : "");
     }
     cali_wipe(before, sizeof before);
@@ -477,16 +492,18 @@ static void erase_tk_if(const uint8_t *tk_id) {
     cali_wipe(id, sizeof id);
 }
 
-/* The pending key-transfer confirmation: on every pass while the 24-h airtime budget has room, ahead of
- * ports 2/3/4. A send without +EVT:TX_DONE waits CONFIRM_RETRY_S; after CONFIRM_TRIES of them the
+/* The pending key-transfer confirmation: on every pass while the 24-h airtime and downlink budgets have room,
+ * ahead of ports 2/3/4. A send without +EVT:TX_DONE waits CONFIRM_RETRY_S; after CONFIRM_TRIES of them the
  * confirmation is dropped and the transfer key kept (the app sends again). After a confirmed status 0
  * the transfer key it answers is erased. */
 static void send_confirm(uint32_t now) {
     uint8_t c[6], tk_id[4];
     size_t n = s_confirm_len;
     unsigned seq = s_confirm_seq;
+    /* no room in either budget: wait, it is no send attempt (the confirmation stays until there is room) */
     if (!n || now < s_confirm_retry_at ||
-        cali_lora_uplink_room_ms(&s_bud, now) < cali_lora_airtime_ms((unsigned)n + CALI_LORA_OVERHEAD, (unsigned)s_st.sf))
+        cali_lora_uplink_room_ms(&s_bud, now) < cali_lora_airtime_ms((unsigned)n + CALI_LORA_OVERHEAD, (unsigned)s_st.sf) ||
+        cali_lora_downlinks_used(&s_bud, now) >= CALI_LORA_DOWNLINKS)
         return;
     memcpy(c, s_confirm, n);
     memcpy(tk_id, s_confirm_tk, sizeof tk_id);
@@ -524,6 +541,8 @@ static void lora_task(void *arg) {
             s_have_keys = false;
             cali_lora_xfer_reset(&s_xfer);
             if (s_confirm_len) confirm_clear();
+            /* this task is the only key writer: a write of its own that raced the forget is gone after this */
+            if (atomic_exchange(&s_forgot, false) && cali_lora_erase_keys() != 0) cali_log("lora: forget: store failed");
             continue;
         }
         if (!ready || s_silent >= CALI_LORA_SILENT_MAX) {
@@ -557,7 +576,9 @@ static void lora_task(void *arg) {
             }
         }
         if (!s_st.joined) {
-            if (!s_have_keys) {   /* nothing to join with until the LoRa screen opens the setup */
+            /* nothing to join with until the LoRa screen opens the setup or `lora keys` stores bench keys;
+             * the store is read again each pass, so either takes effect without a restart */
+            if (!s_have_keys && !apply_keys()) {
                 publish();
                 continue;
             }

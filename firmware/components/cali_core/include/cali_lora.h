@@ -527,6 +527,14 @@ int cali_lora_port_setup_qr(char *out, size_t max);
  * @return 1 while a request waits or runs, else 0.
  */
 int cali_lora_port_setup_pending(void);
+
+/**
+ * @brief cali_lora_forget() has erased the keys; any task. The LoRa task is the only writer of `lora_dev`,
+ *        `lora_tk` and `lora_ttn`: on its next pass with the switch off it erases them once more, after any
+ *        write it had under way, so a key write that raced the forget never survives it. A no-op without a
+ *        module driver.
+ */
+void cali_lora_port_forgotten(void);
 /**
  * @brief Ask the LoRa task to open the setup (cali_lora_setup_open(): a new transfer key, the AppKey once);
  *        any task. The LoRa task does it at its next pass with the module present and the switch on, and

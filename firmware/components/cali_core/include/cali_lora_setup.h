@@ -24,15 +24,18 @@
  *    app_len(1) | app_id | dev_len(1) | dev_id | read_key(58) | cmd_key(58)``; the cluster is at most 64
  *    characters, the app ID and the device ID at most 36. It shall travel on FPort 12 as AES-128-GCM
  *    ciphertext (12-byte nonce, 16-byte tag, the DevEUI as associated data) cut into fragments of at most
- *    50 bytes, each ``seq(1)`` (bit 7 = last, bits 0..2 = index) followed by the bytes. The confirmation
+ *    51 bytes, each ``seq(1)`` (bit 7 = last, bits 0..2 = index) followed by the bytes: exactly 50 in every
+ *    fragment but the last, 1 to 50 in the last. The confirmation
  *    uplink on FPort 12 shall be ``status(1) | sha256(plaintext)[0..3]``: status 0 ok, 1 bad tag; status 2
  *    (missing fragments) is ``02 | bitmap`` with bit ``i`` set for every received index ``i``; a fragment
  *    that arrives without a transfer key is answered ``00 | sha256(lora_ttn)[0..3]`` when ``lora_ttn`` is
- *    stored (a lost status-0 confirmation is sent again), else status 3 (``03``). A new setup start clears
+ *    stored (a lost status-0 confirmation is sent again), else status 3 (``03``); a fragment that arrives
+ *    while the status-0 confirmation of its transfer key is still pending keeps that confirmation. A new setup start clears
  *    only a pending status-2 confirmation. ``lora_ttn`` shall be stored only
  *    from a plaintext with a valid tag that fits ``lora_ttn`` and encodes as the repair QR (else status 1).
- *    The confirmation shall go out as soon as the 24-h airtime budget has room, ahead of ports 2/3/4; a
- *    send without ``+EVT:TX_DONE`` is repeated after at least 60 s, at most 5 times, then dropped.
+ *    The confirmation shall go out as soon as the 24-h airtime and downlink budgets have room, ahead of ports
+ *    2/3/4 (a wait for room is no send); a send without ``+EVT:TX_DONE`` is repeated after at least 60 s, at
+ *    most 5 times, then dropped. No fragment byte shall reach a log line.
  *    ``lora_tk`` shall be erased after a status-0 confirmation that the module confirmed with
  *    ``+EVT:TX_DONE``, and only while it is still the key of that transfer. The display shall show the setup QR (the module's DevEUI) until
  *    ``lora_ttn`` exists, then the repair QR, and none while ``exp_lora`` is off or the module is absent. The setup
