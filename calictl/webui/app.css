@@ -20,6 +20,8 @@
 * { box-sizing: border-box; }
 body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased; }
+/* Safari: follow the iOS text-size setting (Dynamic Type); other engines drop this line */
+@supports (font: -apple-system-body) { body { font: -apple-system-body; } }
 
 #topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: .6rem;
   padding: .9rem 1rem; background: var(--bg); border-bottom: 1px solid var(--border);
@@ -35,7 +37,7 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 @media (display-mode: standalone) {
   #topbar { padding-top: calc(1.9rem + env(safe-area-inset-top)); }
 }
-#topbar h1 { font-size: 1.15rem; font-weight: 650; margin: 0; }
+#topbar h1 { font-size: 1.15rem; font-weight: 650; margin: 0; min-width: 0; overflow-wrap: anywhere; }   /* large text: wrap, never push ⋮ off-screen */
 /* the heading is focused programmatically on navigation (a11y); don't flash a ring for that,
    but keep it for genuine keyboard focus. */
 #title:focus:not(:focus-visible) { outline: none; }
@@ -52,14 +54,15 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
   padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
 
 /* dashboard tiles */
-.tilegrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .8rem; }
+/* two columns, one once large text makes a tile wider than half the row */
+.tilegrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(9rem, calc(50% - .4rem))), 1fr)); gap: .8rem; }
 .tile { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 1rem;
   box-shadow: var(--shadow); cursor: pointer; text-align: left; color: inherit; display: grid; gap: .15rem;
   transition: transform .08s ease; }
 .tile:active { transform: scale(.98); }
 .tile { position: relative; }
 /* a feature with an active fault/alert (cooler door, roof child-lock, ...) */
-.tile.alert { border-color: var(--warn, #c47d00); box-shadow: 0 0 0 1px var(--warn, #c47d00) inset, var(--shadow); }
+.tile.alert { border-color: var(--warn-text); box-shadow: 0 0 0 1px var(--warn-text) inset, var(--shadow); }   /* 3:1 on --card */
 .tile .tbadge { position: absolute; top: .5rem; right: .6rem; font-size: 1rem; line-height: 1; }
 .tile .ti { line-height: 1; }
 .tile .ti svg { width: 1.75rem; height: 1.75rem; display: block; }
@@ -148,6 +151,7 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 .switch { flex: none; width: 52px; height: 31px; border-radius: 999px; background: var(--track-off);
   position: relative; border: 0; cursor: pointer; transition: background .18s ease; }
 .switch[aria-checked="true"] { background: var(--accent); }
+.switch::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }   /* 44 px hit band */
 .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 25px; height: 25px;
   border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: left .18s ease; }
 .switch[aria-checked="true"]::after { left: 24px; }
@@ -162,10 +166,10 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
 .sval { min-width: 1.6rem; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* segmented multi-choice + momentary action buttons */
-.segmented { display: inline-flex; flex-wrap: wrap; gap: 3px; margin-left: auto; }
+.segmented { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 .seg { font: inherit; font-size: .82rem; padding: .34rem .62rem; border-radius: 999px;
   border: 1px solid var(--border); background: var(--card); color: var(--fg); cursor: pointer;
-  transition: background .15s ease, color .15s ease, border-color .15s ease; }
+  min-height: 44px; transition: background .15s ease, color .15s ease, border-color .15s ease; }
 .seg.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .seg:disabled { opacity: .5; cursor: not-allowed; }
 
@@ -173,13 +177,14 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
 .row select, .row input[type=time], .row input[type=text] { font: inherit; margin-left: auto; padding: .3rem .5rem;
   border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--fg);
   font-variant-numeric: tabular-nums; }
+.row select, .row input[type=time] { min-height: 44px; }
 .row input[type=time]:disabled, .row select:disabled, input[type=range]:disabled { opacity: .5; cursor: not-allowed; }
 .row input[type=text] { max-width: 8rem; letter-spacing: .15em; }
 label.row { cursor: pointer; }
 
 /* buttons (roof) */
 .btnrow { display: flex; gap: .5rem; padding: .8rem 0; }
-.btn { flex: 1; padding: .6rem; border-radius: 10px; border: 1px solid var(--border);
+.btn { flex: 1; min-height: 44px; padding: .6rem; border-radius: 10px; border: 1px solid var(--border);
   background: var(--bg); color: inherit; cursor: pointer; }
 .btn.danger { color: var(--danger); }   /* Device status: Unpair… */
 #pairing-card { scroll-margin-top: calc(env(safe-area-inset-top) + 4.5rem); }   /* clear the sticky topbar */
@@ -198,7 +203,7 @@ label.row { cursor: pointer; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* toasts */
-#toasts { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%);
+#toasts { position: fixed; left: 50%; bottom: calc(1.2rem + env(safe-area-inset-bottom)); transform: translateX(-50%);
   display: grid; gap: .5rem; z-index: 20; width: max-content; max-width: 92vw; max-height: 50vh; overflow-y: auto; }
 .toast { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--muted);
   border-radius: 12px; padding: .7rem 1rem; box-shadow: var(--shadow); font-size: .92rem;
@@ -240,7 +245,7 @@ label.row { cursor: pointer; }
 
 /* Warning banner — untested firmware / plausibility-anchor violations (possible decode drift). */
 .fwwarn { margin-bottom: .9rem; padding: .7rem 1rem; border-radius: 12px; font-size: .85rem;
-  background: color-mix(in srgb, var(--warn) 14%, var(--card)); color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, var(--card)); color: var(--warn-text);
   border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border)); }
 
 /* inferred/unverified lamp identity marker on the Lighting screen */
@@ -250,10 +255,19 @@ label.row { cursor: pointer; }
 /* persistent-session status pill (read-only) */
 .session-pill { display: inline-block; font-size: .72rem; color: var(--muted); font-family: inherit;
   background: none; border: 1px solid var(--border); border-radius: 999px; padding: .1rem .6rem;
-  margin-bottom: .6rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  margin-bottom: .6rem; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  justify-self: start; }   /* a grid child of #app: do not stretch to a full-width banner */
 .session-pill:disabled { opacity: .5; cursor: default; }
-.session-pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
-.session-pill.busy { color: var(--accent); }
+.session-pill.ok { color: var(--ok-text); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.session-pill.busy { color: var(--accent-text); }
+
+/* calm the motion when the user asks for it; the spinner slows but keeps turning (it means "busy") */
+@media (prefers-reduced-motion: reduce) {
+  .tile, .bar .fill, .switch, .switch::after, .seg { transition: none; }
+  .tile:active, .fav.filled:active { transform: none; }
+  .toast { animation: none; }
+  .spinner { animation-duration: 2s; }
+}
 
 #menu { font-size: 1.4rem; line-height: 1; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0;
   min-width: 44px; min-height: 44px; margin: -.6rem -.5rem -.6rem 0; }   /* 44 px hit area without growing the topbar */
