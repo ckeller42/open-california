@@ -469,6 +469,8 @@ in setup mode the hotspot SSID and passphrase. The full row table with the Germa
 
 ### Remote screen check (`screenshot`)
 
+Never commit a capture of the setup screen: it shows the hotspot password.
+
 On a CoreS3 build the console command `screenshot` streams the live screen as `[SHOT 320 240 RLE16 <n>]`,
 base64 lines of 76 characters, `[/SHOT]` (kws-de's format). Capture the serial log, then
 `python -m tools.esp_shot decode <log> <out_dir>` writes one PNG per frame. Refusals are

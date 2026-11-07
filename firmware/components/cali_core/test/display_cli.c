@@ -11,17 +11,27 @@
 #include <string.h>
 
 #include "cali_display_model.h"
+#include "cali_platform.h"
 
 static const char *dot_name(cali_dot_t d) {
     return d == CALI_DOT_GREEN ? "green" : d == CALI_DOT_AMBER ? "amber" : d == CALI_DOT_RED ? "red" : "grey";
 }
 
+/* a "\n" inside a text is printed as the two characters backslash n: one case, one output line */
+static void put_text(const char *s) {
+    for (; *s; s++) {
+        if (*s == '\n') fputs("\\n", stdout);
+        else putchar(*s);
+    }
+}
+
 static void put_row(const char *name, const cali_row_t *r) { printf("%s=%s|%s ;; ", name, dot_name(r->dot), r->text); }
 
-int main(void) {
+int main(int argc, char **argv) {
     char line[1024];
     cali_display_model_t m;
     uint8_t swallow = 0;
+    if (cali_platform_init(argc > 1 ? argv[1] : NULL) != 0) return 1;
     cali_display_model_init(&m);
     while (fgets(line, sizeof line, stdin)) {
         cali_status_t s;
@@ -31,6 +41,7 @@ int main(void) {
         cali_display_in_t in = {-1, -1, 0, 0, CALI_BATT_UNKNOWN, 0, {0, 0, 0}};
         cali_display_cfg_t cfg = CALI_DISPLAY_CFG_DEFAULT;
         char *tok;
+        char apqr[CALI_QR_TEXT_MAX] = "";
         line[strcspn(line, "\r\n")] = 0;
         if (!strncmp(line, "fit=", 4)) {  /* the UTF-8-safe cut on its own: fit=<text> */
             char dst[CALI_ROW_TEXT_MAX];
@@ -61,6 +72,9 @@ int main(void) {
             else if (!strcmp(tok, "wstate")) s.wifi_state = (uint8_t)atoi(val);
             else if (!strcmp(tok, "ssid")) snprintf(s.ssid, sizeof s.ssid, "%s", val);
             else if (!strcmp(tok, "ip")) s.ip = (uint32_t)strtoul(val, NULL, 10);
+            else if (!strcmp(tok, "apssid")) snprintf(s.ap_ssid, sizeof s.ap_ssid, "%s", val);
+            else if (!strcmp(tok, "apqr")) snprintf(apqr, sizeof apqr, "%s", val);
+            else if (!strcmp(tok, "pending")) s.setup_pending = (uint8_t)atoi(val);
             else if (!strcmp(tok, "rssi")) s.rssi = atoi(val);
             else if (!strcmp(tok, "fail")) snprintf(s.last_fail, sizeof s.last_fail, "%s", val);
             else if (!strcmp(tok, "up")) s.uptime_ms = strtoull(val, NULL, 10);
@@ -84,11 +98,15 @@ int main(void) {
             else if (!strcmp(tok, "off")) cfg.offset = (int8_t)atoi(val);
             else if (!strcmp(tok, "mw")) cfg.motion_wake = (uint8_t)atoi(val);
         }
-        cali_display_model(&m, &s, now, lang, &in, &cfg, &v);
+        cali_display_model(&m, &s, now, lang, &in, &cfg, apqr[0] ? apqr : NULL, &v);
         put_row("device", &v.device);
         put_row("wifi", &v.wifi);
         put_row("camper", &v.camper);
-        printf("setup=%d ;; footer=%s ;; bright=%u ;; state=%s ;; sensor=%s ;; motion=%d\n", v.footer_setup, v.footer,
+        printf("qr=%s ;; qr_title=%s ;; qr_lines=", v.qr, v.qr_title);
+        put_text(v.qr_lines[0]);
+        putchar('|');
+        put_text(v.qr_lines[1]);
+        printf(" ;; footer=%s ;; bright=%u ;; state=%s ;; sensor=%s ;; motion=%d\n", v.footer,
                (unsigned)v.brightness_pct, v.state == CALI_DISP_ON ? "on" : v.state == CALI_DISP_DIM ? "dim" : "off",
                v.sensor == CALI_SENSOR_OK ? "ok" : v.sensor == CALI_SENSOR_ABSENT ? "absent" : "error", (int)v.motion);
     }

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cali_ap_identity.h"
 #include "cali_auto_camper.h"
 #include "cali_battery.h"
 #include "cali_ble_exp.h"
@@ -285,6 +286,14 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_json_key(&j, "wifi");
     cali_json_obj_begin(&j);
     wifi_members(&j, &st);
+    cali_json_key(&j, "ap_ssid");   /* the setup hotspot's name while it runs; never its password */
+    if (st.ap_ssid[0]) cali_json_str(&j, st.ap_ssid); else cali_json_null(&j);
+    cali_json_obj_end(&j);
+
+    cali_json_key(&j, "setup");   /* a first-time setup begun on the hotspot and not done (CALI_SETUP_QR_KEY) */
+    cali_json_obj_begin(&j);
+    cali_json_key(&j, "pending");
+    cali_json_bool(&j, st.setup_pending);
     cali_json_obj_end(&j);
 
     cali_json_key(&j, "control");   /* POST /api/command is accepted: station mode only (ruling B) */
@@ -493,6 +502,7 @@ static int parse_creds(const char *body, size_t body_len, char *ssid, size_t *ss
 }
 
 static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    int from_hotspot = wifi_mode() == CALI_WIFI_MODE_SETUP;
     static char ssid[NET_SSID_MAX + 1], psk[NET_PSK_MAX + 1];
     size_t ssid_len = 0, psk_len = 0;
     if (parse_creds(req->body, req->body_len, ssid, &ssid_len, psk, &psk_len) != 0) {
@@ -506,6 +516,9 @@ static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
         cali_log("http: storing wifi credentials failed");
         SET_CONST(resp, 500, ERR_STORE);
     } else {
+        if (from_hotspot) {   /* the wizard follows only a setup begun on the hotspot (a failed mark is not fatal) */
+            if (cali_setup_pending_set(1) != 0) cali_log("http: marking setup pending failed");
+        }
         cali_wifi_run_set_creds(ssid, psk);
         SET_CONST(resp, 200, OK_BODY);
     }
@@ -1453,6 +1466,19 @@ static void api_ux_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
+/* ---- POST /api/setup {"done":true}: ends the first-time setup, in any WiFi mode ---- */
+static const char *const K_DONE[] = {"done"};
+static void api_setup_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    int done = 0;
+    if (parse_body(req->body, req->body_len, K_DONE, 1, bool_field, &done) != 1 || !done) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if (cali_setup_pending_set(0) != 0) {
+        SET_CONST(resp, 500, ERR_STORE);
+    } else {
+        SET_CONST(resp, 200, OK_BODY);
+    }
+}
+
 /* ---- POST /api/experimental {"sensors":<bool>}: the Satellite settings sensor-track switch, station only ---- */
 static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp) {
     int v[2] = {0, 0}, seen = -1;
@@ -1550,7 +1576,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     (void)ctx;
     if (strcmp(req->path, "/api/command") == 0) return api_command(req, resp);
     if (strcmp(req->path, "/api/log") == 0) return api_log(req, resp);
-    /* the calictl web UI (R_FW_SHARED_UI) in every mode: over the setup hotspot it opens on WiFi setup
+    /* the calictl web UI (R_FW_SHARED_UI) in every mode: over the setup hotspot it opens on the setup wizard
      * by itself; /app = the same (the manifest's start_url, old links) */
     if (get && (strcmp(req->path, "/") == 0 || strcmp(req->path, "/app") == 0)) {
         cali_ble_exp_activity(cali_uptime_ms());   /* a viewer opens the page: reconnect now (R_FW_BLE_IDLE) */
@@ -1630,6 +1656,11 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         else SET_CONST(resp, 405, ERR_METHOD);
         return 1;
     }
+    if (strcmp(req->path, "/api/setup") == 0) {
+        if (strcmp(req->method, "POST") == 0) api_setup_post(req, resp);
+        else SET_CONST(resp, 405, ERR_METHOD);
+        return 1;
+    }
     if (strcmp(req->path, "/api/wifi") == 0) {
         if (get) {
             api_wifi_get(resp);
@@ -1645,7 +1676,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (wifi_mode() == CALI_WIFI_MODE_SETUP) {
         /* captive portal: an OS probe gets the absolute setup address (its Host is some probe domain),
-         * so the OS's captive sheet opens the UI (WiFi setup); anything else goes home */
+         * so the OS's captive sheet opens the UI (the setup wizard); anything else goes home */
         resp->status = 302;
         resp->location = cali_captive_is_probe(req->path) ? PROBE_TARGET : "/";
         return 1;

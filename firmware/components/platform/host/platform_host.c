@@ -37,6 +37,32 @@ static uint64_t now_ms(void) {
 
 const char *cali_fw_version(void) { return "host"; }
 
+void cali_random(void *buf, size_t len) {
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (f == NULL || fread(buf, 1, len, f) != len) {
+        fputs("cali_random: /dev/urandom unreadable\n", stderr);
+        exit(70);
+    }
+    fclose(f);
+}
+
+int cali_mac(uint8_t mac[6]) {
+    static const uint8_t FAKE[6] = {0x02, 0x00, 0x00, 0x00, 0xC0, 0xFE};
+    const char *env = getenv("CALI_HOST_MAC");
+    memcpy(mac, FAKE, 6);
+    if (env == NULL) return 0;
+    if (strlen(env) != 12) return -1;
+    for (int i = 0; i < 6; i++) {
+        unsigned v;
+        char pair[3] = {env[2 * i], env[2 * i + 1], 0};
+        char *end;
+        v = (unsigned)strtoul(pair, &end, 16);
+        if (*end != 0) return -1;
+        mac[i] = (uint8_t)v;
+    }
+    return 0;
+}
+
 void cali_pi_wake_line(int low) { cali_log("gpio9: %s", low ? "low" : "released"); }   /* no GPIO here */
 void cali_pi_halt_line(int low) { cali_log("gpio8: %s", low ? "low" : "released"); }
 

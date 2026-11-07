@@ -9,8 +9,10 @@ The UI is **un-built JS** served by calictl on buspi **and** compiled into the E
 bundler catches mistakes, so the gates below are the only safety net.
 
 - **The ESP serves ONE UI** (this one, at `/` in every WiFi mode). Satellite-only screens — Satellite
-  settings (`satsettings`) and WiFi setup (`wifisetup`) — live in `app.js` and show only when the
-  satellite flavour is detected (`satellite()`). `/device` (`firmware/web/index.html`) is a minimal
+  settings (`satsettings`), WiFi setup (`wifisetup`) and the first-time setup wizard
+  (`#setup/<step>`) — live in `app.js` and show only when the satellite flavour is detected
+  (`satellite()`). Over the setup hotspot, and while `device.setup.pending` is set, the app lands on
+  the wizard (`setupStep()` picks the step); `#wifisetup` stays reachable as a deep link. `/device` (`firmware/web/index.html`) is a minimal
   WiFi recovery page: never add features there.
 
 If the change also touches a `cali_core/include/*.h` header (a web handler or route), follow skill

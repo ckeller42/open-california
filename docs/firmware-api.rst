@@ -53,6 +53,11 @@ WiFi state machine
 
 .. doxygenfile:: cali_wifi_sm.h
 
+Setup hotspot identity
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_ap_identity.h
+
 WiFi runtime
 ~~~~~~~~~~~~
 

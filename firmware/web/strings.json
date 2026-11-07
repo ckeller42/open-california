@@ -20,7 +20,10 @@
   "d_fail_not_found": {"en": "network not found", "de": "Netz nicht gefunden"},
   "d_fail_auth": {"en": "wrong password", "de": "falsches Passwort"},
   "d_fail_other": {"en": "could not connect", "de": "Verbindungsfehler"},
-  "d_footer_setup": {"en": "WiFi %s · password %s", "de": "WLAN %s · Passwort %s"},
+  "d_qr_join_title": {"en": "Scan with the phone camera", "de": "Mit der Handykamera scannen"},
+  "d_qr_next_title": {"en": "Join %s, then scan", "de": "%s beitreten, dann scannen"},
+  "d_qr_wlan": {"en": "WiFi %s", "de": "WLAN %s"},
+  "d_qr_pass": {"en": "Password %s", "de": "Passwort %s"},
   "d_batt": {"en": "Batt", "de": "Akku"},
   "d_charging": {"en": "charging", "de": "lädt"}
 }

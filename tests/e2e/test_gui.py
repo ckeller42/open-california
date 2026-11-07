@@ -1843,3 +1843,15 @@ def test_menu_lists_device_status_before_the_first_answer(base_url):
         for r in held:
             r.abort()
         browser.close()
+
+
+@pytest.mark.parametrize("hash_", ["#setup", "#setup/pair"])
+def test_calictl_ignores_the_satellite_setup_wizard(base_url, error_gated_page, hash_):
+    """The first-time setup is the satellite's: on calictl ``#setup`` lands on Home and sends no ``/api/setup``."""
+    with error_gated_page(base_url + "/" + hash_) as pg:
+        seen = []
+        pg.on("request", lambda r: seen.append(r.url))
+        pg.reload()
+        expect(pg.locator("#title")).to_have_text("Open California")
+        pg.wait_for_timeout(1500)
+        assert not [u for u in seen if "/api/setup" in u]

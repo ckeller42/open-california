@@ -52,7 +52,8 @@ python3 ~/open-california/tools/esplab/esp_cmd.py /dev/ttyACM0 --tail 120       
 ## 5. The ESP is stuck on its setup hotspot
 
 Since #394 a failed network change rolls back by itself in about 10 s. If the ESP still ends up on
-`calictl-esp-setup` (old build, a wrong password at first setup), restore buspi's own network over
+`calictl-esp-XXXX` (a wrong password at first setup), restore buspi's own network over
 USB: `ssh buspi 'sudo python3 ~/open-california/tools/esplab/esp_wifi_restore.py [PROFILE]'`. It
 reads the NetworkManager profile as root and writes the password only to the serial port.
-Fallback without buspi: a phone joins the hotspot and opens `http://192.168.4.1/device`.
+Fallback without buspi: a phone scans the WiFi QR code on the ESP's display (the hotspot password is on the screen only), joins the hotspot and opens `http://192.168.4.1/device`.
+A fresh board's setup wizard (`#setup/<step>`) is described in `docs/howto-esp-wifi-setup.md`.

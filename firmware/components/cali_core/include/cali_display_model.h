@@ -70,6 +70,9 @@ enum cali_lang_e {
 /** @brief Size of a row's text buffer in bytes, including the NUL. */
 #define CALI_ROW_TEXT_MAX 64
 
+/** @brief Size of the QR text buffer in the view (a `WIFI:` join code fits in 96 bytes). */
+#define CALI_QR_TEXT_MAX 96
+
 /** @brief One status row. */
 typedef struct {
     cali_dot_t dot;                  /**< The dot colour. */
@@ -120,6 +123,8 @@ typedef enum {
 #define DISPLAY_MOTION_STILL_MG 50
 /** @brief Motion re-arms only once every read stayed below DISPLAY_MOTION_STILL_MG for this many ms (driving gives one wake, not a pinned screen). */
 #define DISPLAY_MOTION_REARM_MS 10000
+/** @brief Recovery (set up once, back on the hotspot): a tap shows the hotspot QR for this many ms; the status rows show otherwise. */
+#define DISPLAY_RECOVERY_QR_MS 120000
 
 /**
  * @brief The display settings.
@@ -154,8 +159,10 @@ typedef struct {
     cali_row_t device;       /**< The device row. */
     cali_row_t wifi;         /**< The WiFi row. */
     cali_row_t camper;       /**< The camper-unit row. */
-    int footer_setup;        /**< 1: the footer shows NET_AP_SSID and NET_AP_PSK; 0: `http://NET_HOSTNAME.local` and the battery. */
-    char footer[CALI_ROW_TEXT_MAX];   /**< The footer text. */
+    char footer[CALI_ROW_TEXT_MAX];   /**< The footer text: `http://NET_HOSTNAME.local` and the battery; "" in setup mode. */
+    char qr[CALI_QR_TEXT_MAX];        /**< The text to draw as a QR code; "" = no QR screen. Setup mode: the hotspot's WiFi QR (holds the password: display only; in recovery only for DISPLAY_RECOVERY_QR_MS after a tap); station with a setup pending: `http://<ip>/#setup`. */
+    char qr_title[CALI_ROW_TEXT_MAX]; /**< The line above the QR code. */
+    char qr_lines[2][CALI_ROW_TEXT_MAX]; /**< [0] beside the code under the title ("WLAN\nname" or "http://\naddress"); [1] one full-width line below it (the password, or the .local address). */
     cali_disp_state_t state; /**< On, dim or off. */
     cali_sensor_t sensor;    /**< The light sensor's state. */
     int32_t lux;             /**< The last valid lux, -1 = none. */
@@ -168,7 +175,7 @@ typedef struct {
  * @brief The wake and brightness state.
  *
  * Wake events are a touch, a hand near (rising edge, when `prox_wake`), motion (rising edge, when
- * `motion_wake`), a row turning red or amber, and the first call. The screen is on for
+ * `motion_wake`), a row turning red or amber, a QR code appearing or changing, and the first call. The screen is on for
  * DISPLAY_DIM_AFTER_MS after the last event, then dim, and off after DISPLAY_OFF_AFTER_MS. Ages,
  * uptime, the footer (battery) and green or grey changes never wake it.
  */
@@ -178,10 +185,12 @@ typedef struct {
     uint64_t last_good_ms;   /**< Time of the last valid lux. */
     float lux_log;           /**< EMA of log10(max(lux, 1)). */
     uint64_t last_shake_ms;  /**< The last read with motion at or above DISPLAY_MOTION_STILL_MG. */
+    uint64_t qr_until_ms;    /**< Recovery: the hotspot QR shows until this time (0: not shown). */
     int32_t lux;             /**< Last valid lux. */
     int32_t prox;            /**< Last valid proximity reading. */
     int32_t motion;          /**< Last motion value. */
     int32_t acc[3];          /**< The previous valid accel read (when `have_acc`). */
+    uint32_t qr_hash;        /**< Hash of the QR text last tick (0: none). */
     uint32_t cfg_sig;        /**< Signature of the settings last applied. */
     uint8_t started;         /**< The first call happened. */
     uint8_t have_lux;        /**< A valid lux was seen. */
@@ -208,10 +217,12 @@ void cali_display_model_init(cali_display_model_t *m);
  * @param lang    CALI_LANG_DE or CALI_LANG_EN.
  * @param in      This tick's sensor and touch inputs.
  * @param cfg     The settings.
- * @param out     Filled with the rows, the footer, the screen state and the brightness.
+ * @param ap_qr   The hotspot's WiFi QR text (cali_ap_wifi_qr()), or NULL for none; only read in setup mode.
+ * @param out     Filled with the rows, the footer, the QR screen, the screen state and the brightness.
  */
 void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_t now_ms, int lang,
-                        const cali_display_in_t *in, const cali_display_cfg_t *cfg, cali_display_view_t *out);
+                        const cali_display_in_t *in, const cali_display_cfg_t *cfg, const char *ap_qr,
+                        cali_display_view_t *out);
 
 /**
  * @brief The touch read filter, run in LVGL's task.

@@ -27,8 +27,10 @@ extern const cali_net_t cali_net_esp;
 /* Creates the STA + AP netifs (AP pinned to NET_AP_ADDR/24, DHCP server on, DNS offered = the AP),
  * initialises and starts esp_wifi in STA mode (RAM storage: the credentials live in cali_kv). 0 ok;
  * -1 when the WiFi driver is unavailable (CONFIG_CALI_WIFI=n, e.g. the QEMU image; or esp_wifi_init
- * / esp_wifi_start failed) — then nothing else here may be called. */
-int cali_net_esp_init(void);
+ * / esp_wifi_start failed, or ap_ssid / ap_psk is not a valid WPA2 name / password) — then nothing
+ * else here may be called. ap_ssid / ap_psk: the setup hotspot's identity (cali_ap_identity()); the
+ * AP is configured with it while still down, so it never comes up with another name. */
+int cali_net_esp_init(const char *ap_ssid, const char *ap_psk);
 
 /* Delivers the queued events to the sink (at most the ones queued before this call started: a sink
  * that calls back in sees its outcome on a later poll) and runs the two watchdogs that make every

@@ -451,6 +451,7 @@ class Firmware:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env={**os.environ, "CALI_HOST_MAC": "02000000C0FE"},  # the setup hotspot is calictl-esp-C0FE
         )
         self.lines: queue.Queue[str] = queue.Queue()
         self.log: list[str] = []

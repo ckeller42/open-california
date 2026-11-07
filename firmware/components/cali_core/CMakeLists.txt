@@ -8,7 +8,7 @@ set(lora_port "")
 if(NOT CONFIG_CALI_DISPLAY)
     set(lora_port "lora_port_none.c")
 endif()
-idf_component_register(SRCS "energy.c" "lora.c" ${lora_port} "pairing_sm.c" "runner.c" "session.c" "console.c" "snapshot.c" "status.c" "json.c" "wifi_sm.c" "wifi_run.c" "http_core.c" "captive_dns.c" "web.c" "ota.c" "time.c" "sdlog.c" "diag.c" "display_model.c" "display_cfg.c" "battery.c" "sensors.c" "control.c" "control_run.c" "auto_camper.c" "thermostat.c" "thermostat_run.c" "auto_camper_run.c" "pi_wake.c" "ble_exp.c" "ble_exp_run.c"
+idf_component_register(SRCS "energy.c" "lora.c" ${lora_port} "pairing_sm.c" "runner.c" "session.c" "console.c" "snapshot.c" "status.c" "json.c" "wifi_sm.c" "wifi_run.c" "ap_identity.c" "http_core.c" "captive_dns.c" "web.c" "ota.c" "time.c" "sdlog.c" "diag.c" "display_model.c" "display_cfg.c" "battery.c" "sensors.c" "control.c" "control_run.c" "auto_camper.c" "thermostat.c" "thermostat_run.c" "auto_camper_run.c" "pi_wake.c" "ble_exp.c" "ble_exp_run.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "../../web"
                        REQUIRES csrc

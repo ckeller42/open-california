@@ -16,7 +16,7 @@
  * held and started on the first tick after the flow ends. A request while a scan is in flight is
  * dropped (until its SCAN_DONE). AP_START also asks for a scan, so the setup page has a list.
  *
- * Console lines (cali_log): "wifi: setup hotspot up (calictl-esp-setup)" (AP_STARTED), "wifi:
+ * Console lines (cali_log): "wifi: setup hotspot up (calictl-esp-XXXX)" (AP_STARTED), "wifi:
  * setup hotspot closed" (WACT_AP_STOP), "wifi: joining <ssid>" (each WACT_STA_START), "wifi:
  * online <a.b.c.d>" (GOT_IP accepted), "wifi: lost" (LOST while online), "wifi: failed
  * <not_found|auth|other>" (WACT_LOG_REASON), "wifi: credentials cleared" or "wifi: credential

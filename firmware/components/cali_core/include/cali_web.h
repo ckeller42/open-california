@@ -34,7 +34,7 @@
  *    firmware reports ``device.control.writes`` (station mode), posting calictl's ``/api/command``
  *    body (with the page's clock ``local_now`` on every wake-up edit), except the pop-top roof, which
  *    stays greyed with the firmware's own refusal text ("Only via buspi or the app"); without the
- *    flag every control is greyed; over the setup hotspot the UI opens on its WiFi-setup screen. A
+ *    flag every control is greyed; over the setup hotspot the UI opens on its setup wizard. A
  *    minimal WiFi recovery page stays at ``GET /device``.
  *    Every static page and asset carries a strong ``ETag`` derived from its exact bytes, and a
  *    matching ``If-None-Match`` is answered ``304 Not Modified`` without a body; the pages and the
@@ -102,8 +102,8 @@
  *
  * - `GET /`, `/app`: 200 `text/html`, `Content-Encoding: gzip`, `Cache-Control: no-cache`, in every
  *   mode. The calictl web UI (app_bundle_gen.h's WEB_APP_HTML_GZ, from tools/gen_c_dict.py), which
- *   interprets `/api/state` in the browser (calictl/webui/semantics.js). In setup or off mode it
- *   opens on its WiFi-setup screen (the captive portal lands here).
+ *   interprets `/api/state` in the browser (calictl/webui/semantics.js). In setup or off mode (and while a first-time
+ *   setup is pending) it opens on its setup wizard (the captive portal lands here).
  * - `GET /device`: 200 `text/html`, the WiFi recovery page (firmware/web/index_gen.html, rendered
  *   from index.html by tools/gen_c_dict.py; strings_gen.h's WEB_INDEX_HTML byte array), in every
  *   mode. A way back onto WiFi if the UI fails.
@@ -123,7 +123,9 @@
  *            "link":{"up":<bool>,"ready":<bool>,"rest":<bool>,"redial":<bool>,
  *                    "rest_next_s":<int>|null,"last_snap_age_ms":<int>|null},
  *            "wifi":{"mode":"setup"|"station"|"off","ssid":"…"|null,
- *                    "ip":"a.b.c.d"|null,"rssi":<int>|null},
+ *                    "ip":"a.b.c.d"|null,"rssi":<int>|null,
+ *                    "ap_ssid":"calictl-esp-XXXX"|null},   (the hotspot's name while it runs, never its password)
+ *            "setup":{"pending":<bool>},   (a first-time setup begun on the hotspot and not done: kv setup_qr)
  *            "control":{"writes":<bool>},
  *            "uptime_ms":<int>,"fw":"<cali_fw_version()>",
  *            "ota":{"state","available_sha","progress_pct","error","channel"},
@@ -197,8 +199,13 @@
  *   cali_kv_set(), calls cali_wifi_run_set_creds and answers 200 `{"ok":true}`. Otherwise 400
  *   `{"ok":false,"error":"json"|"ssid"|"psk"}` (json is checked first). A kv write failure answers
  *   500 `{"ok":false,"error":"store"}`.
+ *   A valid body saved while the unit is in setup mode (the hotspot) also sets kv `setup_qr`
+ *   (CALI_SETUP_QR_KEY, cali_setup_pending_set); a save in station mode never does.
  * - `DELETE /api/wifi`: cali_wifi_run_forget(), 200 `{"ok":true}`.
- * - Any other method on `/api/wifi`, `/api/state` or `/api/pairing`: 405 `{"ok":false,"error":"method"}`.
+ * - `POST /api/setup`: body exactly `{"done":true}`, any WiFi mode: erases `setup_qr` and answers 200
+ *   `{"ok":true}` (500 `{"ok":false,"error":"store"}` if the erase fails). Any other body: 400
+ *   `{"ok":false,"error":"bad_json"}`. GET: 405.
+ * - Any other method on `/api/wifi`, `/api/state`, `/api/setup` or `/api/pairing`: 405 `{"ok":false,"error":"method"}`.
  *
  * **Control**
  *

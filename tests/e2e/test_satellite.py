@@ -1179,7 +1179,7 @@ def test_wizard_pairs_the_satellite(stub, error_gated_page, locale):
 
 
 def test_wizard_over_the_setup_hotspot_via_app(stub, error_gated_page):
-    """No home WiFi at the van: on the setup hotspot /app (like /) is the UI on WiFi setup — no
+    """No home WiFi at the van: on the setup hotspot /app#wifisetup is the UI on WiFi setup — no
     control over the hotspot (said once there, not as the read-only banner) but with the pairing wizard.
 
     .. test:: The wizard is reachable and pairs over the setup hotspot
@@ -1188,7 +1188,7 @@ def test_wizard_over_the_setup_hotspot_via_app(stub, error_gated_page):
     """
     stub.mode = "setup"
     _unpaired(stub, "setup")
-    with error_gated_page(stub.base + "/app") as pg:
+    with error_gated_page(stub.base + "/app#wifisetup") as pg:
         expect(
             pg.get_by_text("Controls work only on your home WiFi — not over the setup hotspot")
         ).to_be_visible()

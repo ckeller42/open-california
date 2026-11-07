@@ -70,7 +70,11 @@ const cali_net_t cali_net_esp = {
     .tcp_close = nw_close, .udp_bind = nw_port, .udp_recvfrom = nw_recvfrom, .udp_sendto = nw_sendto,
 };
 
-int cali_net_esp_init(void) { return -1; }
+int cali_net_esp_init(const char *ap_ssid, const char *ap_psk) {
+    (void)ap_ssid;
+    (void)ap_psk;
+    return -1;
+}
 
 void cali_net_esp_poll(uint64_t now_ms) { (void)now_ms; }
 
@@ -826,10 +830,11 @@ static void init_undo(int wifi_inited) {
         }                                                                    \
     } while (0)
 
-int cali_net_esp_init(void) {
+int cali_net_esp_init(const char *ap_ssid, const char *ap_psk) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     int wifi_inited = 0;
     if (s_ready) return 0;
+    if (!ssid_ok(ap_ssid) || !psk_ok(ap_psk)) return -1;
     s_sta_if = esp_netif_create_default_wifi_sta();
     s_ap_if = esp_netif_create_default_wifi_ap();
     if (s_sta_if == NULL || s_ap_if == NULL) {
@@ -850,9 +855,9 @@ int cali_net_esp_init(void) {
     /* Configure the setup AP while it is still down (set_config needs the AP interface enabled),
      * so ap_start()'s mode switch brings it up with our SSID/PSK, never the driver's open default. */
     STEP(esp_wifi_set_mode(WIFI_MODE_APSTA));
-    STEP(set_ap_config(NET_AP_SSID, NET_AP_PSK));
-    strcpy(s_ap_ssid, NET_AP_SSID);
-    strcpy(s_ap_psk, NET_AP_PSK);
+    STEP(set_ap_config(ap_ssid, ap_psk));
+    strcpy(s_ap_ssid, ap_ssid);
+    strcpy(s_ap_psk, ap_psk);
     STEP(esp_wifi_set_mode(WIFI_MODE_STA));
     STEP(esp_wifi_start());
     s_ready = 1;

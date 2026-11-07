@@ -18,7 +18,7 @@
  * the keys in this file. */
 enum {
     K_DEVICE, K_WIFI, K_CAMPER, K_RUNNING, K_SETUP, K_JOINING, K_RETRYING, K_WIFI_OFF, K_CONNECTED,
-    K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_FOOTER_SETUP, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_BATT, K_CHARGING, K_HEATER_LOCKED, K_HEATER_ERROR, K_COUNT
+    K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_QR_JOIN_TITLE, K_QR_NEXT_TITLE, K_QR_WLAN, K_QR_PASS, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_BATT, K_CHARGING, K_HEATER_LOCKED, K_HEATER_ERROR, K_COUNT
 };
 static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_DEVICE] = {WEB_STR_DE_DEVICE, WEB_STR_EN_DEVICE},
@@ -40,7 +40,10 @@ static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_FAIL_NOT_FOUND] = {WEB_STR_DE_D_FAIL_NOT_FOUND, WEB_STR_EN_D_FAIL_NOT_FOUND},
     [K_FAIL_AUTH] = {WEB_STR_DE_D_FAIL_AUTH, WEB_STR_EN_D_FAIL_AUTH},
     [K_FAIL_OTHER] = {WEB_STR_DE_D_FAIL_OTHER, WEB_STR_EN_D_FAIL_OTHER},
-    [K_FOOTER_SETUP] = {WEB_STR_DE_D_FOOTER_SETUP, WEB_STR_EN_D_FOOTER_SETUP},
+    [K_QR_JOIN_TITLE] = {WEB_STR_DE_D_QR_JOIN_TITLE, WEB_STR_EN_D_QR_JOIN_TITLE},
+    [K_QR_NEXT_TITLE] = {WEB_STR_DE_D_QR_NEXT_TITLE, WEB_STR_EN_D_QR_NEXT_TITLE},
+    [K_QR_WLAN] = {WEB_STR_DE_D_QR_WLAN, WEB_STR_EN_D_QR_WLAN},
+    [K_QR_PASS] = {WEB_STR_DE_D_QR_PASS, WEB_STR_EN_D_QR_PASS},
     [K_BATT] = {WEB_STR_DE_D_BATT, WEB_STR_EN_D_BATT},
     [K_CHARGING] = {WEB_STR_DE_D_CHARGING, WEB_STR_EN_D_CHARGING},
     [K_HEATER_LOCKED] = {WEB_STR_DE_D_HEATER_LOCKED, WEB_STR_EN_D_HEATER_LOCKED},
@@ -91,7 +94,7 @@ static void wifi_row(cali_row_t *r, const cali_status_t *s, int lang) {
         return;
     }
     if (s->wifi_mode == CALI_WIFI_MODE_SETUP) {
-        row(r, CALI_DOT_AMBER, label, K_SETUP, lang, NET_AP_SSID, NET_AP_ADDR);
+        row(r, CALI_DOT_AMBER, label, K_SETUP, lang, s->ap_ssid, NET_AP_ADDR);
         return;
     }
     if (s->wifi_state == WIFI_CONNECTING) {
@@ -206,6 +209,16 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
     if (m->started && ((alert(out->wifi.dot) && out->wifi.dot != m->dots[0]) ||
                        (alert(out->camper.dot) && out->camper.dot != m->dots[1])))
         wake = 1;
+    {   /* a QR code appearing or changing (hotspot code, then the setup page's): someone has to scan it */
+        uint32_t h = 0;   /* FNV-1a; 0 = no QR (the text holds the password, so no copy is kept) */
+        if (out->qr[0]) {
+            h = 2166136261u;
+            for (const char *q = out->qr; *q; q++) h = (h ^ (uint8_t)*q) * 16777619u;
+            if (!h) h = 1;
+        }
+        if (h && h != m->qr_hash) wake = 1;
+        m->qr_hash = h;
+    }
     m->dots[0] = (uint8_t)out->wifi.dot;
     m->dots[1] = (uint8_t)out->camper.dot;
     m->started = 1;
@@ -289,21 +302,61 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
     out->brightness_pct = out->state == CALI_DISP_ON ? on : out->state == CALI_DISP_DIM ? dim : 0;
 }
 
+/* "Label value" -> "Label\nvalue" (the last space becomes a line break; none: unchanged). */
+static void break_before_value(char *t) {
+    char *sp = strrchr(t, ' ');
+    if (sp) *sp = '\n';
+}
+
+/* The setup QR screens: the hotspot's join code, or the address once the phone is on the home WiFi. */
+static void qr_screen(cali_display_view_t *out, const cali_status_t *s, const char *ap_qr, int lang) {
+    char tmp[2 * CALI_ROW_TEXT_MAX];
+    out->qr[0] = out->qr_title[0] = out->qr_lines[0][0] = out->qr_lines[1][0] = 0;
+    if (s->wifi_mode == CALI_WIFI_MODE_SETUP && ap_qr && strlen(ap_qr) < CALI_QR_TEXT_MAX) {
+        const char *p = strstr(ap_qr, ";P:");   /* WIFI:T:WPA;S:<ssid>;P:<psk>;; */
+        size_t n = p ? strcspn(p + 3, ";") : 0;
+        char psk[NET_PSK_MAX + 1];
+        if (n == 0 || n > NET_PSK_MAX) return;
+        memcpy(psk, p + 3, n);
+        psk[n] = 0;
+        snprintf(out->qr, CALI_QR_TEXT_MAX, "%s", ap_qr);
+        cali_display_fit_text(out->qr_title, tx(K_QR_JOIN_TITLE, lang));
+        snprintf(tmp, sizeof tmp, tx(K_QR_WLAN, lang), s->ap_ssid);
+        break_before_value(tmp);   /* the SSID on its own line: the narrow text box must not break it */
+        cali_display_fit_text(out->qr_lines[0], tmp);
+        snprintf(tmp, sizeof tmp, tx(K_QR_PASS, lang), psk);   /* full-width line under the code */
+        cali_display_fit_text(out->qr_lines[1], tmp);
+    } else if (s->wifi_mode == CALI_WIFI_MODE_STATION && s->ip != 0 && s->setup_pending) {
+        char ip[16];
+        cali_status_ip_str(s->ip, ip);
+        snprintf(out->qr, CALI_QR_TEXT_MAX, "http://%s/#setup", ip);
+        snprintf(tmp, sizeof tmp, tx(K_QR_NEXT_TITLE, lang), s->ssid);
+        cali_display_fit_text(out->qr_title, tmp);
+        snprintf(tmp, sizeof tmp, "http://\n%s", ip);   /* the address alone on a line: it must not break */
+        cali_display_fit_text(out->qr_lines[0], tmp);
+        cali_display_fit_text(out->qr_lines[1], "http://" NET_HOSTNAME ".local");
+    }
+}
+
 void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_t now_ms, int lang,
-                        const cali_display_in_t *in, const cali_display_cfg_t *cfg, cali_display_view_t *out) {
+                        const cali_display_in_t *in, const cali_display_cfg_t *cfg, const char *ap_qr,
+                        cali_display_view_t *out) {
     char up[24];
     wifi_row(&out->wifi, s, lang);
     camper_row(&out->camper, s, lang);
     fmt_uptime(s->uptime_ms, up);
     row(&out->device, CALI_DOT_GREEN, tx(K_DEVICE, lang), K_RUNNING, lang, up, NULL);
-    out->footer_setup = s->wifi_mode == CALI_WIFI_MODE_SETUP;
-    if (out->footer_setup) {
-        char tmp[2 * CALI_ROW_TEXT_MAX];
-        snprintf(tmp, sizeof tmp, tx(K_FOOTER_SETUP, lang), NET_AP_SSID, NET_AP_PSK);
-        cali_display_fit_text(out->footer, tmp);
+    qr_screen(out, s, ap_qr, lang);
+    /* recovery = set up once (a stored network, no setup pending), back on the hotspot: the rows stay
+       and a tap shows the hotspot QR for DISPLAY_RECOVERY_QR_MS */
+    if (s->wifi_mode == CALI_WIFI_MODE_SETUP && s->ssid[0] && !s->setup_pending) {
+        if (in->touched) m->qr_until_ms = now_ms + DISPLAY_RECOVERY_QR_MS;
+        if (now_ms >= m->qr_until_ms) out->qr[0] = 0;
     } else {
-        station_footer(out->footer, &in->batt, lang);
+        m->qr_until_ms = 0;
     }
+    if (s->wifi_mode == CALI_WIFI_MODE_SETUP) out->footer[0] = 0;   /* no .local address on the hotspot */
+    else station_footer(out->footer, &in->batt, lang);
     wake_and_brightness(m, now_ms, in, cfg, out);
 }
 
