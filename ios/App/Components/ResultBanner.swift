@@ -53,6 +53,7 @@ struct ResultBanner: View {
         case .favouriteEmpty: "This favourite is empty on the unit"
         case .notOnOff, .badValue: "This value is not valid"
         case .quietNeedsFridgeOn: "Switch the refrigerator box on first"
+        case .roofNeedsIgnition: "Please switch on the ignition to operate the pop-up roof."
         case .roofReading: "Only when the pop-up roof is open"
         case .wakeupNoArea: "The wake-up light needs at least one area"
         case .wakeupClock: "The wake-up light needs the time — set it again"

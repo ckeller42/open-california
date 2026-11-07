@@ -34,7 +34,7 @@ public enum PlanResult: Equatable, Sendable {
 public enum Refusal: Sendable, Equatable, CaseIterable {
     case airheaterNotPossible, airheaterRuntimePermanent, airheaterTimerArmed, campingNeedsMaster
     case coolerStateUnknown, coolerTimerNeedsFridgeOff, energyEcoNeedsSolar, energyLocked, favouriteEmpty
-    case notOnOff, quietNeedsFridgeOn, roofReading, wakeupNoArea, wakeupClock, wakeupUnknown
+    case notOnOff, quietNeedsFridgeOn, roofNeedsIgnition, roofReading, wakeupNoArea, wakeupClock, wakeupUnknown
     /// Not a command of this app (`CALI_REASON_ELSEWHERE`).
     case elsewhere
     /// The runner's own: the roof, a value the planner cannot build, a char outside the allow-list.
@@ -54,6 +54,7 @@ public enum Refusal: Sendable, Equatable, CaseIterable {
         CALI_REASON_FAVOURITE_EMPTY: .favouriteEmpty,
         CALI_REASON_NOT_ONOFF: .notOnOff,
         CALI_REASON_QUIET_NEEDS_FRIDGE_ON: .quietNeedsFridgeOn,
+        CALI_REASON_ROOF_NEEDS_IGNITION: .roofNeedsIgnition,
         CALI_REASON_ROOF_READING: .roofReading,
         CALI_REASON_WAKEUP_NO_AREA: .wakeupNoArea,
         CALI_REASON_WAKEUP_CLOCK: .wakeupClock,
