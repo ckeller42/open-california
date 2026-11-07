@@ -100,6 +100,10 @@ def test_redact_hides_the_keys_and_euis_both_ways(cli):
     eui, key = "AC1F09FFFE27799A", bytes(range(0, 0x100, 0x11)).hex().upper()  # dummy values
     lines = [f"AT+DEVEUI={eui}", f"AT+APPEUI={eui}", f"AT+APPKEY={key}", "AT+DEVEUI=?", "AT+DR=?", "AT+DR=5"]
     lines += ["AT+SEND=2:0102", "+EVT:JOINED", "OK"]
+    lines += [
+        "+EVT:RX_C:-70:8:UNICAST:12:" + "AB" * 51,
+        "+EVT:RX_1:-70:8:UNICAST:2:0102",
+    ]  # a fragment, a command
     assert run(cli, *(f"redact {line}" for line in lines)) == [
         "AT+DEVEUI=<redacted>",
         "AT+APPEUI=<redacted>",
@@ -110,6 +114,8 @@ def test_redact_hides_the_keys_and_euis_both_ways(cli):
         "AT+SEND=2:0102",
         "+EVT:JOINED",
         "OK",
+        "+EVT:RX_C:-70:8:UNICAST:12:<redacted>",
+        "+EVT:RX_1:-70:8:UNICAST:2:0102",
     ]
 
 
@@ -407,7 +413,7 @@ def test_setup_open_makes_keys_once(cli):
         "setupopen",
         "kv lora_dev",
         "kv lora_tk",
-        "kvset lora_ttn " + bytes(range(0, 0x100, 0x11)).hex(),
+        "kvset lora_ttn " + plaintext().hex(),
         "setupstate",
     )
     assert out[:2] == ["0", "0"] and out[4] == "1" and out[5] == "0" and out[8] == "3"
@@ -480,6 +486,22 @@ def test_kv_errors_never_regenerate_the_appkey(cli):
     st = json.loads(run(cli, "stsetup -1 0", "stjson 1 0 0 7 1 2 3 4 5 100")[0])["lora"]
     assert st["setup"] == "error" and st["has_ttn_keys"] is False
     assert run(cli, "kvset lora_dev 00", "setupopen")[0] == "-1"  # a wrong-sized AppKey is an error as well
+
+
+def test_setup_state_checks_the_records_shape(cli):
+    """A readable record of the wrong shape is "error", never "keys ready": a lora_dev that is not 24 bytes, a
+    lora_ttn that is not a plaintext the repair QR can show.
+
+    .. test:: lora setup state: a wrong-sized lora_dev or an unusable lora_ttn is error (-1)
+       :id: T_FW_LORA_SETUP_SHAPE
+       :links: R_FW_LORA_SETUP
+    """
+    dummy = bytes(range(0, 0x100, 0x11)).hex()
+    out = run(
+        cli, f"kvset lora_ttn {dummy}", "setupstate", f"kvset lora_ttn {plaintext().hex()}", "setupstate"
+    )
+    assert out == ["-1", "3"]  # kvset prints nothing
+    assert run(cli, f"kvset lora_dev {dummy}", "setupstate") == ["-1"]
 
 
 def test_console_status_names_the_setup_state(cli):

@@ -156,8 +156,9 @@ typedef struct {
 
 /**
  * @brief A line to or from the module as it may be logged: the value of a `...KEY=` or `...EUI=` line
- *        (AppKey, DevEUI, JoinEUI, in a command or in the module's reply) becomes `<redacted>`; a `=?`
- *        query and every other line stay as they are.
+ *        (AppKey, DevEUI, JoinEUI, in a command or in the module's reply) becomes `<redacted>`, and so does
+ *        the payload of an FPort-12 downlink (`+EVT:RX_…:UNICAST:12:<redacted>`, a key-transfer fragment);
+ *        a `=?` query and every other line stay as they are.
  * @param line  The line without CR/LF.
  * @param out   Out: the loggable line (truncated to n; 48 bytes always hold a redacted one).
  * @param n     Size of out.
@@ -405,11 +406,18 @@ int cali_lora_setup_open(cali_lora_rand_fn rnd);
 /**
  * @brief The setup state from the store.
  * @return CALI_LORA_SETUP_NONE (no `lora_dev`), CALI_LORA_SETUP_KEYS_MADE, CALI_LORA_SETUP_TTN_KEYS
- *         (`lora_ttn` exists), or CALI_LORA_SETUP_ERROR when `lora_dev` or `lora_ttn` cannot be read.
+ *         (`lora_ttn` exists), or CALI_LORA_SETUP_ERROR when `lora_dev` or `lora_ttn` cannot be read or has
+ *         the wrong shape (`lora_dev` not 24 bytes, `lora_ttn` not a plaintext cali_lora_ttn_ok() accepts).
  */
 int cali_lora_setup_state(void);
 /**
- * @brief Switch `exp_lora` off, then erase `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys`.
+ * @brief Erase `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys` (every one is tried).
+ * @return 0, or -1 when an erase failed.
+ */
+int cali_lora_erase_keys(void);
+/**
+ * @brief Switch `exp_lora` off, then erase `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys`, and tell the
+ *        LoRa task (cali_lora_port_forgotten()).
  * @return 0, or -1 when a store call failed.
  */
 int cali_lora_forget(void);

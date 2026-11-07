@@ -58,6 +58,13 @@ int cali_rak_redact(const char *line, char *out, size_t n) {
         snprintf(out, n, "%s=<redacted>", name);
         return 1;
     }
+    /* a key-transfer fragment (R_FW_LORA_SETUP): the header up to the port, never a ciphertext byte */
+    const char *cast = starts(line, "+EVT:RX_") ? strstr(line, "CAST:") : NULL;
+    int port;
+    if (cast && sscanf(cast + 5, "%d", &port) == 1 && port == CALI_LORA_XFER_PORT) {
+        snprintf(out, n, "%.*s%d:<redacted>", (int)(cast + 5 - line), line, port);
+        return 1;
+    }
     snprintf(out, n, "%s", line);
     return 0;
 }
@@ -353,17 +360,19 @@ int cali_exp_lora_set(int on) {
     return 0;
 }
 
-/* 1 present, 0 missing, -1 any other read error (corrupt, too long): an error is never "absent" */
-static int kv_has(const char *key) {
+/* 1 a usable record, 0 missing, -1 anything else: a read error (corrupt, too long) or a record of the wrong
+ * shape (lora_dev not 24 bytes, lora_ttn not a plaintext the repair QR can show). An error is never "absent". */
+static int kv_usable(const char *key) {
     uint8_t b[CALI_LORA_TTN_MAX];
     size_t n = sizeof b;
-    int r = cali_kv_get(key, b, &n);
+    int r = cali_kv_get(key, b, &n), ok = 0;
+    if (r == CALI_KV_OK) ok = strcmp(key, CALI_LORA_TTN_KEY) == 0 ? cali_lora_ttn_ok(b, n) : n == 24;
     cali_wipe(b, sizeof b);
-    return r == CALI_KV_OK ? 1 : r == CALI_KV_MISSING ? 0 : -1;
+    return ok ? 1 : r == CALI_KV_MISSING ? 0 : -1;
 }
 
 int cali_lora_setup_state(void) {
-    int ttn = kv_has(CALI_LORA_TTN_KEY), dev = kv_has(CALI_LORA_DEV_KEY);
+    int ttn = kv_usable(CALI_LORA_TTN_KEY), dev = kv_usable(CALI_LORA_DEV_KEY);
     if (ttn < 0 || dev < 0) return CALI_LORA_SETUP_ERROR;
     if (ttn) return CALI_LORA_SETUP_TTN_KEYS;
     return dev ? CALI_LORA_SETUP_KEYS_MADE : CALI_LORA_SETUP_NONE;
