@@ -59,7 +59,7 @@ def full_setup(fake, secret):
         f"""(async()=>{{
       const k={json.dumps(secret)}, c=await checkFullKey(B,k), d={d};
       await registerDevice(B,k,d); await enableStorage(B,k,APP);
-      const p=await makePhoneKeys(B,k,APP); await deleteOwnKey(B,k,APP,c.keyId); return {{c,p}}}})()""",
+      const p=await makePhoneKeys(B,k,APP,d.devId); await deleteOwnKey(B,k,APP,c.keyId); return {{c,p}}}})()""",
     )
 
 
@@ -94,12 +94,12 @@ def test_full_setup_calls_in_order(fake):
     assert secret not in json.dumps(fake.calls) and secret not in again["msg"]
     # the new keys have the Global-Constraints rights
     rights = {v["name"]: v["rights"] for v in fake.keys.values()}
-    assert rights["oc-remote-read"] == [
+    assert rights["oc-remote-read-van-000001"] == [
         "RIGHT_APPLICATION_INFO",
         "RIGHT_APPLICATION_DEVICES_READ",
         "RIGHT_APPLICATION_TRAFFIC_READ",
     ]
-    assert rights["oc-remote-cmd"][-1] == "RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE"
+    assert rights["oc-remote-cmd-van-000001"][-1] == "RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE"
 
 
 def test_setup_refuses_wrong_key_kinds(fake):
@@ -118,7 +118,31 @@ def test_rerun_is_idempotent(fake):
         _, secret = fake.make_key("all")
         full_setup(fake, secret)
     assert list(fake.devices) == ["van-000001"]
-    assert sorted(v["name"] for v in fake.keys.values()) == ["oc-remote-cmd", "oc-remote-read"]
+    assert sorted(v["name"] for v in fake.keys.values()) == [
+        "oc-remote-cmd-van-000001",
+        "oc-remote-read-van-000001",
+    ]
+
+
+def test_phone_keys_are_per_van_and_made_before_the_old_ones_go(fake):
+    """A second van in the same application keeps the first van's keys; a failed create keeps the old keys."""
+    _, secret = fake.make_key("all")
+    first = full_setup(fake, secret)["p"]
+    _, k2 = fake.make_key("all")
+    js(fake, f"makePhoneKeys(B,{json.dumps(k2)},APP,'van-000002')")
+    live = {v["name"] for v in fake.keys.values()}
+    assert {"oc-remote-read-van-000001", "oc-remote-cmd-van-000001"} <= live
+    assert {"oc-remote-read-van-000002", "oc-remote-cmd-van-000002"} <= live
+    fake.refuse_key_create = True
+    r = js(fake, f"makePhoneKeys(B,{json.dumps(k2)},APP,'van-000001').catch(err)")
+    assert r["status"] == 500
+    assert first["readKey"] in fake.keys and first["cmdKey"] in fake.keys, "the van's working keys stay"
+    fake.refuse_key_create = False
+    again = js(fake, f"makePhoneKeys(B,{json.dumps(k2)},APP,'van-000001')")
+    assert (
+        first["readKey"] not in fake.keys and again["readKey"] in fake.keys
+    )  # a new setup revokes the old keys
+    assert [v["name"] for v in fake.keys.values()].count("oc-remote-read-van-000001") == 1
 
 
 def test_read_key_cannot_push(fake):
@@ -139,7 +163,7 @@ def test_read_key_cannot_push(fake):
         ("van-000001", 12, b"\x03"),
     ]
     # a read key cannot make keys either
-    r = js(fake, f"makePhoneKeys(B,{json.dumps(keys['readKey'])},APP).catch(err)")
+    r = js(fake, f"makePhoneKeys(B,{json.dumps(keys['readKey'])},APP,'van-000001').catch(err)")
     assert r["status"] == 403
 
 

@@ -212,7 +212,7 @@ def test_setup_happy_path(site, ttn, error_gated_page, locale):  # noqa: F811
         deleted = calls.index(("DELETE", "/api/v3/applications/%s/api-keys/%s" % (ttn.app, kid), kid))
         pushed = next(i for i, c in enumerate(calls) if c[1].endswith("/down/push"))
         assert deleted < pushed
-        cmd_id = next(k["id"] for k in ttn.keys.values() if k["name"] == "oc-remote-cmd")
+        cmd_id = next(k["id"] for k in ttn.keys.values() if k["name"] == "oc-remote-cmd-" + DEV)
         assert {(d, port, key) for d, port, _, key in frags} == {(DEV, 12, cmd_id)}
         frags = [f for _, _, f, _ in frags]
         assert all(len(f) <= 51 for f in frags) and frags[-1][0] & 0x80

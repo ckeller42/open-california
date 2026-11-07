@@ -74,6 +74,7 @@ class FakeTtn:
         self.downlinks = []  # (dev id, f_port, bytes, key id)
         self.storage_body = None  # test hook: bytes to answer every storage read with
         self.refuse_key_delete = False  # test hook: deleting a full-rights ("all") key answers 500
+        self.refuse_key_create = False  # test hook: creating an API key answers 500
         self.create_gate = None  # test hook: a threading.Event the device create waits for (max 15 s)
         self.stall_reads = 0  # test hook: this many next storage reads wait for ``release`` (max 30 s)
         self.release = threading.Event()
@@ -232,6 +233,8 @@ def _make_handler(fake):
                         if v["app"] == m[1]
                     ]
                     return 200, {"api_keys": ks}
+                if fake.refuse_key_create:
+                    return 500, {"code": 13, "message": "internal"}
                 if "RIGHT_APPLICATION_ALL" not in key["rights"] and not set(body["rights"]) <= set(
                     key["rights"]
                 ):

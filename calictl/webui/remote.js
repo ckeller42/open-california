@@ -314,7 +314,7 @@ async function rsSetupQr(text) {
     if (gone()) return;
     await enableStorage(base, key, rsAppId);
     if (gone()) return;
-    const keys = await makePhoneKeys(base, key, rsAppId);
+    const keys = await makePhoneKeys(base, key, rsAppId, devId);
     if (gone()) return;
     /** @type {Record<string, string>} */
     const cfg = { cluster: rsCluster, appId: rsAppId, devId, readKey: keys.readKey, cmdKey: keys.cmdKey };

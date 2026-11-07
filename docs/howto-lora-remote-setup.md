@@ -89,7 +89,9 @@ Someone who has the phone can read your van's numbers until you make new keys. Y
 full-rights API key and a visit to the van.
 
 1. In the TTN console, open your application, open **API keys** and delete the keys that the app
-   made (`oc-remote-read` and `oc-remote-cmd`). From then on, no phone can read the van.
+   made for this van (`oc-remote-read-<device ID>` and `oc-remote-cmd-<device ID>`, for example
+   `oc-remote-read-van-0abcde`). From then on, no phone can read the van. The keys of your other
+   vans in the same application stay.
 2. In the same place, create a new API key with **Grant all current and future rights** (as in
    section 1).
 3. In the app on your phone, choose **Set up LoRa**, paste the new key and tap **Check the key**.
