@@ -179,6 +179,7 @@ struct touch_ctx { int mhz, usb, chg, scr, bus, pmode; long bus_ms; };
 static struct touch_ctx s_touch_ctx;                      /* LVGL task writes, owner task reads: s_touch_mux */
 static portMUX_TYPE s_touch_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint32_t s_press_start;          /* LVGL task -> owner task, __atomic: uptime ms (| 1) of the delivered press, 0 = none */
+static uint32_t s_press_seen;           /* LVGL task -> owner task, __atomic: uptime ms (| 1) of its last read that saw the touch */
 static int s_lora_shown;                /* owner task -> shot.c, __atomic: the LoRa screen is up */
 /* the LoRa screen, owner task only (under the LVGL lock) */
 static lv_obj_t *s_lora, *s_lqr, *s_lora_hint, *s_lora_line;
@@ -280,6 +281,8 @@ static void build(void) {
         s_lqr = lv_canvas_create(s_lora);
         lv_canvas_set_draw_buf(s_lqr, s_qr_buf);
         lv_obj_set_pos(s_lqr, 0, 0);
+    } else {
+        cali_log("display: lora qr buffer allocation failed: no LoRa screen");   /* lora_inputs: no setup either */
     }
     s_lora_hint = label(s_lora, &font_latin1_16, "");
     lv_label_set_long_mode(s_lora_hint, LV_LABEL_LONG_MODE_WRAP);
@@ -385,9 +388,10 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
     if (pressed) __atomic_store_n(&s_touched, 1, __ATOMIC_RELAXED);
     if (!cali_display_touch_gate(&s_swallow, pressed, __atomic_load_n(&s_awake, __ATOMIC_RELAXED), e == ESP_OK)) {
         data->state = LV_INDEV_STATE_RELEASED;   /* a swallowed (wake) press never starts the LoRa press clock */
-    } else if (pressed) {
-        if (!__atomic_load_n(&s_press_start, __ATOMIC_RELAXED))
-            __atomic_store_n(&s_press_start, (uint32_t)cali_uptime_ms() | 1u, __ATOMIC_RELAXED);
+    } else if (pressed) {   /* pressed = a good read that saw the touch */
+        uint32_t t = (uint32_t)cali_uptime_ms() | 1u;
+        if (!__atomic_load_n(&s_press_start, __ATOMIC_RELAXED)) __atomic_store_n(&s_press_start, t, __ATOMIC_RELAXED);
+        __atomic_store_n(&s_press_seen, t, __ATOMIC_RELEASE);
     }
     /* only a good read that reports no touch ends the press: a failed read (#346 NACKs) is "released"
      * for LVGL but must not restart the 3 s count or close the LoRa screen mid-press */
@@ -711,13 +715,17 @@ static void lora_paint(const cali_display_view_t *v, uint64_t now_ms) {
 /* The model's LoRa inputs: the switch, the module, the setup state (read only while it can matter). */
 static void lora_inputs(cali_display_in_t *in, uint64_t now_ms) {
     cali_lora_status_t ls;
-    uint32_t start = __atomic_load_n(&s_press_start, __ATOMIC_RELAXED);
-    if (start) {   /* signed: a press that began after now_ms was taken (the tick's I2C reads) is 1, never a wrap to ~49 days */
-        int32_t d = (int32_t)((uint32_t)now_ms - start);
+    /* the press lasts up to its last read that SAW the touch: failed reads after a tap (#346 NACKs) keep it
+     * open (no close) but never let it grow to the LoRa threshold. seen first: a press that restarts between
+     * the two loads gives seen < start, so 1 (signed: never a wrap to ~49 days) */
+    uint32_t seen = __atomic_load_n(&s_press_seen, __ATOMIC_ACQUIRE), start = __atomic_load_n(&s_press_start, __ATOMIC_RELAXED);
+    if (start) {
+        int32_t d = (int32_t)(seen - start);
         in->pressed_ms = d < 1 ? 1u : (uint32_t)d;   /* 0 means "not pressed" */
     }
     in->lora_confirmed_age_s = -1;
-    if (!cali_exp_lora() || !cali_lora_port_status(&ls) || ls.present != 1) return;
+    /* no QR buffer: no LoRa screen, so no press may open a setup (and rotate the transfer key) either */
+    if (!s_qr_buf || !cali_exp_lora() || !cali_lora_port_status(&ls) || ls.present != 1) return;
     in->lora_available = 1;
     in->lora_joined = ls.joined && !ls.at_unanswered;
     if (ls.last_confirmed_s) in->lora_confirmed_age_s = (int32_t)(now_ms / 1000 - ls.last_confirmed_s);
