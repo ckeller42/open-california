@@ -688,7 +688,7 @@ def test_experimental_box_toggles(host_fw, hci_unit, tmp_path, locale, lang):
         )
         browser.close()
     assert not errors, errors
-    assert get_json(fw, "/api/state")["device"]["experimental"] == {"sensors": True}
+    assert get_json(fw, "/api/state")["device"]["experimental"] == {"sensors": True, "lora": False}
 
 
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])

@@ -336,7 +336,8 @@ def esp_fixtures():
                 "unit_adv_seen_ms_ago": None,
             },
             "ux": {"enabled": True},
-            "experimental": {"sensors": False},
+            "experimental": {"sensors": False, "lora": False},
+            "energy": {"boot": 17, "solar_wh": 812.4, "load_wh": 655.0, "batt_net_wh": 157.4, "load_a": 2.1},
             "water_held": False,
         },
     }
@@ -382,7 +383,8 @@ def esp_fixtures():
                         "unit_adv_seen_ms_ago": None,
                     },
                     "ux": {"enabled": True},
-                    "experimental": {"sensors": False},
+                    "experimental": {"sensors": False, "lora": False},
+                    "energy": {"boot": 1, "solar_wh": 0, "load_wh": 0, "batt_net_wh": 0, "load_a": None},
                     "water_held": False,
                 },
             },
@@ -405,7 +407,10 @@ def esp_fixtures():
             "/api/state": dict(
                 station_state,
                 fn=_esp_fn(DEFAULT_SEED),
-                device=dict(station_state["device"], experimental={"sensors": True}),
+                device=dict(
+                    station_state["device"],
+                    experimental=dict(station_state["device"]["experimental"], sensors=True),
+                ),
                 ext=EXT_SENSORS,
             ),
             "/api/wifi": dict(station_wifi, last_error=None, reverted=False, scan=[]),

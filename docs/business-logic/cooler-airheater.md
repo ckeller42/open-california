@@ -300,8 +300,9 @@ then reads "Timer: On").
   activated when the engine is running or when the auxiliary water heater is activated. If the
   auxiliary air heater is active, it will be switched off when the engine is running or when the
   auxiliary water heater is activated." `FaultTriggerBit=1` alone shows nothing. The web UI's
-  `AIRHEATER_ERROR_MSG` mirrors these titles (so `heating_time_exceeded` reads "Emission limit
-  exceeded", `not_possible` "deactivated — engine / water heater running").
+  `AIRHEATER_ERROR_MSG` mirrors these titles (`not_possible` reads "deactivated — engine / water
+  heater running"), except `heating_time_exceeded`: it uses the unit panel's own words, "Max.
+  Betriebsdauer erreicht" ("Max. operating time reached"), not the app's "Emission limit exceeded".
 - **ErrorCode** (read-back only): `0` = none/cleared, `1` = low battery, `2` = low fuel,
   `3` = system error, `4` = heating time exceeded, `5` = operation not possible; app 5.4.0
   adds `6` = engine running (`AIR_HEATER_ENGINE_ON`) and `7` = auxiliary heater active
@@ -376,8 +377,10 @@ Send the full 10-field frame every time (shared-send behavior above).
   immediate heating "is limited to 120 minutes" (`infoPage_heating_immediate_description`).
   `ErrorCode 4` is named HEATING_TIME_EXCEEDED in the app (text "Emission limit exceeded … switched
   on again when moving ≥ 5 km/h"); the T7 limits per a third-party manual copy / dealer explainer
-  are ≤ 120 min per run and ≤ 180 min in total, then locked until driven. That the unit reports
-  code 4 for such a run is **not verified on this van**. The app's slider writes only
+  are ≤ 120 min per run and ≤ 180 min in total, then locked until driven. This van reports code 4
+  after about 150 min of heating in one day without a drive, on a run of 77 min, and refuses each
+  later start with code 4 for 6 to 40 s (DEVICE, `evidence-ledger.md`). The exact limits stay
+  unverified, and so does the release by a drive. The app's slider writes only
   10–120 (index 1–12 × 10, 5.4.0 `d9/u.java:45-176`); calictl enforces the same **10–120** in
   `control._airheater` (`AIRHEATER_MIN_RUNTIME_MIN`/`AIRHEATER_MAX_RUNTIME_MIN`); the 8-bit width
   is not the valid range),
