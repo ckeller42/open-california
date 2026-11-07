@@ -203,6 +203,7 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.e2e.test_link_state.test_asleep_van_shows_the_amber_banner
 .. autofunction:: tests.e2e.test_link_state.test_backend_down_turns_red_at_15_s_and_recovers
 .. autofunction:: tests.e2e.test_link_state.test_unpaired_never_says_not_paired_not_asleep
+.. autofunction:: tests.e2e.test_gui.test_session_pill_shows_busy_then_a_persistent_error
 .. autofunction:: tests.e2e.test_satellite.test_beacons_carry_views_controls_values_errors
 .. autofunction:: tests.e2e.test_satellite.test_a_control_without_a_value_omits_the_key_and_a_number_is_a_string
 .. autofunction:: tests.e2e.test_satellite.test_secrets_never_reach_a_beacon

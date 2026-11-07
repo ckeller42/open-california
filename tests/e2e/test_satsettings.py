@@ -354,6 +354,41 @@ def test_auto_camper_usage_data_and_experimental_switch(station, locale, lang):
         expect(pg.locator("#sens")).to_be_visible()  # the Sensors box follows the switch
 
 
+def test_a_switch_stays_disabled_while_its_write_runs_and_its_error_is_announced(station):
+    """#511: a state poll does not re-enable a switch whose POST is still on the wire (one write per
+    tap), and every row's error line is a polite live region."""
+    held = []
+    with _settings(station) as pg:
+        pg.route("**/api/auto_camper", lambda r: held.append(r))
+        expect(pg.locator("#ac-status")).to_have_text("Auto camper on")
+        expect(pg.locator(".warn[id$='-msg']").first).to_be_attached()
+        for el in pg.locator(".warn[id$='-msg']").all():
+            expect(el).to_have_attribute("aria-live", "polite")
+        sw = pg.locator("#ac-toggle")
+        sw.click()
+        expect(sw).to_be_disabled()
+        pg.wait_for_timeout(3000)  # state polls run
+        expect(sw).to_be_disabled()
+        assert len(held) == 1
+        held[0].fulfill(status=200, content_type="application/json", body='{"ok":true}')
+        expect(sw).to_be_enabled()
+
+
+def test_hotspot_connect_is_disabled_while_the_join_posts(setup):
+    """#511: "Connect" over the hotspot is disabled while POST /api/wifi runs: one join per tap."""
+    held = []
+    with _open(setup, "/app") as pg:
+        pg.route("**/api/wifi", lambda r: held.append(r) if r.request.method == "POST" else r.continue_())
+        pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
+        pg.select_option("#ssid", "HomeNet")
+        pg.fill("#psk", "test-psk-1234")
+        pg.click("#connect")
+        expect(pg.locator("#connect")).to_be_disabled()
+        assert len(held) == 1
+        held[0].fulfill(status=200, content_type="application/json", body='{"ok":true}')
+        expect(pg.locator("#connect")).to_be_enabled()
+
+
 @pytest.mark.parametrize("locale,lang", LOCALES)
 def test_raspberry_pi_box_wakes_and_switches(station, locale, lang):
     """R_FW_PI_WAKE: "Wake Pi" posts /api/pi_wake and says the signal went out (or the refusal); the
