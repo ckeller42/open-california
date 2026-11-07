@@ -10,6 +10,7 @@ on:
       - 'calictl/**'
       - 'tests/**'
       - 'firmware/components/cali_core/include/**'  # C API headers (Doxygen input)
+      - 'firmware/components/cali_lora/include/**'
       - 'firmware/Doxyfile'
       - 'tools/gen_c_dict.py'        # automodule'd in docs/api.md
       - 'tools/gen_codec_vectors.py'

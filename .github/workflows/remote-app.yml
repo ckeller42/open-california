@@ -1,0 +1,58 @@
+name: remote-app
+# Publish the remote app (calictl/webui built by tools/build_remote.py) to the separate public repository
+# open-california/open-california.github.io, which serves it as https://open-california.github.io/.
+# INACTIVE until the owner creates that repository, adds its deploy key (write access, that repository only)
+# and stores the private key here as the secret REMOTE_APP_DEPLOY_KEY. Runs only for a tag remote-v* whose
+# commit is on main; no pull_request trigger, so no PR code ever sees the key.
+
+on:
+  push:
+    tags: ['remote-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-app
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: The tagged commit must be on main
+        run: |
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::tag ${GITHUB_REF_NAME} is not on main"; exit 1; }
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Build the remote app
+        run: python3 -m tools.build_remote --out _build/remote
+      - name: Push it to open-california/open-california.github.io (branch main)
+        env:
+          DEPLOY_KEY: ${{ secrets.REMOTE_APP_DEPLOY_KEY }}
+        run: |
+          set -eu
+          umask 077
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/deploy_key"
+          # GitHub's published ed25519 host key fingerprint: refuse any other host
+          ssh-keyscan -t ed25519 github.com > "$RUNNER_TEMP/known_hosts" 2>/dev/null
+          ssh-keygen -lf "$RUNNER_TEMP/known_hosts" | grep -q 'SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU'
+          export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/deploy_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts -o StrictHostKeyChecking=yes"
+          git clone --quiet --depth 1 --branch main git@github.com:open-california/open-california.github.io.git "$RUNNER_TEMP/site"
+          find "$RUNNER_TEMP/site" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a _build/remote/. "$RUNNER_TEMP/site/"
+          cd "$RUNNER_TEMP/site"
+          git add -A
+          if git diff --cached --quiet; then echo "nothing changed"; exit 0; fi
+          git -c user.name="open-california remote-app" -c user.email="noreply@users.noreply.github.com" \
+            commit --quiet -m "remote app ${GITHUB_REF_NAME} from ${GITHUB_SHA}"
+          git push --quiet origin HEAD:main
+          rm -f "$RUNNER_TEMP/deploy_key"

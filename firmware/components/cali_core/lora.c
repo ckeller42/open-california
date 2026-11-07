@@ -1,5 +1,6 @@
 /* lora.c — LoRaWAN telemetry, the platform-free part (R_FW_LORA). See cali_lora.h. */
 #include "cali_lora.h"
+#include "cali_lora_setup.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -55,6 +56,13 @@ int cali_rak_redact(const char *line, char *out, size_t n) {
     snprintf(name, sizeof name, "%.*s", eq ? (int)(eq - line) : 0, line);
     if (eq && strcmp(eq + 1, "?") != 0 && (strstr(name, "KEY") || strstr(name, "EUI"))) {
         snprintf(out, n, "%s=<redacted>", name);
+        return 1;
+    }
+    /* a key-transfer fragment (R_FW_LORA_SETUP): the header up to the port, never a ciphertext byte */
+    const char *cast = starts(line, "+EVT:RX_") ? strstr(line, "CAST:") : NULL;
+    int port;
+    if (cast && sscanf(cast + 5, "%d", &port) == 1 && port == CALI_LORA_XFER_PORT) {
+        snprintf(out, n, "%.*s%d:<redacted>", (int)(cast + 5 - line), line, port);
         return 1;
     }
     snprintf(out, n, "%s", line);
@@ -293,6 +301,8 @@ void cali_lora_tracker_commit(cali_lora_tracker_t *t, const cali_lora_snap_t *s,
 
 /* ---- status, switch, owner tick, console ---- */
 
+static const char *setup_name(int setup);
+
 void cali_lora_status_json(cali_json_t *j, const cali_lora_status_t *st, uint32_t now_s) {
     cali_json_obj_begin(j);
     cali_json_key(j, "module");
@@ -321,6 +331,13 @@ void cali_lora_status_json(cali_json_t *j, const cali_lora_status_t *st, uint32_
     cali_json_key(j, "note");
     if (st->note) cali_json_str(j, st->note);
     else cali_json_null(j);
+    cali_json_key(j, "setup");
+    cali_json_str(j, setup_name(st->setup));
+    cali_json_key(j, "has_ttn_keys");
+    cali_json_bool(j, st->has_ttn_keys);
+    cali_json_key(j, "dev_eui");   /* an identifier, not a secret */
+    if (st->dev_eui[0]) cali_json_str(j, st->dev_eui);
+    else cali_json_null(j);
     cali_json_obj_end(j);
 }
 
@@ -343,6 +360,119 @@ int cali_exp_lora_set(int on) {
     return 0;
 }
 
+/* 1 a usable record, 0 missing, -1 anything else: a read error (corrupt, too long) or a record of the wrong
+ * shape (lora_dev not 24 bytes, lora_ttn not a plaintext the repair QR can show). An error is never "absent". */
+static int kv_usable(const char *key) {
+    uint8_t b[CALI_LORA_TTN_MAX];
+    size_t n = sizeof b;
+    int r = cali_kv_get(key, b, &n), ok = 0;
+    if (r == CALI_KV_OK) ok = strcmp(key, CALI_LORA_TTN_KEY) == 0 ? cali_lora_ttn_ok(b, n) : n == 24;
+    cali_wipe(b, sizeof b);
+    return ok ? 1 : r == CALI_KV_MISSING ? 0 : -1;
+}
+
+int cali_lora_setup_state(void) {
+    int ttn = kv_usable(CALI_LORA_TTN_KEY), dev = kv_usable(CALI_LORA_DEV_KEY);
+    if (ttn < 0 || dev < 0) return CALI_LORA_SETUP_ERROR;
+    if (ttn) return CALI_LORA_SETUP_TTN_KEYS;
+    return dev ? CALI_LORA_SETUP_KEYS_MADE : CALI_LORA_SETUP_NONE;
+}
+
+int cali_lora_setup_open(cali_lora_rand_fn rnd) {
+    uint8_t k[24];   /* AppKey 16 + JoinEUI 8 */
+    size_t n = sizeof k;
+    int rc = 0, g = cali_kv_get(CALI_LORA_DEV_KEY, k, &n);
+    if (g == CALI_KV_MISSING) {   /* only a missing key is made; any other read error keeps the stored AppKey */
+        rnd(k, 16);
+        memset(k + 16, 0, 8);
+        rc = cali_kv_set(CALI_LORA_DEV_KEY, k, sizeof k) == 0 ? 0 : -1;
+    } else if (g != CALI_KV_OK || n != sizeof k) {
+        rc = -1;
+    }
+    if (rc == 0) {
+        rnd(k, 16);   /* always a new transfer key */
+        rc = cali_kv_set(CALI_LORA_TK_KEY, k, 16) == 0 ? 0 : -1;
+    }
+    cali_wipe(k, sizeof k);
+    return rc;
+}
+
+int cali_lora_erase_keys(void) {
+    static const char *const KEYS[] = {CALI_LORA_DEV_KEY, CALI_LORA_TK_KEY, CALI_LORA_TTN_KEY, CALI_LORA_KEYS_KEY};
+    int rc = 0;
+    for (size_t i = 0; i < sizeof KEYS / sizeof *KEYS; i++)
+        if (cali_kv_erase(KEYS[i]) != 0) rc = -1;
+    return rc;
+}
+
+int cali_lora_forget(void) {
+    int rc = cali_exp_lora_set(0) != 0 ? -1 : 0;   /* the switch first: a failing erase never leaves it on */
+    if (cali_lora_erase_keys() != 0) rc = -1;
+    cali_lora_port_forgotten();   /* the LoRa task erases again after a key write it may have had under way */
+    return rc;
+}
+
+static int unhex(const char *h, uint8_t *out, size_t n);
+
+size_t cali_lora_setup_qr_text(char *out, size_t max, const cali_lora_status_t *st, int exp_on) {
+    uint8_t eui[8], k[40];   /* lora_dev (AppKey 16 + JoinEUI 8) + lora_tk (16) */
+    size_t n = 0, dl = 24, tl = 16;
+    if (max) memset(out, 0, max);
+    if (!exp_on || st->present != 1 || unhex(st->dev_eui, eui, 8) != 0) return 0;
+    if (cali_kv_get(CALI_LORA_DEV_KEY, k, &dl) == CALI_KV_OK && dl == 24 &&
+        cali_kv_get(CALI_LORA_TK_KEY, k + 24, &tl) == CALI_KV_OK && tl == 16)
+        n = cali_lora_setup_qr(out, max, eui, k, k + 24);
+    cali_wipe(k, sizeof k);
+    if (!n && max) cali_wipe(out, max);   /* no partial text with key bytes stays behind */
+    return n;
+}
+
+size_t cali_lora_qr_text(char *out, size_t max, const cali_lora_status_t *st, int exp_on) {
+    uint8_t k[CALI_LORA_TTN_MAX];   /* lora_ttn */
+    size_t n = 0, got = sizeof k;
+    if (max) memset(out, 0, max);
+    if (!exp_on || st->present != 1) return 0;
+    int state = cali_lora_setup_state();
+    if (state == CALI_LORA_SETUP_KEYS_MADE) return cali_lora_setup_qr_text(out, max, st, exp_on);
+    if (state == CALI_LORA_SETUP_TTN_KEYS && cali_kv_get(CALI_LORA_TTN_KEY, k, &got) == CALI_KV_OK)
+        n = cali_lora_repair_qr(out, max, k, got);
+    cali_wipe(k, sizeof k);
+    if (!n && max) cali_wipe(out, max);   /* no partial text with key bytes stays behind */
+    return n;
+}
+
+int cali_lora_ttn_ok(const uint8_t *plain, size_t len) {
+    char q[400];   /* the longest repair QR is 341 characters */
+    int ok = len <= CALI_LORA_TTN_MAX && cali_lora_repair_qr(q, sizeof q, plain, len) != 0;
+    cali_wipe(q, sizeof q);
+    return ok;
+}
+
+size_t cali_lora_confirm_no_tk(uint8_t *confirm) {
+    uint8_t k[CALI_LORA_TTN_MAX];
+    size_t n = sizeof k, len = 1;
+    confirm[0] = 3;
+    if (cali_kv_get(CALI_LORA_TTN_KEY, k, &n) == CALI_KV_OK && cali_lora_ttn_ok(k, n)) {
+        confirm[0] = 0;   /* the keys already arrived: the lost status-0 confirmation again */
+        cali_lora_sha256_4(k, n, confirm + 1);
+        len = 5;
+    }
+    cali_wipe(k, sizeof k);
+    return len;
+}
+
+static const char *setup_name(int setup) {
+    static const char *const SETUP[] = {"none", "keys_made", "joined", "ttn_keys"};
+    return setup >= 0 && setup <= CALI_LORA_SETUP_TTN_KEYS ? SETUP[setup] : "error";
+}
+
+/* the store's part of the status; the module's part comes from the port */
+static void fill_setup(cali_lora_status_t *st) {
+    st->setup = cali_lora_setup_state();
+    st->has_ttn_keys = st->setup == CALI_LORA_SETUP_TTN_KEYS;
+    if (st->setup == CALI_LORA_SETUP_KEYS_MADE && st->joined) st->setup = CALI_LORA_SETUP_JOINED;
+}
+
 static cali_lora_status_t s_st = {.present = -1, .sf = 12};
 static uint64_t s_next_snap;
 static int s_was_on;
@@ -362,6 +492,7 @@ void cali_lora_tick(uint64_t now_ms) {
 void cali_lora_json(cali_json_t *j) {
     cali_lora_status_t st;
     if (cali_lora_port_status(&st)) s_st = st;   /* the newest, also before the first tick */
+    fill_setup(&s_st);
     cali_lora_status_json(j, &s_st, (uint32_t)(cali_uptime_ms() / 1000));
 }
 
@@ -381,18 +512,21 @@ int cali_lora_console(const char *args) {
     if (n >= 1 && (!strcmp(op, "on") || !strcmp(op, "off"))) {
         if (cali_exp_lora_set(!strcmp(op, "on")) != 0) cali_log("lora: store failed");
     } else if (n >= 1 && !strcmp(op, "status")) {
-        cali_log("lora: %s, module %s, %s, at_unanswered %u, airtime %lu ms confirmed / %lu ms charged",
+        fill_setup(&s_st);
+        cali_log("lora: %s, module %s, %s, at_unanswered %u, airtime %lu ms confirmed / %lu ms charged, setup %s%s",
                  cali_exp_lora() ? "on" : "off", s_st.present < 0 ? "checking" : s_st.present ? "present" : "absent",
                  s_st.joined ? "joined" : "not joined", s_st.at_unanswered, (unsigned long)s_st.airtime_ms,
-                 (unsigned long)s_st.charged_ms);
+                 (unsigned long)s_st.charged_ms, setup_name(s_st.setup), s_st.has_ttn_keys ? " (TTN keys stored)" : "");
+    } else if (n >= 1 && !strcmp(op, "forget")) {
+        cali_log(cali_lora_forget() == 0 ? "lora: forgotten (keys erased, LoRa off)" : "lora: forget: store failed");
     } else if (n == 4 && !strcmp(op, "keys")) {
         uint8_t k[32];   /* DevEUI 8, JoinEUI 8, AppKey 16; never printed */
         if (unhex(a, k, 8) || unhex(b, k + 8, 8) || unhex(c, k + 16, 16)) cali_log("lora: keys: 16 + 16 + 32 hex digits");
         else if (cali_kv_set(CALI_LORA_KEYS_KEY, k, sizeof k) != 0) cali_log("lora: keys: store failed");
         else cali_log("lora: keys stored (used at the next join attempt)");
-        memset(k, 0, sizeof k);
+        cali_wipe(k, sizeof k);
     } else {
-        cali_log("lora: usage: lora on|off|status|keys <deveui> <joineui> <appkey>");
+        cali_log("lora: usage: lora on|off|status|forget|keys <deveui> <joineui> <appkey>");
     }
     return 0;
 }

@@ -59,6 +59,7 @@ calictl/webui/icons/
 # internal dev planning artifacts — kept local, not published
 docs/superpowers/
 docs/_build/
+_build/
 
 # playwright MCP scratch (browser snapshots/screenshots)
 .playwright-mcp/
@@ -74,6 +75,7 @@ firmware/host/*.o
 firmware/host/cali-host
 firmware/host/cali-host-jw
 firmware/host/store-cli
+firmware/host/lora_aead_cli
 firmware/build/
 firmware/build-qemu/
 # ESP-IDF generated config (sdkconfig.defaults is the committed source)

@@ -33,6 +33,7 @@ CHECKED_PAGES = [
     "docs/howto-esp-first-flash.md",
     "docs/howto-esp-standalone.md",
     "docs/howto-esp-wifi-setup.md",
+    "docs/howto-lora-remote-setup.md",
     "docs/howto-pair-your-camper.md",
     "docs/index.md",
     "docs/mock-unit-guide.md",
