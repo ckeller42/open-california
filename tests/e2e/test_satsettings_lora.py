@@ -91,6 +91,16 @@ def test_values_are_hidden_while_the_switch_is_off(error_gated_page):
                 expect(pg.locator(gone)).to_be_hidden()
 
 
+def test_no_lora_box_on_a_firmware_without_the_switch(error_gated_page):
+    """A satellite firmware older than the UI reports no ``experimental.lora``: the LoRa box stays hidden, so
+    the UI never offers a switch the firmware would refuse."""
+    with ux_gallery.EspStub("satellite") as s:
+        del s.fixtures["satellite"]["/api/state"]["device"]["experimental"]["lora"]
+        with _open(error_gated_page, s, "en") as pg:
+            expect(pg.locator("#exp")).to_be_visible()  # the screen is up
+            expect(pg.locator("#lora")).to_be_hidden()
+
+
 @pytest.mark.parametrize("locale,lang", LOCALES)
 def test_the_switch_turns_lora_on_and_off(error_gated_page, locale, lang):
     with ux_gallery.EspStub("satellite") as s:
