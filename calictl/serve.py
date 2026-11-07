@@ -1,13 +1,11 @@
-"""Unified calictl daemon: one BLE owner -> InfluxDB + MQTT + commands.
+"""Unified calictl daemon: one BLE owner -> InfluxDB + web UI + commands.
 
-A single process owns buspi's shared ``hci0`` and its (at most one) link to the unit. Each poll fans out
-to both InfluxDB (Grafana stack) and MQTT (Home Assistant discovery/state).
-MQTT command messages are serviced by BLE writes under the same lock, so a
-control write can never race a poll for that link.
+A single process owns buspi's shared ``hci0`` and its (at most one) link to the unit. Each poll goes
+to InfluxDB (Grafana stack) and the web UI's state. Commands from the web UI/API are serviced by BLE
+writes under the same lock, so a control write can never race a poll for that link.
 
-`paho.mqtt.client` is imported lazily in `run()` and `control` lazily in
-`on_command` (both may be absent on a dev box / not-yet-built), so
-`import calictl.serve` stays cheap and offline-safe.
+`influxdb_client` is imported lazily in `run()` and `control` lazily in `on_command` (both may be
+absent on a dev box), so `import calictl.serve` stays cheap and offline-safe.
 """
 
 from __future__ import annotations
@@ -25,7 +23,6 @@ from . import (
     freshness,
     history,
     influx,
-    mqtt,
     observer,
     overrides,
     protocol,
@@ -143,7 +140,7 @@ def guard_water(st, states, now, wall, settle, stale_from=None):
         st._water_stale_since = None
         return True
     if base is not None:
-        states["water"] = base  # MQTT/Influx get the held level, not the latch/ramp
+        states["water"] = base  # the UI/Influx get the held level, not the latch/ramp
     else:
         states.pop("water")  # nothing measured yet: publish nothing, not a fake 1 L
     st._water_stale_since = st._water_stale_since or stale_from or wall
@@ -217,9 +214,7 @@ class ServeBackend:
                 # the hold substitutes the WHOLE dict, so flag BOTH tanks — waste is just as held
                 # as fresh (it was served frozen-but-unflagged for a month before 2026-08-16)
                 out["water"] = {**good, "fresh": {**good["fresh"], "stale": True}, "stale_since": stale_since}
-                if (
-                    self._s._water_measured_at
-                ):  # the UI shows "🕒 measured 2 h ago" (web only, not MQTT/Influx)
+                if self._s._water_measured_at:  # the UI shows "🕒 measured 2 h ago" (web only, not Influx)
                     out["water"]["measured_at"] = self._s._water_measured_at
                 if isinstance(good.get("waste"), dict):
                     out["water"]["waste"] = {**good["waste"], "stale": True}
@@ -344,7 +339,7 @@ class ServeBackend:
         # Physical-precondition refusal (roof-reading needs roof up, cooler timer needs fridge off):
         # surface the reason as a distinct `refused` field and DON'T schedule a BLE write — otherwise
         # the outcome collapses into on_command's None and the UI misreports it as "Sent". on_command
-        # keeps its own gate for the MQTT/HA path.
+        # keeps its own gate for its other callers (the auto-camper).
         from . import control  # lazy
 
         reason = control.command_precondition(function, what, value, self._s._last or {})
@@ -374,14 +369,11 @@ class ServeBackend:
 
 
 async def dry_run(addr=None):
-    """Print the MQTT discovery configs + one live poll — no broker, no InfluxDB.
+    """Print one live poll as flattened JSON per function — no InfluxDB.
     Backs `calictl serve --dry-run`."""
     funcs = protocol.load()
     overrides.apply(funcs)
-    log.warning("# --- HA discovery configs ---")
-    for topic, cfg in mqtt.render_discovery().items():
-        print(topic, "=>", json.dumps(cfg))
-    print("\n# --- one poll ---")
+    print("# --- one poll ---")
     dev = CamperDevice(addr) if addr else CamperDevice()
     try:
         states = await influx.poll_states(funcs, dev)
@@ -389,8 +381,7 @@ async def dry_run(addr=None):
         print("(device unreachable: %s)" % e)
         return
     for fn, interp in states.items():
-        topic, payload = mqtt.render_state(fn, interp)
-        print(topic, "=>", payload)
+        print(fn, "=>", json.dumps(semantics.flatten(interp), default=str))
 
 
 class Server:
@@ -400,8 +391,7 @@ class Server:
            :id: R_SERVE_NO_BLE
 
            With ``ble_enabled=False`` the daemon never opens BLE: no supervisor, no poll, and the
-           web backend is read-only. The web UI serves the cached last state, MQTT publishes
-           availability only (state is published by the poll), and InfluxDB is filled by
+           web backend is read-only. The web UI serves the cached last state, and InfluxDB is filled by
            ``calictl-esp-ingest`` from the ESP SD log. ``_meta.session`` is ``"satellite"`` so the
            web UI shows the satellite pill instead of an offline banner.
            A ``SessionSupervisor`` is still constructed (``ServeBackend`` and ``_record_outcome``
@@ -414,7 +404,6 @@ class Server:
         self.interval = interval
         self.influx_enabled = influx_enabled
         self._ble: asyncio.Lock | None = None  # created inside run()'s loop (shared)
-        self._published = set()  # functions whose discovery is sent
         self._last = {}  # function -> last DECODED state (for commands)
         self._roof_stop: asyncio.Event | None = None  # lazy, loop-bound: interrupts an in-flight roof move
         self._roof_standalone_stop_at = float("-inf")  # monotonic arrival of the last standalone STOP
@@ -445,7 +434,6 @@ class Server:
         self._outcomes_cache = os.environ.get(
             "CALICTL_OUTCOMES_CACHE", os.path.expanduser("~/.cache/calictl/poll_outcomes.jsonl")
         )
-        self._mqtt = None
         self._iw = None  # influx write_api
         self._loop: asyncio.AbstractEventLoop | None = None
         self._web_port: int | None = None  # set by the CLI to enable the web UI
@@ -808,7 +796,7 @@ class Server:
             log.info("poll resumed: pairing flow ended")
         # One BLE read of every function under the lock; cache the DECODED state
         # (on_command builds full-packet control frames from it) and derive the
-        # INTERPRETED state for MQTT + InfluxDB.
+        # INTERPRETED state for the web UI + InfluxDB.
         async with self._ble:
             if self._pairing_owns_radio():
                 # a "start" won the race while this poll waited for the lock: it owns the radio now
@@ -882,19 +870,9 @@ class Server:
             # not next — closes the one-poll window where a restart right after engine-start would
             # otherwise still drop the just-armed restore. The step never mutates `_last`.
             self._save_last()
-        # MQTT discovery for newly-seen installed functions
         inst = installed_from(states)
-        new = inst - self._published
-        if new and self._mqtt:
-            for topic, cfg in mqtt.render_discovery(installed=new).items():
-                self._mqtt.publish(topic, json.dumps(cfg), retain=True)
-            self._published |= inst
-        for fn, interp in states.items():
-            if fn in inst and self._mqtt:
-                t, payload = mqtt.render_state(fn, interp)
-                self._mqtt.publish(t, payload)
         if self.influx_enabled and self._iw:
-            # Store only INSTALLED functions (same set MQTT publishes). The uninstalled ones
+            # Store only INSTALLED functions. The uninstalled ones
             # (satellite / living-room heater / roof-A/C / stairs / generalpurposesignals) emit
             # only raw pass-through fields (WordZeroFour, System, ...) — pure noise on this van.
             store = set(inst)
@@ -963,8 +941,8 @@ class Server:
         :returns: ``True`` if the post-write readback shows the targeted field
             now matches the request, ``False`` if it does not, or ``None`` when
             there is nothing to check against (unknown target, a frame that
-            can't be built, or a cold-cache read failure). The MQTT command
-            path ignores this; `ServeBackend.command` surfaces it to the web UI.
+            can't be built, or a cold-cache read failure). The auto-camper
+            ignores this; `ServeBackend.command` surfaces it to the web UI.
         """
         if not self._ble_enabled:  # satellite mode: BLE stays closed (the ESP actuates)
             log.warning("satellite mode: refusing command %s/%s" % (function, what))
@@ -975,14 +953,14 @@ class Server:
 
         if self._read_only:
             # SAFE DEFAULT: no vehicle writes unless writes were explicitly enabled. Central gate,
-            # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
+            # so it also blocks the auto-camper's writes (web.py rejects earlier with a 405).
             log.warning("read-only: refusing command %s/%s" % (function, what))
             return None
         if function == "roof" and what == "stop":
             return await self._roof_stop_command()
         # Roof MOVES gate here and branch off before the session warm-up (_roof_move_command: a press
         # must reach the unit at once, not after a wait for the session), so it never reaches the
-        # precondition check at the bottom (the gap that once left /api/command, CLI and HA able to drive the
+        # precondition check at the bottom (the gap that once left /api/command and the CLI able to drive the
         # roof under a blocking InfoPopUp). Refusing up here also avoids waking the unit for a move
         # we are about to refuse. STOP never gets here — it returned above — and must never be gated.
         if function == "roof":
@@ -1275,68 +1253,11 @@ class Server:
             await asyncio.sleep(0.05)
         return None
 
-    def _maybe_start_mqtt(self, loop):
-        """Connect the MQTT client for Home Assistant, or skip gracefully. Returns the client
-        or None. MQTT is OPTIONAL: paho-mqtt not installed, or the broker being unreachable,
-        must never stop BLE polling + the web UI (web-only / dev / e2e runs have no broker)."""
-        try:
-            import paho.mqtt.client as mqtt_client  # lazy
-        except ImportError:
-            log.warning("mqtt: paho-mqtt not installed — skipping MQTT (polling + web only)")
-            return None
-        host = os.environ.get("MQTT_HOST", "localhost")
-        port = int(os.environ.get("MQTT_PORT", "1883"))
-        user = os.environ.get("MQTT_USER")
-        password = os.environ.get("MQTT_PASSWORD")
-        cmd_map: dict = getattr(mqtt, "command_topics", lambda: {})()
-        # paho-mqtt >= 2.0 requires an explicit callback API version; request V1 so the
-        # 4-arg on_connect / 3-arg on_message below stay valid on both 1.x and 2.x.
-        try:
-            cli = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION1)
-        except AttributeError:
-            cli = mqtt_client.Client()  # paho-mqtt < 2.0
-        if user:
-            cli.username_pw_set(user, password)
-        cli.will_set(mqtt.availability_topic(), "offline", retain=True)
-
-        def on_connect(c, u, flags, rc):
-            c.publish(mqtt.availability_topic(), "online", retain=True)
-            for topic in cmd_map:
-                c.subscribe(topic)
-            log.info("mqtt connected to %s:%d (%d command topics)" % (host, port, len(cmd_map)))
-
-        def on_message(c, u, msg):
-            fn, what = cmd_map.get(msg.topic, (None, None))
-            if not fn:
-                return
-            value = msg.payload.decode().strip()
-            log.info("command: %s %s %s" % (fn, what, value))
-            fut = asyncio.run_coroutine_threadsafe(self.on_command(fn, what, value), loop)
-
-            def _log_command_failure(f, fn=fn, what=what, value=value):
-                exc = f.exception()
-                if exc is not None:
-                    log.warning("command failed: %s %s %s: %r" % (fn, what, value, exc))
-
-            fut.add_done_callback(_log_command_failure)
-
-        cli.on_connect = on_connect
-        cli.on_message = on_message
-        try:
-            cli.connect(host, port, keepalive=60)
-        except OSError as e:
-            log.warning(
-                "mqtt: connect to %s:%d failed (%s) — skipping MQTT (polling + web only)" % (host, port, e)
-            )
-            return None
-        cli.loop_start()
-        return cli
-
     def _maybe_start_web(self, loop):
         """Start the embedded web UI if ``_web_port`` is set, returning the server or None.
 
         The web UI is OPTIONAL: a bind failure (e.g. the port is already taken) must never
-        take down BLE polling + MQTT. On any startup error we log and continue headless.
+        take down BLE polling. On any startup error we log and continue headless.
         """
         port = getattr(self, "_web_port", None)
         if port is None:
@@ -1386,8 +1307,7 @@ class Server:
             await self._nap()
 
     def run(self):
-        """Blocking daemon: connect MQTT (+ optional InfluxDB), then poll→fan-out
-        on a timer while servicing HA commands from the MQTT network thread."""
+        """Blocking daemon: connect the optional InfluxDB and web UI, then poll→fan-out on a timer."""
         loop = asyncio.new_event_loop()
         self._loop = loop
         asyncio.set_event_loop(loop)
@@ -1395,9 +1315,6 @@ class Server:
         # Hand the loop-created shared lock to the session supervisor (which also creates its own
         # loop-bound wake event in attach()). Both must be born on THIS loop, hence not in __init__.
         self._sessions.attach(self._ble)  # inert state only (a lock + event): opens no BLE
-
-        # --- MQTT (Home Assistant) — optional; a missing broker must not stop polling+web ---
-        self._mqtt = self._maybe_start_mqtt(loop)
 
         # --- InfluxDB (Grafana/buspi) ---
         if self.influx_enabled:
@@ -1417,16 +1334,7 @@ class Server:
         # --- web UI (replica app, embedded) — optional; must never crash the daemon ---
         self._httpd = self._maybe_start_web(loop)
 
-        try:
-            loop.run_until_complete(self._main_loop())
-        finally:
-            if self._mqtt is not None:
-                info = self._mqtt.publish(mqtt.availability_topic(), "offline", retain=True)
-                try:
-                    info.wait_for_publish(timeout=2)  # flush the retained "offline" before stopping
-                except Exception:
-                    pass
-                self._mqtt.loop_stop()
+        loop.run_until_complete(self._main_loop())
 
 
 def run(addr=None, *, interval=30.0, influx_enabled=True):

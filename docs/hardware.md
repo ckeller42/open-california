@@ -192,7 +192,7 @@ frames match the app's byte for byte, but a first drive needs ignition ON and th
 driven: it ACKs the write, does not apply it, and its own screen says the function is not
 available while driving. An engine start also switches camping mode off. The web UI greys the
 master switch while the ignition is on ("Only possible when stationary"). `calictl` itself does
-not block the write: from the CLI, the API or Home Assistant it is sent and reported as not
+not block the write: from the CLI or the API it is sent and reported as not
 applied.
 
 **Energy mode.** `calictl` builds Normal, Max and ECO. The app's Normal and Max frames are
@@ -234,8 +234,8 @@ the bare readback. See the lighting section of
 
 ## Sinks
 
-Home Assistant over MQTT (Mosquitto), and Grafana over InfluxDB, both fed by the daemon on the
-Pi that owns its BLE link to the unit. The phone app and the ESP32 satellite stay connected to
+Grafana over InfluxDB, fed by the daemon on the Pi that owns its BLE link to the unit; the daemon
+also serves the web UI. The phone app and the ESP32 satellite stay connected to
 the unit alongside it.
 
 No real vehicle MAC address or VIN is recorded anywhere in this repository; if you need to

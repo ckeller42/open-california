@@ -535,7 +535,7 @@ def test_on_command_roof_stop_routes_to_actuate(monkeypatch):
 
 
 def test_on_command_refuses_precondition_without_actuating(monkeypatch):
-    """Characterization: on_command's OWN precondition gate (the MQTT/HA path — the web
+    """Characterization: on_command's OWN precondition gate (the auto-camper path — the web
     backend gates earlier and separately). Roof-reading with the roof closed must return
     None and never build/actuate."""
     s = serve.Server(influx_enabled=False)
@@ -1152,15 +1152,6 @@ def test_maybe_start_web_returns_server_on_success(monkeypatch, capsys):
     s._web_port = 8088
     assert s._maybe_start_web(loop=None) is sentinel
     assert "web UI on http://0.0.0.0:8088" in capsys.readouterr().out
-
-
-# --- MQTT is optional: no broker / paho absent must not crash the daemon ---
-
-
-def test_maybe_start_mqtt_survives_no_broker(monkeypatch):
-    monkeypatch.setenv("MQTT_PORT", "1")  # nothing listens on port 1 -> connect refused
-    s = serve.Server(influx_enabled=False)
-    assert s._maybe_start_mqtt(loop=None) is None  # graceful None, never raises
 
 
 def test_auto_camper_toggle_persists_and_surfaces():

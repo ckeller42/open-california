@@ -17,7 +17,6 @@
   <br>
   <a href="docs/raspberry-pi-setup.md"><img src="https://img.shields.io/badge/runs%20on-Raspberry%20Pi-c51a4a" alt="Runs on Raspberry Pi"></a>
   <a href="docs/firmware.md"><img src="https://img.shields.io/badge/runs%20on-ESP32--S3-e7352c" alt="Runs on ESP32-S3"></a>
-  <a href="calictl/deploy/homeassistant/HOMEASSISTANT.md"><img src="https://img.shields.io/badge/Home%20Assistant-MQTT%20discovery-41bdf5" alt="Home Assistant (MQTT discovery)"></a>
   <a href="calictl/deploy/GRAFANA.md"><img src="https://img.shields.io/badge/Grafana-InfluxDB-f46800" alt="Grafana (InfluxDB)"></a>
 </p>
 
@@ -26,13 +25,10 @@
   API reference, requirement traceability, and the <a href="https://ckeller42.github.io/open-california/protocol-sequences.html">protocol sequence diagrams</a>.
 </p>
 
-The camper control unit only talks to the vendor's iOS/Android app — so from Linux, Home
-Assistant, or a script there's simply no way to see the water level or turn on the fridge.
+The camper control unit only talks to the vendor's iOS/Android app — so from Linux or a script there's simply no way to see the water level or turn on the fridge.
 **Open California** reverse-engineers its Bluetooth-LE protocol into a clean, **stdlib-only**
-toolkit: full telemetry, *real* control writes, and a built-in **web UI** — plus first-class
-integration with **[Home Assistant](calictl/deploy/homeassistant/HOMEASSISTANT.md)** (MQTT
-discovery) and **[Grafana](calictl/deploy/GRAFANA.md)** (via InfluxDB), all self-hosted on a
-Raspberry Pi.
+toolkit: full telemetry, *real* control writes, and a built-in **web UI** — plus
+**[Grafana](calictl/deploy/GRAFANA.md)** dashboards (via InfluxDB), all self-hosted on a Raspberry Pi.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/light_00_dashboard.png" width="230" alt="Dashboard — status overview + feature tiles">
@@ -56,8 +52,8 @@ Raspberry Pi.
 - **Actually controls** — `calictl set cooler power on` (camping mode, lighting, roof, …) actuate
   for real, armed by the same `1003` heartbeat that unlocks the firmware's [write gate](https://ckeller42.github.io/open-california/protocol-sequences.html#heartbeat-armed-control-write)
   (lighting, roof, and range-rejection have their own [sequence diagrams](https://ckeller42.github.io/open-california/protocol-sequences.html)).
-- **Fits your stack** — one BLE-owning daemon fans out to **InfluxDB/Grafana** and **Home
-  Assistant** (MQTT), and serves the web UI above — same process, one link from the Pi. The unit
+- **Fits your stack** — one BLE-owning daemon writes to **InfluxDB/Grafana** and serves the
+  web UI above — same process, one link from the Pi. The unit
   serves several Bluetooth clients at once, so the phone app and the [ESP32 satellite](https://ckeller42.github.io/open-california/glossary.html#term-Satellite) can stay
   connected alongside it.
 - **Guides you through pairing** — a web wizard walks through first-run pairing and re-pair
@@ -69,10 +65,10 @@ Raspberry Pi.
 ## Quickstart
 
 ```sh
-python3 -m pytest tests/ -q            # test suite — stdlib-only, no BLE/MQTT needed
+python3 -m pytest tests/ -q            # test suite — stdlib-only, no BLE/InfluxDB needed
 python3 -m calictl status              # live read of every function (needs BLE; with the daemon up use its /api/state)
 python3 -m calictl set cooler power on # actuate (heartbeat-armed); reads back + reports
-python3 -m calictl serve --web 8080    # the daemon → InfluxDB + MQTT + web UI at :8080 (read-only)
+python3 -m calictl serve --web 8080    # the daemon → InfluxDB + web UI at :8080 (read-only)
 python3 -m calictl serve --web 8080 --enable-writes   # ...allow control writes to the vehicle
 ```
 
@@ -87,8 +83,8 @@ The **daemon is read-only by default** — it will not write to the vehicle unti
 accident. The web UI disables its controls and shows a banner when read-only, and greys out any
 control the unit refuses in the current state (with the reason as a tooltip).
 
-Only the standard library is imported at load; `bleak` / `paho-mqtt` / `influxdb_client` load
-lazily, only when actually talking to BLE / MQTT / InfluxDB.
+Only the standard library is imported at load; `bleak` / `influxdb_client` load
+lazily, only when actually talking to BLE / InfluxDB.
 
 ## Raspberry Pi
 
@@ -132,7 +128,7 @@ Full GATT service/characteristic map, software-version fields and the equipment 
 ## How it works
 
 - **Stdlib-only at import** — the runtime pulls no third-party packages until it actually needs a
-  BLE/MQTT/InfluxDB connection, so tests run anywhere.
+  BLE/InfluxDB connection, so tests run anywhere.
 - **One BLE owner on the Pi** — a single daemon owns the Pi's shared `hci0` and holds one link to
   the unit, serialized by an `asyncio.Lock`; control writes never race a poll. (The unit itself
   serves several centrals at once — the phone app, the Pi and the ESP32 satellite were connected

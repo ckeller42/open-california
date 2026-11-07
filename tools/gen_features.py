@@ -7,7 +7,6 @@ Read-only projection, never hand-edit the page: regenerate it with
 - :mod:`calictl.control` — the commands (the table below is checked against ``control.build`` and
   ``tests/vectors/control.json`` by ``tests/test_features_page.py``; ranges come from the
   module's own constants);
-- :mod:`calictl.mqtt` ``COMMAND_SPECS`` — the Home Assistant entities;
 - ``tools.gen_c_dict.ESP_CONTROL_FUNCTIONS`` — the functions the ESP32 satellite writes (the list
   that becomes ``CALI_CTL_CHARS`` in ``csrc/control_consts.h``, which ``ctl_char()`` in
   ``firmware/components/cali_core/control.c`` reads); the wake-up light there needs the web page's
@@ -21,8 +20,8 @@ Read-only projection, never hand-edit the page: regenerate it with
 .. req:: A generated page says what calictl does today, per function
    :id: R_FEATURES_PAGE
 
-   ``docs/features.md`` shall be generated from the catalog, the command builders, the Home
-   Assistant entity list and the satellite's write list, so it cannot drift from the code; it
+   ``docs/features.md`` shall be generated from the catalog, the command builders and the
+   satellite's write list, so it cannot drift from the code; it
    shall say for each function what is shown, what can be controlled, where, and how it is
    proven, in present tense and without issue numbers, dates, decompile class names or catalog
    vocabulary.
@@ -34,7 +33,7 @@ import argparse
 import re
 from pathlib import Path
 
-from calictl import control, mqtt
+from calictl import control
 from tools.catalog import load_catalog
 from tools.gen_c_dict import ESP_CONTROL_FUNCTIONS, ESP_ELSEWHERE_REASON
 
@@ -260,7 +259,7 @@ COMMANDS = {
             for k in control.LIGHT_ZONES
         },
         "all": ("Every lamp", _LVL, "sets every fitted lamp to one level", 5),
-        "brightness": ("Every lamp", _LVL, "the same as `all`; the Home Assistant slider uses it", 5),
+        "brightness": ("Every lamp", _LVL, "the same as `all` (an alias)", 5),
         "profile": (
             "Favourite",
             "0–13 except 8",
@@ -343,14 +342,12 @@ INTRO = """\
 
 This page lists, for each function of the VW California camper unit, what calictl shows, what it
 can control, where, and how well that is proven. It is generated from the code (the signal catalog,
-the command builders, the Home Assistant entities and the satellite's write list), so it changes
-when the code changes.
+the command builders and the satellite's write list), so it changes when the code changes.
 
-**Where** has three columns:
+**Where** has two columns:
 
 - **buspi** — the calictl daemon on the Raspberry Pi: its web UI, the `calictl set` command line
   and the HTTP API. The web UI shows only the functions fitted to the van.
-- **Home Assistant** — the entity calictl publishes over MQTT, with its name.
 - **Satellite** — the ESP32 satellite's web UI (the same web UI, served by the satellite). It writes
   to five functions only; for anything else it answers "{elsewhere}".
 
@@ -406,18 +403,14 @@ def _shown(fn, state, de) -> list:
     ]
 
 
-def _ha() -> dict:
-    return {(fn, s.what): s.name for fn, specs in mqtt.COMMAND_SPECS.items() for s in specs}
-
-
 def _satellite(fn, what) -> str:
     if fn not in ESP_CONTROL_FUNCTIONS or (fn, what) in SATELLITE_LACKS:
         return "—"
     return "yes, with the web page's clock" if (fn, what) == ("lighting", "wakeup") else "yes"
 
 
-# Commands of a satellite function that the satellite's C twin does not carry (an alias only Home
-# Assistant on buspi uses). tests/test_features_page.py checks this against control.c.
+# Commands of a satellite function that the satellite's C twin does not carry (`brightness`, an alias
+# of `all` that only buspi accepts). tests/test_features_page.py checks this against control.c.
 SATELLITE_LACKS = {("lighting", "brightness")}
 
 
@@ -431,7 +424,7 @@ def build(signals_path=None) -> str:
     catalog = load_catalog(signals_path)
     if set(catalog) != set(FUNCTIONS):
         raise ValueError("FUNCTIONS and signals.yaml disagree: %s" % sorted(set(catalog) ^ set(FUNCTIONS)))
-    de, ha = _german(), _ha()
+    de = _german()
     lines = [
         INTRO.format(
             elsewhere=ESP_ELSEWHERE_REASON,
@@ -460,17 +453,16 @@ def build(signals_path=None) -> str:
                 "**You can control** (`calictl set %s <command>%s`):"
                 % (fn, "" if all(c[3] is None for c in cmds.values()) else " <value>"),
                 "",
-                "| Command | Label | Values | buspi | Home Assistant | Satellite | Note |",
-                "|---|---|---|---|---|---|---|",
+                "| Command | Label | Values | buspi | Satellite | Note |",
+                "|---|---|---|---|---|---|",
             ]
             for what, (label, values, cnote, _) in cmds.items():
                 lines.append(
-                    "| `%s` | %s | %s | yes | %s | %s | %s |"
+                    "| `%s` | %s | %s | yes | %s | %s |"
                     % (
                         what,
                         _label(label, de),
                         values,
-                        ha.get((fn, what), "—"),
                         _satellite(fn, what),
                         cnote or "—",
                     )

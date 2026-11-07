@@ -1,12 +1,12 @@
 ---
 name: add-signal
-description: Surface a new BLE signal in calictl end-to-end (catalog → semantics → dashboard/HA → audit). Use when adding or re-scaling a field from protocol/dictionary.yaml so it reaches Grafana/Home Assistant without tripping the coverage guardrail.
+description: Surface a new BLE signal in calictl end-to-end (catalog → semantics → dashboard → audit). Use when adding or re-scaling a field from protocol/dictionary.yaml so it reaches the web UI/Grafana without tripping the coverage guardrail.
 ---
 
 # Add / re-surface a signal
 
 The pipeline is `dictionary.yaml → protocol.decode → semantics.interpret → signals.yaml
-catalog → influx/mqtt`. Every dictionary field MUST have a catalog decision or CI fails.
+catalog → influx/web UI`. Every dictionary field MUST have a catalog decision or CI fails.
 See `docs/architecture.md`.
 
 ## Steps
@@ -28,7 +28,7 @@ See `docs/architecture.md`.
 5. **Update sinks if surfaced**: Grafana panels don't auto-update — edit
    `calictl/deploy/camper-dashboard.json` (data auto-flows to InfluxDB by field name; only
    titles/units/new-panels need JSON edits) and push with `calictl/deploy/push_dashboard.py` (needs
-   Grafana creds on buspi). HA MQTT discovery is automatic for installed functions.
+   Grafana creds on buspi).
 6. **Don't label unverified scales with a unit** — several scales are UNVERIFIED
    (`docs/business-logic/signal-scales.md`).
 

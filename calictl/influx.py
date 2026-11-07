@@ -23,7 +23,7 @@ import os
 import time
 
 from . import log as _log
-from . import mqtt, overrides, protocol, semantics
+from . import overrides, protocol, semantics
 from .device import CamperDevice
 
 log = _log.get(__name__)
@@ -59,7 +59,7 @@ def numeric_fields(interp: dict) -> dict[str, float]:
     list-valued keys become a `<key>_count` and curated alert enums (see
     :data:`_ENUM_CODES`) become a numeric `<key>_code` (0 = ok/none)."""
     out: dict[str, float] = {}
-    for k, v in mqtt.flatten(interp).items():
+    for k, v in semantics.flatten(interp).items():
         if k in _ENUM_CODES:  # alert enum -> code (None/unknown -> 0 = ok)
             out[k + "_code"] = float(_ENUM_CODES[k].get(v, 0))
         elif isinstance(v, bool):

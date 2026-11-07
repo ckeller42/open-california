@@ -142,7 +142,7 @@ def test_import_is_stdlib_only():
     import importlib
 
     importlib.reload(web)
-    for banned in ("bleak", "yaml", "paho", "influxdb_client"):
+    for banned in ("bleak", "yaml", "influxdb_client"):
         assert banned not in sys.modules or banned in before
 
 

@@ -600,14 +600,10 @@ def test_general_firmware_untested_flag():
     assert semantics.apply_sw_corrections({"energy": {"dcdc_current": 5}})["energy"]["dcdc_current"] == 5
 
 
-def test_mqtt_flatten_and_state():
-    from calictl import mqtt
-
+def test_semantics_flatten():
     interp = {"installed": True, "fresh": {"percent": 38, "liters": 11}, "waste": {"percent": 0}}
-    flat = mqtt.flatten(interp)
-    assert flat["fresh_percent"] == 38 and flat["waste_percent"] == 0
-    topic, payload = mqtt.render_state("water", interp)
-    assert topic == "calivan/water" and '"fresh_percent": 38' in payload
+    flat = semantics.flatten(interp)
+    assert flat == {"installed": True, "fresh_percent": 38, "fresh_liters": 11, "waste_percent": 0}
 
 
 def test_installed_from_states():
@@ -662,7 +658,7 @@ def test_numeric_fields_alert_enums_become_codes():
 def test_points_for_reuses_numeric_fields():
     import pytest
 
-    pytest.importorskip("influxdb_client")  # tests must run without MQTT/Influx installed
+    pytest.importorskip("influxdb_client")  # tests must run without Influx installed
     from calictl import influx
 
     pts = influx.points_for({"water": {"installed": True, "fresh": {"percent": 38}}})
@@ -671,22 +667,6 @@ def test_points_for_reuses_numeric_fields():
     p = pts[0]
     assert p._name == "camper" and p._tags.get("function") == "water"
     assert p._fields.get("fresh_percent") == 38.0  # field actually landed, not just the point
-
-
-def test_full_parity_devices_and_installed_gating():
-    from calictl import mqtt
-
-    # every installed function gets its own HA device + >=1 entity
-    installed = {"water", "energy", "cooler", "campingmode", "airheater", "roof", "lighting"}
-    cfgs = mqtt.render_discovery(installed=installed)
-    # one device per function, keyed in each entity's config
-    devices = {tuple(sorted(c["device"]["identifiers"])) for c in cfgs.values()}
-    assert ("vwcamper_water",) in devices and ("vwcamper_energy",) in devices
-    # a not-installed function (stairs) publishes nothing
-    assert not any("stairs" in t for t in cfgs)
-    # roof is present but ONLY as a sensor (no switch/light/command_topic)
-    roof = [c for t, c in cfgs.items() if "roof_" in t and "roofair" not in t]
-    assert roof and all("command_topic" not in c for c in roof)
 
 
 def test_camping_lights_control_frame():

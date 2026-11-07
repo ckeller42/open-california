@@ -4,7 +4,7 @@ constants (#154 Task 1+). ``tools.gen_c_dict.generate_net()`` turns ``CONSTS`` i
 ``CONSTS`` dict, so the two languages can never drift on an SSID, a timeout or a size limit.
 
 Stdlib-only, no runtime import cost: plain data, safe to import from ``calictl/*`` at module top
-if a later task wants to (unlike ``bleak``/``paho``/etc, which stay lazy per the project's hard
+if a later task wants to (unlike ``bleak``/``influxdb_client``/etc, which stay lazy per the project's hard
 rule).
 
 .. req:: WiFi setup constants are generated for C from one Python source
