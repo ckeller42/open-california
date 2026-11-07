@@ -1285,6 +1285,7 @@ def test_wizard_start_while_a_command_runs_says_busy(stub, locale, text):
         pg.get_by_label(words["ready"]).check()
         pg.get_by_role("button", name=words["connect"]).click()
         expect(pg.locator("#pairing-req-error")).to_have_text(text)  # a row in the card (#511), not a toast
+        expect(pg.locator("#pairing-req-error")).to_be_visible()
         browser.close()
     assert not errors, errors
 

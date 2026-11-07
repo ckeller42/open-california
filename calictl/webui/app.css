@@ -196,7 +196,7 @@ label.row { cursor: pointer; }
 
 /* toasts */
 #toasts { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%);
-  display: grid; gap: .5rem; z-index: 20; width: max-content; max-width: 92vw; }
+  display: grid; gap: .5rem; z-index: 20; width: max-content; max-width: 92vw; max-height: 50vh; overflow-y: auto; }
 .toast { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--muted);
   border-radius: 12px; padding: .7rem 1rem; box-shadow: var(--shadow); font-size: .92rem;
   animation: rise .2s ease; }

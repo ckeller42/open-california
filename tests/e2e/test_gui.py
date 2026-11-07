@@ -664,6 +664,8 @@ def test_session_pill_shows_busy_then_a_persistent_error(page, base_url):
     expect(toast).to_have_text("Couldn't change the Bluetooth connection")
     page.wait_for_timeout(4500)  # past the 4 s a confirmation toast lives
     expect(toast).to_be_visible()
+    page.evaluate("toast(\"Couldn't change the Bluetooth connection\", 'error')")  # the same failure again
+    expect(toast).to_have_count(1)  # replaces the earlier one: retries never pile up
     toast.get_by_role("button", name="Dismiss").focus()
     page.keyboard.press("Enter")
     expect(toast).to_have_count(0)

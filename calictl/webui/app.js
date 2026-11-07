@@ -1093,10 +1093,12 @@ const CMD_LINK_WAIT_MS = 45000;
  * @param {number} [ms]
  */
 function toast(msg, kind, ms = 4000) {
-  const d = document.createElement("div");
+  const d = document.createElement("div"), box = /** @type {HTMLElement} */ (document.getElementById("toasts"));
   d.className = "toast" + (kind ? " " + kind : "");
   d.textContent = /** @type {string} */ (t(msg));
-  (/** @type {HTMLElement} */ (document.getElementById("toasts"))).appendChild(d);
+  if (kind === "error")   // a repeated failure replaces its earlier toast: the stack never grows with retries
+    for (const o of Array.from(box.querySelectorAll(".toast.error"))) if (o.firstChild && o.firstChild.textContent === d.textContent) o.remove();
+  box.appendChild(d);
   if (kind === "error") {   // the failure reason: stays until the owner dismisses it (tap, or the ✕ button)
     const x = document.createElement("button");
     x.type = "button"; x.className = "toast-x";
@@ -1879,7 +1881,9 @@ async function pairingAction(action, value, confirmFlag) {
   render();
   let res = null;
   try {
-    res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    // above the daemon's 30 s pairing bridge: a stalled POST frees the card's buttons (Cancel) again
+    res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+                                      signal: AbortSignal.timeout(35000) });
   } catch (e) { /* res stays null */ }
   pairingBusy = false;
   if (res && res.state) PAIRING = res;              // a real snapshot -> adopt it
@@ -2086,6 +2090,7 @@ function pairingCard() {
     const resetBtn = document.createElement("button"); resetBtn.type = "button"; resetBtn.className = "btn";
     resetBtn.textContent = /** @type {string} */ (t("Unpair…"));
     resetBtn.onclick = () => unpair();
+    resetBtn.disabled = pairingBusy;
     rbtns.appendChild(resetBtn);
     card.appendChild(rbtns);
   }
@@ -2550,7 +2555,7 @@ function buildSetup() {
     start.onclick = () => pairingAction("start");
     card.append(h("div", { id: "setup-pair-intro" },
       p(T("Close the California app. On the camper unit open Einstellungen → Bluetooth → Gerät verbinden, then press Pair now.")),
-      setupBtns(start)),
+      h("p", { class: "warn", id: "setup-pair-err", "aria-live": "polite" }), setupBtns(start)),
       h("p", { class: "note", id: "setup-count", "aria-live": "off" }), h("div", { id: "setup-paircard" }),
       p("", "setup-paired"), setupBtns(setupNext("Next", "victron", "primary", "setup-pair-next"),
         setupSkip("victron", () => { setupPairSkipped = true; }, "setup-pair-skip")));
@@ -2618,6 +2623,8 @@ function setupUpdate(m, s) {
     const p = PAIRING, paired = !!m.paired || !!(p && p.state === "bonded");
     const live = !!p && p.state !== "idle";
     sq("setup-pair-intro").hidden = paired || live;
+    sq("setup-pair-err").textContent = pairingReqError ? T(pairingReqError) : "";   // a failed request stays (R_UI_VISIBLE_FAILURES)
+    /** @type {HTMLButtonElement} */ (sq("setup-pair-start")).disabled = pairingBusy;
     const ae = document.activeElement;
     if (!(ae && ae.id === "pairing-passkey")) {   // never under a code being typed
       const pc = live ? pairingCard() : null;
