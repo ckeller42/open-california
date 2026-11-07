@@ -196,12 +196,15 @@ label.row { cursor: pointer; }
 
 /* toasts */
 #toasts { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%);
-  display: grid; gap: .5rem; z-index: 20; width: max-content; max-width: 92vw; }
+  display: grid; gap: .5rem; z-index: 20; width: max-content; max-width: 92vw; max-height: 50vh; overflow-y: auto; }
 .toast { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--muted);
   border-radius: 12px; padding: .7rem 1rem; box-shadow: var(--shadow); font-size: .92rem;
   animation: rise .2s ease; }
 .toast.ok { border-left-color: var(--ok); } .toast.warn { border-left-color: var(--warn); }
-.toast.error { border-left-color: var(--error); }
+.toast.error { border-left-color: var(--error); cursor: pointer; display: flex; align-items: center; gap: .5rem; }
+.toast-x { background: none; border: 0; color: var(--muted); font: inherit; min-width: 44px; min-height: 44px;
+  margin: -.7rem -1rem -.7rem auto; cursor: pointer; }
+.toast-x::before { content: "✕"; }   /* drawn, not text: the toast's text stays the message */
 .toast.update { border-left-color: var(--ok); cursor: pointer; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 

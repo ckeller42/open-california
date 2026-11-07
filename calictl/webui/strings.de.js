@@ -385,6 +385,9 @@ window.STRINGS_DE = {
   "power saving": "Energiesparen",
   "reconnecting…": "verbinde neu…",
   "Connecting…": "Verbinde …",
+  "Disconnecting…": "Trenne …",
+  "Couldn't change the Bluetooth connection": "Bluetooth-Verbindung konnte nicht geändert werden",
+  "Dismiss": "Ausblenden",
   "⚠ {name} not reachable since {since}. Last data {clock} ({ago}).":
     "⚠ {name} nicht erreichbar seit {since}. Letzte Daten {clock} ({ago}).",
   "⚠ {name} not reachable since {since}.": "⚠ {name} nicht erreichbar seit {since}.",

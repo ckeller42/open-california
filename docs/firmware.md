@@ -2190,6 +2190,18 @@ collected here. `firmware/README.md` has the human-readable version of the same 
    only with the state; its age ticks in an ``aria-hidden`` child. No buttons, except on the
    satellite's rest card (``R_UI_REST_CARD``).
 
+.. req:: The web UI keeps a failed write visible and takes one write per tap
+   :id: R_UI_VISIBLE_FAILURES
+   :status: implemented
+   :tags: web, esp32
+
+   A failure reason shall stay on screen until the owner acts: an error toast stays until it is
+   dismissed (a tap, or its "Dismiss" button from the keyboard), while confirmations still go after
+   4 s; a failed pairing request is a row in the pairing card until the next request; a satellite
+   setting's error line is a polite live region. While a write is on the wire its control shall be
+   disabled and say so, and a state poll shall not re-enable it: the BLE session pill ("Connecting…"
+   or "Disconnecting…"), the pairing card's buttons, a satellite switch and the WiFi "Connect".
+
 .. req:: The web UI shows the satellite's power-save rest as the app's card, with Reconnect
    :id: R_UI_REST_CARD
    :status: implemented
@@ -2323,6 +2335,10 @@ collected here. `firmware/README.md` has the human-readable version of the same 
   tab, asleep-then-unreachable, DE copy + the quiet live region) and `T_UI_LINK_RESTORED`
   (`tests/e2e/test_pwa.py`); the satellite's 4 s command stall by
   `test_a_pending_command_does_not_trip_the_offline_banner`.
+- **`R_UI_VISIBLE_FAILURES`** — verified by `T_UI_VISIBLE_FAILURES` (`tests/e2e/test_gui.py`, the session
+  pill), `test_a_failed_pairing_request_stays_in_the_card_as_translated_text` and
+  `tests/e2e/test_satsettings.py`'s `test_a_switch_stays_disabled_while_its_write_runs_and_its_error_is_announced` /
+  `test_hotspot_connect_is_disabled_while_the_join_posts`.
 - **`R_FW_SHARED_UI`** — verified by `T_SEMANTICS_JS_PARITY` (`tests/test_semantics_js_parity.py`,
   `semantics.js` vs the Python golden vectors), `T_FW_APP_BUNDLE` (`tests/test_app_bundle.py`, the
   generated bundle) and `T_FW_SHARED_UI_HOST` (`tests/firmware/test_web_e2e.py`, the host tier's

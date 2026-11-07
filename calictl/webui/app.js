@@ -1093,10 +1093,20 @@ const CMD_LINK_WAIT_MS = 45000;
  * @param {number} [ms]
  */
 function toast(msg, kind, ms = 4000) {
-  const d = document.createElement("div");
+  const d = document.createElement("div"), box = /** @type {HTMLElement} */ (document.getElementById("toasts"));
   d.className = "toast" + (kind ? " " + kind : "");
   d.textContent = /** @type {string} */ (t(msg));
-  (/** @type {HTMLElement} */ (document.getElementById("toasts"))).appendChild(d);
+  if (kind === "error")   // a repeated failure replaces its earlier toast: the stack never grows with retries
+    for (const o of Array.from(box.querySelectorAll(".toast.error"))) if (o.firstChild && o.firstChild.textContent === d.textContent) o.remove();
+  box.appendChild(d);
+  if (kind === "error") {   // the failure reason: stays until the owner dismisses it (tap, or the ✕ button)
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "toast-x";
+    x.setAttribute("aria-label", /** @type {string} */ (t("Dismiss")));
+    d.appendChild(x);
+    d.onclick = () => d.remove();
+    return d;
+  }
   if (ms) setTimeout(() => d.remove(), ms);   // 0 = stays until removed
   return d;
 }
@@ -1606,6 +1616,8 @@ function clockText(epochSec) {
 // disconnect. When the session is merely idle in auto mode the daemon is still polling normally —
 // showing a "Connect" button there falsely reads as "no connection", so we hide it (the fast path
 // warms automatically the moment you interact). The main status pill still shows live/offline.
+/** the /api/session action on the wire ("" = none) */
+let sessionBusy = "";
 function sessionToggle() {
   const m = /** @type {Meta} */ (STATE._meta || {});
   const mode = m.session_mode, st = m.session;
@@ -1616,6 +1628,7 @@ function sessionToggle() {
   else if (st === "connecting" || st === "degraded") { spec = { cls: "busy", text: "🟡 Connecting" }; action = "disconnect"; }
   else if (st === "asleep") { spec = { cls: "", text: "⚪ Asleep — tap to wake" }; action = "connect"; }
   else return null;   // idle in auto mode while polling normally — not a disconnection, don't imply one
+  if (sessionBusy) spec = { cls: "busy", text: sessionBusy === "connect" ? "Connecting…" : "Disconnecting…" };   // a poll keeps it
   const el = document.createElement("button");
   el.type = "button";
   el.className = "session-pill" + (spec.cls ? " " + spec.cls : "");
@@ -1624,12 +1637,18 @@ function sessionToggle() {
     ? "Connect the fast BLE session (warm it before controlling)"
     : "Disconnect — release this session now (it also auto-releases when idle)"));
   el.setAttribute("aria-label", el.title);
+  el.disabled = !!sessionBusy;   // one POST per tap, also across the re-renders while it runs
   el.onclick = async () => {
-    el.disabled = true;
+    sessionBusy = action;
+    el.disabled = true; el.className = "session-pill busy";
+    el.textContent = /** @type {string} */ (t(action === "connect" ? "Connecting…" : "Disconnecting…"));
+    let res = null;
     try {
-      await api("/api/session", { method: "POST", headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ action }) });
-    } catch (e) { /* the state refresh below reflects whatever actually happened */ }
+      res = await api("/api/session", { method: "POST", headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ action }) });
+    } catch (e) { /* res stays null */ }
+    sessionBusy = "";
+    if (!res || res.error) toast("Couldn't change the Bluetooth connection", "error");
     await refreshState(true);
   };
   return el;
@@ -1769,6 +1788,8 @@ let pairingAdvOpen = false;            // the bonded step's "Advanced" disclosur
 // neutral loading step instead of flashing a leftover passkey/bonded/error/etc. step from a
 // flow the server has since moved on from (e.g. it restarted while this tab stayed open).
 let pairingLoading = false;
+let pairingBusy = false;               // a POST /api/pairing is on the wire
+let pairingReqError = "";              // the last failed request's text (EN key), shown in the card
 /** @type {{state:string, attempts:number, error:string|null, address:string|null, radio_busy?: boolean}|null} */
 let PAIRING = null;
 let pairingFetched = false;            // the one-off load-time fetch (refreshState) has run
@@ -1850,18 +1871,25 @@ const SAT_PAIRING_ERROR_HINT = {
  * @param {boolean} [confirmFlag]
  */
 async function pairingAction(action, value, confirmFlag) {
+  if (pairingBusy) return;   // one POST per tap: the card's buttons are disabled while it runs
   if (action === "start" || action === "reset") startPairingPoll();  // re-arm: a new flow begins
   /** @type {Record<string, any>} */
   const body = { action };
   if (value !== undefined) body.value = value;
   if (confirmFlag) body.confirm = true;
-  let res;
+  pairingBusy = true; pairingReqError = "";
+  render();
+  let res = null;
   try {
-    res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  } catch (e) { toast("Pairing request failed", "error"); return; }
+    // above the daemon's 30 s pairing bridge: a stalled POST frees the card's buttons (Cancel) again
+    res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+                                      signal: AbortSignal.timeout(35000) });
+  } catch (e) { /* res stays null */ }
+  pairingBusy = false;
   if (res && res.state) PAIRING = res;              // a real snapshot -> adopt it
-  // never a raw error enum: known request errors get their own text, anything else the generic one
-  else toast(PAIRING_REQUEST_ERROR_MSG[(res && res.error) || ""] || "Pairing request failed", "warn");
+  // never a raw error enum: known request errors get their own text, anything else the generic one.
+  // A row in the card, not a toast: it stays until the next request.
+  else pairingReqError = PAIRING_REQUEST_ERROR_MSG[(res && res.error) || ""] || "Pairing request failed";
   render();
 }
 
@@ -1916,7 +1944,7 @@ function pairingCard() {
   head.appendChild(hlbl);
   const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
   closeBtn.textContent = /** @type {string} */ (t("Close"));
-  closeBtn.onclick = () => { pairingOpen = false; pairingLoading = false; stopPairingPoll(); render(); };
+  closeBtn.onclick = () => { pairingOpen = false; pairingLoading = false; pairingReqError = ""; stopPairingPoll(); render(); };
   if (view !== "setup") head.appendChild(closeBtn);   // the setup wizard has its own Skip
   card.appendChild(head);
 
@@ -1937,6 +1965,11 @@ function pairingCard() {
     const busy = document.createElement("div"); busy.className = "warn"; busy.id = "pairing-radio-busy";
     busy.textContent = /** @type {string} */ (t("Another app on this Pi keeps Bluetooth scanning — pairing will likely fail until it stops (for example the Home Assistant Bluetooth integration)."));
     card.appendChild(busy);
+  }
+  if (pairingReqError) {
+    const err = document.createElement("div"); err.className = "warn"; err.id = "pairing-req-error";
+    err.textContent = /** @type {string} */ (t(pairingReqError));
+    card.appendChild(err);
   }
   const sat = satellite();
   if (p.state === "idle") {
@@ -1962,7 +1995,7 @@ function pairingCard() {
     card.appendChild(crow);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const startBtn = document.createElement("button"); startBtn.type = "button"; startBtn.className = "btn";
-    startBtn.textContent = /** @type {string} */ (t("Pair now")); startBtn.disabled = !pairingReady;
+    startBtn.textContent = /** @type {string} */ (t("Pair now")); startBtn.disabled = !pairingReady || pairingBusy;
     startBtn.onclick = () => pairingAction("start");
     btns.appendChild(startBtn);
     card.appendChild(btns);
@@ -1977,6 +2010,7 @@ function pairingCard() {
     const cancelBtn = document.createElement("button"); cancelBtn.type = "button"; cancelBtn.className = "btn";
     cancelBtn.textContent = /** @type {string} */ (t("Cancel"));
     cancelBtn.onclick = () => pairingAction("cancel");
+    cancelBtn.disabled = pairingBusy;
     btns.appendChild(cancelBtn);
     card.appendChild(btns);
   } else if (p.state === "waiting_passkey") {
@@ -1996,6 +2030,7 @@ function pairingCard() {
       if (!/^[0-9]{6}$/.test(v)) { toast("The passcode has 6 digits", "warn"); return; }
       pairingAction("passkey", v);
     };
+    sendBtn.disabled = pairingBusy;
     row.appendChild(sendBtn);
     card.appendChild(row);
   } else if (p.state === "pairing" || p.state === "verifying" || p.state === "resetting") {
@@ -2044,6 +2079,7 @@ function pairingCard() {
     const retryBtn = document.createElement("button"); retryBtn.type = "button"; retryBtn.className = "btn";
     retryBtn.textContent = /** @type {string} */ (t("Try again"));
     retryBtn.onclick = () => pairingAction("start");
+    retryBtn.disabled = pairingBusy;
     btns.appendChild(retryBtn);
     card.appendChild(btns);
   }
@@ -2054,6 +2090,7 @@ function pairingCard() {
     const resetBtn = document.createElement("button"); resetBtn.type = "button"; resetBtn.className = "btn";
     resetBtn.textContent = /** @type {string} */ (t("Unpair…"));
     resetBtn.onclick = () => unpair();
+    resetBtn.disabled = pairingBusy;
     rbtns.appendChild(resetBtn);
     card.appendChild(rbtns);
   }
@@ -2300,7 +2337,7 @@ const satCard = (id, title, ...kids) => h("section", { class: "card dcard", id: 
 const satSwitchRow = (id) => h("div", { class: "row" }, h("span", { class: "lbl", id: id + "-status" }),
   h("button", { type: "button", class: "switch", role: "switch", id: id + "-toggle", "aria-labelledby": id + "-status" }));
 /** A row's error line. @param {string} id */
-const satMsg = (id) => h("p", { class: "warn", id: id });
+const satMsg = (id) => h("p", { class: "warn", id: id, "aria-live": "polite" });
 
 /** The WiFi box (both screens): online "Connected to <ssid> · ip · dBm" + Change network…; the join
  * form over the hotspot, after Change network…, or while a hotspot join runs; the Switching panel. */
@@ -2518,7 +2555,7 @@ function buildSetup() {
     start.onclick = () => pairingAction("start");
     card.append(h("div", { id: "setup-pair-intro" },
       p(T("Close the California app. On the camper unit open Einstellungen → Bluetooth → Gerät verbinden, then press Pair now.")),
-      setupBtns(start)),
+      h("p", { class: "warn", id: "setup-pair-err", "aria-live": "polite" }), setupBtns(start)),
       h("p", { class: "note", id: "setup-count", "aria-live": "off" }), h("div", { id: "setup-paircard" }),
       p("", "setup-paired"), setupBtns(setupNext("Next", "victron", "primary", "setup-pair-next"),
         setupSkip("victron", () => { setupPairSkipped = true; }, "setup-pair-skip")));
@@ -2586,6 +2623,8 @@ function setupUpdate(m, s) {
     const p = PAIRING, paired = !!m.paired || !!(p && p.state === "bonded");
     const live = !!p && p.state !== "idle";
     sq("setup-pair-intro").hidden = paired || live;
+    sq("setup-pair-err").textContent = pairingReqError ? T(pairingReqError) : "";   // a failed request stays (R_UI_VISIBLE_FAILURES)
+    /** @type {HTMLButtonElement} */ (sq("setup-pair-start")).disabled = pairingBusy;
     const ae = document.activeElement;
     if (!(ae && ae.id === "pairing-passkey")) {   // never under a code being typed
       const pc = live ? pairingCard() : null;
@@ -2700,7 +2739,7 @@ function satRow(id, parts, on, st) {
   const b = /** @type {HTMLButtonElement} */ (sq(id + "-toggle"));
   sq(id + "-status").textContent = [...parts, st ? "" : T(SAT_STATION_ONLY)].filter(Boolean).join(" · ");
   b.hidden = !st;
-  b.disabled = false;
+  b.disabled = b.classList.contains("pending");   // a poll never re-enables a switch whose write still runs
   b.setAttribute("aria-checked", String(on));
 }
 
@@ -2709,10 +2748,11 @@ function satRow(id, parts, on, st) {
 async function satToggle(path, id, err, key, msgId) {
   const b = /** @type {HTMLButtonElement} */ (sq(id + "-toggle")), msg = sq(msgId), on = b.getAttribute("aria-checked") !== "true";
   msg.textContent = "";
-  b.disabled = true;   // one POST per tap
+  b.disabled = true; b.classList.add("pending");   // one POST per tap
   ux({ type: "control", fn: "satellite", control: uxId(id) });
   let ok = false;
   try { ok = !!(await satFetch(path, { [key]: on })).body.ok; } catch (e) { /* ok stays false */ }
+  b.classList.remove("pending");
   if (!ok) msg.textContent = T(err);
   await refreshState(true);
   if (satDom) b.disabled = false;
@@ -2986,8 +3026,9 @@ function satConnect() {
 /** POST /api/wifi and watch the join. @param {string} ssid @param {string} psk
  * @param {boolean} hotspot over the hotspot a lost answer is retried once; online it means the satellite already left */
 async function satJoin(ssid, psk, hotspot) {
-  const msg = sq("setup-msg");
+  const msg = sq("setup-msg"), connect = /** @type {HTMLButtonElement} */ (sq("connect"));
   const send = () => satFetch("/api/wifi", { ssid: ssid, psk: psk }, NET_CONNECT_TIMEOUT_MS);
+  connect.disabled = true; connect.classList.add("pending");   // one join per tap, the retry included
   try {
     let r = null;
     try { r = await send(); } catch (e) {
@@ -3020,7 +3061,7 @@ async function satJoin(ssid, psk, hotspot) {
     msg.className = "warn";
     msg.textContent = T("No answer from the satellite.");
     sq("wifi-switch").hidden = true;
-  }
+  } finally { connect.disabled = false; connect.classList.remove("pending"); }
 }
 
 /** One look at GET /api/wifi while a join runs (every NET_PAGE_POLL_MS until it ends). */

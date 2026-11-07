@@ -637,6 +637,40 @@ def test_session_pill_shows_live(page, base_url):
     assert "Live" in txt
 
 
+def test_session_pill_shows_busy_then_a_persistent_error(page, base_url):
+    """#511: a tap on the session pill says what runs ("Disconnecting…", disabled — a state poll does
+    not re-enable it), and a failed POST leaves an error toast that outlives the 4 s confirmations
+    and goes only when dismissed (here: the keyboard, on its ✕ button).
+
+    .. test:: A write in flight disables its control; its failure stays until dismissed
+       :id: T_UI_VISIBLE_FAILURES
+       :links: R_UI_VISIBLE_FAILURES
+    """
+    held = []
+    page.route("**/api/session", lambda r: held.append(r))  # hold the POST on the wire
+    page.goto(base_url)
+    pill = page.locator(".session-pill")
+    expect(pill).to_contain_text("Live", timeout=20000)
+    pill.click()
+    expect(pill).to_have_text("Disconnecting…")
+    expect(pill).to_be_disabled()
+    page.wait_for_timeout(2500)  # a state poll re-renders the pill
+    expect(pill).to_have_text("Disconnecting…")
+    expect(pill).to_be_disabled()
+    assert len(held) == 1
+    # 200 + an error body: no "Failed to load resource" console line for the error gate
+    held[0].fulfill(status=200, content_type="application/json", body='{"error": "session_failed"}')
+    toast = page.locator("#toasts .toast.error")
+    expect(toast).to_have_text("Couldn't change the Bluetooth connection")
+    page.wait_for_timeout(4500)  # past the 4 s a confirmation toast lives
+    expect(toast).to_be_visible()
+    page.evaluate("toast(\"Couldn't change the Bluetooth connection\", 'error')")  # the same failure again
+    expect(toast).to_have_count(1)  # replaces the earlier one: retries never pile up
+    toast.get_by_role("button", name="Dismiss").focus()
+    page.keyboard.press("Enter")
+    expect(toast).to_have_count(0)
+
+
 def test_command_latency_is_subsecond(page, base_url):
     """The persistent session's payoff: a control write applies in well under a second
     (the e2e daemon runs with real ARM_DELAY defaults; only a live session makes this pass)."""
@@ -710,9 +744,11 @@ def test_pairing_checklist_before_connect(pairing_page):
     assert "Home Assistant" in text  # other scanners on the Pi
 
 
-def test_a_failed_pairing_request_toasts_translated_text_not_an_enum(tmp_path):
+def test_a_failed_pairing_request_stays_in_the_card_as_translated_text(tmp_path):
     """A POST /api/pairing that returns an error body (e.g. HTTP 500 {"error":"pairing_failed"}
-    when the daemon bridge times out) must toast translated text, never the raw enum."""
+    when the daemon bridge times out) shows translated text, never the raw enum, as a row in the
+    pairing card that stays (#511: not a 4 s toast). While the POST runs "Pair now" is disabled:
+    one request per tap."""
     port = _free_port()
     proc, url = _start_daemon(
         port,
@@ -726,20 +762,27 @@ def test_a_failed_pairing_request_toasts_translated_text_not_an_enum(tmp_path):
         with sync_playwright() as p:
             page = p.chromium.launch().new_page()
 
-            def _fail_post(route):
+            held = []
+
+            def _hold_post(route):
                 if route.request.method == "POST":
-                    route.fulfill(
-                        status=500, content_type="application/json", body='{"error": "pairing_failed"}'
-                    )
+                    held.append(route)
                 else:
                     route.continue_()
 
-            page.route("**/api/pairing", _fail_post)
+            page.route("**/api/pairing", _hold_post)
             page.goto(url)
             _open_and_start_pairing(page)
-            toast = page.locator("#toasts .toast")
-            expect(toast).to_contain_text("did not answer the pairing request", timeout=10000)
-            assert "pairing_failed" not in toast.inner_text()
+            expect(page.get_by_role("button", name="Pair now")).to_be_disabled()
+            assert len(held) == 1
+            held[0].fulfill(status=500, content_type="application/json", body='{"error": "pairing_failed"}')
+            err = page.locator("#pairing-req-error")
+            expect(err).to_contain_text("did not answer the pairing request", timeout=10000)
+            assert "pairing_failed" not in err.inner_text()
+            expect(page.locator("#toasts .toast")).to_have_count(0)
+            page.wait_for_timeout(4500)
+            expect(err).to_be_visible()
+            expect(page.get_by_role("button", name="Pair now")).to_be_enabled()
     finally:
         proc.terminate()
 

@@ -142,6 +142,25 @@ def test_the_pair_step_pairs_with_a_countdown(station_pending, locale, lang):
     assert [b["action"] for b in station_pending.pairing_posts] == ["start", "passkey"]
 
 
+def test_the_pair_step_disables_pair_now_in_flight_and_keeps_a_failure(station_pending):
+    """R_UI_VISIBLE_FAILURES on the setup step: "Pair now" is disabled while its POST runs (one
+    request per tap), and a failed request stays as a row on the step (here: 409 busy)."""
+    held = []
+    with _page(station_pending, "/#setup/pair", "en-US", allow=("409",)) as pg:
+        pg.route("**/api/pairing", lambda r: held.append(r) if r.request.method == "POST" else r.continue_())
+        start = pg.get_by_role("button", name="Pair now", exact=True)
+        start.click()
+        expect(start).to_be_disabled()
+        assert len(held) == 1
+        held[0].fulfill(status=409, content_type="application/json", body='{"error": "busy"}')
+        err = pg.locator("#setup-pair-err")
+        expect(err).to_have_text(
+            "The satellite is still sending the previous command — try again in a moment"
+        )
+        expect(err).to_be_visible()
+        expect(start).to_be_enabled()
+
+
 def test_the_pair_step_can_be_skipped(station_pending):
     with _page(station_pending, "/#setup/pair", "en-US") as pg:
         pg.get_by_role("button", name="Skip").click()
