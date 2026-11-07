@@ -965,7 +965,7 @@ const FEATURES = {
         : s.age_min != null ? `${s.age_min} min` : "—") },
     ],
     // Starter-battery staleness is the "Starter data age" row; the why lives in the Help (⋮, #314).
-    summary: (s) => (s.soc2_pct != null ? `${t("Battery")} ${s.soc2_pct}%` : ""),
+    summary: (s) => (s.soc2_pct != null ? `${t("Second battery")} ${s.soc2_pct}%` : ""),
   },
   roof: {
     title: "Roof", icon: "caravan", roof: true,
@@ -995,12 +995,24 @@ const FEATURES = {
           : levelGauges(s.level_roll, s.level_pitch, roofIsUp())) },
       { label: "Vehicle clock", get: (s) => s.car_clock ?? "—", tick: true },
       { ext: "govee" },
-      { label: "Firmware (amb · cm · comm)",
+      // the unit's three sub-versions are jargon: behind a disclosure, never shown by default
+      { label: "Firmware",
         get: () => {
           const fw = (STATE._meta && STATE._meta.firmware) || {};
           if (fw.amb_sw_version == null && fw.comm_version == null) return "—";
-          return `${fw.amb_sw_version ?? "?"} · ${fw.cm_sw_version ?? "?"} · ${fw.comm_version ?? "?"}`
-            + (fw.untested ? t("  ⚠ untested") : t("  ✓ tested"));
+          return String(fw.untested ? t("  ⚠ untested") : t("  ✓ tested")).trim();
+        },
+        widget: () => {
+          const fw = (STATE._meta && STATE._meta.firmware) || {};
+          if (fw.amb_sw_version == null && fw.comm_version == null) return null;
+          const det = document.createElement("details"); det.className = "note";
+          det.open = fwDetailsOpen;
+          det.ontoggle = () => { fwDetailsOpen = det.open; };   // survives a re-render
+          const sum = document.createElement("summary"); sum.textContent = /** @type {string} */ (t("Details"));
+          const code = document.createElement("code");
+          code.textContent = `amb ${fw.amb_sw_version ?? "?"} · cm ${fw.cm_sw_version ?? "?"} · comm ${fw.comm_version ?? "?"}`;
+          det.append(sum, code);
+          return det;
         } },
     ],
     warn: () => lowSensorBatteries(),
@@ -1752,6 +1764,7 @@ function roofIsUp() {
 // dashboard poll stays at 2 s. See .superpowers/sdd/2026-08-31-guided-pairing.
 let pairingOpen = false;
 let pairingReady = false;              // "I'm on that screen" checkbox
+let fwDetailsOpen = false;             // the Vehicle screen's Firmware "Details" disclosure
 let pairingAdvOpen = false;            // the bonded step's "Advanced" disclosure (calictl only)
 // True for the brief window between opening the wizard and the fresh `pairingFetch()` landing,
 // but ONLY when the cached PAIRING snapshot might be stale (see openPairingWizard): renders a
@@ -2127,8 +2140,7 @@ function batteryText(b) {
 
 // device.time -> the Clock row (R_FW_TIME)
 /** @type {Record<string, string>} */
-const SAT_CLOCK = { synced: "synced (SNTP) · boot {boot}", waiting: "not synced yet · boot {boot}",
-  none: "no source · boot {boot}", unit: "from the camper unit · boot {boot}" };
+const SAT_CLOCK = { synced: "synced", waiting: "not synced yet", none: "no source", unit: "from the camper unit" };
 
 // The camper unit's connection, in linkState()'s words (the pill + banner): online / asleep / not paired
 /** @type {Record<ReturnType<typeof linkState>, string>} every link state (tsc checks the set) */
@@ -2193,9 +2205,9 @@ function renderDeviceStatus() {
       [w.ssid, w.ip, typeof w.rssi === "number" ? w.rssi + " dBm" : ""].filter(Boolean).join(" · ")));
     if (sat.uptime_ms != null)
       card.appendChild(sumRow(/** @type {string} */ (t("Uptime")), uptimeText(sat.uptime_ms + (Date.now() - stateAt))));
-    const tm = sat.time;   // the clock the SD log stamps with (R_FW_TIME), with the boot number
-    if (tm) card.appendChild(sumRow(/** @type {string} */ (t("Clock")), tf(SAT_CLOCK[tm.source === "none" || tm.source === "unit"
-      ? tm.source : tm.synced ? "synced" : "waiting"], { boot: tm.boot })));
+    const tm = sat.time;   // the clock the SD log stamps with (R_FW_TIME); its boot number only in Diagnostics ›
+    if (tm) card.appendChild(sumRow(/** @type {string} */ (t("Clock")), /** @type {string} */ (t(SAT_CLOCK[tm.source === "none" || tm.source === "unit"
+      ? tm.source : tm.synced ? "synced" : "waiting"]))));
     if (sat.sd) card.appendChild(sumRow(/** @type {string} */ (t("Storage")), sdText(sat.sd)));
     const batt = sat.battery && batteryText(sat.battery);
     if (batt) card.appendChild(sumRow(/** @type {string} */ (t("Battery")), batt));
@@ -2213,7 +2225,7 @@ function renderDeviceStatus() {
 // screen is open refreshState asks with ?diag=1. By the device object that holds them, as web.c sends
 // them: null = every member of that object.
 /** @type {[string, string[]|null][]} */
-const SAT_DIAG = [["res", null], ["sd", ["last_seq"]], ["time", ["up"]], ["ble", ["probing", "unit_adv_seen_ms_ago"]],
+const SAT_DIAG = [["res", null], ["sd", ["last_seq"]], ["time", ["up", "boot"]], ["ble", ["probing", "unit_adv_seen_ms_ago"]],
   ["display", ["lux", "prox", "motion", "dfs", "pm"]]];
 
 function renderSatDiag() {
