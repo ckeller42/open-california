@@ -458,6 +458,17 @@ def test_time_control_keeps_the_sent_value_while_in_flight(page, base_url):
         "unit-reported heater start time " + new,
     )
     expect(start_at).to_have_value(new)
+    old = (st.get("timer_hour") or 0, st.get("timer_min") or 0)  # leave the shared mock as we found it
+    assert page.request.post(
+        base_url + "/api/command",
+        data={"function": "airheater", "what": "timer", "value": "%02d:%02d" % old, "confirm": True},
+    ).ok
+    _poll(
+        page,
+        base_url,
+        lambda st: (st["airheater"]["timer_hour"], st["airheater"]["timer_min"]) == old,
+        "restored",
+    )
 
 
 def test_heater_continuous_switch_off_only(page):
