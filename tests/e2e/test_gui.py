@@ -1779,9 +1779,15 @@ def test_tile_grid_reflows_to_one_column_for_large_text(base_url, error_gated_pa
     with error_gated_page(base_url, viewport={"width": 390, "height": 844}) as pg:
         expect(pg.locator(".tilegrid .tile").first).to_be_visible()
         assert columns(pg) == 2
-        pg.evaluate("document.documentElement.style.fontSize = '200%'")
-        assert columns(pg) == 1
-        assert pg.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+        for size in ("200%", "310%"):  # 310 % ~ iOS's largest accessibility size
+            pg.evaluate("s => { document.documentElement.style.fontSize = s; }", size)
+            assert columns(pg) == 1, size
+            wide = pg.evaluate(
+                "() => { const w = document.documentElement.clientWidth;"
+                " return [...document.querySelectorAll('body *')]"
+                ".filter(e => e.getBoundingClientRect().right > w + 0.5).map(e => e.id || e.className); }"
+            )
+            assert not wide, (size, wide)
 
 
 def test_controls_have_44px_targets_and_the_session_pill_does_not_stretch(page):

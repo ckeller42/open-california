@@ -37,7 +37,7 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 @media (display-mode: standalone) {
   #topbar { padding-top: calc(1.9rem + env(safe-area-inset-top)); }
 }
-#topbar h1 { font-size: 1.15rem; font-weight: 650; margin: 0; }
+#topbar h1 { font-size: 1.15rem; font-weight: 650; margin: 0; min-width: 0; overflow-wrap: anywhere; }   /* large text: wrap, never push ⋮ off-screen */
 /* the heading is focused programmatically on navigation (a11y); don't flash a ring for that,
    but keep it for genuine keyboard focus. */
 #title:focus:not(:focus-visible) { outline: none; }
@@ -55,7 +55,7 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 
 /* dashboard tiles */
 /* two columns, one once large text makes a tile wider than half the row */
-.tilegrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(9rem, calc(50% - .4rem)), 1fr)); gap: .8rem; }
+.tilegrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(9rem, calc(50% - .4rem))), 1fr)); gap: .8rem; }
 .tile { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 1rem;
   box-shadow: var(--shadow); cursor: pointer; text-align: left; color: inherit; display: grid; gap: .15rem;
   transition: transform .08s ease; }
