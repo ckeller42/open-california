@@ -251,6 +251,7 @@ function setLang(l) {
   try { localStorage.setItem("calictl.lang", l); } catch (e) { /* storage blocked */ }
   closeMenu();
   render();
+  menuEl.focus();   // the menu item that called this is gone: keep focus on ⋮, not the page top
 }
 
 // --- topbar context menu (UX: pairing chrome lives here, not in the main flow) ---------------
@@ -718,6 +719,7 @@ function openHelp() {
   const d = document.createElement("dialog");
   d.className = "help";
   const head = document.createElement("h2");
+  head.id = "help-title"; d.setAttribute("aria-labelledby", head.id);
   head.textContent = t("Help") + " · " + titleEl.textContent;
   d.appendChild(head);
   for (const para of /** @type {string} */ (t(h[1])).split("\n\n")) {
@@ -732,7 +734,7 @@ function openHelp() {
   close.onclick = () => d.close();
   d.append(a, close);
   d.onclick = (ev) => { if (ev.target === d) d.close(); };   // tap on the backdrop closes
-  d.onclose = () => d.remove();
+  d.onclose = () => { d.remove(); menuEl.focus(); };   // closeMenu() dropped the opener: back to ⋮
   document.body.appendChild(d);   // outside #app: survives the 2 s re-render
   d.showModal();
 }
@@ -1704,7 +1706,7 @@ function levelGauge(deg, van, label) {
   g.className = "lg-gauge";
   g.innerHTML =
     `<svg viewBox="0 0 ${2 * C} ${2 * C}" class="lg-svg${ok ? " ok" : ""}" role="img" ` +
-    `aria-label="${label} ${fmtLevel(deg)}">` +
+    `aria-label="${label} ${deg.toFixed(1)}°">` +
     `<circle cx="${C}" cy="${C}" r="76" class="lg-ring"/>` +
     `<circle cx="${C}" cy="${C}" r="${FACE}" class="lg-face"/>` + ticks +
     `<g transform="${turn}">` +
@@ -1758,6 +1760,13 @@ let pairingAdvOpen = false;            // the bonded step's "Advanced" disclosur
 // neutral loading step instead of flashing a leftover passkey/bonded/error/etc. step from a
 // flow the server has since moved on from (e.g. it restarted while this tab stayed open).
 let pairingLoading = false;
+/** The wizard step last read out in `#sr-status` (the card is rebuilt each poll, so it cannot be the live region). */
+let pairingSaid = /** @type {?string} */ (null);
+/** Read `text` out once via the stable `#sr-status` live region (outside #app: survives a re-render).
+ * @param {string} text */
+function announce(text) {
+  (/** @type {HTMLElement} */ (document.getElementById("sr-status"))).textContent = text;
+}
 /** @type {{state:string, attempts:number, error:string|null, address:string|null, radio_busy?: boolean}|null} */
 let PAIRING = null;
 let pairingFetched = false;            // the one-off load-time fetch (refreshState) has run
@@ -1784,7 +1793,8 @@ function startPairingPoll() {
     pairingPolling = true;
     try { await pairingFetch(); } finally { pairingPolling = false; }
     const ae = document.activeElement;
-    if (!(ae && ae.id === "pairing-passkey")) {      // don't clobber the user mid-type
+    // don't clobber the user mid-type (the field is focused on entry), but leave a step that has ended
+    if (!(ae && ae.id === "pairing-passkey" && PAIRING && PAIRING.state === "waiting_passkey")) {
       if (wizardView()) render();                    // the card only shows on Home and WiFi setup
     }
     if (PAIRING && PAIRING_TERMINAL_STATES.has(PAIRING.state)) stopPairingPoll();
@@ -1905,7 +1915,7 @@ function pairingCard() {
   head.appendChild(hlbl);
   const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
   closeBtn.textContent = /** @type {string} */ (t("Close"));
-  closeBtn.onclick = () => { pairingOpen = false; pairingLoading = false; stopPairingPoll(); render(); };
+  closeBtn.onclick = () => { pairingOpen = false; pairingLoading = false; pairingSaid = null; stopPairingPoll(); render(); };
   head.appendChild(closeBtn);
   card.appendChild(head);
 
@@ -1922,6 +1932,7 @@ function pairingCard() {
   }
 
   const p = PAIRING || { state: "idle", attempts: 0, error: null, address: null };
+  let say = /** @type {string} */ (hlbl.textContent);   // the step text read out on a state change
   if (p.radio_busy) {
     const busy = document.createElement("div"); busy.className = "warn"; busy.id = "pairing-radio-busy";
     busy.textContent = /** @type {string} */ (t("Another app on this Pi keeps Bluetooth scanning — pairing will likely fail until it stops (for example the Home Assistant Bluetooth integration)."));
@@ -1960,6 +1971,7 @@ function pairingCard() {
     row.appendChild(spinner());
     const lbl = document.createElement("span"); lbl.className = "lbl";
     lbl.textContent = /** @type {string} */ (t(p.state === "scanning" ? "Searching…" : "Connecting to the unit…"));
+    say = lbl.textContent;
     row.appendChild(lbl);
     card.appendChild(row);
     const btns = document.createElement("div"); btns.className = "btnrow";
@@ -1969,13 +1981,16 @@ function pairingCard() {
     btns.appendChild(cancelBtn);
     card.appendChild(btns);
   } else if (p.state === "waiting_passkey") {
-    const instr = document.createElement("div"); instr.className = "note";
+    const instr = document.createElement("div"); instr.className = "note"; instr.id = "pairing-passkey-instr";
     instr.textContent = /** @type {string} */ (t("Enter the passcode now shown on the camper unit (it replaced ---). A fresh code each attempt."));
     card.appendChild(instr);
+    say = instr.textContent;
     const row = document.createElement("div"); row.className = "row";
     const inp = document.createElement("input");
     inp.type = "text"; inp.inputMode = "numeric"; inp.pattern = "[0-9]{6}"; inp.maxLength = 6;
     inp.id = "pairing-passkey";
+    inp.setAttribute("aria-labelledby", instr.id);
+    if (pairingSaid !== p.state) queueMicrotask(() => inp.focus());   // on entry; render() attaches the card first
     inp.placeholder = "123456";
     row.appendChild(inp);
     const sendBtn = document.createElement("button"); sendBtn.type = "button"; sendBtn.className = "btn";
@@ -1992,12 +2007,14 @@ function pairingCard() {
     row.appendChild(spinner());
     const lbl = document.createElement("span"); lbl.className = "lbl";
     lbl.textContent = /** @type {string} */ (t(p.state === "pairing" ? "Pairing…" : p.state === "verifying" ? "Verifying…" : "Resetting…"));
+    say = lbl.textContent;
     row.appendChild(lbl);
     card.appendChild(row);
   } else if (p.state === "bonded") {
     const ok = document.createElement("div"); ok.className = "note";
     ok.textContent = p.address ? (t("✓ Paired — ") + p.address) : /** @type {string} */ (t("paired — address cache unavailable (see logs)"));
     card.appendChild(ok);
+    say = /** @type {string} */ (ok.textContent);
     if (p.address && sat) {
       const saved = document.createElement("div"); saved.className = "note";
       saved.textContent = /** @type {string} */ (t("Saved on the satellite — survives a restart. No further action needed."));
@@ -2023,6 +2040,7 @@ function pairingCard() {
     errRow.textContent = /** @type {string} */ (t("Error: "))
       + (/** @type {string} */ (t(PAIRING_ERROR_MSG[perr])) || /** @type {string} */ (t(PAIRING_ERROR_FALLBACK)));
     card.appendChild(errRow);
+    say = errRow.textContent;
     const hint = (sat && SAT_PAIRING_ERROR_HINT[perr]) || PAIRING_ERROR_HINT[perr];
     if (hint) {
       const hintRow = document.createElement("div"); hintRow.className = "note";
@@ -2046,6 +2064,7 @@ function pairingCard() {
     rbtns.appendChild(resetBtn);
     card.appendChild(rbtns);
   }
+  if (pairingSaid !== p.state) { pairingSaid = p.state; announce(say); }
   return card;
 }
 
@@ -3225,7 +3244,7 @@ function renderLighting(s) {
   mrow.appendChild(mlbl);
   if (pending_is("lighting", "power")) mrow.appendChild(spinner());
   const msw = document.createElement("button"); msw.className = "switch";
-  msw.setAttribute("role", "switch"); msw.setAttribute("aria-label", "All lights");
+  msw.setAttribute("role", "switch"); msw.setAttribute("aria-label", /** @type {string} */ (t("All lights")));
   msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = readOnly();
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
   mrow.appendChild(msw); mc.appendChild(mrow);
@@ -3286,7 +3305,7 @@ function renderLighting(s) {
       // clamp the thumb (11 ≈ full) but zero it for the no-reading markers; label shows the truth
       inp.value = /** @type {any} */ (val >= 13 ? 0 : Math.min(val, LIGHT_MAX));
       inp.disabled = readOnly() || roofBlocked;
-      inp.setAttribute("aria-label", grp.group + " " + lamp.label + " brightness");
+      inp.setAttribute("aria-label", t(grp.group) + " " + t(lamp.label) + " " + t("Brightness"));
       const out = document.createElement("span"); out.className = "sval";
       out.textContent = brightnessText(val);
       inp.oninput = () => (out.textContent = inp.value);
@@ -3345,7 +3364,7 @@ function renderLighting(s) {
   wrow.appendChild(wl);
   if (pending_is("lighting", "wakeup")) wrow.appendChild(spinner());
   const wsw = document.createElement("button"); wsw.className = "switch";
-  wsw.setAttribute("role", "switch"); wsw.setAttribute("aria-label", "Wake-up light");
+  wsw.setAttribute("role", "switch"); wsw.setAttribute("aria-label", /** @type {string} */ (t("Wake-up light")));
   wsw.setAttribute("aria-checked", wk && wk.enabled ? "true" : "false"); wsw.disabled = wkOff;
   wsw.onclick = () => wakeCmd({ on: !(wk && wk.enabled) });
   wrow.appendChild(wsw); wf.appendChild(wrow);
@@ -3353,13 +3372,13 @@ function renderLighting(s) {
   const tl = document.createElement("span"); tl.className = "lbl"; tl.textContent = /** @type {string} */ (t("Wake-up time"));
   const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time
     : (typeof wkOpt === "string" && wkOpt.split(/\s+/).find((x) => x.includes(":"))) || "";   // empty, never 00:00
-  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = readOnly();   // live even while unknown (R5 pull)
+  tin.setAttribute("aria-label", /** @type {string} */ (t("Wake-up time"))); tin.disabled = readOnly();   // live even while unknown (R5 pull)
   tin.onchange = () => { if (tin.value) wakeCmd({ time: tin.value }); };
   trow.append(tl, tin); wf.appendChild(trow);
   const rrow = document.createElement("div"); rrow.className = "row";
   const rl = document.createElement("span"); rl.className = "lbl"; rl.textContent = /** @type {string} */ (t("Lead time"));
   const rsel = document.createElement("select"); rsel.disabled = wkOff;
-  rsel.setAttribute("aria-label", "Lead time");
+  rsel.setAttribute("aria-label", /** @type {string} */ (t("Lead time")));
   for (const m of [0, 10, 20, 30]) {
     const o = document.createElement("option"); o.value = /** @type {any} */ (m); o.textContent = tf("{n} min", { n: m });
     o.selected = (wk ? wk.ramp : 0) === m; rsel.appendChild(o);
@@ -3370,7 +3389,7 @@ function renderLighting(s) {
   const bl = document.createElement("span"); bl.className = "lbl"; bl.textContent = /** @type {string} */ (t("Brightness"));
   const bin = document.createElement("input"); bin.type = "range"; bin.min = /** @type {any} */ (0); bin.max = /** @type {any} */ (LIGHT_MAX);
   bin.value = /** @type {any} */ (wk ? wk.brightness : 0); bin.disabled = wkOff;
-  bin.setAttribute("aria-label", "Wake-up brightness");
+  bin.setAttribute("aria-label", /** @type {string} */ (t("Wake-up brightness")));
   bin.onchange = () => wakeCmd({ brightness: Number(bin.value) });
   brow.append(bl, bin); wf.appendChild(brow);
   const arow = document.createElement("div"); arow.className = "row areas";
@@ -3544,7 +3563,7 @@ function renderControl(fn, c, s) {
     const on = c.invert ? !lit : lit;
     const sw = document.createElement("button");
     sw.className = "switch" + (isPending ? " pending" : "");
-    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", c.label);
+    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", /** @type {string} */ (t(c.label)));
     sw.setAttribute("aria-checked", on ? "true" : "false");
     sw.disabled = ro;
     sw.onclick = () => fire(lit ? "off" : "on");
@@ -4025,6 +4044,7 @@ function thermostatCard() {
   // t_ref → target, −/+ 0.5 °C
   const tr = document.createElement("div");
   tr.className = "row";
+  tr.appendChild(thermoEl("sr-only", /** @type {string} */ (t("Now"))));
   tr.appendChild(thermoEl("big", st.t_ref != null ? (st.t_ref / 100).toFixed(1) + " °C" : "—"));
   tr.appendChild(thermoEl("lbl", "→"));
   const want = thermoWant ?? th.target;
@@ -4035,10 +4055,14 @@ function thermostatCard() {
     b.setAttribute("aria-label", /** @type {string} */ (t(label)));
     const nt = want + d;
     b.disabled = readOnly() || nt < THERMO_MIN || nt > THERMO_MAX;
-    b.onclick = () => { thermoWant = nt; thermoPost({ target: nt }); render(); };
+    b.onclick = () => {
+      thermoWant = nt; thermoPost({ target: nt }); render();
+      announce(t("Target") + " " + (nt / 100).toFixed(1) + " °C");   // the stepper's value is rebuilt: no live region of its own
+    };
     return b;
   };
   tr.appendChild(step("Colder", "−", -THERMO_STEP));
+  tr.appendChild(thermoEl("sr-only", /** @type {string} */ (t("Target"))));
   tr.appendChild(thermoEl("sval", (want / 100).toFixed(1) + " °C"));
   tr.appendChild(step("Warmer", "+", THERMO_STEP));
   card.appendChild(tr);

@@ -135,6 +135,7 @@ window.STRINGS_DE = {
   "Interior lighting": "Innenlicht",
   "Wake-up light": "Wecklicht",
   "Wake-up time": "Weckzeit",
+  "Wake-up brightness": "Weckhelligkeit",
   "{n} min": "{n} Min.",
   "Wake-up settings not known yet — the unit has not reported them":
     "Wecklicht-Einstellungen noch nicht bekannt — die Einheit hat sie nicht gemeldet",
@@ -855,6 +856,8 @@ window.STRINGS_DE = {
   "AUTO": "AUTO",
   "Colder": "Kälter",
   "Warmer": "Wärmer",
+  "Now": "Jetzt",
+  "Target": "Ziel",
   "Thermometer": "Thermometer",
   "Regulate on": "Regeln nach",
   "Backup": "Reserve",

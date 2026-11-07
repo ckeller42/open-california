@@ -423,7 +423,7 @@ def test_a_command_is_confirmed_from_the_units_own_state(stub, error_gated_page,
         pg.wait_for_function(LIVE)
         pg.on("dialog", lambda d: d.accept())
         _open(pg, tile)
-        pg.get_by_role("switch", name="Refrigerator box").click()
+        pg.get_by_role("switch", name=_de(locale, "Refrigerator box", "Kühlbox")).click()
         _wait_commands(pg, stub)
         expect(pg.locator(".toast")).to_have_text(
             "✓ Übernommen" if locale == "de-DE" else "✓ Applied", timeout=6000
@@ -504,6 +504,11 @@ LATCH = {
 }
 
 
+def _de(locale, en, de):
+    """A control's accessible name follows the page language, like its visible label."""
+    return de if locale == "de-DE" else en
+
+
 @pytest.mark.parametrize(
     "locale,tile,head", [("en-US", "Lighting", "Wake-up light"), ("de-DE", "Beleuchtung", "Wecklicht")]
 )
@@ -522,10 +527,12 @@ def test_wakeup_card_is_live_and_sends_the_browsers_wall_clock(stub, error_gated
         _lighting_settings(pg)
         # the card heading (a profile <option> carries the same words)
         expect(pg.locator("div.note", has_text=re.compile("^%s$" % head)).first).to_be_visible()
-        tm = pg.get_by_label("Wake-up time")
+        tm = pg.get_by_label(_de(locale, "Wake-up time", "Weckzeit"))
         expect(tm).to_be_enabled()
         expect(tm).to_have_value("06:00")
-        expect(pg.get_by_role("switch", name="Wake-up light")).to_have_attribute("aria-checked", "true")
+        expect(pg.get_by_role("switch", name=_de(locale, "Wake-up light", "Wecklicht"))).to_have_attribute(
+            "aria-checked", "true"
+        )
         expect(pg.locator(".arealist input[type=checkbox]")).to_have_count(4)
         expect(pg.get_by_role("switch", name="Sliding door lighting")).to_have_attribute(
             "aria-checked", "true"
@@ -588,11 +595,11 @@ def test_wakeup_time_is_editable_before_the_unit_reported(stub, error_gated_page
         pg.wait_for_function(LIVE)
         _open(pg, tile)
         _lighting_settings(pg)
-        tm = pg.get_by_label("Wake-up time")
+        tm = pg.get_by_label(_de(locale, "Wake-up time", "Weckzeit"))
         expect(tm).to_be_enabled()
         expect(tm).to_have_value("")
-        expect(pg.get_by_role("switch", name="Wake-up light")).to_be_disabled()
-        expect(pg.get_by_label("Wake-up brightness")).to_be_disabled()
+        expect(pg.get_by_role("switch", name=_de(locale, "Wake-up light", "Wecklicht"))).to_be_disabled()
+        expect(pg.get_by_label(_de(locale, "Wake-up brightness", "Weckhelligkeit"))).to_be_disabled()
         expect(pg.locator(".arealist input[type=checkbox]:enabled")).to_have_count(0)
         expect(pg.locator(".card select:disabled").first).to_be_visible()
         assert pg.locator(".note", has_text=re.compile("not known yet|noch nicht bekannt")).count() >= 1
@@ -755,7 +762,7 @@ def test_firmware_answers_show_a_clear_message(stub, status, reply, locale, text
         pg.goto(stub.base)
         pg.wait_for_function(LIVE)
         _open(pg, "Kühlbox" if locale == "de-DE" else "Cooler")
-        pg.get_by_role("switch", name="Refrigerator box").click()
+        pg.get_by_role("switch", name=_de(locale, "Refrigerator box", "Kühlbox")).click()
         _wait_commands(pg, stub)
         # not_connected: the page retries for CMD_LINK_WAIT_MS (45 s) before it gives up
         expect(pg.locator(".toast")).to_have_text(text, timeout=55000 if status == 503 else 5000)
@@ -1155,7 +1162,7 @@ def _pair_in_wizard(pg, stub, words):
     pg.get_by_role("button", name=words["connect"]).click()
     pg.locator("#pairing-passkey").fill("123456")
     pg.get_by_role("button", name=words["send"]).click()
-    expect(pg.get_by_text(words["paired"])).to_be_visible()
+    expect(pg.locator("#pairing-card").get_by_text(words["paired"])).to_be_visible()
     expect(pg.get_by_text(words["saved"])).to_be_visible()
     shown = _card_text(pg)
     assert not [w for w in BUSPI_ONLY if w in shown], shown

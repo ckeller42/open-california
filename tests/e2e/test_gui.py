@@ -685,7 +685,9 @@ def _complete_bonding(page):
     expect(passkey).to_be_visible(timeout=10000)
     passkey.fill(str(FakePairingTransport.RIGHT_PASSKEY))
     page.get_by_role("button", name="Send").click()
-    expect(page.get_by_text("✓ Paired — " + FakePairingTransport.FOUND_ADDR)).to_be_visible(timeout=10000)
+    expect(
+        page.locator("#pairing-card").get_by_text("✓ Paired — " + FakePairingTransport.FOUND_ADDR)
+    ).to_be_visible(timeout=10000)
 
 
 def test_pairing_wizard_reaches_bonded(pairing_page):
@@ -880,6 +882,51 @@ def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
     expect(page.get_by_role("button", name="Try again")).to_be_visible(timeout=10000)
     assert "pairing_failed" not in page.locator("#app").inner_text()  # friendly text, not the raw enum
     assert "Pairing was refused" in page.locator("#app").inner_text()
+
+
+def test_pairing_passkey_is_labelled_focused_and_steps_are_announced(pairing_page):
+    """#517: the passkey field is named by its instruction and focused on entry; each wizard step
+    is written to the stable `#sr-status` live region, which lives outside the re-rendered #app."""
+    page = pairing_page
+    live = page.locator("#sr-status")
+    expect(live).to_have_attribute("aria-live", "polite")
+    assert page.locator("#app #sr-status").count() == 0
+    _open_and_start_pairing(page)
+    passkey = page.locator("#pairing-passkey")
+    expect(passkey).to_be_focused(timeout=10000)
+    instr = page.locator("#pairing-passkey-instr").inner_text()
+    expect(page.get_by_role("textbox", name=instr)).to_have_id("pairing-passkey")
+    expect(live).to_have_text(instr)
+    passkey.fill(str(FakePairingTransport.RIGHT_PASSKEY))
+    page.get_by_role("button", name="Send").click()
+    expect(live).to_contain_text("Paired", timeout=10000)
+
+
+def test_help_sheet_is_named_and_returns_focus_to_menu(page):
+    """#517: the Help dialog is named by its heading; closing it puts focus back on ⋮, not the page top."""
+    page.click("#menu")
+    page.locator(".menupop").get_by_role("menuitem", name="Help", exact=True).click()
+    sheet = page.get_by_role("dialog", name=re.compile(r"^Help · "))
+    expect(sheet).to_be_visible()
+    sheet.get_by_role("button", name="Close").click()
+    expect(sheet).to_have_count(0)
+    expect(page.locator("#menu")).to_be_focused()
+    # the language switch rebuilds the screen: focus stays on ⋮ too
+    page.click("#menu")
+    page.locator(".menupop").get_by_role("menuitem", name="Deutsch", exact=True).click()
+    expect(page.locator("#menu")).to_be_focused()
+
+
+def test_main_landmark_and_german_accessible_names(base_url, error_gated_page):
+    """#517: #app is the <main> landmark; control names follow the language like the visible labels."""
+    with error_gated_page(base_url, locale="de-DE") as pg:
+        expect(pg.get_by_role("main")).to_have_id("app")
+        pg.evaluate("v => goto(v)", "lighting")
+        expect(pg.get_by_role("switch", name="Alle Lichter", exact=True)).to_be_visible()
+        _lighting_settings(pg)
+        expect(pg.get_by_role("switch", name="Wecklicht", exact=True)).to_be_visible()
+        expect(pg.get_by_label("Weckhelligkeit", exact=True)).to_be_visible()
+        expect(pg.get_by_label("Leselichter", exact=False).first).to_be_visible()
 
 
 def test_pairing_hidden_until_opened_from_menu(unconfigured_pairing_page):
@@ -1623,6 +1670,8 @@ def test_level_indicator_shows_the_apps_two_gauges(page, base_url):
     expect(gauges.nth(0).locator(".lg-label")).to_have_text("Roll")
     expect(gauges.nth(1).locator(".lg-label")).to_have_text("Pitch")
     expect(gauges.nth(1).locator("svg")).to_have_attribute("aria-label", "Pitch 1.5°")
+    # #517: the accessible name keeps the sign (the visible number is absolute)
+    expect(gauges.nth(0).locator("svg")).to_have_attribute("aria-label", "Roll -1.1°")
     expect(gauges.nth(1).locator("svg")).not_to_have_class("lg-svg ok")  # 1.5° is not level
     side = gauges.nth(1).locator(".lg-logo").get_attribute("d")
     assert "M98 74.5" in side  # the closed pop-top shell, not the raised tent

@@ -27,7 +27,7 @@ def _serve():
 def test_index_and_assets_served():
     srv, base = _serve()
     try:
-        for path, needle in (("/", b'<div id="app"'), ("/app.js", b"/api/state"), ("/app.css", b"--card")):
+        for path, needle in (("/", b'<main id="app"'), ("/app.js", b"/api/state"), ("/app.css", b"--card")):
             with urllib.request.urlopen(base + path) as r:
                 assert r.status == 200
                 assert needle in r.read()
