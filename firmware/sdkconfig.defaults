@@ -145,6 +145,12 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # It also turns off MBEDTLS_HARDWARE_GCM (depends on it); PSA AES (lora_aead.c, ble_nimble.c) runs in
 # software too.
 CONFIG_MBEDTLS_HARDWARE_AES=n
+# Static data (.bss) in PSRAM (bench 2026-11-07, odelly CoreS3, LoRa + sensors on, 3 min after boot):
+# internal heap free 20 -> 86 KB, heap_min 14 -> 53 KB; during an OTA download heap_min 40 KB (the van
+# on the old layout: 1 KB). IDF moves the .bss of lwip, net80211, pp and bt by itself; cali_core's own
+# (48 KB: the web/console/SD-log buffers and every "static" kv/frame buffer) follows through
+# components/cali_core/linker.lf. Static DIRAM 223 -> 156 KB, 67.5 KB of .bss now in PSRAM.
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
 
 # Power management (R_FW_BATTERY): PM compiled in, no dynamic frequency scaling at boot. Measured
 # 2026-10-13 on the board (35 min unplugged each, screen off, WiFi + BLE link up): DFS 40-160 MHz
