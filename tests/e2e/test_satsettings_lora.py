@@ -138,16 +138,12 @@ def test_forget_confirmed_posts_and_the_box_disappears(stub, error_gated_page, l
 
 def test_a_failed_forget_keeps_the_box_and_says_so(stub, error_gated_page):
     stub.post_reply["/api/lora"] = (500, {"ok": False, "error": "store"})
-    with sync_api.sync_playwright() as p:
-        browser = p.chromium.launch()
-        pg = browser.new_page(locale="en-US")
-        pg.goto(stub.base + "/#satsettings")
+    with error_gated_page(stub.base + "/#satsettings", locale="en-US", allow_errors=("status of 500",)) as pg:
         box = pg.locator("#lora")
         box.get_by_role("button", name="Forget LoRa").click()
         box.get_by_role("button", name="Forget LoRa").click()
         expect(pg.locator("#lora-msg")).to_have_text("Couldn't forget LoRa")
         expect(box).to_be_visible()
-        browser.close()
 
 
 def test_no_lora_secret_reaches_a_beacon(stub, error_gated_page):

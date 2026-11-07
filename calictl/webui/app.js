@@ -3208,10 +3208,11 @@ function satAsk(acts, nodes, okText, okCls, ok, msgId) {
   acts.className = cls + " open";
   acts.replaceChildren(...nodes);
   const b = acts.appendChild(satBtn(okText, okCls)), c = acts.appendChild(satBtn(T("Cancel")));
+  const msg = sq(msgId);   // this screen's: a reply that lands after another screen opened never looks it up there
   const close = () => {
     acts.className = cls;
     acts.replaceChildren(...old);
-    sq(msgId).textContent = "";
+    if (msg) msg.textContent = "";
   };
   b.onclick = async () => { b.disabled = true; await ok(close); b.disabled = false; };
   c.onclick = close;
