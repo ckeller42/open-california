@@ -67,7 +67,7 @@ COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o
 	sensors.o json.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o thermostat_run.o pi_wake.o ble_exp.o ble_exp_run.o energy.o lora.o lora_port_none.o
+CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o ap_identity.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o thermostat_run.o pi_wake.o ble_exp.o ble_exp_run.o energy.o lora.o lora_port_none.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
@@ -156,7 +156,7 @@ snapshot.o: $(COMPONENTS)/cali_core/snapshot.c $(CORE_H)/cali_snapshot.h $(CORE_
 status.o: $(COMPONENTS)/cali_core/status.c $(CORE_H)/cali_status.h $(CORE_H)/cali_snapshot.h \
 		$(CORE_H)/cali_session.h $(CORE_H)/cali_control.h $(CSRC)/codec.h $(CORE_H)/cali_runner.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_transport.h $(CSRC)/net_consts.h \
-		$(COMPONENTS)/platform/include/cali_platform.h
+		$(COMPONENTS)/platform/include/cali_platform.h $(CORE_H)/cali_ap_identity.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The bounded JSON writer shared by console.c (STATE/SNAP) and, from Task 2 on, the web setup page.
@@ -169,9 +169,14 @@ wifi_sm.o: $(COMPONENTS)/cali_core/wifi_sm.c $(CORE_H)/cali_wifi_sm.h $(CSRC)/ne
 
 # The WiFi runtime (#154 Task 7): the SM over cali_net + kv + captive DNS. tests/firmware/test_session_fake.py
 # (fake net) and test_web_e2e.py (cali-host --http).
-wifi_run.o: $(COMPONENTS)/cali_core/wifi_run.c $(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h \
+wifi_run.o: $(COMPONENTS)/cali_core/wifi_run.c $(CORE_H)/cali_ap_identity.h $(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h \
 		$(CORE_H)/cali_net.h $(CORE_H)/cali_captive.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_pairing_sm.h \
 		$(CORE_H)/cali_transport.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The per-unit setup hotspot identity (name from the MAC, random stored password): tests/firmware/test_ap_identity.py.
+ap_identity.o: $(COMPONENTS)/cali_core/ap_identity.c $(CORE_H)/cali_ap_identity.h $(CSRC)/net_consts.h \
 		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 

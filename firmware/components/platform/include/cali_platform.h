@@ -41,6 +41,15 @@ int cali_kv_erase(const char *key);
 /* Remove every key. Returns 0 ok, -1 on failure. */
 int cali_kv_erase_all(void);
 
+/* Fill buf with len cryptographically strong random bytes (host: /dev/urandom; esp: esp_fill_random,
+ * hardware RNG). Exits the process on the host if /dev/urandom is unreadable: a predictable
+ * password is worse than none. */
+void cali_random(void *buf, size_t len);
+
+/* The unit's own WiFi MAC into mac[6] (host: env CALI_HOST_MAC = 12 hex digits, else the fixed fake
+ * 02:00:00:00:C0:FE; esp: esp_read_mac, ESP_MAC_WIFI_STA). Returns 0 ok, -1 on failure. */
+int cali_mac(uint8_t mac[6]);
+
 /* Write "LOG <text>\n" to the console (printf-style), flushed. */
 void cali_log(const char *fmt, ...)
 #if defined(__GNUC__)

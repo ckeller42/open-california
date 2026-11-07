@@ -30,16 +30,25 @@ def glyphs(size: int) -> set[int]:
     return {int(h, 16) for h in re.findall(r"/\* U\+([0-9A-F]{4,5}) ", src)}
 
 
+# The per-unit hotspot (ap_identity.c): calictl-esp-XXXX and a xxxx-xxxx-xxxx password.
+AP_SSID = CONSTS["NET_AP_SSID_PREFIX"] + "C0FE"
+AP_PSK = "wwww-wwww-wwww"  # the widest letter
+AP_SSID_HEX = "0123456789ABCDEF-"
+AP_ALPHABET = "23456789abcdefghijkmnpqrstuvwxyz"
+
+
 def display_texts() -> list[tuple[str, str, str]]:
     out = []
     for key, tr in STRINGS.items():
         if key.startswith("d_") or key == "device":
             for lang in ("en", "de"):
                 out.append((key, lang, tr[lang].replace("%s", "")))
-    for lang in ("en", "de"):  # the setup footer as display.c renders it
+    for lang in ("en", "de"):  # the QR screen lines as display.c renders them
+        out.append(("qr_wlan", lang, STRINGS["d_qr_wlan"][lang] % AP_SSID))
+        out.append(("qr_pass", lang, STRINGS["d_qr_pass"][lang] % AP_PSK))
         out.append(
-            ("footer", lang, STRINGS["d_footer_setup"][lang] % (CONSTS["NET_AP_SSID"], CONSTS["NET_AP_PSK"]))
-        )
+            ("ap_chars", lang, AP_SSID_HEX + AP_ALPHABET)
+        )  # every character the hotspot identity can hold
         out.append(("url", lang, f"http://{CONSTS['NET_HOSTNAME']}.local"))
         out += [("batt_footer", lang, t) for t in battery_footers(lang)]
     out.append(("title", "-", "calictl satellite fw 0123456789abcdef-dirty"))
@@ -58,7 +67,7 @@ def battery_footers(lang: str) -> list[str]:
 
 def test_display_key_set_includes_failures():
     keys = {k for k, _, _ in display_texts()}
-    assert {"device", "d_fail_not_found", "d_fail_auth", "d_fail_other", "d_footer_setup"} <= keys
+    assert {"device", "d_fail_not_found", "d_fail_auth", "d_fail_other", "d_qr_join_title"} <= keys
 
 
 @pytest.mark.parametrize("size", [16, 24])
@@ -114,7 +123,7 @@ def spec_row_texts(lang: str) -> list[str]:
     ssid = "Campingplatz"
     texts = [
         s["d_running"] % "23 h 59 min",
-        s["d_setup"] % (CONSTS["NET_AP_SSID"], CONSTS["NET_AP_ADDR"]),
+        s["d_setup"] % (AP_SSID, CONSTS["NET_AP_ADDR"]),
         f"{ssid} · 192.168.178.186 · -100 dBm",
         s["d_joining"] % ssid,
         s["d_retrying"] % ssid,
@@ -152,3 +161,41 @@ def test_battery_footer_fits_two_lines(lang):
     adv = advance(16)
     for text in battery_footers(lang):
         assert lines(text, layout("W") - 2 * layout("PAD"), adv) <= 2, (lang, text)
+
+
+@pytest.mark.parametrize("lang", ["en", "de"])
+def test_qr_screen_values_fit_unbroken_and_the_text_fits_the_plate(lang):
+    """The QR screen as display.c lays it out: the title + qr_lines[0] in the QR_TEXT_W box beside the
+    plate (QR_BOX high, ellipsis on overflow), qr_lines[1] one full-width line below. Values the model
+    puts on their own line (the SSID, the IP) must fit that box without a break; the password and the
+    .local address must fit the screen width."""
+    adv = advance(16)
+    line = int(re.search(r"\.line_height = (\d+)", (FONT_DIR / "font_latin1_16.c").read_text()).group(1))
+    qr_box = layout("QR_SIZE") + 2 * layout("QR_PLATE")
+    box = layout("W") - (layout("QR_X") + qr_box + 4) - 4  # display.c QR_TEXT_W
+    s = {k: v[lang] for k, v in STRINGS.items()}
+    widest_hex = max("0123456789ABCDEF", key=lambda c: adv[ord(c)])
+    widest_sym = max(AP_ALPHABET, key=lambda c: adv[ord(c)])
+    ssid = CONSTS["NET_AP_SSID_PREFIX"] + widest_hex * 4
+    psk = "-".join([widest_sym * 4] * 3)
+    url = f"http://{CONSTS['NET_HOSTNAME']}.local"
+    ssid_label = (s["d_qr_wlan"] % "").strip()
+    cases = [  # (title, own-line values, label lines above them, foot)
+        (s["d_qr_join_title"], [ssid], [ssid_label], s["d_qr_pass"] % psk),
+        (s["d_qr_next_title"] % "Campingplatz", ["255.255.255.255"], ["http://"], url),
+        # a 32-char SSID (the model's limit) of ordinary glyphs: one unbreakable word, wrapped by char;
+        # the widest glyphs (32 x "m") need one more line and end in "..." (DOTS mode), asserted below
+        (s["d_qr_next_title"] % ("e" * 32), ["255.255.255.255"], ["http://"], url),
+    ]
+    for title, values, labels, foot in cases:
+        for v in values:
+            assert width(v, adv) <= box, (lang, v, width(v, adv), box)
+        assert width(foot, adv) <= layout("W"), (lang, foot, width(foot, adv))
+        n = max(lines(title, box, adv), -(-width(title, adv) // box)) + len(labels) + len(values)
+        assert n * line <= qr_box, (lang, title, n)
+    assert layout("ROW_Y0") + qr_box + 2 + line <= 240  # the foot line is on the screen
+    assert (
+        "lv_obj_set_size(s_qr_text, QR_TEXT_W, QR_BOX)" in DISPLAY_C
+        and "LV_LABEL_LONG_MODE_DOTS" in DISPLAY_C
+    )
+    assert layout("QR_PLATE") + 9 >= 16  # quiet zone: 4 modules at scale 4 (LVGL's own margin is ~9 px)

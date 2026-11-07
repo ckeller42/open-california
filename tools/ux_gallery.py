@@ -315,7 +315,8 @@ def esp_fixtures():
                 "rest_next_s": None,
                 "last_snap_age_ms": 1200,
             },
-            "wifi": station_wifi,
+            "wifi": dict(station_wifi, ap_ssid=None),
+            "setup": {"pending": False},
             "control": {"writes": True},
             "uptime_ms": 3912400,
             "fw": "bef07f1",
@@ -356,7 +357,8 @@ def esp_fixtures():
                         "rest_next_s": None,
                         "last_snap_age_ms": None,
                     },
-                    "wifi": setup_wifi,
+                    "wifi": dict(setup_wifi, ap_ssid="calictl-esp-C0FE"),
+                    "setup": {"pending": False},
                     "control": {"writes": False},
                     "uptime_ms": 41250,
                     "fw": "bef07f1",
@@ -547,7 +549,8 @@ class EspStub:
         a firmware without the endpoint). ``POST /api/sensors`` applies the firmware's add/remove/rename
     rules (``_sensors``; bodies in ``sensor_posts``), a removed sensor is seen again on the next
     ``GET /api/sensors``. ``POST /api/wifi`` appends the body to ``wifi_posts`` and answers
-    ``{"ok": true}``; a POST to a settings endpoint (``_SETTINGS``: auto camper, usage data,
+    ``{"ok": true}`` (with ``joins = True`` a ``setup`` stub then turns ``station`` with ``device.setup.pending``;
+    ``POST /api/setup {"done": true}`` clears it, recorded in ``posts`` too); a POST to a settings endpoint (``_SETTINGS``: auto camper, usage data,
     experimental, display, OTA, BLE) is recorded in ``posts`` as ``(path, body)``, applied to the fixture's
     ``device`` and answered ``{"ok": true}`` (``post_reply[path] = (status, body)`` answers that
     instead, changing nothing); ``down = True`` makes the stub answer nothing at all (the satellite left the
@@ -580,6 +583,7 @@ class EspStub:
             0  # each POST /api/thermostat answers this late (the satellite takes a few 100 ms)
         )
         self.wifi_posts = []  # POST /api/wifi bodies, in order
+        self.joins = False  # True: a POST /api/wifi in "setup" joins (turns "station", setup pending)
         self.down = False  # True: every request gets no answer (the connection just closes)
         self.posts = []  # (path, body) of every POST to a _SETTINGS endpoint, in order
         self.post_reply = {}  # path -> (status, body) instead of applying the POST and {"ok": true}
@@ -621,7 +625,21 @@ class EspStub:
                     return  # no answer: the server closes the connection
                 if path == "/api/wifi":
                     stub.wifi_posts.append(body)
+                    if (
+                        stub.mode == "setup" and stub.joins
+                    ):  # saved from the hotspot: joins, and the setup is pending
+                        stub.mode = "station"
+                        stub.fixtures["station"]["/api/state"]["device"]["setup"] = {"pending": True}
                     self._json(200, {"ok": True})
+                    return
+                if path == "/api/setup":  # {"done": true} ends the first-time setup, any mode
+                    stub.posts.append((path, body))
+                    ok = body == {"done": True}
+                    if ok:
+                        for fx in stub.fixtures.values():
+                            if "setup" in fx.get("/api/state", {}).get("device", {}):
+                                fx["/api/state"]["device"]["setup"] = {"pending": False}
+                    self._json(200 if ok else 400, {"ok": ok} if ok else {"ok": False, "error": "bad_json"})
                     return
                 if path in _SETTINGS:
                     stub.posts.append((path, body))
@@ -876,7 +894,7 @@ def capture_esp(out_dir):
             viewport={"width": 420, "height": 900},
             device_scale_factor=2,
         )
-        for path, name in (("/", "esp-setup-page.png"), ("/device", "esp-recovery-page.png")):
+        for path, name in (("/#wifisetup", "esp-setup-page.png"), ("/device", "esp-recovery-page.png")):
             pg = ctx.new_page()
             pg.goto(stub.base + path)
             pg.wait_for_selector("#ssid option", state="attached")

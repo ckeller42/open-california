@@ -219,6 +219,17 @@ int cali_kv_set(const char *key, const void *buf, size_t len) {
     return 0;
 }
 
+/* ap_identity.c (the setup hotspot's name + password): a fixed MAC (02:00:00:00:C0:FE, as the host
+ * platform's default) and a predictable "random" (byte i = i, so the password is 2345-789a-cdef). */
+void cali_random(void *buf, size_t len) {
+    for (size_t i = 0; i < len; i++) ((uint8_t *)buf)[i] = (uint8_t)i;
+}
+int cali_mac(uint8_t mac[6]) {
+    static const uint8_t FAKE[6] = {0x02, 0x00, 0x00, 0x00, 0xC0, 0xFE};
+    memcpy(mac, FAKE, 6);
+    return 0;
+}
+
 /* console.c's "sensors" commands link these (web.c / the platform clock are not in this build). */
 int cali_exp_sensors_set(int on) { (void)on; return -1; }
 int cali_lora_console(const char *args) {   /* console.c's "lora" (R_FW_LORA): what it hands over */

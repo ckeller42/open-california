@@ -162,10 +162,11 @@ def test_deep_link_opens_the_settings_and_a_reload_stays_there(station):
         assert pg.evaluate("location.hash") == "#devicestatus"
 
 
-def test_setup_mode_lands_on_wifi_setup_and_station_mode_shows_home(setup):
-    """The setup hotspot: the app opens on the WiFi-setup screen (the join form + the pairing entry);
-    once the satellite runs in station mode the app shows Home as usual."""
-    with _open(setup, "/app", locale="en-US") as pg:
+def test_wifi_setup_over_the_hotspot_and_station_mode_shows_home(setup):
+    """The setup hotspot: WiFi setup (``#wifisetup``; the landing is now the setup wizard, see
+    test_first_setup.py) shows the join form + the pairing entry; once the satellite runs in station
+    mode the app shows Home as usual."""
+    with _open(setup, "/app#wifisetup", locale="en-US") as pg:
         _title(pg, "en", "WiFi setup")
         expect(pg.locator("#setup-title")).to_have_text("Connect to your WiFi")
         expect(pg.locator("#wifi-form")).to_be_visible()
@@ -194,7 +195,7 @@ def test_wifi_setup_pairs_in_place(setup):
     (start -> scanning -> waiting_passkey a few polls later): the wizard's 1 s poll must repaint the card
     on WiFi setup too (firmware-host e2e regression, PR #397)."""
     setup.pairing_scan_polls = 2
-    with _open(setup, "/app", locale="en-US") as pg:
+    with _open(setup, "/app#wifisetup", locale="en-US") as pg:
         _title(pg, "en", "WiFi setup")
         pg.locator("#unpaired-banner").get_by_role("button", name="Pair…").click()
         card = pg.locator("#pairing-card")
@@ -211,7 +212,7 @@ def test_wifi_setup_pairs_in_place(setup):
 def test_back_from_a_screen_opened_on_wifi_setup_returns_to_it(setup):
     """The landing is the entry's screen (history.replaceState): browser back from Device status opened on
     WiFi setup returns to WiFi setup, not Home (CodeRabbit, PR #397); ‹ there still stays in the app."""
-    with _open(setup, "/app", locale="en-US") as pg:
+    with _open(setup, "/app#wifisetup", locale="en-US") as pg:
         _title(pg, "en", "WiFi setup")
         _device_status(pg)
         pg.go_back()
@@ -222,8 +223,8 @@ def test_back_from_a_screen_opened_on_wifi_setup_returns_to_it(setup):
 
 
 def test_setup_landing_lets_the_owner_go_home(setup):
-    """WiFi setup is a landing, not a trap: ‹ goes to Home and stays there."""
-    with _open(setup, "/app", locale="en-US") as pg:
+    """WiFi setup is not a trap: ‹ goes to Home and stays there."""
+    with _open(setup, "/app#wifisetup", locale="en-US") as pg:
         _title(pg, "en", "WiFi setup")
         pg.click("#back")
         _title(pg, "en", "Open California")
@@ -617,15 +618,12 @@ def test_change_network_switches_and_comes_back(station, locale, lang):
         expect(panel).to_contain_text(tr("Join {ssid} with this phone, then open:", lang, ssid="minsel"))
         expect(panel).to_contain_text(
             tr(
-                "Back on {old} within a minute if the new password was wrong; otherwise join the setup hotspot {ap} (password {appsk}) and open:",
+                "Back on {old} within a minute if the new password was wrong; otherwise the satellite opens its setup hotspot: scan the QR code on its display.",
                 lang,
                 old="HomeNet",
-                ap=CONSTS["NET_AP_SSID"],
-                appsk=CONSTS["NET_AP_PSK"],
             )
         )
         expect(panel.locator('a[href="%s"]' % host).first).to_be_visible()
-        expect(panel.locator('a[href="http://%s"]' % CONSTS["NET_AP_ADDR"])).to_be_visible()
         held[0].continue_()
         _wait(pg, lambda: station.wifi_posts, "the join POST")
         assert station.wifi_posts == [{"ssid": "minsel", "psk": "test-psk-1234"}]
@@ -720,7 +718,7 @@ def test_hotspot_join_posts_at_once_and_retries_once(setup, locale, lang):
         else:
             route.fulfill(status=200, content_type="application/json", body='{"ok":true}')
 
-    with _open(setup, "/app", locale=locale, allow=("ERR_INTERNET_DISCONNECTED",)) as pg:
+    with _open(setup, "/app#wifisetup", locale=locale, allow=("ERR_INTERNET_DISCONNECTED",)) as pg:
         pg.route("**/api/wifi", on_post)
         pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
         pg.select_option("#ssid", "HomeNet")
@@ -739,7 +737,7 @@ def test_a_hotspot_join_that_works_stays_on_wifi_setup_with_the_link(setup):
     """A join made on WiFi setup that comes online keeps the screen (the "Connected as …" link the owner
     opens next), instead of the switch to Home a station-mode answer otherwise makes."""
     online = {"mode": "station", "ssid": "HomeNet", "ip": "192.168.1.57", "rssi": -58}
-    with _open(setup, "/app", locale="en-US") as pg:
+    with _open(setup, "/app#wifisetup", locale="en-US") as pg:
         pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
         pg.fill("#psk", "test-psk-1234")
         pg.click("#connect")
@@ -755,7 +753,7 @@ def test_a_hotspot_join_that_works_stays_on_wifi_setup_with_the_link(setup):
 
 @pytest.mark.parametrize("locale,lang", LOCALES)
 def test_hotspot_join_failure_says_why(setup, locale, lang):
-    with _open(setup, "/app", locale=locale) as pg:
+    with _open(setup, "/app#wifisetup", locale=locale) as pg:
         pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
         pg.fill("#psk", "test-psk-1234")
         pg.click("#connect")
@@ -784,7 +782,7 @@ def test_both_screens_have_a_help_sheet(station, setup, locale, lang):
     """⋮ → Help on Satellite settings and WiFi setup, translated (a missing DE key would fall back to
     English)."""
     texts = []
-    for stub, path in ((station, "/#satsettings"), (setup, "/app")):
+    for stub, path in ((station, "/#satsettings"), (setup, "/app#wifisetup")):
         with _open(stub, path, locale=locale) as pg:
             expect(pg.locator("#title")).to_have_text(
                 tr("Satellite settings" if stub is station else "WiFi setup", lang)
