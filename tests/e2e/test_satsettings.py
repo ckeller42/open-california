@@ -234,20 +234,21 @@ def test_setup_landing_lets_the_owner_go_home(setup):
 
 @pytest.mark.parametrize("locale,lang", LOCALES)
 def test_device_status_shows_the_clock_row(station, locale, lang):
-    """Every status line lives in Device status' Satellite card: the clock (R_FW_TIME) with the boot
-    number joins storage, battery and resources; Satellite settings shows none of them."""
+    """Every status line lives in Device status' Satellite card: the clock (R_FW_TIME) joins storage,
+    battery and resources, in plain words (no "SNTP", no boot number: that is in Diagnostics);
+    Satellite settings shows none of them."""
     with _open(station, "/", locale=locale) as pg:
         _device_status(pg)
         card = pg.locator("#app .card", has=pg.get_by_role("heading", name=tr("Satellite", lang), exact=True))
         row = card.locator(".row", has=pg.get_by_text(tr("Clock", lang), exact=True))
-        expect(row).to_contain_text(tr("synced (SNTP) · boot {boot}", lang, boot=17))
+        expect(row.locator(".val")).to_have_text(tr("synced", lang))
         clock = station.fixtures["station"]["/api/state"]["device"]["time"]
         clock.update(synced=False)
-        expect(row).to_contain_text(tr("not synced yet · boot {boot}", lang, boot=17))
+        expect(row.locator(".val")).to_have_text(tr("not synced yet", lang))
         clock.update(source="unit")
-        expect(row).to_contain_text(tr("from the camper unit · boot {boot}", lang, boot=17))
+        expect(row.locator(".val")).to_have_text(tr("from the camper unit", lang))
         clock.update(source="none")
-        expect(row).to_contain_text(tr("no source · boot {boot}", lang, boot=17))
+        expect(row.locator(".val")).to_have_text(tr("no source", lang))
         pg.get_by_role("button", name=tr("Satellite settings ›", lang)).click()
         _title(pg, lang)
         for gone in ("Storage", "Clock"):

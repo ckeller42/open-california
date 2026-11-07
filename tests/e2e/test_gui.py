@@ -1930,6 +1930,29 @@ def test_energy_card_hides_power_sources_the_van_does_not_have(page, base_url):
     assert "not installed" not in card.inner_text()
 
 
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_copy_names_the_second_battery_and_hides_firmware_jargon(base_url, error_gated_page, locale):
+    """The Energy tile names the leisure battery as its card does ("Second battery", not a bare
+    "Battery" beside the starter battery); the Vehicle screen's Firmware row shows tested/untested
+    and keeps the unit's amb · cm · comm sub-versions behind Details."""
+    de = locale == "de-DE"
+    with error_gated_page(base_url, locale=locale) as pg:
+        tile = pg.locator(".tile", has_text="Energie" if de else "Energy")
+        expect(tile.locator(".tv")).to_have_text(
+            re.compile(("Zweitbatterie" if de else "Second battery") + r" \d+%")
+        )
+        pg.locator(".tile").last.click()  # Vehicle / Fahrzeug
+        app = pg.locator("#app")
+        expect(app.get_by_text("Firmware", exact=True)).to_be_visible()
+        expect(app.get_by_text("getestet" if de else "tested", exact=False).first).to_be_visible()
+        assert "amb · cm · comm" not in app.inner_text()
+        expect(app.get_by_text("amb 0410 · cm 0207 · comm 2")).to_be_hidden()
+        app.locator("summary", has_text="Details").click()
+        expect(app.get_by_text("amb 0410 · cm 0207 · comm 2")).to_be_visible()
+        pg.wait_for_timeout(2500)  # one poll re-renders the screen: the disclosure stays open
+        expect(app.get_by_text("amb 0410 · cm 0207 · comm 2")).to_be_visible()
+
+
 def test_calictl_page_has_no_house_load_row(page, base_url):
     page.goto(base_url)
     page.locator(".tile", has_text="Energy").first.click()

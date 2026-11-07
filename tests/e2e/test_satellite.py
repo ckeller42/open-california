@@ -203,6 +203,7 @@ def test_diagnostics_screen_polls_the_diag_state_only_while_open(sat, stub):
         ("display.motion", "3"),
         ("display.pm", "40-240"),
         ("ble.probing", "false"),
+        ("time.boot", "17"),  # the boot number: here, not on the Clock row
     ]:
         expect(_row(sat.locator("#app"), label)).to_contain_text(value)
     assert "/api/state?diag=1" in stub.queries
