@@ -2,7 +2,8 @@
  * Implements ``R_FW_STATUS_DISPLAY`` (docs/firmware.md): three rows (device always green; WiFi
  * green/amber/red; camper green/amber/red/grey), a stale rule (no snapshot for DISPLAY_STALE_MS turns
  * the camper row red), the footer, all derived from one cali_status_t; and the screen state + brightness
- * from the light/proximity/touch inputs (R_FW_DISPLAY_WAKE). Every text is an EN/DE pair generated from firmware/web/strings.json. */
+ * from the light/proximity/touch inputs (R_FW_DISPLAY_WAKE); the LoRa screen's gestures and texts
+ * (R_FW_LORA_SCREEN). Every text is an EN/DE pair generated from firmware/web/strings.json. */
 #include "cali_display_model.h"
 
 #include <math.h>
@@ -18,7 +19,8 @@
  * the keys in this file. */
 enum {
     K_DEVICE, K_WIFI, K_CAMPER, K_RUNNING, K_SETUP, K_JOINING, K_RETRYING, K_WIFI_OFF, K_CONNECTED,
-    K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_FOOTER_SETUP, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_BATT, K_CHARGING, K_COUNT
+    K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_QR_JOIN_TITLE, K_QR_NEXT_TITLE, K_QR_WLAN, K_QR_PASS, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_BATT, K_CHARGING, K_HEATER_LOCKED, K_HEATER_ERROR,
+    K_LORA_SCAN, K_LORA_WAIT, K_LORA_JOINED, K_LORA_NOT_JOINED, K_LORA_CONFIRMED, K_LORA_NONE, K_COUNT
 };
 static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_DEVICE] = {WEB_STR_DE_DEVICE, WEB_STR_EN_DEVICE},
@@ -40,9 +42,20 @@ static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_FAIL_NOT_FOUND] = {WEB_STR_DE_D_FAIL_NOT_FOUND, WEB_STR_EN_D_FAIL_NOT_FOUND},
     [K_FAIL_AUTH] = {WEB_STR_DE_D_FAIL_AUTH, WEB_STR_EN_D_FAIL_AUTH},
     [K_FAIL_OTHER] = {WEB_STR_DE_D_FAIL_OTHER, WEB_STR_EN_D_FAIL_OTHER},
-    [K_FOOTER_SETUP] = {WEB_STR_DE_D_FOOTER_SETUP, WEB_STR_EN_D_FOOTER_SETUP},
+    [K_QR_JOIN_TITLE] = {WEB_STR_DE_D_QR_JOIN_TITLE, WEB_STR_EN_D_QR_JOIN_TITLE},
+    [K_QR_NEXT_TITLE] = {WEB_STR_DE_D_QR_NEXT_TITLE, WEB_STR_EN_D_QR_NEXT_TITLE},
+    [K_QR_WLAN] = {WEB_STR_DE_D_QR_WLAN, WEB_STR_EN_D_QR_WLAN},
+    [K_QR_PASS] = {WEB_STR_DE_D_QR_PASS, WEB_STR_EN_D_QR_PASS},
     [K_BATT] = {WEB_STR_DE_D_BATT, WEB_STR_EN_D_BATT},
     [K_CHARGING] = {WEB_STR_DE_D_CHARGING, WEB_STR_EN_D_CHARGING},
+    [K_HEATER_LOCKED] = {WEB_STR_DE_D_HEATER_LOCKED, WEB_STR_EN_D_HEATER_LOCKED},
+    [K_HEATER_ERROR] = {WEB_STR_DE_D_HEATER_ERROR, WEB_STR_EN_D_HEATER_ERROR},
+    [K_LORA_SCAN] = {WEB_STR_DE_D_LORA_SCAN, WEB_STR_EN_D_LORA_SCAN},
+    [K_LORA_WAIT] = {WEB_STR_DE_D_LORA_WAIT, WEB_STR_EN_D_LORA_WAIT},
+    [K_LORA_JOINED] = {WEB_STR_DE_D_LORA_JOINED, WEB_STR_EN_D_LORA_JOINED},
+    [K_LORA_NOT_JOINED] = {WEB_STR_DE_D_LORA_NOT_JOINED, WEB_STR_EN_D_LORA_NOT_JOINED},
+    [K_LORA_CONFIRMED] = {WEB_STR_DE_D_LORA_CONFIRMED, WEB_STR_EN_D_LORA_CONFIRMED},
+    [K_LORA_NONE] = {WEB_STR_DE_D_LORA_NONE, WEB_STR_EN_D_LORA_NONE},
 };
 
 static const char *tx(int key, int lang) { return lang == CALI_LANG_EN ? TXT[key].en : TXT[key].de; }
@@ -89,7 +102,7 @@ static void wifi_row(cali_row_t *r, const cali_status_t *s, int lang) {
         return;
     }
     if (s->wifi_mode == CALI_WIFI_MODE_SETUP) {
-        row(r, CALI_DOT_AMBER, label, K_SETUP, lang, NET_AP_SSID, NET_AP_ADDR);
+        row(r, CALI_DOT_AMBER, label, K_SETUP, lang, s->ap_ssid, NET_AP_ADDR);
         return;
     }
     if (s->wifi_state == WIFI_CONNECTING) {
@@ -147,6 +160,11 @@ static void camper_row(cali_row_t *r, const cali_status_t *s, int lang) {
         row(r, CALI_DOT_RED, label, K_STALE, lang, age, NULL);
         return;
     }
+    if (s->heater_fault > 0) {  /* the unit clears its ErrorCode within seconds: the satellite's kept one */
+        snprintf(age, sizeof age, "%d", s->heater_fault);
+        row(r, CALI_DOT_AMBER, label, s->heater_fault == 4 ? K_HEATER_LOCKED : K_HEATER_ERROR, lang, age, NULL);
+        return;
+    }
     {  /* rounded up, at least 1 s */
         unsigned sec = (unsigned)((s->snap_age_ms + 999) / 1000);
         snprintf(age, sizeof age, "%u s", sec ? sec : 1u);
@@ -185,6 +203,55 @@ static uint8_t on_level(float x, const cali_display_cfg_t *c) {
     return (uint8_t)(c->min_pct + f * (float)(c->max_pct - c->min_pct) + 0.5f);
 }
 
+/* The LoRa screen's gestures (R_FW_LORA_SCREEN), from the press duration seen each tick: a press is new
+ * when the duration starts or drops; one that starts on a dark screen is spent (the wake press); an
+ * unspent press fires once at DISPLAY_LORA_PRESS_MS; an unspent press that ends shorter, or a tap
+ * between two ticks, closes the screen. */
+static void lora_screen(cali_display_model_t *m, uint64_t now_ms, const cali_display_in_t *in, cali_display_view_t *out) {
+    uint32_t p = in->pressed_ms;
+    int new_press = p && (!m->press_ms || p < m->press_ms);
+    int ended = m->press_ms && (!p || new_press);
+    out->lora_request = 0;
+    if (m->show_lora && ((ended && !m->press_spent) || (in->touched && !p && !m->press_ms))) m->show_lora = 0;
+    if (new_press)   /* dim or off; the open LoRa screen is lit whatever the last tick was */
+        m->press_spent = !m->show_lora && m->started && now_ms - m->last_wake_ms >= DISPLAY_DIM_AFTER_MS;
+    if (p >= DISPLAY_LORA_PRESS_MS && !m->press_spent) {
+        m->press_spent = 1;
+        if (!m->show_lora && in->lora_available) {   /* open: the selector; a new transfer key before the TTN keys */
+            m->show_lora = 1;
+            out->lora_request = !in->lora_has_ttn_keys;
+            m->lora_since = now_ms;
+        } else if (m->show_lora == 1 && in->lora_has_ttn_keys) {   /* rotation (spec 5.3) */
+            m->show_lora = 2;
+            out->lora_request = 1;
+            m->lora_since = now_ms;
+        }
+    }
+    m->press_ms = p;
+    if (m->show_lora && (!in->lora_available || now_ms - m->lora_since >= DISPLAY_LORA_SHOW_MS)) {
+        m->show_lora = 0;
+        m->press_spent = 1;   /* a press held across the close never reopens it (nor makes a new key) */
+    }
+    out->show_lora = m->show_lora;
+}
+
+/* The LoRa screen's texts: "Preparing…" or the scan hint; "<joined> · <last confirmed uplink>". */
+static void lora_texts(const cali_display_in_t *in, int lang, cali_display_view_t *out) {
+    char age[24], tmp[2 * CALI_ROW_TEXT_MAX], last[CALI_ROW_TEXT_MAX + 24];
+    out->lora_hint = "";
+    out->lora_line[0] = 0;
+    if (!out->show_lora) return;
+    out->lora_hint = tx(in->lora_qr_ready ? K_LORA_SCAN : K_LORA_WAIT, lang);
+    if (in->lora_confirmed_age_s >= 0) {
+        fmt_uptime((uint64_t)in->lora_confirmed_age_s * 1000u, age);
+        snprintf(last, sizeof last, tx(K_LORA_CONFIRMED, lang), age);
+    } else {
+        snprintf(last, sizeof last, "%s", tx(K_LORA_NONE, lang));
+    }
+    snprintf(tmp, sizeof tmp, "%s · %s", tx(in->lora_joined ? K_LORA_JOINED : K_LORA_NOT_JOINED, lang), last);
+    cali_display_fit_text(out->lora_line, tmp);
+}
+
 static int alert(cali_dot_t d) { return d == CALI_DOT_RED || d == CALI_DOT_AMBER; }
 
 /* Wake, lux EMA + deadband and the on/dim/off state (R_FW_DISPLAY_WAKE). */
@@ -199,6 +266,16 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
     if (m->started && ((alert(out->wifi.dot) && out->wifi.dot != m->dots[0]) ||
                        (alert(out->camper.dot) && out->camper.dot != m->dots[1])))
         wake = 1;
+    {   /* a QR code appearing or changing (hotspot code, then the setup page's): someone has to scan it */
+        uint32_t h = 0;   /* FNV-1a; 0 = no QR (the text holds the password, so no copy is kept) */
+        if (out->qr[0]) {
+            h = 2166136261u;
+            for (const char *q = out->qr; *q; q++) h = (h ^ (uint8_t)*q) * 16777619u;
+            if (!h) h = 1;
+        }
+        if (h && h != m->qr_hash) wake = 1;
+        m->qr_hash = h;
+    }
     m->dots[0] = (uint8_t)out->wifi.dot;
     m->dots[1] = (uint8_t)out->camper.dot;
     m->started = 1;
@@ -253,7 +330,7 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
         m->lux = in->lux;
         m->last_lux_ms = m->last_good_ms = now_ms;
     }
-    if (wake) m->last_wake_ms = now_ms;
+    if (wake || m->show_lora) m->last_wake_ms = now_ms;   /* the LoRa screen stays lit */
 
     out->sensor = !in->present ? CALI_SENSOR_ABSENT
                   : now_ms - m->last_good_ms > DISPLAY_SENSOR_FAIL_MS ? CALI_SENSOR_ERROR : CALI_SENSOR_OK;
@@ -279,28 +356,74 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
         uint64_t idle = now_ms - m->last_wake_ms;
         out->state = idle < DISPLAY_DIM_AFTER_MS ? CALI_DISP_ON : idle < DISPLAY_OFF_AFTER_MS ? CALI_DISP_DIM : CALI_DISP_OFF;
     }
-    out->brightness_pct = out->state == CALI_DISP_ON ? on : out->state == CALI_DISP_DIM ? dim : 0;
+    out->brightness_pct = m->show_lora                     ? DISPLAY_LORA_BRIGHT_PCT
+                          : out->state == CALI_DISP_ON  ? on
+                          : out->state == CALI_DISP_DIM ? dim
+                                                        : 0;
+}
+
+/* "Label value" -> "Label\nvalue" (the last space becomes a line break; none: unchanged). */
+static void break_before_value(char *t) {
+    char *sp = strrchr(t, ' ');
+    if (sp) *sp = '\n';
+}
+
+/* The setup QR screens: the hotspot's join code, or the address once the phone is on the home WiFi. */
+static void qr_screen(cali_display_view_t *out, const cali_status_t *s, const char *ap_qr, int lang) {
+    char tmp[2 * CALI_ROW_TEXT_MAX];
+    out->qr[0] = out->qr_title[0] = out->qr_lines[0][0] = out->qr_lines[1][0] = 0;
+    if (s->wifi_mode == CALI_WIFI_MODE_SETUP && ap_qr && strlen(ap_qr) < CALI_QR_TEXT_MAX) {
+        const char *p = strstr(ap_qr, ";P:");   /* WIFI:T:WPA;S:<ssid>;P:<psk>;; */
+        size_t n = p ? strcspn(p + 3, ";") : 0;
+        char psk[NET_PSK_MAX + 1];
+        if (n == 0 || n > NET_PSK_MAX) return;
+        memcpy(psk, p + 3, n);
+        psk[n] = 0;
+        snprintf(out->qr, CALI_QR_TEXT_MAX, "%s", ap_qr);
+        cali_display_fit_text(out->qr_title, tx(K_QR_JOIN_TITLE, lang));
+        snprintf(tmp, sizeof tmp, tx(K_QR_WLAN, lang), s->ap_ssid);
+        break_before_value(tmp);   /* the SSID on its own line: the narrow text box must not break it */
+        cali_display_fit_text(out->qr_lines[0], tmp);
+        snprintf(tmp, sizeof tmp, tx(K_QR_PASS, lang), psk);   /* full-width line under the code */
+        cali_display_fit_text(out->qr_lines[1], tmp);
+    } else if (s->wifi_mode == CALI_WIFI_MODE_STATION && s->ip != 0 && s->setup_pending) {
+        char ip[16];
+        cali_status_ip_str(s->ip, ip);
+        snprintf(out->qr, CALI_QR_TEXT_MAX, "http://%s/#setup", ip);
+        snprintf(tmp, sizeof tmp, tx(K_QR_NEXT_TITLE, lang), s->ssid);
+        cali_display_fit_text(out->qr_title, tmp);
+        snprintf(tmp, sizeof tmp, "http://\n%s", ip);   /* the address alone on a line: it must not break */
+        cali_display_fit_text(out->qr_lines[0], tmp);
+        cali_display_fit_text(out->qr_lines[1], "http://" NET_HOSTNAME ".local");
+    }
 }
 
 void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_t now_ms, int lang,
-                        const cali_display_in_t *in, const cali_display_cfg_t *cfg, cali_display_view_t *out) {
+                        const cali_display_in_t *in, const cali_display_cfg_t *cfg, const char *ap_qr,
+                        cali_display_view_t *out) {
     char up[24];
     wifi_row(&out->wifi, s, lang);
     camper_row(&out->camper, s, lang);
     fmt_uptime(s->uptime_ms, up);
     row(&out->device, CALI_DOT_GREEN, tx(K_DEVICE, lang), K_RUNNING, lang, up, NULL);
-    out->footer_setup = s->wifi_mode == CALI_WIFI_MODE_SETUP;
-    if (out->footer_setup) {
-        char tmp[2 * CALI_ROW_TEXT_MAX];
-        snprintf(tmp, sizeof tmp, tx(K_FOOTER_SETUP, lang), NET_AP_SSID, NET_AP_PSK);
-        cali_display_fit_text(out->footer, tmp);
+    qr_screen(out, s, ap_qr, lang);
+    /* recovery = set up once (a stored network, no setup pending), back on the hotspot: the rows stay
+       and a tap shows the hotspot QR for DISPLAY_RECOVERY_QR_MS */
+    if (s->wifi_mode == CALI_WIFI_MODE_SETUP && s->ssid[0] && !s->setup_pending) {
+        if (in->touched) m->qr_until_ms = now_ms + DISPLAY_RECOVERY_QR_MS;
+        if (now_ms >= m->qr_until_ms) out->qr[0] = 0;
     } else {
-        station_footer(out->footer, &in->batt, lang);
+        m->qr_until_ms = 0;
     }
+    if (s->wifi_mode == CALI_WIFI_MODE_SETUP) out->footer[0] = 0;   /* no .local address on the hotspot */
+    else station_footer(out->footer, &in->batt, lang);
+    lora_screen(m, now_ms, in, out);
+    lora_texts(in, lang, out);
     wake_and_brightness(m, now_ms, in, cfg, out);
 }
 
-int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake) {
+int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake, int read_ok) {
+    if (!read_ok) return 0;   /* a failed read: "released" for the widgets, but the press (and its swallow) goes on */
     if (!pressed) *swallow = 0;
     else if (!awake) *swallow = 1;
     return !*swallow;

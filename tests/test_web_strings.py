@@ -87,7 +87,8 @@ def test_display_format_strings_are_safe():
         en, de = (re.findall(r"%.?", tr[lang]) for lang in ("en", "de"))
         assert en == de, key
         assert set(en) <= {"%s"} and len(en) <= 2, key
-    assert re.findall(r"%.?", STRINGS["d_footer_setup"]["de"]) == ["%s", "%s"]  # SSID + PSK
+    for key in ("d_qr_next_title", "d_qr_wlan", "d_qr_pass"):  # one name or one password each
+        assert re.findall(r"%.?", STRINGS[key]["de"]) == ["%s"], key
 
 
 def test_page_script_stripper():

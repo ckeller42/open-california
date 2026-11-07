@@ -30,55 +30,57 @@ and the device's own state (Bluetooth pairing, link, WiFi).
 
 ## First-time setup
 
-A satellite with no saved WiFi opens its own setup hotspot as soon as it boots.
+A satellite with no saved WiFi opens its own setup hotspot as soon as it boots. Its screen shows
+everything you need: a WiFi QR code, the hotspot name `calictl-esp-XXXX` (the last four hex digits
+of the board's address) and, in a full-width line under the code, the hotspot password
+(`xxxx-xxxx-xxxx`). Every satellite makes its own random password once and keeps it across
+updates; a new one appears only after the board's settings are erased. The password is on the screen
+only: it is in no document, in no log and not in `/api/state`.
 
-1. **Join the setup hotspot.** On your phone, open the WiFi settings and join
-   **`calictl-esp-setup`**. Its password is **`calictl-setup`**.
+1. **Scan the QR code with the phone camera.** The phone offers to join `calictl-esp-XXXX`; accept.
+   (Without a camera scan, join the network by hand with the name and password from the screen.)
+2. **The setup wizard opens by itself.** Right after you join, your phone checks whether the network
+   needs a sign-in and finds the satellite's camper UI instead — a "Sign in to network" notice or a
+   small browser window pops up. Tap it. The camper UI opens its **setup wizard**; the steps are
+   in the URL (`#setup/<step>`), so a reload stays on the step.
 
-   ![Android WiFi settings: calictl-esp-setup in the list](screenshots/esp-android-1-join.png)
-   ![Android asks for the hotspot password: calictl-setup](screenshots/esp-android-2-password.png)
-2. **WiFi setup opens by itself.** Right after you join, your phone checks whether the network
-   needs a sign-in and finds the satellite's camper UI instead, on its **WiFi setup** screen — a "Sign in to network" notice or a
-   small browser window pops up. Tap it.
-
-   ![Android's notice "Sign in to Wi-Fi network — calictl-esp-setup"](screenshots/esp-android-3-signin-notice.png)
-
-   On Android the notice opens a sign-in window titled *Sign in to calictl-esp-setup* that shows
-   the camper UI's **WiFi setup** screen:
-
-   ![Android's sign-in window showing the WiFi setup screen with the network list](screenshots/esp-android-4-wifi-setup.png)
-
-   **The phone jumps back to your home WiFi?** If your home network is in range too, Android may
-   leave the setup hotspot because it has no internet, and the notice disappears. Join
-   `calictl-esp-setup` again and tap the notice at once, or open **<http://192.168.4.1>** while you
-   are on the hotspot. Mobile data can stay on.
+   **The phone jumps back to your home WiFi?** If your home network is in range too, the phone may
+   leave the hotspot because it has no internet, and the notice disappears. Join the hotspot again
+   and tap the notice at once, or open **<http://192.168.4.1>** while you are on the hotspot. Mobile
+   data can stay on.
 
    **Nothing pops up?** Open a browser and go to **<http://192.168.4.1>** (plain `http`, no
    `s`). That is always the satellite's address on its own hotspot.
-3. **Choose your network and type its password.** The *WiFi setup* screen (*Connect to your WiFi*)
-   lists the networks the satellite can see. Pick yours, type the password (*Show password* shows
-   what you typed), tap **Connect**. If your network isn't listed, tap **Search again**, or pick
-   **Other network…** and type its name.
+3. **Welcome, then WiFi.** The WiFi step lists the networks the satellite can see. Pick yours, type
+   the password (*Show password* shows what you typed), tap **Connect**. If your network isn't
+   listed, tap **Search again**, or pick **Other network…** and type its name. This step cannot be
+   skipped: every later step needs the home WiFi. The step also gives a tip for using a **phone hotspot**;
+   on an iPhone that is **Maximize Compatibility**, because the
+   satellite has only a 2.4 GHz radio.
 
    ![The camper UI's WiFi setup screen on the satellite's hotspot: network list, password, Connect](screenshots/esp-setup-page.png)
+4. **Switch to the satellite's new address from the display.** While the satellite joins, its
+   hotspot moves to your network's channel, so your phone may drop off the setup WiFi for a moment.
+   Once the satellite is on your network, its **screen shows a second QR code** with
+   `http://<ip>/#setup`, the line *Join `<your network>`, then scan* and the station addresses
+   (the IP address and `http://calictl-esp.local`).
+   Put your phone on your own WiFi (most phones do that on their own) and scan that code: the wizard
+   resumes where it was.
 
-4. **Wait for "Connected as …".** The screen says *Connecting to …*, and once the satellite has
-   joined your network it shows *Connected as 192.168.x.y. Join <your network> with this phone
-   too, then open:* followed by a link to **<http://calictl-esp.local>**.
-
-   While the satellite joins, its hotspot moves to your network's channel, so your phone may drop
-   off the setup WiFi for a moment; it comes back by itself and the screen then shows the result.
-   (It also retries a **Connect** that got no answer once, saying *Retrying the connection…*.)
-
-   If joining failed, the screen says why: *Wrong password — try again.*, *Network not found — check
-   that it is in range, then try again.*, or *Could not join the network — try again.* The
+   If joining failed, the wizard says why: *Wrong password — try again.*, *Network not found —
+   check that it is in range, then try again.*, or *Could not join the network — try again.* The
    satellite forgets the failed password and keeps its setup hotspot open, so you can simply try
    again.
-5. **Switch back.** About 30 seconds after the satellite joins your network it closes the setup
-   hotspot. Put your phone back on your own WiFi (most phones do that on their own) and open
-   **<http://calictl-esp.local>**.
+5. **Pair, Victron, sensors, home screen.** The remaining steps are in
+   [The setup wizard's steps](#the-setup-wizards-steps). About 30 seconds after the satellite joins
+   your network it closes the setup hotspot.
 
-From now on the satellite joins your network by itself every time it starts.
+From now on the satellite joins your network by itself every time it starts. The setup wizard
+ends when you go **Home** (or open *Satellite settings* from the final checklist). A satellite that
+already has saved WiFi never shows the wizard, and a WiFi change made later from your
+network never starts it. A satellite that falls back to its hotspot (for example, no known
+network for 5 minutes) keeps its status rows on the screen; tap the screen to show the join
+QR code for 2 minutes.
 
 **The camper UI doesn't load at all?** The satellite also serves a tiny fallback page,
 **<http://192.168.4.1/device>** on its hotspot (or `http://calictl-esp.local/device` on your network):
@@ -86,6 +88,18 @@ From now on the satellite joins your network by itself every time it starts.
 back to the camper UI. It is only a way back onto WiFi; everything else is in the camper UI.
 
 ![The satellite's WiFi recovery page: state, network list, password, Connect](screenshots/esp-recovery-page.png)
+
+### The setup wizard's steps
+
+| Step | What it asks |
+|---|---|
+| **Welcome** | What the wizard does. |
+| **WiFi** | Your home network and its password (above). |
+| **Pair** | Close the California On Tour app on your phone. On the camper unit open **Einstellungen → Bluetooth → Gerät verbinden**, then tap **Pair now** and type the passcode within about 30 seconds (a countdown shows). Can be skipped. |
+| **Victron** | Whether the van has Victron devices (yes or no). If yes, the key help says: in VictronConnect open the device, then ⋮ → *Product info* → *Instant readout details* → *Show* and copy the key. |
+| **Sensors** | Every Govee sensor the satellite hears, each with a name. |
+| **Home** | *Add to Home Screen* (see below), and a check whether `calictl-esp.local` opens on your phone. If not, the step suggests a fixed address (a DHCP reservation in your router). |
+| **Done** | A checklist. A row you skipped says *not set up* and links to *Satellite settings*. |
 
 ## Pair the satellite with your camper unit
 
@@ -98,8 +112,9 @@ camper screen's side: [How to pair your camper unit](howto-pair-your-camper.md))
    the unit) can collide with it. A Pi running calictl can stay up — the unit serves several
    Bluetooth clients at once, so the satellite pairs alongside it.
 2. Open the calictl UI — **<http://calictl-esp.local>** on your WiFi, or, still on the setup
-   hotspot, the *WiFi setup* screen at **<http://192.168.4.1>**: its *No camper unit is paired yet* banner
-   has **Pair…** (or open **<http://192.168.4.1/#pair>**).
+   hotspot, **<http://192.168.4.1>**: over the hotspot the setup wizard has only the welcome and WiFi
+   steps. Tap **‹** to go to Home, where the *No camper unit is paired yet* banner has **Pair…**
+   (or open **<http://192.168.4.1/#pair>**). In the first-time setup the wizard's *Pair* step does this for you.
 3. The link opens the wizard; otherwise tap **Pair…** on the *No camper unit is
    paired yet* banner (or ⋮ → **Device status** → **Pair…**). The wizard opens at the top of the page. Tick *I'm on that screen*, tap **Pair now**.
 4. Type the 6-digit passcode the unit now shows and tap **Send**. *✓ Paired — …* — the satellite
@@ -162,7 +177,7 @@ the Pi — and the vendor app — send for these; what it cannot do:
 
 - **The pop-up roof** is greyed with *Only via buspi or the app*. It is deliberately left to buspi
   and the app.
-- **Nothing works over the setup hotspot.** While you are on `calictl-esp-setup` every control is
+- **Nothing works over the setup hotspot.** While you are on `calictl-esp-XXXX` every control is
   greyed (a *Satellite — display only* banner says so); a command sent anyway is answered
   *Controls work only on your home WiFi — not over the setup hotspot*.
 
@@ -198,17 +213,17 @@ Things to expect:
 ## What the screen tells you
 
 The CoreS3's own screen shows the same status as the page, without a browser: one coloured dot
-per row, the firmware version top right, and the page address (or, in setup, the hotspot and its
-password) at the bottom. The texts are German by default; an English build exists.
+per row, the firmware version top right, and the page address at the bottom. In setup the screen
+shows the join QR code instead, with the hotspot name and its password; after the WiFi step it
+shows the second QR code (see [First-time setup](#first-time-setup)). The texts are German by default; an English build exists.
 
-![The screen of a fresh satellite: setup hotspot (amber), camper not paired (grey), hotspot name and password at the bottom](screenshots/esp-screen-setup.png)
 ![The screen in normal use: on the WiFi with address (greyed out here) and signal, camper connected with data 1 s old](screenshots/esp-screen-connected.png)
 
 | Row | Green | Amber | Red | Grey |
 |---|---|---|---|---|
 | **Gerät** (device) | *läuft · seit 2 h 13 min* — running, and for how long | — | — (a crash shows as a restart: the time starts again) | — |
-| **WLAN** (WiFi) | *\<network\> · 192.168.x.y · −58 dBm* — on your network, its address and signal | *Hotspot calictl-esp-setup · 192.168.4.1* (setup hotspot open); *verbinde mit \<network\>* (joining); *\<network\> nicht erreichbar, versuche neu* (out of reach, retrying) | *nicht verbunden* plus the reason: *Netz nicht gefunden*, *falsches Passwort* or *Verbindungsfehler* | — |
-| **Camper** | *verbunden · Daten vor 1 s* — linked, and how old the last reading is | *verbinde …* (connecting); *Kopplung läuft …* (pairing); *Code der Einheit eingeben* (type the code the unit shows) | *Verbindung verloren, verbinde neu* (link lost, reconnecting); *keine Daten seit 95 s* (linked, but no reading for more than 90 s); *Kopplung fehlgeschlagen* (pairing failed) | *nicht gekoppelt* — not paired yet |
+| **WLAN** (WiFi) | *\<network\> · 192.168.x.y · −58 dBm* — on your network, its address and signal | *Hotspot calictl-esp-XXXX · 192.168.4.1* (setup hotspot open); *verbinde mit \<network\>* (joining); *\<network\> nicht erreichbar, versuche neu* (out of reach, retrying) | *nicht verbunden* plus the reason: *Netz nicht gefunden*, *falsches Passwort* or *Verbindungsfehler* | — |
+| **Camper** | *verbunden · Daten vor 1 s* — linked, and how old the last reading is | *verbinde …* (connecting); *Kopplung läuft …* (pairing); *Code der Einheit eingeben* (type the code the unit shows); *verbunden · Heizung: Max. Betriebsdauer erreicht* (the unit stopped or refused the air heater with its heating-time lock; it starts again after the van has driven); *verbunden · Heizungsfehler 3* (another heater error code). The heater texts stay until the heater runs again, because the unit clears its error code after a few seconds | *Verbindung verloren, verbinde neu* (link lost, reconnecting); *keine Daten seit 95 s* (linked, but no reading for more than 90 s); *Kopplung fehlgeschlagen* (pairing failed) | *nicht gekoppelt* — not paired yet |
 
 The screen lights up when you **tap it** (that tap only wakes it, it presses nothing), when you
 **reach toward it**, or when a row turns amber or red; it dims after **60 seconds** and goes dark
@@ -222,7 +237,7 @@ with "…" — the camper UI shows it in full.
 When the saved network disappears (you drove off, the router restarted), the satellite keeps
 trying to rejoin — after 1 s, then 2 s, 4 s and so on, up to once a minute — and never forgets the
 saved network on its own. If it still hasn't rejoined after **5 minutes**, it **also** opens the
-setup hotspot `calictl-esp-setup` again, while it keeps retrying the saved network in the
+setup hotspot `calictl-esp-XXXX` again, while it keeps retrying the saved network in the
 background. So at a new campsite you can join the hotspot and give it the new network (next
 section) — or do nothing, and it rejoins your network when you're back in range (the hotspot then
 closes 30 seconds later).
@@ -243,7 +258,7 @@ closes 30 seconds later).
     <http://calictl-esp.local>;
   - a different network: join that network with your phone, then open <http://calictl-esp.local>;
   - a wrong password: the satellite is back on the old network within a minute; otherwise (it
-    came back on neither) join `calictl-esp-setup` and open <http://192.168.4.1> to try again.
+    came back on neither) join the setup hotspot (its name and password are on the screen) and open <http://192.168.4.1> to try again.
 
   If the satellite comes back on the same network, the screen shows *Connected as …* by itself — or,
   when the new network did not work, *The new network didn't work (wrong password); back on
@@ -285,7 +300,7 @@ back**. The replies you'll see:
   or the name **or the password** has a space. `wifi set` cannot take either with a space (WiFi
   passwords may contain spaces): use the WiFi setup screen for those.
 - `LOG wifi: credentials replaced, reconnecting` — you replaced a saved network.
-- `LOG wifi: setup hotspot up (calictl-esp-setup)` / `LOG wifi: setup hotspot closed`.
+- `LOG wifi: setup hotspot up (calictl-esp-XXXX)` / `LOG wifi: setup hotspot closed`.
 
 ## What is stored, and where
 
@@ -293,17 +308,20 @@ back**. The replies you'll see:
   settings area, NVS), **in plain text** — not encrypted. They stay there across restarts until
   you replace them or type `wifi forget` (or a newly typed password turns out wrong). Nothing
   about your WiFi is sent anywhere else.
-- **The setup hotspot's password `calictl-setup` is the same on every satellite and printed in
-  these docs.** While the hotspot is open (first setup, after `wifi forget`, or after 5 minutes
-  without the saved network), anyone in range can join it and read or change the WiFi settings.
-  The page and the USB console have no login. This follows the project owner's stance that every
-  device on the local network (and near the van) is trusted.
+- **The setup hotspot's password is random per satellite.** It is made once, kept in the same
+  settings area (key `ap_psk`, plain text) and shown only on the satellite's screen. It stays across
+  updates and changes only after the settings are erased. It appears in no document, no log and not in
+  `/api/state`. While the hotspot is open (first setup, after `wifi forget`, or after 5 minutes
+  without the saved network), anyone who can read the screen can join it and read or change the WiFi
+  settings. The page and the USB console have no login. This follows the project owner's stance
+  that every device on the local network (and near the van) is trusted.
 
 ## Troubleshooting
 
 | What you see | What to do |
 |---|---|
-| No `calictl-esp-setup` network appears | The satellite already has a saved network and is on it (or still inside its first 5 minutes of retrying). Open <http://calictl-esp.local>, or type `wifi status` on the USB console; `wifi forget` reopens the hotspot. |
+| No `calictl-esp-XXXX` network appears | The satellite already has a saved network and is on it (or still inside its first 5 minutes of retrying). Open <http://calictl-esp.local>, or type `wifi status` on the USB console; `wifi forget` reopens the hotspot. |
+| The hotspot asks for a password | Read it from the satellite's screen (the line under the QR code), or scan the code. |
 | Joined the hotspot, no page pops up | Open **<http://192.168.4.1>** in a browser. Some phones only show the sign-in notice once; others open it in a small window you have to tap. |
 | Your network is missing from the list | Tap **Search again**. 5 GHz-only networks, and networks that hide their name, never appear — use a 2.4 GHz network; for a hidden one, try `wifi set` on the USB console (untested). |
 | "The password needs 8–63 characters." | The password is too short or too long. An open network (no password) cannot be used. |
@@ -316,7 +334,7 @@ back**. The replies you'll see:
 | The page is slow with several tabs open | The satellite answers one request at a time. Keep one tab open. |
 | *Link to the camper unit: not connected* | That is the Bluetooth side, not WiFi: the satellite is not paired yet, the camper unit is asleep, or another device (the Pi, the app) holds the unit's only Bluetooth connection. Pair it from the page ([Pair the satellite with your camper unit](#pair-the-satellite-with-your-camper-unit)); the USB console's `pair` / `passkey <code>` does the same. |
 | *Not connected to the camper unit yet — try again in a few seconds* after tapping a control | The Bluetooth link is not armed yet (give it a few seconds after the unit connects) or the unit is out of reach / asleep. |
-| *Controls work only on your home WiFi — not over the setup hotspot* | You are on `calictl-esp-setup`. Put the satellite on your WiFi (above) and use <http://calictl-esp.local>. |
+| *Controls work only on your home WiFi — not over the setup hotspot* | You are on the setup hotspot. Put the satellite on your WiFi (above) and use <http://calictl-esp.local>. |
 | *The satellite is still sending the previous command — try again in a moment* | One command at a time; wait for the toast of the previous one. |
 | *Only via buspi or the app* on the roof | By design — the roof is not controlled from the satellite. Use the Pi's page or the vendor app. |
 | *the wake-up light needs the time from the web page — set it there* | The request came without the page's clock — an old page still open from before the update, or a script. Reload <http://calictl-esp.local> and set the wake-up light on the page. |

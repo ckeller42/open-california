@@ -25,3 +25,8 @@ def test_device_build_sends_the_web_ui_in_a_few_ticks():
     the ~58 KB UI bundle take ~1.2 s (measured 2026-10-10). Keep the larger buffer."""
     lines = set(SDKCONFIG.read_text().splitlines())
     assert "CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040" in lines
+
+
+def test_device_build_has_lvgls_qr_code_widget():
+    """The setup screen draws the hotspot and setup-page QR codes with lv_qrcode."""
+    assert "CONFIG_LV_USE_QRCODE=y" in SDKCONFIG.read_text().splitlines()

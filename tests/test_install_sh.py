@@ -77,7 +77,7 @@ def test_dry_run_previews_all_steps_and_touches_nothing(tmp_path):
     assert not target.exists()  # dry-run created nothing
 
 
-def test_with_sinks_dry_run_configures_mqtt_without_leaking_password(tmp_path):
+def test_with_sinks_dry_run_installs_only_the_influx_client(tmp_path):
     r = subprocess.run(
         ["sh", SH, "--dry-run", "--yes", "--with-sinks", "--dir", str(tmp_path / "oc")],
         capture_output=True,
@@ -86,5 +86,5 @@ def test_with_sinks_dry_run_configures_mqtt_without_leaking_password(tmp_path):
     )
     assert r.returncode == 0, r.stderr
     out = r.stdout
-    assert "MQTT" in out and "paho-mqtt" in out  # sink deps + MQTT config previewed
-    assert "password hidden" in out  # password is never printed
+    assert "influxdb_client" in out  # the one sink dep is previewed
+    assert "MQTT" not in out and "paho" not in out  # the MQTT/Home Assistant bridge is gone

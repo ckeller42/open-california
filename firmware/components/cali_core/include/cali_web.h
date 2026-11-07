@@ -34,7 +34,7 @@
  *    firmware reports ``device.control.writes`` (station mode), posting calictl's ``/api/command``
  *    body (with the page's clock ``local_now`` on every wake-up edit), except the pop-top roof, which
  *    stays greyed with the firmware's own refusal text ("Only via buspi or the app"); without the
- *    flag every control is greyed; over the setup hotspot the UI opens on its WiFi-setup screen. A
+ *    flag every control is greyed; over the setup hotspot the UI opens on its setup wizard. A
  *    minimal WiFi recovery page stays at ``GET /device``.
  *    Every static page and asset carries a strong ``ETag`` derived from its exact bytes, and a
  *    matching ``If-None-Match`` is answered ``304 Not Modified`` without a body; the pages and the
@@ -102,8 +102,8 @@
  *
  * - `GET /`, `/app`: 200 `text/html`, `Content-Encoding: gzip`, `Cache-Control: no-cache`, in every
  *   mode. The calictl web UI (app_bundle_gen.h's WEB_APP_HTML_GZ, from tools/gen_c_dict.py), which
- *   interprets `/api/state` in the browser (calictl/webui/semantics.js). In setup or off mode it
- *   opens on its WiFi-setup screen (the captive portal lands here).
+ *   interprets `/api/state` in the browser (calictl/webui/semantics.js). In setup or off mode (and while a first-time
+ *   setup is pending) it opens on its setup wizard (the captive portal lands here).
  * - `GET /device`: 200 `text/html`, the WiFi recovery page (firmware/web/index_gen.html, rendered
  *   from index.html by tools/gen_c_dict.py; strings_gen.h's WEB_INDEX_HTML byte array), in every
  *   mode. A way back onto WiFi if the UI fails.
@@ -114,7 +114,8 @@
  *   (R_FW_STATE_DIAG): the diagnostics the page never shows. The plain 2 s poll carries only what
  *   the page shows. The body is built whole in one handler call (one consistent snapshot) into a
  *   NET_JSON_MAX buffer; an overflow answers 500 and logs "http: overflow". The `ext` member is
- *   present only while exp_sensors is on (cali_sensors_state_json). Shape:
+ *   present only while exp_sensors is on (cali_sensors_state_json), `device.lora` only while exp_lora
+ *   is on (cali_lora_json). Shape:
  *
  * @code{.unparsed}
  * {"t":<uptime_ms> [diag],"fn":{<the SNAP "fn" object, cali_snapshot_fn>},
@@ -122,7 +123,9 @@
  *            "link":{"up":<bool>,"ready":<bool>,"rest":<bool>,"redial":<bool>,
  *                    "rest_next_s":<int>|null,"last_snap_age_ms":<int>|null},
  *            "wifi":{"mode":"setup"|"station"|"off","ssid":"…"|null,
- *                    "ip":"a.b.c.d"|null,"rssi":<int>|null},
+ *                    "ip":"a.b.c.d"|null,"rssi":<int>|null,
+ *                    "ap_ssid":"calictl-esp-XXXX"|null},   (the hotspot's name while it runs, never its password)
+ *            "setup":{"pending":<bool>},   (a first-time setup begun on the hotspot and not done: kv setup_qr)
  *            "control":{"writes":<bool>},
  *            "uptime_ms":<int>,"fw":"<cali_fw_version()>",
  *            "ota":{"state","available_sha","progress_pct","error","channel"},
@@ -145,7 +148,11 @@
  *                       "prox_wake":<bool>,"motion_wake":<bool>,"min","max","offset",
  *                       "dfs":<bool>|null,"pm":"<min>-<max>"|null [diag]},
  *            "ux":{"enabled":<bool>},
- *            "experimental":{"sensors":<bool>},
+ *            "experimental":{"sensors":<bool>,"lora":<bool>},
+ *            "energy":{"boot","solar_wh","load_wh","batt_net_wh","load_a"},
+ *            "lora":{"module","joined","at_unanswered","sf","last_s","airtime_ms_24h",
+ *                    "airtime_charged_ms_24h","unconfirmed_sends","downlinks_24h","uplinks","note"}
+ *                   [only while exp_lora is on],
  *            "water_held":<bool>,
  *            "water_held_age_ms":<int>},
  *  "ext":{"<alias>":{"type":"<id>",<field>:<num|null>,…,"age_s":<int|null>},…}}
@@ -169,7 +176,9 @@
  *     members are null without a screen (host, QEMU). `dfs` and `pm` show the live esp_pm config.
  *   - `ux`: the "Send usage data" switch (NVS ux_on, default on; the web UI's _meta.ux,
  *     R_UX_TELEMETRY).
- *   - `experimental`: the sensor track switch (NVS exp_sensors, default off; R_FW_EXPERIMENTAL).
+ *   - `experimental`: the sensor track switch (NVS exp_sensors, default off; R_FW_EXPERIMENTAL) and
+ *     the LoRa switch (NVS exp_lora, default off; R_FW_LORA).
+ *   - `energy`: cali_energy.h (R_FW_ENERGY_COUNTERS). `lora`: cali_lora.h (R_FW_LORA).
  *   - `water_held_age_ms`: present only while the water level is held AND the baseline was measured
  *     on this boot.
  *
@@ -190,8 +199,13 @@
  *   cali_kv_set(), calls cali_wifi_run_set_creds and answers 200 `{"ok":true}`. Otherwise 400
  *   `{"ok":false,"error":"json"|"ssid"|"psk"}` (json is checked first). A kv write failure answers
  *   500 `{"ok":false,"error":"store"}`.
+ *   A valid body saved while the unit is in setup mode (the hotspot) also sets kv `setup_qr`
+ *   (CALI_SETUP_QR_KEY, cali_setup_pending_set); a save in station mode never does.
  * - `DELETE /api/wifi`: cali_wifi_run_forget(), 200 `{"ok":true}`.
- * - Any other method on `/api/wifi`, `/api/state` or `/api/pairing`: 405 `{"ok":false,"error":"method"}`.
+ * - `POST /api/setup`: body exactly `{"done":true}`, any WiFi mode: erases `setup_qr` and answers 200
+ *   `{"ok":true}` (500 `{"ok":false,"error":"store"}` if the erase fails). Any other body: 400
+ *   `{"ok":false,"error":"bad_json"}`. GET: 405.
+ * - Any other method on `/api/wifi`, `/api/state`, `/api/setup` or `/api/pairing`: 405 `{"ok":false,"error":"method"}`.
  *
  * **Control**
  *
@@ -263,10 +277,11 @@
  * - `POST /api/ux_setting`: `{"enabled":<bool>}` (exactly that object), the Satellite settings
  *   switch. Stores NVS ux_on, answers 200 `{"ok":true,"ux":<bool>}`. Errors: 403, 400 `bad_json`,
  *   500 `store`, 405.
- * - `POST /api/experimental`: `{"sensors":<bool>}` (exactly that object; R_FW_EXPERIMENTAL), the
- *   Satellite settings "Sensors" switch. Calls cali_exp_sensors_set (NVS exp_sensors, applied at
- *   once, log "exp: sensors on|off") and answers 200 `{"ok":true,"sensors":<bool>}`. Errors: 403
- *   `setup_mode`, 400 `bad_json`, 500 `store`, 405.
+ * - `POST /api/experimental`: `{"sensors":<bool>}` or `{"lora":<bool>}` (exactly one of them per
+ *   body; R_FW_EXPERIMENTAL, R_FW_LORA), the Satellite settings "Sensors" switch and the LoRa switch.
+ *   Calls cali_exp_sensors_set or cali_exp_lora_set (NVS exp_sensors / exp_lora, applied at once, log
+ *   "exp: sensors|lora on|off") and answers 200 `{"ok":true,"sensors":<bool>}` or
+ *   `{"ok":true,"lora":<bool>}`. Errors: 403 `setup_mode`, 400 `bad_json`, 500 `store`, 405.
  * - `GET|POST /api/sensors` (R_FW_SENSORS, cali_sensors.h): every WiFi mode. Both answer 404
  *   `{"ok":false,"error":"disabled"}` while exp_sensors is off (checked first). GET answers 200
  *   `{"configured":[{id,type,alias,last_seen_s,value|null,has_key}],"seen":[{id,type,model,rssi}],

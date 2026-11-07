@@ -46,12 +46,6 @@ const CTL_COOLER_LEVEL_RANGE = [1, 5];
 /** @type {number[]} calictl/control.py AIRHEATER_LEVEL_RANGE */
 const CTL_AIRHEATER_LEVEL_RANGE = [1, 10];
 /** tools/wifi_consts.py */
-const NET_AP_SSID = "calictl-esp-setup";
-/** tools/wifi_consts.py */
-const NET_AP_PSK = "calictl-setup";
-/** tools/wifi_consts.py */
-const NET_AP_ADDR = "192.168.4.1";
-/** tools/wifi_consts.py */
 const NET_HOSTNAME = "calictl-esp";
 /** tools/wifi_consts.py */
 const NET_PAGE_POLL_MS = 2000;

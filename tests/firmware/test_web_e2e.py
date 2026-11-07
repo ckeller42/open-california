@@ -47,7 +47,7 @@ pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-bui
 
 PSK = "test-psk-1234"
 PAGE = Path(__file__).resolve().parents[2] / "firmware" / "web" / "index_gen.html"
-AP_UP = "wifi: setup hotspot up (%s)" % CONSTS["NET_AP_SSID"]
+AP_UP = "wifi: setup hotspot up (%s)" % (CONSTS["NET_AP_SSID_PREFIX"] + "C0FE")  # conftest pins the MAC
 _DE_SRC = (Path(__file__).resolve().parents[2] / "calictl/webui/strings.de.js").read_text(encoding="utf-8")
 _DE = {
     json.loads('"%s"' % k): json.loads('"%s"' % v)
@@ -269,7 +269,13 @@ def test_api_state_matches_snap_after_pairing(host_fw, hci_unit, tmp_path):
     assert body["fn"] == latest["fn"] == snap["fn"]
     assert body["device"]["pairing"] == {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"}
     assert body["device"]["link"]["up"] is True
-    assert body["device"]["wifi"] == {"mode": "setup", "ssid": None, "ip": None, "rssi": None}
+    assert body["device"]["wifi"] == {
+        "mode": "setup",
+        "ssid": None,
+        "ip": None,
+        "rssi": None,
+        "ap_ssid": "calictl-esp-C0FE",  # the per-unit hotspot name while it runs (never its password)
+    }
 
 
 def test_wifi_loss_keeps_ble_link(host_fw, hci_unit, tmp_path):
@@ -481,7 +487,9 @@ def test_roof_stays_with_buspi_or_the_app(host_fw, rec_unit, tmp_path, locale, r
         assert page.get_by_text(hint, exact=True).count() >= 1
         page.evaluate("document.getElementById('back').click()")
         _open_tile(page, "Kühlbox" if locale == "de-DE" else "Cooler")
-        assert page.get_by_role("switch", name="Refrigerator box").is_enabled()
+        assert page.get_by_role(
+            "switch", name="Kühlbox" if locale == "de-DE" else "Refrigerator box"
+        ).is_enabled()
         browser.close()
     assert not errors, errors
     assert set(paths) <= {"/", "/api/state", "/api/pairing", "/api/ble"}, (
@@ -686,7 +694,7 @@ def test_experimental_box_toggles(host_fw, hci_unit, tmp_path, locale, lang):
         )
         browser.close()
     assert not errors, errors
-    assert get_json(fw, "/api/state")["device"]["experimental"] == {"sensors": True}
+    assert get_json(fw, "/api/state")["device"]["experimental"] == {"sensors": True, "lora": False}
 
 
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
@@ -765,7 +773,7 @@ def test_recovery_page_joins_over_the_hotspot(host_fw, hci_unit, tmp_path, local
         assert page.inner_text("h1") == title and page.title() == title
         assert page.inner_text("#app") == app and page.get_attribute("#app", "href") == "/"
         page.wait_for_selector("#ssid option[value=minsel]", state="attached", timeout=wait_ms)
-        assert CONSTS["NET_AP_SSID"] in page.inner_text("#now")
+        assert page.inner_text("#now").startswith(("Setup hotspot", "Einrichtungs-Hotspot"))
         page.select_option("#ssid", "minsel")
         page.fill("#psk", PSK)
         page.click("#go")
@@ -781,9 +789,9 @@ def test_recovery_page_joins_over_the_hotspot(host_fw, hci_unit, tmp_path, local
     assert not any(PSK in line for line in fw.log)
 
 
-def test_captive_probe_opens_the_ui_on_wifi_setup(host_fw, hci_unit, tmp_path):
+def test_captive_probe_opens_the_ui_on_the_setup_wizard(host_fw, hci_unit, tmp_path):
     """Over the setup hotspot an OS captive-portal probe gets a 302 to ``http://<NET_AP_ADDR>/``, and /
-    (where the captive sheet lands) is the UI bundle, which opens on its WiFi-setup screen."""
+    (where the captive sheet lands) is the UI bundle, which opens on the first-time setup's welcome step."""
     sync_playwright = _require_chromium()
     wifi = _wifi_script(tmp_path, "ap minsel -55 1\n")
     fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
@@ -801,9 +809,9 @@ def test_captive_probe_opens_the_ui_on_wifi_setup(host_fw, hci_unit, tmp_path):
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto("http://127.0.0.1:%d/" % fw.http_port)
         page.wait_for_function(
-            "() => document.getElementById('title').textContent === 'WiFi setup'", timeout=15000
+            "() => document.getElementById('title').textContent === 'Set up the satellite'", timeout=15000
         )
-        assert page.evaluate("location.hash") == "#wifisetup"
+        assert page.evaluate("location.hash") == "#setup/welcome"
         browser.close()
     assert not errors, errors
 
@@ -811,8 +819,9 @@ def test_captive_probe_opens_the_ui_on_wifi_setup(host_fw, hci_unit, tmp_path):
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
 def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
     """The owner's first-flash path, clicked in Chromium (final review I2) on the web UI's WiFi setup
-    screen at /: pick a network, type a wrong password -> the screen says why (R23: the auth text); pick
-    the right one -> the ``http://<NET_HOSTNAME>.local`` link. The password field is emptied after each
+    screen (its /#wifisetup deep link; / opens the setup wizard): pick a network, type a wrong
+    password -> the screen says why (R23: the auth text); pick the right one -> the
+    ``http://<NET_HOSTNAME>.local`` link. The password field is emptied after each
     submit; any uncaught page error fails the test. Texts in the browser's language (strings.de.js)."""
     sync_playwright = _require_chromium()
     wifi = _wifi_script(
@@ -828,7 +837,7 @@ def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
         browser = p.chromium.launch()
         page = browser.new_context(locale=locale).new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto("http://127.0.0.1:%d/" % fw.http_port)
+        page.goto("http://127.0.0.1:%d/#wifisetup" % fw.http_port)
         page.wait_for_selector("#setup", state="visible", timeout=wait_ms)
         assert page.inner_text("#title") == tr("WiFi setup", lang)
         page.wait_for_selector("#ssid option[value=typo]", state="attached", timeout=wait_ms)
@@ -872,7 +881,7 @@ def test_rescan_then_connect_keeps_the_join_result_in_browser(host_fw, hci_unit,
         browser = p.chromium.launch()
         page = browser.new_context().new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto("http://127.0.0.1:%d/" % fw.http_port)
+        page.goto("http://127.0.0.1:%d/#wifisetup" % fw.http_port)
         page.wait_for_selector("#setup", state="visible", timeout=wait_ms)
         page.wait_for_selector("#ssid option[value=minsel]", state="attached", timeout=wait_ms)
 

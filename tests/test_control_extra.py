@@ -216,7 +216,7 @@ def test_command_precondition_cooler_timer_needs_fridge_off():
 
 
 def test_command_precondition_mirrors_the_remaining_web_ui_gates():
-    """The web UI greys state-forbidden controls, but those gates are client-side: the CLI/API/HA
+    """The web UI greys state-forbidden controls, but those gates are client-side: the CLI/API
     paths bypass them. These three families are the ones the UI grays and the server must refuse too
     — quiet mode needs the fridge ON (the mirror of the timer gate above), camping lights/USB need
     the camping master ON (the rear USB is physically dead without it, #111), and the energy-mode
@@ -305,6 +305,23 @@ def test_command_precondition_roof_move_blocked_but_stop_never_is():
     # unknown / not-installed state allows (can't prove it's blocked), per the doctrine
     assert control.command_precondition("roof", "open", None, {}) is None
     assert control.command_precondition("roof", "open", None, state(1, installed=0)) is None
+
+
+def test_command_precondition_roof_move_needs_the_ignition():
+    """#513: open/close are refused while the unit reports terminal 15 OFF (the app's "Switch on
+    the ignition" dialog); an unknown ignition allows, and STOP is never gated."""
+    from calictl import control
+
+    def state(t15):
+        return {"roof": {"Installed": 1, "InfoPopUp": 0, "Position": 0}, "vehicle": {"TerminalOneFive": t15}}
+
+    for what in ("open", "close"):
+        assert (
+            control.command_precondition("roof", what, None, state(0)) == control.REASON_ROOF_NEEDS_IGNITION
+        )
+        assert control.command_precondition("roof", what, None, state(1)) is None
+        assert control.command_precondition("roof", what, None, {"roof": {"Position": 0}}) is None
+    assert control.command_precondition("roof", "stop", None, state(0)) is None
 
 
 def test_favourite_gate_refuses_only_a_known_empty_slot():

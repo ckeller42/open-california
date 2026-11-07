@@ -64,6 +64,7 @@ def test_settings_and_reasons():
         "min_dwell_ms": 300000, "band_hi": 200, "hot_hold_ms": 900000, "overheat": 400,
         "min_level": 1, "stale_after_ms": 600000, "heater_stale_ms": 180000, "batt_min_dv": 119,
         "batt_hold_ms": 300000, "verify_ms": 10000, "runtime_min": 120,
+        "night_wait_ms": 300000, "night_confirm_ms": 30000,
     }  # fmt: skip
     assert (th.TARGET_MIN, th.TARGET_MAX, th.TARGET_STEP) == (500, 3000, 50)
     assert len(set(th.REASONS)) == len(th.REASONS)
@@ -110,8 +111,31 @@ def test_hysteresis_and_dwell():
 def test_outside_off_contributes_zero():
     _, ctl, _ = th.control(2000, -1000, 2100, 60000, _ctl(), CFG, 3, 0)
     assert ctl["u_out"] == 3000
-    _, ctl, _ = th.control(2000, None, 2100, 60000, ctl, CFG, 3, 60000)
-    assert ctl["u_out"] == 0
+    _, ctl, _ = th.control(2000, None, 2100, 60000, ctl, CFG, None, 60000)
+    assert ctl["u_out"] is None and ctl["u"] == ctl["i"] + th._rdiv(CFG["kp"] * 100, 100)
+
+
+def test_outside_lost_or_found_is_bumpless():
+    """Losing or gaining the outside thermometer moves its share into the integrator."""
+    ctl = th.track(_ctl(u_out=2500), 4, 2100, 2100, CFG)
+    _, c1, _ = th.control(2100, -400, 2100, 0, ctl, CFG, 4, 0)
+    assert (c1["u"], c1["u_out"]) == (4000, 2500)
+    _, c2, why = th.control(2100, None, 2100, 0, c1, CFG, 4, 0)
+    assert (c2["u"], c2["u_out"], why) == (4000, None, "HOLD")  # no drop by 2.5 levels
+    _, c3, why = th.control(2100, -400, 2100, 0, c2, CFG, 4, 0)
+    assert (c3["u"], c3["u_out"], why) == (4000, 2500, "HOLD")  # and no jump back up
+    assert th.track(c2, 4, 2100, 2100, CFG)["i"] == 4000  # track reads a missing share as 0
+
+
+def test_windup_stops_at_min_level():
+    """The integrator stops at ``min_level``, not at level 1."""
+    cfg = {**CFG, "min_level": 3, "hot_hold_ms": 10**12, "overheat": 10**6}
+    ctl = th.track(_ctl(), 3, 2100, 2100, cfg)
+    for k in range(60):  # one hour 1 °C too warm at the lowest allowed level
+        lvl, ctl, why = th.control(2200, None, 2100, 60000, ctl, cfg, 3, k * 60000)
+        assert lvl is None
+    # back at the target the demand is still min_level (at most one step past the limit), not wound down
+    assert ctl["i"] >= 3000 - th._rdiv(cfg["ki"] * 100 * 60000, 100 * 60000)
 
 
 def test_outside_cold_adds_up_to_cap():
@@ -158,8 +182,9 @@ def test_step_gap_freezes_integrator():
 # --- session machine (step) ---------------------------------------------------------------
 
 OFF_H = {"Installed": 1}
-RUN = {"Installed": 1, "NormalOperation": 1, "HeatingLevel": 5}
-CONT = {"Installed": 1, "NormalOperation": 1, "PermanentOperation": 1, "HeatingLevel": 5}
+# level 6 = the demand at the default inputs (ref 17 °C, target 21 °C): a takeover sends nothing
+RUN = {"Installed": 1, "NormalOperation": 1, "HeatingLevel": 6}
+CONT = {"Installed": 1, "NormalOperation": 1, "PermanentOperation": 1, "HeatingLevel": 6}
 P = CFG["period_ms"]
 V = CFG["verify_ms"]
 
@@ -170,6 +195,7 @@ def _inp(**kw):
         "ref": {"alias": "cabin", "value": 1700, "age_ms": 0}, "backup": None, "out": None,
         "outside_on": False, "heater": OFF_H, "heater_age_ms": 0, "link_ready": True,
         "camping_on": True, "shore_on": False, "ignition_on": False, "batt2_dv": 128, "cmd": None,
+        "night": False, "known": {"camping_on": True, "shore_on": False, "ignition_on": False},
     }  # fmt: skip
     base.update(kw)
     return base
@@ -236,7 +262,9 @@ def test_auto_from_off_sends_runtime_level_power_in_order():
     assert out["cmds"] == [] and st["pending"] is None and out["mode"] == "AUTO"
 
 
-def test_adopt_running_sends_nothing():
+def test_adopt_running_takes_over_at_demand():
+    """A takeover at the demand level sends nothing; elsewhere it sends the demand at once."""
+    assert _auto({**RUN, "HeatingLevel": 1})[0]["cmds"] == [("level", 6)]
     out, st = _auto(RUN)
     assert (out["reason"], out["cmds"], out["mode"]) == ("ADOPT_RUN", [], "AUTO")
     assert out["status"]["end"] == "run"
@@ -246,9 +274,9 @@ def test_adopt_running_sends_nothing():
 
 def test_adopt_continuous_never_sends_power():
     out, st = _auto(CONT, ref={"alias": "cabin", "value": 1000, "age_ms": 0})
-    assert (out["reason"], out["cmds"]) == ("ADOPT_CONTINUOUS", [])
+    assert (out["reason"], out["cmds"]) == ("ADOPT_CONTINUOUS", [("level", 10)])  # takeover to demand
     assert out["status"]["end"] == "none"
-    heater, sent = dict(CONT), []
+    heater, sent = {**CONT, "HeatingLevel": 10}, []
     for k in range(1, 40):
         out, st = _step(
             st, now_ms=k * P, heater=heater, ref={"alias": "cabin", "value": 1000 + 30 * k, "age_ms": 0}
@@ -325,6 +353,42 @@ def test_not_applied_after_one_retry():
     assert (out["cmds"], out["mode"], out["reason"]) == ([], "OFF", "NOT_APPLIED")
 
 
+def test_owner_off_with_a_failed_level_stops_the_heater():
+    """An owner OFF in the step of a refused or unapplied level command stops the heater."""
+    for refused in (True, False):
+        out, st = _auto({**RUN, "HeatingLevel": 1})
+        assert out["cmds"] == [("level", 6)]
+        low = {**RUN, "HeatingLevel": 1}
+        if refused:
+            res = {"what": "level", "result": "REFUSED"}
+            out, st = _step(st, now_ms=1, heater=low, cmd=res, request="OFF")
+        else:
+            _, st = _step(st, now_ms=V, heater=low, cmd={"what": "level", "result": "OK"})
+            out, st = _step(st, now_ms=2 * V, heater=low, request="OFF")
+        assert (out["cmds"], out["mode"], out["reason"]) == ([("power", "off")], "OFF", "USER_OFF")
+    # the same failure without an OFF still ends AUTO with no command
+    _, st = _auto({**RUN, "HeatingLevel": 1})
+    out, _ = _step(
+        st, now_ms=1, heater={**RUN, "HeatingLevel": 1}, cmd={"what": "level", "result": "REFUSED"}
+    )
+    assert (out["cmds"], out["mode"], out["reason"]) == ([], "OFF", "NOT_APPLIED")
+
+
+def test_takeover_without_a_send_keeps_the_dwell_and_resets_the_integrator():
+    """A takeover that sends nothing keeps the dwell start; with no reference it still zeroes the integrator."""
+    _, st = _night()
+    cont = {**CONT, "HeatingLevel": 10}
+    st["ctl"].update(i=4000, last_change_ms=-1)
+    _, st = _wait_step(st, 60000, cont)
+    out, st = _wait_step(st, 90000, cont, link_ready=False)
+    assert (out["reason"], out["cmds"], st["ctl"]["last_change_ms"]) == ("ADOPT_CONTINUOUS", [], -1)
+    _, st = _night()
+    st["ctl"].update(i=4000, last_change_ms=-1)
+    _, st = _wait_step(st, 60000, cont, ref=None)
+    out, st = _wait_step(st, 90000, cont, ref=None)
+    assert (out["reason"], st["ctl"]["i"], st["ctl"]["last_change_ms"]) == ("ADOPT_CONTINUOUS", 0, -1)
+
+
 def test_user_off_while_link_down_goes_stopping_then_drops_on_change():
     _, st = _auto(RUN)
     out, st1 = _step(st, now_ms=1000, request="OFF")
@@ -376,7 +440,7 @@ def test_active_backup_lost_falls_back_to_a_valid_reference():
     out, st2 = _step(st, now_ms=2 * P, heater=RUN, ref=good_r, backup={**good_b, "value": None})
     assert (out["reason"], out["cmds"], out["mode"]) == ("REFERENCE_SELECTED", [], "AUTO")
     assert st2["active"] == "ref" and out["status"]["active_alias"] == "cabin"
-    assert st2["ctl"] == th.track(st["ctl"], 5, 1900, 2100, CFG) and st2["last_ctl_ms"] == 2 * P
+    assert st2["ctl"] == th.track(st["ctl"], 6, 1900, 2100, CFG) and st2["last_ctl_ms"] == 2 * P
 
 
 @pytest.mark.parametrize("code", range(1, 16))
@@ -488,3 +552,361 @@ def test_auto_request_drops_pending_stop():
     assert (st["mode"], st["stop_snapshot"]["why"]) == ("STOPPING", "OVERHEAT")
     out, st2 = _step(st, now_ms=P + 1000, request="AUTO", heater=RUN, link_ready=False)
     assert (out["reason"], st2["mode"]) == ("STOPPING", "STOPPING")
+
+
+# --- night mode, takeover to demand, continuous hold, blocked ------------------------------
+
+
+def _ref(v):
+    return {"alias": "cabin", "value": v, "age_ms": 0}
+
+
+def test_adopt_goes_to_demand():
+    """An owner takeover starts from the computed demand, not from the panel's stored level.
+
+    .. test:: Takeover to the demand
+       :id: T_THERMO_ADOPT_DEMAND
+       :links: R_THERMOSTAT_SESSION
+    """
+    out, st = _auto(
+        {**CONT, "HeatingLevel": 1}, ref=_ref(830), target=1800, outside_on=True,
+        out={"alias": "out", "value": 880, "age_ms": 0},
+    )  # fmt: skip
+    assert (out["reason"], out["mode"], out["cmds"]) == ("ADOPT_CONTINUOUS", "AUTO", [("level", 10)])
+    assert st["pending"]["what"] == "level" and st["expect"]["level"] == 10
+
+
+def _night(heater=OFF_H, **kw):
+    kw.setdefault("ref", _ref(820))
+    kw.setdefault("target", 1800)
+    return _step(th.initial_state(), request="AUTO", night=True, heater=heater, **kw)
+
+
+def test_night_start_presets_level_and_waits():
+    """A night start with the heater off pre-sets the demand level and waits for Dauerbetrieb.
+
+    .. test:: Night start
+       :id: T_THERMO_NIGHT_START
+       :links: R_THERMOSTAT_NIGHT
+    """
+    out, st = _night({**OFF_H, "HeatingLevel": 1})
+    assert (out["mode"], out["reason"], out["cmds"]) == ("WAITING", "WAITING_FOR_CONTINUOUS", [("level", 10)])
+    assert out["status"]["wait_left_s"] == 300 and out["status"]["night"] is True
+    assert st["night"] and st["wait_until_ms"] == 300000
+    # an immediate run going: wait too, but send nothing
+    out, _ = _night(RUN)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("WAITING", "WAITING_FOR_CONTINUOUS", [])
+    # Dauerbetrieb already on: adopt at once
+    out, st = _night(CONT)
+    assert (out["mode"], out["reason"]) == ("AUTO", "ADOPT_CONTINUOUS") and st["night"]
+    assert out["status"]["wait_left_s"] is None
+
+
+def _wait_step(st, t, heater, **kw):
+    kw.setdefault("ref", _ref(820))
+    kw.setdefault("target", 1800)
+    return _step(st, now_ms=t, heater=heater, night=True, **kw)
+
+
+def test_night_waits_30s_of_continuous_then_adopts():
+    """Dauerbetrieb counts only after it held ``night_confirm_ms``.
+
+    .. test:: Night confirm window
+       :id: T_THERMO_NIGHT_CONFIRM
+       :links: R_THERMOSTAT_NIGHT
+    """
+    _, st = _night()
+    cont = {**CONT, "HeatingLevel": 10}
+    t = 60000
+    out, st = _wait_step(st, t, cont)
+    assert (out["mode"], out["cmds"], st["cont_since_ms"]) == ("WAITING", [], t)
+    out, st = _wait_step(st, t + 29000, cont)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("WAITING", "WAITING_FOR_CONTINUOUS", [])
+    out, st = _wait_step(st, t + 30000, cont)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("AUTO", "ADOPT_CONTINUOUS", [])
+    assert st["night"] and out["status"]["night"] is True
+    # no valid reference at the takeover: adopt as is, rule (7) acts on the next step
+    _, st = _night()
+    _, st = _wait_step(st, t, cont, ref=None)
+    out, st = _wait_step(st, t + 30000, cont, ref=None)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("AUTO", "ADOPT_CONTINUOUS", [])
+    out, _ = _wait_step(st, t + 31000, cont, ref=None)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("DEGRADED", "REFERENCE_LOST", [("level", 1)])
+
+
+def test_night_unconfirmed_panel_start_keeps_waiting():
+    """A Dauerbetrieb that ends before the confirm window keeps the wait with its remaining time.
+
+    .. test:: Unconfirmed panel start
+       :id: T_THERMO_NIGHT_UNCONFIRMED
+       :links: R_THERMOSTAT_NIGHT
+    """
+    _, st = _night()
+    cont = {**CONT, "HeatingLevel": 10}
+    _, st = _wait_step(st, 60000, cont)
+    _, st = _wait_step(st, 80000, cont)
+    out, st = _wait_step(st, 81000, OFF_H)
+    assert (out["mode"], out["cmds"], st["cont_since_ms"]) == ("WAITING", [], None)
+    assert out["status"]["wait_left_s"] == 219
+    adopts = 0
+    for t in range(120000, 160000, 5000):
+        out, st = _wait_step(st, t, cont)
+        adopts += out["reason"] == "ADOPT_CONTINUOUS"
+    assert adopts == 1 and out["mode"] == "AUTO"
+
+
+def test_night_wait_ends_quietly():
+    """No Dauerbetrieb within ``night_wait_ms``: AUTO goes off without a command.
+
+    .. test:: Night wait ends
+       :id: T_THERMO_NIGHT_WAIT_ENDS
+       :links: R_THERMOSTAT_NIGHT
+    """
+    _, st = _night()
+    out, st = _wait_step(st, 299999, OFF_H)
+    assert out["mode"] == "WAITING" and out["status"]["wait_left_s"] == 1
+    out, st = _wait_step(st, 300000, OFF_H)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "NIGHT_WAIT_ENDED", [])
+    assert not st["night"] and st["wait_until_ms"] is None
+
+
+def test_night_continuous_first_seen_after_the_wait_is_not_taken_over():
+    """A Dauerbetrieb first seen after ``night_wait_ms`` ends the wait; one seen before is still confirmed."""
+    _, st = _night()
+    cont = {**CONT, "HeatingLevel": 10}
+    out, _ = _wait_step(st, 300000, cont)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "NIGHT_WAIT_ENDED", [])
+    _, st = _wait_step(st, 299999, cont)
+    out, _ = _wait_step(st, 329999, cont)
+    assert (out["mode"], out["reason"]) == ("AUTO", "ADOPT_CONTINUOUS")
+
+
+def test_night_confirm_needs_a_frame_read_after_the_window():
+    """A cached Dauerbetrieb frame does not confirm: the frame must be read ``night_confirm_ms`` after the first."""
+    _, st = _night()
+    cont = {**CONT, "HeatingLevel": 10}
+    _, st = _wait_step(st, 60000, cont)
+    out, st = _wait_step(st, 90000, cont, heater_age_ms=5000)
+    assert (out["mode"], out["reason"]) == ("WAITING", "WAITING_FOR_CONTINUOUS")
+    out, _ = _wait_step(st, 91000, cont)
+    assert (out["mode"], out["reason"]) == ("AUTO", "ADOPT_CONTINUOUS")
+
+
+def test_waiting_user_off_stops_what_runs():
+    """Owner OFF or the feature disabled while waiting stops whatever heater runs: an immediate run with
+    ``power off``, a Dauerbetrieb still in its confirm window with ``permanent off``; an off heater gets
+    no command. With the link down the stop waits in ``STOPPING``.
+
+    .. test:: Waiting owner off
+       :id: T_THERMO_WAITING_OFF
+       :links: R_THERMOSTAT_NIGHT
+    """
+    cont = {**CONT, "HeatingLevel": 10}
+    for heater, sent in ((OFF_H, []), (RUN, [("power", "off")]), (cont, [("permanent", "off")])):
+        _, st = _night()
+        _, st = _wait_step(st, 500, heater)
+        assert st["mode"] == "WAITING"
+        out, st2 = _wait_step(st, 1000, heater, request="OFF")
+        assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "USER_OFF", sent)
+        assert (st2["pending"] or {}).get("why") == ("USER_OFF" if sent else None)
+        out, _ = _wait_step(st, 1000, heater, enabled=False)
+        assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "DISABLED", sent)
+    _, st = _night(RUN)
+    out, st = _wait_step(st, 1000, RUN, request="OFF", link_ready=False)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("STOPPING", "STOPPING", [])
+    out, _ = _wait_step(st, 2000, RUN)
+    assert (out["mode"], out["cmds"]) == ("OFF", [("power", "off")])
+    _, st = _night()
+    out, _ = _wait_step(st, 1000, {**OFF_H, "ErrorCode": 4})
+    assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "LOCKED", [])
+
+
+def test_waiting_user_off_stale_heater_stops_later():
+    """Owner OFF in the wait with a stale heater reading: when the last fresh reading showed a run or an
+    unconfirmed Dauerbetrieb, the stop waits in ``STOPPING`` and goes out on the next fresh reading if
+    the heater is unchanged; a last fresh reading of an off heater ends with no command.
+
+    .. test:: Waiting owner off, heater stale
+       :id: T_THERMO_WAITING_OFF_STALE
+       :links: R_THERMOSTAT_NIGHT
+    """
+    cont = {**CONT, "HeatingLevel": 10}
+    stale = CFG["heater_stale_ms"] + 1
+    for heater, what in ((RUN, "power"), (cont, "permanent")):
+        for kw, why in (({"request": "OFF"}, "USER_OFF"), ({"enabled": False}, "DISABLED")):
+            _, st = _night()
+            _, st = _wait_step(st, 500, heater)
+            out, st = _wait_step(st, 1000, heater, heater_age_ms=stale, **kw)
+            assert (out["mode"], out["reason"], out["cmds"]) == ("STOPPING", "STOPPING", [])
+            assert st["stop_snapshot"]["why"] == why
+            out, st2 = _wait_step(st, 2000, heater)
+            assert (out["mode"], out["cmds"]) == ("OFF", [(what, "off")])
+            out, _ = _wait_step(st, 2000, OFF_H)  # ended meanwhile: nothing to stop
+            assert (out["mode"], out["cmds"]) == ("OFF", [])
+    # a run at the night start, never re-read before the stale OFF: the entry reading counts
+    _, st = _night(RUN)
+    out, _ = _wait_step(st, 1000, RUN, heater_age_ms=stale, request="OFF")
+    assert out["mode"] == "STOPPING"
+    _, st = _night()
+    _, st = _wait_step(st, 500, OFF_H)
+    out, _ = _wait_step(st, 1000, OFF_H, heater_age_ms=stale, request="OFF")
+    assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "USER_OFF", [])
+
+
+def test_waiting_target_change_no_second_preset():
+    """A new target (or AUTO request) while waiting sends nothing; the adopt uses the new target.
+
+    .. test:: Waiting target change
+       :id: T_THERMO_WAITING_TARGET
+       :links: R_THERMOSTAT_NIGHT
+    """
+    _, st = _night({**OFF_H, "HeatingLevel": 1})
+    out, st = _wait_step(st, 1000, {**OFF_H, "HeatingLevel": 10}, cmd={"what": "level", "result": "OK"})
+    assert out["cmds"] == [] and st["pending"] is None
+    out, st = _wait_step(st, 2000, {**OFF_H, "HeatingLevel": 10}, target=600, request="AUTO")
+    assert (out["mode"], out["cmds"]) == ("WAITING", [])
+    cont = {**CONT, "HeatingLevel": 10}
+    _, st = _wait_step(st, 60000, cont, target=600)
+    out, st = _wait_step(st, 90000, cont, target=600)
+    assert (out["reason"], out["cmds"]) == ("ADOPT_CONTINUOUS", [("level", 1)])
+
+
+def test_night_failed_preset_does_not_end_the_wait():
+    """A refused or unapplied pre-set is not retried and the wait goes on."""
+    _, st = _night({**OFF_H, "HeatingLevel": 1})
+    out, st = _wait_step(st, 1000, {**OFF_H, "HeatingLevel": 1}, cmd={"what": "level", "result": "REFUSED"})
+    assert (out["mode"], out["cmds"], st["pending"]) == ("WAITING", [], None)
+    _, st = _night({**OFF_H, "HeatingLevel": 1})
+    out, st = _wait_step(st, V, {**OFF_H, "HeatingLevel": 1})
+    assert (out["mode"], out["cmds"], st["pending"]) == ("WAITING", [], None)
+
+
+def test_night_skips_warm_refusal():
+    """A night start is never refused as already warm.
+
+    .. test:: Night skips WARM
+       :id: T_THERMO_NIGHT_NO_WARM
+       :links: R_THERMOSTAT_NIGHT
+    """
+    out, _ = _night(ref=_ref(2100))
+    assert (out["mode"], out["reason"]) == ("WAITING", "WAITING_FOR_CONTINUOUS")
+    assert _auto(OFF_H, ref=_ref(2100), target=1800)[0]["reason"] == "AUTO_REFUSED_WARM"
+
+
+def _hot_run(heater, ref, steps):
+    _, st = _auto(heater, ref=_ref(ref))
+    for k in range(1, steps + 1):
+        out, st = _step(st, now_ms=k * P, heater=heater, ref=_ref(ref))
+        if out["cmds"]:
+            return out, st
+    return out, st
+
+
+def test_continuous_hold_at_min_level_instead_of_stop():
+    """Regulating Dauerbetrieb, too warm holds at ``min_level`` and never stops the heater.
+
+    .. test:: Continuous hold at min level
+       :id: T_THERMO_CONT_HOLD
+       :links: R_THERMOSTAT_NIGHT
+    """
+    steps = CFG["hot_hold_ms"] // P + 1
+    out, st = _hot_run({**CONT, "HeatingLevel": 1}, 2100 + 201, steps)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("AUTO", "HOLD_AT_MIN_LEVEL", [])
+    out, _ = _hot_run({**CONT, "HeatingLevel": 1}, 2100 + 401, 1)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("AUTO", "HOLD_AT_MIN_LEVEL", [])
+
+
+def test_continuous_hold_sends_min_level():
+    """OVERHEAT at a level above ``min_level`` while regulating Dauerbetrieb sends ``min_level``."""
+    _, st = _auto({**CONT, "HeatingLevel": 4}, ref=_ref(1700))
+    out, st = _step(
+        st, now_ms=1000, heater={**CONT, "HeatingLevel": 6}, cmd={"what": "level", "result": "OK"}
+    )
+    assert st["pending"] is None
+    out, _ = _step(st, now_ms=P, heater={**CONT, "HeatingLevel": 6}, ref=_ref(2501))
+    assert (out["mode"], out["reason"], out["cmds"]) == ("AUTO", "HOLD_AT_MIN_LEVEL", [("level", 1)])
+
+
+def test_running_still_stops_when_too_warm():
+    """A timed run keeps today's stop at the minimum level.
+
+    .. test:: Timed run stops when too warm
+       :id: T_THERMO_RUN_STOPS
+       :links: R_THERMOSTAT_SESSION
+    """
+    out, _ = _hot_run({**RUN, "HeatingLevel": 1}, 2100 + 201, CFG["hot_hold_ms"] // P + 1)
+    assert (out["mode"], out["reason"], out["cmds"]) == (
+        "OFF",
+        "TARGET_EXCEEDED_AT_MIN_LEVEL",
+        [("power", "off")],
+    )
+
+
+def test_panel_off_during_night_ends_quietly():
+    """Dauerbetrieb off at the panel during a night run ends AUTO without a command.
+
+    .. test:: Panel off at night
+       :id: T_THERMO_NIGHT_PANEL_OFF
+       :links: R_THERMOSTAT_NIGHT
+    """
+    _, st = _night(CONT, ref=_ref(1700), target=2100)
+    assert st["mode"] == "AUTO" and st["pending"] is None
+    out, st = _step(st, now_ms=P, heater=OFF_H, night=True)
+    assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", "CONTINUOUS_ENDED", [])
+    assert not st["night"]
+
+
+def _blk(**kw):
+    return th.blocked(_inp(**kw), CFG)
+
+
+def test_blocked_codes():
+    """``blocked`` reports the first entry check that fails, from the last-known frames.
+
+    .. test:: Blocked start codes
+       :id: T_THERMO_BLOCKED
+       :links: R_THERMOSTAT_BLOCKED
+    """
+    k = {"camping_on": True, "shore_on": False, "ignition_on": False}
+    assert _blk() is None
+    assert _blk(heater={"Installed": 0}, known={**k, "camping_on": False}) == "NOT_INSTALLED"
+    assert _blk(heater={"Installed": 1, "ErrorCode": 5}) == "FAULT"
+    assert _blk(heater={"Installed": 1, "OperationModeAirHeater": 3}) == "TIMER_ARMED"
+    assert _blk(known={**k, "camping_on": False}, ignition_on=True) == "NO_CAMPING"
+    assert _blk(known={**k, "camping_on": False, "shore_on": True}) is None
+    assert _blk(known={**k, "ignition_on": None}) == "IGNITION"
+    assert _blk(ref=None) == "NO_REFERENCE"
+    # never DISABLED, NO_LINK, STALE_HEATER or WARM
+    assert _blk(enabled=False, link_ready=False, heater=None, ref=_ref(3000)) is None
+    assert _blk(heater=OFF_H, heater_age_ms=CFG["heater_stale_ms"] + 1) is None
+    # every out() carries it
+    assert _step(th.initial_state(), ref=None)[0]["status"]["blocked"] == "NO_REFERENCE"
+    assert _auto(OFF_H)[0]["status"]["blocked"] is None
+
+
+def test_blocked_uses_known_frames():
+    """``blocked`` reads the last-known camping frame, not this link's.
+
+    .. test:: Blocked from last-known frames
+       :id: T_THERMO_BLOCKED_KNOWN
+       :links: R_THERMOSTAT_BLOCKED
+    """
+    assert _blk(camping_on=False, known={"camping_on": True, "shore_on": False, "ignition_on": False}) is None
+
+
+def test_panel_off_during_pending_level_ends_quietly():
+    """The heater switched off at the panel while a level command waits for its readback: AUTO ends
+    with ``RUN_ENDED`` / ``CONTINUOUS_ENDED`` (quiet on the card), not ``FOREIGN_CHANGE``.
+
+    .. test:: Panel off during a pending level command
+       :id: T_THERMO_PANEL_OFF_PENDING
+       :links: R_THERMOSTAT_SESSION
+    """
+    for heater, why in (
+        ({**RUN, "HeatingLevel": 3}, "RUN_ENDED"),
+        ({**CONT, "HeatingLevel": 3}, "CONTINUOUS_ENDED"),
+    ):
+        out, st = _auto(heater, ref=_ref(800))
+        assert out["cmds"] == [("level", 10)] and st["pending"]["what"] == "level"
+        out, st = _step(st, now_ms=1000, heater=OFF_H, ref=_ref(800))
+        assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", why, [])

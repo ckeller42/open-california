@@ -9,8 +9,8 @@ provenance behind any claim, follow the links into
 ## 1. Introduction and goals
 
 `open-california` reads all telemetry of the VW California T7 {term}`camper unit` over Bluetooth LE and
-sends control writes to it, from a Raspberry Pi (`buspi`). It feeds Home Assistant (MQTT) and
-Grafana (InfluxDB). It is an independent reverse-engineering project for the owner's own vehicle,
+sends control writes to it, from a Raspberry Pi (`buspi`). It feeds Grafana (InfluxDB) and
+serves its own web UI. It is an independent reverse-engineering project for the owner's own vehicle,
 not affiliated with Volkswagen.
 
 **Quality goals**, in priority order:
@@ -22,14 +22,14 @@ not affiliated with Volkswagen.
 5. **Drift is caught** — Every protocol field has a recorded decision, and CI fails when one is dropped.
 
 **Stakeholders:** the vehicle owner (operator and sole user), contributors who extend the protocol
-map, and the downstream consumers Home Assistant and Grafana.
+map, and the downstream consumer Grafana.
 
 ## 2. Constraints
 
 - **`hci0` on the Pi is shared with other readers** — `serve` is the single BLE owner on the Pi, holds one link to the unit, and an `asyncio.Lock` serialises all access. The unit itself accepts several centrals at once
 - **The unit expects every central to answer its ATT Exchange MTU Request** — it sends one on connect and drops the link (HCI `0x13`) when it is unanswered for 30 s
 - **With camping mode off, the unit does not hold a link** — it ends every central's link about 30 s after encryption, and cuts a link that starts less than 6 s after the previous one ended. With camping mode on, links hold
-- **Runtime `calictl/*` imports only the standard library at import time** — The suite runs with no BLE or MQTT installed. `bleak`, `paho`, `influxdb_client` and `yaml` import lazily
+- **Runtime `calictl/*` imports only the standard library at import time** — The suite runs with no BLE or InfluxDB client installed. `bleak`, `influxdb_client` and `yaml` import lazily
 - **The BLE codec is MSB-first and control frames are full-packet** — That is how the unit and the vendor app behave. Every field is resent, and unchanged fields carry the {term}`leave-unchanged sentinel <Sentinel>`
 - **No vendor material in the repository** — The APK, decompiled sources and manuals are never committed. VW material appears as citations only
 - **The unit is not always reachable** — A parked unit keeps advertising, but with camping mode off and no shore power it ends every link after about 30 s, and a Bluetooth fault on the central's side (a stale bond, a kernel regression on {term}`Buspi`) can keep a central out for days
@@ -51,35 +51,31 @@ flowchart TB
   end
   unit[("VW California camper unit<br/>BLE GATT, several centrals at once")]
   app["Vendor app on the phone<br/>(CaliforniaOnTour)"]
-  ha["Home Assistant<br/>entities and commands"]
   graf["Grafana<br/>dashboards"]
   idb[("InfluxDB<br/>time series")]
+  tts[("The Things Stack<br/>LoRaWAN network and storage")]
   owner -->|web UI or CLI| sys
   owner -->|web UI over WiFi| esp
   owner -->|uses| app
-  owner -->|uses| ha
   owner -->|views| graf
   sys ---|BLE read, notify, write| unit
   esp ---|BLE read, notify, write| unit
   app ---|BLE, concurrent central| unit
-  sys -->|MQTT discovery and state| ha
-  ha -->|MQTT commands| sys
   sys -->|numeric fields| idb
   idb --> graf
+  esp -->|LoRaWAN uplinks, experimental| tts
+  owner -->|reads far away| tts
   classDef person fill:#08427b,color:#fff,stroke:#052e56
   classDef system fill:#1168bd,color:#fff,stroke:#0b4884
   classDef ext fill:#999999,color:#fff,stroke:#6b6b6b
   class owner person
   class sys,esp system
-  class unit,app,ha,graf,idb ext
+  class unit,app,graf,idb,tts ext
 ```
 
 - **Camper unit**
   - *Interface:* BLE GATT characteristics, `1003` {term}`liveness heartbeat <Heartbeat>` for writes
   - *Direction:* read and write
-- **Home Assistant**
-  - *Interface:* MQTT discovery, state topics and command topics via Mosquitto
-  - *Direction:* publish and subscribe
 - **InfluxDB and Grafana**
   - *Interface:* `influx.numeric_fields` written to a bucket, queried by dashboards
   - *Direction:* write only from here
@@ -89,6 +85,19 @@ flowchart TB
 - **ESP32 satellite**
   - *Interface:* its own BLE bond to the unit, its own web UI and API over WiFi
   - *Direction:* read and write, independent of buspi
+- **The Things Stack** (experimental, `R_FW_LORA`)
+  - *Interface:* {term}`LoRaWAN` uplinks from the satellite's RAK3172 module (ports 2, 3, 4: raw frames,
+    charger readings, energy counters) through The Things Network's gateways; the owner's phone reads
+    them from its {term}`Storage Integration` while no router runs in the van
+  - *Direction:* write only from here; the only downlink acted on is the setup's key transfer (FPort 12)
+- **Remote app** (`R_UI_REMOTE_APP`)
+  - *Interface:* the same web UI built as a static site (`tools/build_remote.py`, published at
+    `https://open-california.github.io/`) with `window.OC_REMOTE` set. It is a static client of The Things
+    Stack and never of the router, the Pi or the satellite: its page policy allows calls only to
+    `*.thethings.network` and `*.thethings.industries`, and its code refuses every `/api/` call. It sets a
+    van up with a full-rights key that it deletes afterwards and reads the uplinks with a read key
+    ({doc}`howto-lora-remote-setup`)
+  - *Direction:* read only, plus the one-time key-transfer downlinks (FPort 12) of the setup
 - **Owner**
   - *Interface:* web UI (`--web`, port 8088 on buspi), CLI, guided pairing wizard
   - *Direction:* both
@@ -102,7 +111,7 @@ installed on the reference van, so they are verified statically only.
 - **Truthful values** — A dictionary-driven codec: `protocol/dictionary.yaml` is the source of truth for bit layout, and manual offsets live only in `overrides.py`. A separate `semantics` layer gives fields meaning, so decode never guesses.
 - **Drift is caught** — A {term}`signal catalog <Catalog>` (`protocol/signals.yaml`) records a `surface` or `omit` decision for every field, enforced by `tests/test_signal_coverage.py` and `tools.audit_signals`.
 - **Safe actuation** — Control frames are built by `control.BUILDERS`, validated by `protocol.encode` against bit widths and curated ranges, and written under the single BLE lock while the `1003` heartbeat ticks. Readback is a write-through echo, so it is never reported as proof.
-- **One BLE owner** — One daemon (`serve`) owns the connection. The web UI, MQTT and InfluxDB are sinks inside that process.
+- **One BLE owner** — One daemon (`serve`) owns the connection. The web UI and InfluxDB are sinks inside that process.
 - **Absent unit** — `serve` persists the last state with an "as of" timestamp, and the UI shows an amber "van asleep" banner (a red "not reachable" one only when calictl or the satellite itself stops answering for 15 s, `R_UI_LINK_STATE`). `freshness` holds the last plausible value for measurement-gated fields such as water.
 - **Evidence over assertion** — Every protocol claim carries a verification tier in the evidence ledger, from watched on the real unit, through captured on the wire, down to read from the app's code only or not yet verified.
 
@@ -118,8 +127,6 @@ flowchart TB
     daemon["calictl daemon<br/>serve: polls, decodes,<br/>interprets, actuates"]
     webui["Web UI<br/>un-built JS, served by the daemon"]
     cli["calictl CLI<br/>status, set, serve"]
-    mqtt["Mosquitto<br/>MQTT broker"]
-    ha["Home Assistant"]
     idb[("InfluxDB")]
     graf["Grafana"]
   end
@@ -130,8 +137,6 @@ flowchart TB
   webui -->|HTTP /api| daemon
   cli -->|direct or via daemon| daemon
   daemon ---|BLE| unit
-  daemon --> mqtt
-  mqtt --- ha
   daemon --> idb
   idb --> graf
   esp ---|BLE, own NimBLE stack| unit
@@ -142,7 +147,7 @@ flowchart TB
   classDef ext fill:#999999,color:#fff,stroke:#6b6b6b
   class owner person
   class daemon,webui,cli,esp,tools container
-  class unit,mqtt,ha,idb,graf ext
+  class unit,idb,graf ext
 ```
 
 - **calictl daemon**
@@ -161,7 +166,7 @@ flowchart TB
   - *Technology:* Python, Bumble
   - *Responsibility:* The {term}`mock unit` (a BLE peripheral with real SMP pairing), the real app in an emulator, and a trace comparer. They make the unit reproducible.
 
-The sinks (Mosquitto, Home Assistant, InfluxDB, Grafana) are deployed next to the daemon but are
+The sinks (InfluxDB, Grafana) are deployed next to the daemon but are
 off-the-shelf components. They are drawn grey because this repository configures them and does not
 implement them.
 
@@ -179,7 +184,6 @@ flowchart LR
     freshness["freshness<br/>stale-read guards"]
     serve["serve<br/>daemon, asyncio.Lock, cache"]
     web["web"]
-    mqttc["mqtt"]
     influx["influx"]
     pairing["pairing and pairing_bluez<br/>guided pairing"]
     postcheck["postcheck<br/>applied-check after a write"]
@@ -196,7 +200,6 @@ flowchart LR
   session --> device
   serve --> session
   serve --> web
-  serve --> mqttc
   serve --> influx
   web --> control
   control --> protocol
@@ -208,7 +211,7 @@ flowchart LR
 Rules that shape these dependencies:
 
 - `protocol` and `semantics` are pure. They import no I/O libraries, which is what lets the whole
-  suite run without BLE or MQTT installed.
+  suite run without BLE or InfluxDB installed.
 - Only `device` and `pairing_bluez` touch BLE, and only `serve` creates the `asyncio.Lock` (inside
   the running loop) that serialises every access.
 - `semantics` is the one place that gives a field its name and scale. The sinks consume its output
@@ -227,7 +230,7 @@ flowchart LR
   DECODE --> SEM["semantics.interpret<br/>(per-function meaning)"]
   SEM --> CAT{"signals.yaml catalog<br/>(surface | omit)"}
   CAT -->|numeric| INFLUX[influx.numeric_fields] --> IDB[(InfluxDB)] --> GRAF[Grafana]
-  CAT -->|entities| MQTT[mqtt.render_state] --> HA[Home Assistant]
+  CAT -->|state| WEB["web.py /api/state"] --> UI["Web UI"]
   DICT -. every field needs a decision .-> GUARD[["tests/test_signal_coverage<br/>+ tools.audit_signals"]]
   CAT -. CI fails on drift .-> GUARD
 ```
@@ -251,8 +254,8 @@ One daemon (`serve.py`) owns buspi's BLE link to the unit and drives that pipeli
    "camping USB is on."
 4. **`serve.py` — the daemon.** Polls `device` then `protocol.decode` then `semantics`, caches the
    result with an "as of" timestamp, and fans out.
-5. **Sinks.** `web.py` (the web UI + `/api/state`), `mqtt.py` (Home Assistant discovery), `influx.py`
-   (InfluxDB, read by Grafana). Same process, one link to the unit.
+5. **Sinks.** `web.py` (the web UI + `/api/state`) and `influx.py` (InfluxDB, read by
+   Grafana). Same process, one link to the unit.
 
 Supporting the daemon: `session.py` (a supervisor that holds the BLE link while the UI is active and
 releases it when idle; a roof move or STOP runs inside a live session with its `1003` heartbeat
@@ -284,7 +287,7 @@ mode (live-verified on the real unit so far: cooler, lighting, wake-up light and
 dropped after the frame went out as *unconfirmed*. It holds its link while the van is parked
 with camping mode on, because its NimBLE keeps a {term}`GATT server` that answers the unit's ATT
 MTU request; a dropped link reconnects with a 1 s→60 s backoff, never sooner than 7 s. It also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
-then it serves the calictl UI at `/` in every WiFi mode (with Device status, Satellite settings and, over the hotspot, a WiFi-setup screen), a minimal WiFi recovery page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
+then it serves the calictl UI at `/` in every WiFi mode (with Device status, Satellite settings and, over the hotspot, the first-time setup wizard), a minimal WiFi recovery page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
 from `http://calictl-esp.local` — the same platform-free C (`wifi_sm`/`wifi_run`/`http_core`/`web`)
 on the host tier, where a scripted fake WiFi stands in for the radio, and on the chip. In station mode
 the satellite serves the same calictl web UI at `/` with its controls live (`POST /api/command` in
@@ -307,7 +310,6 @@ depicts, so they are not repeated here. Read them in [Protocol sequences](https:
 - **Fresh read** (`S_SEQ_READ`): a cold read under the heartbeat: subscribe, read every characteristic, a later push wins
 - **Poll cycle** (`S_SEQ_POLL`): lock, read, decode, interpret, guards, cache with its "as of" time, fan out, the offline path
 - **Unreachable unit** (`S_SEQ_SLEEP`): connects fail, `serve` keeps the last known state
-- **Home Assistant** (`S_SEQ_MQTT`): MQTT discovery, state publish, and a command arriving through `serve.on_command`
 - **Heartbeat-armed write** (`S_SEQ_ACTUATE`): the `1003` heartbeat spanning one control write, cold and persistent paths
 - **Cooler command** (`S_SEQ_COOLER`): the app-faithful frame (untargeted fields at leave-unchanged), the applied-check
 - **Lighting** (`S_SEQ_LIGHT_COMMIT`): the bare brightness write and its commit frame on an awake unit
@@ -332,7 +334,7 @@ Two runtime behaviours matter for every scenario:
 ```mermaid
 flowchart LR
   CLI["calictl set cooler power on"] --> BUILD["control.BUILDERS[fn]<br/>(full-packet frame,<br/>unchanged fields = sentinel)"]
-  HA["HA command (MQTT)"] --> BUILD
+  WEB["web UI POST /api/command"] --> BUILD
   BUILD --> ENC["protocol.encode<br/>(validates width + CONTROL_RANGES)"]
   ENC --> ACT["device.actuate<br/>(under serve's asyncio.Lock)"]
   ACT --> UNIT[("Camper unit<br/>char 1101/1201/1501/…")]
@@ -363,7 +365,7 @@ stateDiagram-v2
 
 The state-char **readback is a write-through echo, never proof of actuation** — trust a human at the
 device, or the unit's genuine `1502` notifications. Full per-step sequence diagrams (the table in section 6: connect,
-pairing, poll cycle, MQTT, heartbeat-armed write, cooler, lighting, wake-up, roof, range rejection and the
+pairing, poll cycle, heartbeat-armed write, cooler, lighting, wake-up, roof, range rejection and the
 ESP32 satellite) are in the
 [rendered protocol sequences](https://ckeller42.github.io/open-california/protocol-sequences.html);
 recipes and per-feature history in
@@ -381,10 +383,6 @@ flowchart TB
       subgraph systemd["systemd"]
         unitsvc["calictl.service<br/>python -m calictl serve"]
       end
-      subgraph compose["Docker Compose"]
-        mosq["Mosquitto"]
-        hac["Home Assistant"]
-      end
       idb[("InfluxDB")]
       graf["Grafana"]
       cache[("last_state.json<br/>as-of cache")]
@@ -396,8 +394,6 @@ flowchart TB
   esp ---|BLE central| unit
   phone ---|BLE central| unit
   unitsvc --> cache
-  unitsvc --> mosq
-  mosq --- hac
   unitsvc --> idb
   idb --> graf
   idb -.->|replication, see buspi-config| cloud
@@ -405,7 +401,7 @@ flowchart TB
 ```
 
 - **buspi**
-  - *What runs there:* the `calictl serve` unit, Mosquitto and Home Assistant containers, InfluxDB, Grafana
+  - *What runs there:* the `calictl serve` unit, InfluxDB, Grafana
   - *Notes:* `serve` runs under a virtualenv, and the installed unit adds `--web 8088` through a `systemctl edit` drop-in rather than the committed template. Secrets live in root-only files under `/etc/buspi/`.
 - **Camper unit**
   - *What runs there:* the vehicle's own firmware
@@ -478,14 +474,14 @@ the unit's on-screen display, not a guess. See [`signals.md`](https://ckeller42.
 
 ### Add a signal
 
-The steps (catalog → `semantics` → dashboard + Home Assistant → audit) live in the `add-signal` skill
+The steps (catalog → `semantics` → dashboard → audit) live in the `add-signal` skill
 (`.claude/skills/add-signal/SKILL.md`). What each test layer proves and which CI job runs it:
 [simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html).
 
 ### Invariants (do not break these)
 
-- **Runtime `calictl/*` is stdlib-only at import.** `bleak` / `paho` / `influxdb_client` / `yaml`
-  import lazily inside functions, so the whole test suite runs with no BLE or MQTT installed (CI
+- **Runtime `calictl/*` is stdlib-only at import.** `bleak` / `influxdb_client` / `yaml`
+  import lazily inside functions, so the whole test suite runs with no BLE or InfluxDB installed (CI
   asserts this).
 - **`serve` is the single BLE owner.** `hci0` is shared with other readers on the Pi — never open a
   second connection from the daemon path; the loop-created `asyncio.Lock` serializes `poll` and
@@ -519,7 +515,7 @@ summarised below. Each cites the requirements it is traced to.
   - *Consequence:* It shares the dictionary, generated constants and golden vectors, writes through one allow-list, never drives the roof, and writes only in station mode. See [firmware](https://ckeller42.github.io/open-california/firmware.html).
   - *Requirement:* `R_FW_CONTROL_TWIN`, `R_FW_WRITE_ALLOWLIST`, `R_FW_CONTROL_API`
 - **Runtime modules import only the standard library**
-  - *Context:* Tests must run on a machine with no BLE or MQTT stack.
+  - *Context:* Tests must run on a machine with no BLE or InfluxDB stack.
   - *Consequence:* Heavy dependencies import lazily inside functions, and a guard checks it.
   - *Requirement:* guard `tools/check_import_clean.py`
 

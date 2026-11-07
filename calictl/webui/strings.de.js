@@ -6,6 +6,7 @@ window.STRINGS_DE = {
   "Vehicle": "Fahrzeug",
   "live": "live",
   "offline": "offline",
+  "unit offline": "Einheit offline",
   "connecting…": "Verbindung wird aufgebaut…",
   "unreachable": "nicht erreichbar",
   "Sending…": "Wird gesendet…",
@@ -119,7 +120,7 @@ window.STRINGS_DE = {
     "{b}? Am Fahrzeug noch nicht verifiziert. Fortfahren?",
 
   // --- camping mode --------------------------------------------------------------------------
-  "Exterior and interior lighting": "Außen- und Innenbeleuchtung",
+  "Lights off when front doors open": "Licht aus, wenn vordere Türen öffnen",
   "Rear USB ports": "Hintere USB-Anschlüsse",
   "Restore camping after you park": "Campingmodus nach dem Parken wiederherstellen",
   "⟳ will restore on park": "⟳ wird beim Parken wiederhergestellt",
@@ -135,6 +136,7 @@ window.STRINGS_DE = {
   "Interior lighting": "Innenlicht",
   "Wake-up light": "Wecklicht",
   "Wake-up time": "Weckzeit",
+  "Wake-up brightness": "Weckhelligkeit",
   "{n} min": "{n} Min.",
   "Wake-up settings not known yet — the unit has not reported them":
     "Wecklicht-Einstellungen noch nicht bekannt — die Einheit hat sie nicht gemeldet",
@@ -218,7 +220,7 @@ window.STRINGS_DE = {
   "⚠ Battery voltage too low — charge the second battery or connect external power": "⚠ Batteriespannung zu niedrig — Zweitbatterie laden oder externe Stromquelle anschließen",
   "⚠ Low fuel — the heater switched off, please refuel": "⚠ Kraftstoffstand niedrig — die Heizung wurde abgeschaltet, bitte tanken",
   "⚠ Auxiliary air heater fault — please contact your workshop": "⚠ Störung der Luftstandheizung — bitte Werkstatt kontaktieren",
-  "⚠ Emission limit exceeded — the heater switched off, drive ≥ 5 km/h to re-enable": "⚠ Emissionsgrenze überschritten — die Heizung wurde abgeschaltet, ab 5 km/h wieder einschaltbar",
+  "⚠ Max. operating time reached — the heater switched off, drive ≥ 5 km/h to re-enable": "⚠ Max. Betriebsdauer erreicht — die Heizung wurde abgeschaltet, ab 5 km/h wieder einschaltbar",
   "⚠ Heater deactivated — not while the engine or the auxiliary water heater is running": "⚠ Luftstandheizung deaktiviert — nicht bei laufendem Motor oder aktiver Wasser-Zusatzheizung",
   "⚠ Auxiliary air heater deactivated due to engine running.": "⚠ Luftstandheizung durch Motorlauf deaktiviert.",
   "⚠ Auxiliary air heater deactivated due to activation of the auxiliary heater.": "⚠ Luftstandheizung deaktiviert durch Aktivierung der Standheizung.",
@@ -243,8 +245,8 @@ window.STRINGS_DE = {
   "⚠ Grey water tank is full. Please empty.": "⚠ Grauwassertank ist voll. Bitte entleeren.",
   "⚠ Fill level sensor in waste water tank. Please visit a workshop.": "⚠ Fehler: Füllstandsensor im Abwassertank. Bitte Werkstatt aufsuchen.",
   "⚠ General grey water error. Please visit a workshop.": "⚠ Allgemeiner Grauwasser-Fehler. Bitte Werkstatt aufsuchen.",
-  "Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?":
-    "Kraftstoffbetriebene Luftstandheizung starten ({w})? Nicht live-verifiziert. Fortfahren?",
+  "Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?":
+    "Kraftstoffbetriebene Luftstandheizung starten? Nicht live-verifiziert. Fortfahren?",
 
   // --- water ---------------------------------------------------------------------------------
   "Fresh water": "Frischwasser",
@@ -257,6 +259,7 @@ window.STRINGS_DE = {
   "Sensors": "Sensoren",
   "Solar yield today": "Solarertrag heute",
   "Battery sensor": "Batteriesensor",
+  "⚠ Sensor battery low: {list}": "⚠ Sensorbatterie schwach: {list}",
   "Temperature": "Temperatur",
   "Humidity": "Luftfeuchte",
   "Solar charger error {n}": "Solarladeregler-Fehler {n}",
@@ -320,9 +323,11 @@ window.STRINGS_DE = {
   "open": "öffnen",
   "close": "schließen",
   "stop": "stopp",
-  "Roof {dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?":
-    "Dach {dir}: halten, um das Aufstelldach zu bewegen (an diesem Fahrzeug UNVERIFIZIERT). "
-    + "Loslassen zum Stoppen. Weg frei?",
+  "Press and hold Open or Close: the roof moves while you hold and stops when you release. Keep the vehicle in view and avoid distraction during operation.":
+    "Öffnen oder Schließen gedrückt halten: Das Dach bewegt sich, solange Sie halten, und stoppt beim "
+    + "Loslassen. Behalten Sie das Fahrzeug im Blick und lassen Sie sich während der Bedienung nicht ablenken.",
+  "Please switch on the ignition to operate the pop-up roof.":
+    "Bitte schalten Sie die Zündung ein, um das Aufstelldach zu bedienen.",
 
   // --- vehicle -------------------------------------------------------------------------------
   "Ignition": "Zündung",
@@ -332,7 +337,6 @@ window.STRINGS_DE = {
   "pitch": "Nick",
   "Signal unavailable. Ignition is off.": "Signal nicht verfügbar. Zündung ist aus.",
   "Vehicle clock": "Fahrzeuguhr",
-  "Firmware (amb · cm · comm)": "Firmware (Umg. · CM · Komm)",
   "  ⚠ untested": "  ⚠ ungetestet",
   "  ✓ tested": "  ✓ getestet",
 
@@ -384,6 +388,9 @@ window.STRINGS_DE = {
   "power saving": "Energiesparen",
   "reconnecting…": "verbinde neu…",
   "Connecting…": "Verbindung wird aufgebaut…",
+  "Disconnecting…": "Trenne …",
+  "Couldn't change the Bluetooth connection": "Bluetooth-Verbindung konnte nicht geändert werden",
+  "Dismiss": "Ausblenden",
   "⚠ {name} not reachable since {since}. Last data {clock} ({ago}).":
     "⚠ {name} nicht erreichbar seit {since}. Letzte Daten {clock} ({ago}).",
   "⚠ {name} not reachable since {since}.": "⚠ {name} nicht erreichbar seit {since}.",
@@ -571,15 +578,15 @@ window.STRINGS_DE = {
     + "ausgeschalteter Kühlbox einstellen.\n\nFlüstermodus und Timer sind am Fahrzeug noch nicht "
     + "verifiziert. Hinweise zeigen, was die Einheit meldet: Tür nicht ganz geschlossen, Notbetrieb "
     + "oder ein Fehler für die Werkstatt.",
-  ["Camping mode is the unit's master switch for the camper functions. Exterior and interior lighting and "
+  ["Camping mode is the unit's master switch for the camper functions. The front-door light setting and "
     + "the rear USB ports only work while it is on; the rear USB ports are off whenever camping mode is off.\n\n"
     + "The unit turns camping mode off when the engine starts and does not allow it while the ignition is "
     + "on: it is only possible when stationary.\n\n"
     + "Restore camping after you park: turns camping mode and the rear USB ports back on once you park "
     + "(ignition off), if the engine had switched them off. It respects a manual off and stands down on "
     + "low battery, so it never fights the unit's power saving."]:
-    "Der Campingmodus ist der Hauptschalter der Einheit für die Camper-Funktionen. Außen- und "
-    + "Innenbeleuchtung und die hinteren USB-Anschlüsse funktionieren nur, solange er an ist; die "
+    "Der Campingmodus ist der Hauptschalter der Einheit für die Camper-Funktionen. Die Einstellung "
+    + "„Licht aus, wenn vordere Türen öffnen“ und die hinteren USB-Anschlüsse funktionieren nur, solange er an ist; die "
     + "hinteren USB-Anschlüsse sind immer aus, wenn der Campingmodus aus ist.\n\nDie Einheit schaltet "
     + "den Campingmodus beim Motorstart aus und lässt ihn bei eingeschalteter Zündung nicht zu: Er ist "
     + "nur im Stand möglich.\n\nCampingmodus nach dem Parken wiederherstellen: schaltet Campingmodus "
@@ -684,21 +691,46 @@ window.STRINGS_DE = {
   "Connect to your WiFi": "Mit deinem WLAN verbinden",
   "Device status ›": "Gerätestatus ›",
   "Clock": "Uhr",
-  "synced (SNTP) · boot {boot}": "synchronisiert (SNTP) · Start Nr. {boot}",
-  "not synced yet · boot {boot}": "noch nicht synchronisiert · Start Nr. {boot}",
-  "no source · boot {boot}": "keine Zeitquelle · Start Nr. {boot}",
-  "from the camper unit · boot {boot}": "von der Camper-Einheit · Start Nr. {boot}",
+  "synced": "synchronisiert",
+  "not synced yet": "noch nicht synchronisiert",
+  "no source": "keine Zeitquelle",
+  "from the camper unit": "von der Camper-Einheit",
   "Send usage data: on": "Nutzungsdaten senden: an",
   "Send usage data: off": "Nutzungsdaten senden: aus",
   "Sensors: on": "Sensoren: an",
   "Sensors: off": "Sensoren: aus",
+  "Module": "Modul",
+  "Last uplink": "Letzter Uplink",
+  "Airtime (24 h)": "Sendezeit (24 h)",
+  "Setup": "Einrichtung",
+  "Found": "Gefunden",
+  "Not found": "Nicht gefunden",
+  "Checking …": "Prüfe …",
+  "Joined": "Verbunden",
+  "Not joined": "Nicht verbunden",
+  "Module not answering": "Modul antwortet nicht",
+  "confirmed {n} min ago": "vor {n} min bestätigt",
+  "none confirmed yet": "noch keiner bestätigt",
+  "{a} s confirmed / {c} s charged": "{a} s bestätigt / {c} s berechnet",
+  "Not set up": "Nicht eingerichtet",
+  "Keys made, waiting for the app": "Schlüssel erzeugt, wartet auf die App",
+  "Joined, waiting for the keys": "Verbunden, wartet auf die Schlüssel",
+  "Set up": "Eingerichtet",
+  "Key storage unreadable": "Schlüsselspeicher nicht lesbar",
+  "Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app.": "Einrichten: den Bildschirm des Satelliten 3 Sekunden gedrückt halten und den Code mit der Open-California-Fernbedienungs-App scannen.",
+  "Forget LoRa": "LoRa vergessen",
+  "LoRa: on": "LoRa: an",
+  "LoRa: off": "LoRa: aus",
+  "Only for a satellite with a LoRa module (RAK3172). Off: the LoRa pins stay untouched.": "Nur für einen Satelliten mit LoRa-Modul (RAK3172). Aus: Die LoRa-Pins bleiben unberührt.",
+  "Forget LoRa? The satellite deletes its LoRa keys and switches LoRa off. The device stays registered at The Things Network until you delete it there.": "LoRa vergessen? Der Satellit löscht seine LoRa-Schlüssel und schaltet LoRa aus. Das Gerät bleibt im The Things Network registriert, bis du es dort löschst.",
+  "Couldn't forget LoRa": "LoRa konnte nicht vergessen werden",
   "Scan paused while pairing": "Suche pausiert während der Kopplung",
   "No other sensors nearby (the scan runs every minute).": "Keine weiteren Sensoren in der Nähe (Suche jede Minute).",
   "No sensors found yet (the scan runs every minute).": "Noch keine Sensoren gefunden (die Suche läuft jede Minute).",
   "Could not save the WiFi settings.": "Die WLAN-Einstellungen konnten nicht gespeichert werden.",
   "The satellite rejected the request.": "Der Satellit hat die Anfrage abgelehnt.",
   "Add": "Hinzufügen",
-  "Back on {old} within a minute if the new password was wrong; otherwise join the setup hotspot {ap} (password {appsk}) and open:": "Bei falschem Passwort ist er binnen einer Minute zurück in {old}; sonst verbinde dich mit dem Einrichtungs-Hotspot {ap} (Passwort {appsk}) und öffne:",
+  "Back on {old} within a minute if the new password was wrong; otherwise the satellite opens its setup hotspot: scan the QR code on its display.": "Innerhalb einer Minute zurück in {old}, falls das neue Passwort falsch war; sonst öffnet der Satellit seinen Einrichtungs-Hotspot: den QR-Code auf seinem Display scannen.",
   "Battery sense (Victron)": "Batteriesensor (Victron)",
   "Brighter": "Heller",
   "Brightness from room light": "Helligkeit nach Raumlicht",
@@ -815,7 +847,8 @@ window.STRINGS_DE = {
     + "looks for an update, Install loads it and restarts the satellite.\n\nAdvanced: Send usage data "
     + "sends which screens and controls are used (never values). Sensors turns on the scan for "
     + "add-on Bluetooth sensors; below it add the ones that are yours (a Victron needs its "
-    + "encryption key), rename or remove them.\n\nOver the setup hotspot these switches need the home "
+    + "encryption key), rename or remove them. LoRa turns on the LoRa module; switch it on only on a "
+    + "satellite that has one (RAK3172). Forget LoRa deletes its LoRa keys.\n\nOver the setup hotspot these switches need the home "
     + "WiFi."]:
     "WLAN: das Netzwerk, in dem der Satellit ist. Netzwerk wechseln… listet die Netzwerke, die er "
     + "findet (Erneut suchen sucht noch einmal); Anderes Netzwerk… nimmt einen Namen. Vor dem Wechsel "
@@ -830,7 +863,8 @@ window.STRINGS_DE = {
     + "den Satelliten neu.\n\nErweitert: Nutzungsdaten senden schickt, welche Seiten und Bedienelemente "
     + "genutzt werden (nie Werte). Sensoren schaltet die Suche nach Bluetooth-Zusatzsensoren ein; "
     + "darunter fügst du deine hinzu (ein Victron braucht seinen Verschlüsselungsschlüssel), "
-    + "benennst sie um oder entfernst sie.\n\nÜber den Einrichtungs-Hotspot brauchen diese Schalter das "
+    + "benennst sie um oder entfernst sie. LoRa schaltet das LoRa-Modul ein; schalte es nur bei einem "
+    + "Satelliten ein, der eines hat (RAK3172). LoRa vergessen löscht seine LoRa-Schlüssel.\n\nÜber den Einrichtungs-Hotspot brauchen diese Schalter das "
     + "Heim-WLAN.",
   ["The satellite runs its setup hotspot: it has no home WiFi yet, or cannot reach it. Choose the "
     + "network, enter its password and tap Connect; the satellite then joins it and the hotspot closes. "
@@ -854,6 +888,8 @@ window.STRINGS_DE = {
   "AUTO": "AUTO",
   "Colder": "Kälter",
   "Warmer": "Wärmer",
+  "Now": "Jetzt",
+  "Target": "Ziel",
   "Thermometer": "Thermometer",
   "Regulate on": "Regeln nach",
   "Backup": "Reserve",
@@ -865,8 +901,28 @@ window.STRINGS_DE = {
   "on backup": "auf Reserve",
   "degraded": "eingeschränkt",
   "stopping": "stoppt",
-  "Start the fuel-burning auxiliary air heater (AUTO)? It is not live-verified. Continue?":
-    "Kraftstoffbetriebene Luftstandheizung starten (AUTO)? Nicht live-verifiziert. Fortfahren?",
+  "waiting": "wartet",
+  "Night": "Nacht",
+  "Night · level {n} · no end": "Nacht · Stufe {n} · kein Ende",
+  "Night · no end": "Nacht · kein Ende",
+  "Night · level {n} · on backup · no end": "Nacht · Stufe {n} · auf Reserve · kein Ende",
+  "Night · on backup · no end": "Nacht · auf Reserve · kein Ende",
+  "Night · level {n} · degraded · no end": "Nacht · Stufe {n} · eingeschränkt · kein Ende",
+  "Night · degraded · no end": "Nacht · eingeschränkt · kein Ende",
+  "ends {t}": "endet {t}",
+  "{target} °C in about {min} min (≈{t})": "{target} °C in etwa {min} min (≈{t})",
+  "The run time ends before {target} °C": "Die Laufzeit endet vor {target} °C",
+  "Take over the running air heater with the thermostat? It holds {target} °C (thermometer “{alias}”); the run time already set stays.":
+    "Die laufende Luftstandheizung mit dem Thermostat übernehmen? Es hält {target} °C (Thermometer „{alias}“); die eingestellte Laufzeit bleibt.",
+  "Open camping mode ›": "Campingmodus öffnen ›",
+  "Start the air heater with the thermostat? It holds {target} °C (thermometer “{alias}”) for at most {min} min, then it stops.":
+    "Die Luftstandheizung mit dem Thermostat starten? Es hält {target} °C (Thermometer „{alias}“) höchstens {min} min lang und stoppt dann.",
+  "Take over the running “Dauerbetrieb” with the thermostat? It holds {target} °C (thermometer “{alias}”) until you switch it off.":
+    "Den laufenden „Dauerbetrieb“ mit dem Thermostat übernehmen? Es hält {target} °C (Thermometer „{alias}“), bis du es ausschaltest.",
+  "Heat for the night? 1. Tap OK. 2. Switch on “Dauerbetrieb” on the panel in the van and confirm its question with “Yes”. The thermostat then takes over and holds {target} °C (thermometer “{alias}”) until you switch it off.":
+    "Für die Nacht heizen? 1. Tippe auf „OK“. 2. Schalte am Bedienteil im Fahrzeug „Dauerbetrieb“ ein und bestätige dort die Frage mit „Ja“. Das Thermostat übernimmt dann und hält {target} °C (Thermometer „{alias}“), bis du es ausschaltest.",
+  "Switch on “Dauerbetrieb” on the panel now and confirm with “Yes”. Waiting {m}:{ss} min.":
+    "Jetzt am Bedienteil „Dauerbetrieb“ einschalten und mit „Ja“ bestätigen. Wartet noch {m}:{ss} min.",
   "The thermostat was changed elsewhere — reloaded, please try again":
     "Das Thermostat wurde anderswo geändert — neu geladen, bitte noch einmal versuchen",
   "Couldn't change the thermostat": "Thermostat konnte nicht geändert werden",
@@ -879,6 +935,8 @@ window.STRINGS_DE = {
   "Choose a thermometer first": "Zuerst ein Thermometer wählen",
   "Heater state not known yet — try again in a moment": "Heizungszustand noch nicht bekannt — gleich noch einmal versuchen",
   "Already warm enough — heater not started": "Schon warm genug — Heizung nicht gestartet",
+  "Waiting for continuous heating": "Wartet auf den Dauerbetrieb",
+  "Continuous heating not switched on — AUTO off": "Dauerbetrieb nicht eingeschaltet — AUTO aus",
   "Heater started": "Heizung gestartet",
   "Taking over the running heater": "Übernimmt die laufende Heizung",
   "Taking over continuous heating": "Übernimmt den Dauerbetrieb",
@@ -903,4 +961,31 @@ window.STRINGS_DE = {
   "Stopping the heater": "Heizung wird gestoppt",
   "The stop was not confirmed — check the heater": "Das Stoppen wurde nicht bestätigt — Heizung prüfen",
   "Heater fault {n}": "Heizungsfehler {n}",
+
+  // --- the first-time setup wizard (#setup/<step>, the ESP satellite)
+  "Set up the satellite": "Satellit einrichten",
+  "Step {n} of {total}": "Schritt {n} von {total}",
+  "This page sets up your satellite in about 5 minutes. You need the camper unit's screen and, if you have Victron devices, VictronConnect on this phone.": "Diese Seite richtet deinen Satelliten in etwa 5 Minuten ein. Du brauchst den Bildschirm der Camper-Einheit und, wenn du Victron-Geräte hast, VictronConnect auf diesem Handy.",
+  "Next": "Weiter",
+  "Skip": "Überspringen",
+  "Yes": "Ja",
+  "No": "Nein",
+  "No router in the van? Use your phone's hotspot. iPhone: Settings → Personal Hotspot → Maximize Compatibility on.": "Kein Router im Bus? Nimm den Hotspot deines Handys. iPhone: Einstellungen → Persönlicher Hotspot → Kompatibilität maximieren an.",
+  "Join {ssid} with this phone, then scan the new QR code on the satellite's display — or open:": "Verbinde dieses Handy mit {ssid}, dann scanne den neuen QR-Code auf dem Display des Satelliten — oder öffne:",
+  "Close the California app. On the camper unit open Einstellungen → Bluetooth → Gerät verbinden, then press Pair now.": "Schließe die California-App. Öffne an der Camper-Einheit Einstellungen → Bluetooth → Gerät verbinden und tippe dann auf Jetzt koppeln.",
+  "{n} s left": "noch {n} s",
+  "The code may have expired — press Pair now again.": "Der Code ist vielleicht abgelaufen — tippe noch einmal auf Jetzt koppeln.",
+  "Do you have Victron devices (battery monitor, solar charger)?": "Hast du Victron-Geräte (Batteriewächter, Solarladeregler)?",
+  "In VictronConnect: open the device → ⋮ → Product info → Instant readout details → Show — copy the encryption key.": "In VictronConnect: Öffne das Gerät → ⋮ → Product info → Instant readout details → Show und kopiere den Verschlüsselungsschlüssel.",
+  "Search for sensors": "Nach Sensoren suchen",
+  "Which temperature sensors do you have? Every Govee sensor the satellite hears is listed; give each one a name (for example innen, dach).": "Welche Temperatursensoren hast du? Jeder Govee-Sensor, den der Satellit empfängt, steht in der Liste; gib jedem einen Namen (zum Beispiel innen, dach).",
+  "Tap Share, then Add to Home Screen.": "Tippe auf Teilen, dann auf Zum Home-Bildschirm.",
+  "Tap ⋮, then Add to Home screen.": "Tippe auf ⋮, dann auf Zum Startbildschirm hinzufügen.",
+  "Address": "Adresse",
+  "Ask your router to always give the satellite the same address (DHCP reservation), so the home-screen link keeps working.": "Lass deinen Router dem Satelliten immer dieselbe Adresse geben (DHCP-Reservierung), damit der Link auf dem Home-Bildschirm weiter funktioniert.",
+  "Done": "Fertig",
+  "Open the app": "Zur App",
+  "✓ Setup done": "✓ Einrichtung abgeschlossen",
+  "Couldn't finish the setup": "Einrichtung konnte nicht abgeschlossen werden",
+  "not set up": "nicht eingerichtet",
 };

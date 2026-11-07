@@ -145,6 +145,8 @@ codec_fresh() {   # golden vectors + generated C headers match protocol/dictiona
     || { echo "semantics golden vectors stale — run: $PY -m tools.gen_semantics_vectors"; exit 1; }
   "$PY" -m tools.gen_control_vectors --check \
     || { echo "ESP control vectors stale — run: $PY -m tools.gen_control_vectors"; exit 1; }
+  "$PY" -m tools.gen_lora_dict --check \
+    || { echo "LoRa TTN formatter stale — run: $PY -m tools.gen_lora_dict"; exit 1; }
 }
 screenshots() {   # regenerate docs/screenshots from the live UI over the mock (needs Playwright +
                   # Chromium). Local stand-in for the screenshots.yml workflow while Actions is unused.
@@ -163,7 +165,7 @@ webcheck() {   # hard gate: the web UIs are un-built JS, so this is their only s
   command -v node >/dev/null || { echo "webcheck: node not found (install Node 22+)"; exit 1; }
   # typescript is pinned (bump deliberately; the 0-error baseline is per compiler version).
   npx --yes -p typescript@7.0.2 tsc --noEmit -p calictl/webui/jsconfig.json
-  node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js && node --check calictl/webui/semantics_tables.js && node --check calictl/webui/semantics.js
+  node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js && node --check calictl/webui/strings.remote.de.js && node --check calictl/webui/semantics_tables.js && node --check calictl/webui/semantics.js && node --check calictl/webui/lora_setup.js && node --check calictl/webui/ttn.js && node --check calictl/webui/lora_decode.js && node --check calictl/webui/remote.js
   _d="$(mktemp -d)"   # the recovery page's script as served (constants substituted, comment lines stripped)
   "$PY" -c 'import re, sys; from tools import gen_c_dict; sys.stdout.write(re.search(r"<script>(.*?)</script>", gen_c_dict.render_web_page(), re.S).group(1))' > "$_d/recovery.js"
   node --check "$_d/recovery.js"

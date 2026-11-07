@@ -4,10 +4,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cali_ap_identity.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
 #include "cali_snapshot.h"
+#include "cali_thermostat.h"
 #include "cali_wifi_run.h"
 
 static void copy(char *dst, size_t cap, const char *src) {
@@ -34,7 +36,15 @@ void cali_status_get(cali_status_t *s, const cali_transport_t *t, uint64_t now_m
     copy(s->ssid, sizeof s->ssid, cali_wifi_run_ssid());
     s->ip = cali_wifi_run_ip();
     s->rssi = cali_wifi_run_rssi();
+    s->ap_ssid[0] = 0;
+    if (s->wifi_mode == CALI_WIFI_MODE_SETUP) {
+        char psk[NET_PSK_MAX + 1];
+        if (cali_ap_identity(s->ap_ssid, psk) < 0) s->ap_ssid[0] = 0;
+        memset(psk, 0, sizeof psk);
+    }
+    s->setup_pending = (uint8_t)cali_setup_pending();
     copy(s->last_fail, sizeof s->last_fail, cali_wifi_run_last_fail());
+    s->heater_fault = (int8_t)cali_thermo_run_heater_fault();
     s->uptime_ms = now_ms;
     s->fw = cali_fw_version();
 }

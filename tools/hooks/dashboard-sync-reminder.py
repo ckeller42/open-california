@@ -15,7 +15,7 @@ except Exception:
     sys.exit(0)
 
 fp = (data.get("tool_input") or {}).get("file_path", "") or ""
-targets = ("calictl/semantics.py", "protocol/signals.yaml", "calictl/mqtt.py", "calictl/influx.py")
+targets = ("calictl/semantics.py", "protocol/signals.yaml", "calictl/influx.py")
 if any(fp.endswith(t) for t in targets):
     msg = (
         "You edited %s (a signal-defining file). Grafana dashboards do NOT auto-update: "

@@ -236,13 +236,13 @@ def build_parser():
     # value is optional: `set roof open|close|stop` takes no value (the direction is `what`).
     s.add_argument("value", nargs="*", help="value words, e.g. 07:00 1,2 5 10 on")
     sub.add_parser("influx", help="single InfluxDB test write; the serve daemon does this continuously")
-    sv = sub.add_parser("serve", help="unified daemon: one BLE owner -> InfluxDB + MQTT + commands")
+    sv = sub.add_parser("serve", help="unified daemon: one BLE owner -> InfluxDB + web UI + commands")
     sv.add_argument("--interval", type=float, default=30.0)
     sv.add_argument("--no-influx", action="store_true", help="skip InfluxDB writes")
     sv.add_argument(
         "--no-ble",
         action="store_true",
-        help="satellite mode: never open BLE (the ESP talks to the unit); web/MQTT/Influx keep running",
+        help="satellite mode: never open BLE (the ESP talks to the unit); web/Influx keep running",
     )
     sv.add_argument("--dry-run", action="store_true", help="print discovery + one poll, no broker/InfluxDB")
     sv.add_argument(

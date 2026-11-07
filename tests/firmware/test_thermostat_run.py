@@ -154,3 +154,218 @@ def test_auto_tap_wakes_the_link_and_waits_for_it(cli, tmp_path):
     assert states[1]["mode"] == "AUTO" and submits(out) == ["runtime 120"]  # the start batch begins
     out = run(cli, tmp_path, [*SETUP, "ready 0", "auto", "tick", "now 31000", "tick", "state"])
     assert state(out)["reason"] == "AUTO_REFUSED_NO_LINK" and submits(out) == []
+
+
+def test_auto_tap_waits_for_a_fresh_heater_read(cli, tmp_path):
+    """With the thermostat OFF the session does not re-read 1702, so an idle heater's frame ages past
+    heater_stale_ms. An AUTO tap then holds the session (the hold reads 1702 at once) and waits up to
+    CALI_THERMO_LINK_WAIT_MS for a fresh frame instead of answering AUTO_REFUSED_STALE_HEATER; past that
+    wait it is refused and the hold drops.
+
+    .. test:: Thermostat runner: an AUTO tap waits for a fresh heater read
+       :id: T_FW_THERMOSTAT_RUN_FRESH_HEATER
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    stale = [*SETUP, "now 200000", "auto", "tick", "state"]  # the 1702 frame from 1000 is 199 s old
+    out = run(cli, tmp_path, [*stale, "now 201000", OFF_HEATER, "tick", "state"])
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert "HOLD 1" in out and states[0]["reason"] is None and states[0]["mode"] == "OFF"  # waiting
+    assert states[1]["mode"] == "AUTO" and submits(out) == ["runtime 120"]  # the fresh read starts it
+    out = run(cli, tmp_path, [*stale, "now 231000", "tick", "state"])
+    assert state(out)["reason"] == "AUTO_REFUSED_STALE_HEATER" and submits(out) == []
+    assert out.index("HOLD 0") > out.index("HOLD 1")
+
+
+def test_a_short_fault_between_steps_still_ends_auto_with_it(cli, tmp_path):
+    """A new 1702 frame with a fault steps at once: on the van the unit stopped the heater with ErrorCode 4
+    (heating time exceeded) and cleared the code 36 s later, between two 60 s steps, so the next step saw a
+    heater off without a fault and logged RUN_ENDED instead of LOCKED.
+
+    .. test:: Thermostat runner: a fault frame steps at once
+       :id: T_FW_THERMOSTAT_RUN_FAULT_STEP
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    locked = frame(
+        "airheater", Installed=1, NormalOperation=0, FaultTriggerBit=1, ErrorCode=4, HeatingLevel=6
+    )
+    cleared = frame("airheater", Installed=1, NormalOperation=0, HeatingLevel=6)
+    out = run(cli, tmp_path, [*STARTED, "set period_ms 60000", "now 2600", RUNNING, "tick",
+                              "now 10000", locked, "tick", "now 46000", cleared, "tick", "state"])  # fmt: skip
+    st = state(out)
+    assert (st["mode"], st["reason"]) == ("OFF", "LOCKED"), st
+    assert submits(out) == ["runtime 120", "level 6", "power on"]  # nothing sent to a locked heater
+
+
+def test_the_last_heater_fault_is_kept_until_the_heater_runs(cli, tmp_path):
+    """The run tick keeps the last ErrorCode of a new 1702 frame (the status screen shows it): the unit clears
+    the code within seconds (two refused panel starts on the van, 7 s each), the kept one stays until a frame
+    shows the heater running again. The thermostat need not be on.
+
+    .. test:: Thermostat runner: the last heater fault is kept
+       :id: T_FW_THERMOSTAT_RUN_FAULT_KEPT
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    locked = frame(
+        "airheater", Installed=1, NormalOperation=0, FaultTriggerBit=1, ErrorCode=4, HeatingLevel=2
+    )
+    out = run(cli, tmp_path, ["init", "now 1000", OFF_HEATER, "tick", "hfault", "now 2000", locked, "tick",
+                              "hfault", "now 9000", OFF_HEATER, "tick", "hfault", "now 20000", RUNNING, "tick",
+                              "hfault"])  # fmt: skip
+    assert [line for line in out if line.startswith("HFAULT")] == [
+        "HFAULT 0",
+        "HFAULT 4",
+        "HFAULT 4",
+        "HFAULT 0",
+    ]
+
+
+def test_night_wait_holds_the_session(cli, tmp_path):
+    """A night AUTO request with the heater off pre-sets the level alone and enters WAITING; the wait holds
+    the session like AUTO (no rest: a WAITING that loses fresh 1702 data never sees the panel's Dauerbetrieb).
+
+    .. test:: Thermostat runner: the night wait holds the session
+       :id: T_FW_THERMOSTAT_RUN_NIGHT_HOLD
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(cli, tmp_path, [*SETUP, "night 1", "auto", "tick", f"done {OK}", "state"])
+    st = state(out)
+    assert submits(out) == ["level 6"] and "HOLD 1" in out
+    assert (st["mode"], st["reason"], st["night"], st["wait_left_s"]) == (
+        "WAITING",
+        "WAITING_FOR_CONTINUOUS",
+        True,
+        300,
+    )
+
+
+def test_blocked_uses_the_last_known_frames(cli, tmp_path):
+    """``status.blocked`` reads camping mode and the ignition (1004 TerminalOneFive or 1202 Enable, the rule of
+    cali_ac_ignition) from the last-known frames, the entry check from this link's only: with the stored
+    frames not live (a rest), nothing blocks on the card, and an AUTO request is refused.
+
+    .. test:: Thermostat runner: blocked from the last-known frames
+       :id: T_FW_THERMOSTAT_RUN_BLOCKED
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(cli, tmp_path, [*SETUP, frame("vehicle", TerminalOneFive=0), "live 0", "ign -1", "tick", "state",
+                              "auto", "tick", "state"])  # fmt: skip
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert states[0]["blocked"] is None and states[0]["wait_left_s"] is None
+    assert states[1]["reason"] == "AUTO_REFUSED_NO_CAMPING"
+    out = run(
+        cli, tmp_path, [*SETUP, frame("vehicle", TerminalOneFive=1), "live 0", "ign -1", "tick", "state"]
+    )
+    assert state(out)["blocked"] == "IGNITION"
+    out = run(cli, tmp_path, [*SETUP, frame("campingmode", State=1, Enable=1), "live 0", "ign -1", "state"])
+    assert state(out)["blocked"] == "IGNITION"  # the 1202 mirror of terminal 15
+
+
+def test_blocked_follows_the_inputs_between_steps(cli, tmp_path):
+    """``status.blocked`` is computed at each read of the status, not only at a step: the card polls every
+    2 s and undims as soon as camping mode is on.
+
+    .. test:: Thermostat runner: blocked is current at each GET
+       :id: T_FW_THERMOSTAT_RUN_BLOCKED_GET
+       :links: R_FW_THERMOSTAT_API
+    """
+    out = run(cli, tmp_path, [*SETUP, frame("campingmode", State=0), "tick", "state",
+                              frame("campingmode", State=1), "state"])  # fmt: skip
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert [st["blocked"] for st in states] == ["NO_CAMPING", None]
+
+
+def test_night_in_off_is_the_stored_setting_at_each_get(cli, tmp_path):
+    """``status.night`` in mode OFF is the stored night setting, current at each GET (not the last step's).
+
+    .. test:: Thermostat runner: the night in OFF is current at each GET
+       :id: T_FW_THERMOSTAT_RUN_NIGHT_OFF_GET
+       :links: R_FW_THERMOSTAT_API
+    """
+    out = run(cli, tmp_path, [*SETUP, "tick", "state", "night 1", "state"])
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert [st["night"] for st in states] == [False, True]
+
+
+CONT = frame("airheater", Installed=1, NormalOperation=1, PermanentOperation=1, HeatingLevel=6)
+NIGHT_60S = [*SETUP, "set period_ms 60000", "night 1", "auto", "tick", f"done {OK}", "tick"]
+
+
+def test_night_countdown_counts_at_each_get(cli, tmp_path):
+    """``status.wait_left_s`` is computed at each GET from the end of the wait, not only at a step: with
+    ``period_ms`` 60 s the card's countdown still falls between two steps.
+
+    .. test:: Thermostat runner: the night countdown is current at each GET
+       :id: T_FW_THERMOSTAT_RUN_WAIT_GET
+       :links: R_FW_THERMOSTAT_API
+    """
+    out = run(cli, tmp_path, [*NIGHT_60S, "state", "now 3000", "tick", "state", "now 3500", "tick", "state"])
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert [s["wait_left_s"] for s in states] == [300, 298, 298]  # rounded up: 297.5 s -> 298
+    assert all(s["mode"] == "WAITING" for s in states)
+
+
+def test_night_confirm_sampled_within_seconds(cli, tmp_path):
+    """While WAITING the runner steps every ``min(period_ms, 5000)``: Dauerbetrieb that holds
+    ``night_confirm_ms`` (30 s) is taken over within 35 s, not at the next 60 s step.
+
+    .. test:: Thermostat runner: the night confirm window is sampled every 5 s
+       :id: T_FW_THERMOSTAT_RUN_WAIT_STEP
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    lines = list(NIGHT_60S)
+    for t in range(2000, 64000, 1000):
+        lines += [f"now {t}", CONT, "tick", "state"]
+    out = run(cli, tmp_path, lines)
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    first = next(i for i, s in enumerate(states) if s["mode"] == "AUTO")
+    assert 2000 + 1000 * first <= 2000 + 35000, first
+    assert states[first]["reason"] == "ADOPT_CONTINUOUS" and submits(out) == ["level 6"]
+
+
+def test_eta_after_six_minutes_of_rise(cli, tmp_path):
+    """``status.eta_s`` stays null for the first 6 min of an AUTO run (the heater's dead time), then
+    follows the rise of one sample per minute; ``eta_ends_first`` compares it with the unit's run time
+    left; mode OFF clears it.
+
+    .. test:: Thermostat runner: the time-to-target estimate
+       :id: T_FW_THERMOSTAT_RUN_ETA
+       :links: R_THERMOSTAT_ETA, R_FW_THERMOSTAT_API
+    """
+
+    def hot(rem):
+        return frame("airheater", Installed=1, NormalOperation=1, HeatingLevel=10, RunningTimeinAction=rem)
+
+    # the reading of 17.00 is from 1000 (SETUP), so the first sample is stamped 1000, not at the step (1500)
+    lines = [*SETUP, "backup bed", "sensor bed 1700", "target 3000", "auto", "tick", *[f"done {OK}"] * 3,
+             "now 1500", hot(4), "tick", "state"]  # fmt: skip
+    for k in range(1, 12):  # 17.00, then 17.50 -> 20.00: 0.5 K in the first minute, then 0.25 K/min
+        lines += [
+            f"now {1500 + k * 60000}",
+            hot(60 if k >= 8 else 4),
+            f"sensor cabin {1725 + k * 25}",
+            f"sensor bed {1700 + k * 25}",
+            "tick",
+            "state",
+        ]
+    lines += [
+        "now 721500",
+        hot(60),
+        "sensor cabin -",
+        "sensor bed 2000",
+        "tick",
+        "state",
+    ]  # the backup takes over
+    lines += ["stop", "tick", "state"]
+    states = [json.loads(s[7:])["thermostat"] for s in run(cli, tmp_path, lines) if s.startswith("THERMO ")]
+    assert all(s["mode"] == "AUTO" and s["level"] == 10 for s in states[:-1])
+    assert [s["eta_s"] for s in states[:6]] == [None] * 6  # under 6 min of samples
+    # calictl.thermostat.eta over (span from 1000, rise, gap to 30.00, run time left)
+    assert [s["eta_s"] for s in states[6:9]] == [2318, 2313, 2296]
+    assert [s["eta_ends_first"] for s in states[6:9]] == [True, True, False]  # 4 min left, then 60
+    assert (
+        states[11]["eta_s"] == 2400
+    )  # the 10 min window drops 17.00: 17.50 -> 20.00, 1000 to go (keeping it: 2200)
+    assert (
+        states[12]["active"] == "bed" and states[12]["eta_s"] is None
+    )  # a new thermometer starts a new series
+    assert states[-1]["eta_s"] is None and states[-1]["eta_ends_first"] is False

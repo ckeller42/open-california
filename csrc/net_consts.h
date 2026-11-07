@@ -19,8 +19,7 @@
 #define NET_AP_ADDR "192.168.4.1"
 #define NET_AP_ADDR_U32 0xc0a80401u
 #define NET_AP_CLOSE_MS 30000
-#define NET_AP_PSK "calictl-setup"
-#define NET_AP_SSID "calictl-esp-setup"
+#define NET_AP_SSID_PREFIX "calictl-esp-"
 #define NET_CONNECT_RETRY_MS 3000
 #define NET_CONNECT_TIMEOUT_MS 8000
 #define NET_HOSTNAME "calictl-esp"

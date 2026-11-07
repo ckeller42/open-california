@@ -13,6 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "firmware/components/cali_core"
+PLATFORM = ROOT / "firmware/components/platform"
 
 
 @pytest.fixture(scope="module")
@@ -29,10 +30,14 @@ def cli(tmp_path_factory):
             "-I",
             str(CORE / "include"),
             "-I",
+            str(PLATFORM / "include"),
+            "-I",
             str(ROOT / "csrc"),
             "-I",
             str(ROOT / "firmware/web"),
             str(CORE / "display_model.c"),
+            str(CORE / "ap_identity.c"),
+            str(PLATFORM / "host/platform_host.c"),
             str(CORE / "test/display_cli.c"),
             "-o",
             str(out),
@@ -45,7 +50,13 @@ def cli(tmp_path_factory):
 
 def run(cli, *lines):
     out = (
-        subprocess.run([str(cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True)
+        subprocess.run(
+            [str(cli), str(Path(cli).parent / "kv")],
+            input="\n".join(lines) + "\n",
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         .stdout.strip()
         .splitlines()
     )
@@ -54,7 +65,13 @@ def run(cli, *lines):
 
 def run_raw(cli, *lines):
     return (
-        subprocess.run([str(cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True)
+        subprocess.run(
+            [str(cli), str(Path(cli).parent / "kv")],
+            input="\n".join(lines) + "\n",
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         .stdout.strip()
         .splitlines()
     )
@@ -71,7 +88,7 @@ def test_all_green_online(cli):
     assert v["device"] == "green|läuft · seit 2 h 13 min"
     assert v["wifi"] == "green|Insel · 192.168.178.86 · -58 dBm"
     assert v["camper"] == "green|verbunden · Daten vor 1 s"
-    assert v["setup"] == "0" and v["footer"] == "http://calictl-esp.local"
+    assert v["qr"] == "" and v["footer"] == "http://calictl-esp.local"
 
 
 def test_wifi_unknown_rssi_is_left_out(cli):  # rssi 0 = unknown (null in /api/state), never "0 dBm"
@@ -117,27 +134,90 @@ def test_camper_pairing_error(cli):
     assert v["camper"] == "red|Kopplung fehlgeschlagen"
 
 
-def test_wifi_setup_mode_and_footer(cli):
-    (v,) = run(
+SETUP = (
+    BASE.replace("wmode=2 wstate=3", "wmode=1 wstate=1")
+    .replace("ssid=Insel", "ssid=")
+    .replace("ip=3232281174", "ip=0")
+)
+AP_QR = "WIFI:T:WPA;S:calictl-esp-1A2B;P:abcd-efgh-jkmn;;"  # a made-up identity, not the host's
+
+
+def view(cli, mode, lang="de", **kw):
+    """One tick in the given wifi mode with extra CLI flags; returns the view dict."""
+    base = {"setup": SETUP, "station": BASE}[mode]
+    flags = " ".join("%s=%s" % (k, v) for k, v in kw.items())
+    (v,) = run(cli, "%s now=1 lang=%d %s" % (base, 1 if lang == "en" else 0, flags))
+    return v
+
+
+def test_wifi_setup_mode_row(cli):
+    v = view(cli, mode="setup", apssid="calictl-esp-C0FE")
+    assert v["wifi"] == "amber|Hotspot calictl-esp-C0FE · 192.168.4.1"
+    assert v["footer"] == ""  # the QR screen replaces the footer
+
+
+def test_setup_mode_shows_the_join_qr(cli):
+    v = view(cli, mode="setup", apssid="calictl-esp-1A2B", apqr=AP_QR)
+    assert v["qr"].startswith("WIFI:T:WPA;S:calictl-esp-1A2B;")
+    assert v["qr_title"] == "Mit der Handykamera scannen"
+    assert v["qr_lines"] == "WLAN\\ncalictl-esp-1A2B|Passwort abcd-efgh-jkmn"
+    en = view(cli, mode="setup", lang="en", apssid="calictl-esp-1A2B", apqr=AP_QR)
+    assert en["qr_title"] == "Scan with the phone camera"
+    assert en["qr_lines"] == "WiFi\\ncalictl-esp-1A2B|Password abcd-efgh-jkmn"
+
+
+def test_a_qr_appearing_wakes_the_screen_once(cli):
+    qr = SETUP + " apqr=" + AP_QR
+    v = run(
         cli,
-        BASE.replace("wmode=2 wstate=3", "wmode=1 wstate=1")
-        .replace("ssid=Insel", "ssid=")
-        .replace("ip=3232281174", "ip=0")
-        + " now=1 lang=0",
+        "reset",
+        SETUP + " now=0",
+        SETUP + " now=400000",  # off
+        qr + " now=400200",  # the QR appears: wake
+        qr + " now=400400",
+        qr + " now=800000",  # no new wake: off again
+        SETUP + " now=800200",  # the QR goes: no wake
+        qr + " now=800400",  # it comes back: wake
+        qr + " now=1200000",  # off
+        BASE + " pending=1 now=1200200",  # the setup page's QR replaces the hotspot's: wake
     )
-    assert v["wifi"] == "amber|Hotspot calictl-esp-setup · 192.168.4.1"
-    assert v["setup"] == "1" and v["footer"] == "WLAN calictl-esp-setup · Passwort calictl-setup"
+    assert [x["state"] for x in v] == ["on", "off", "on", "on", "off", "off", "on", "off", "on"]
+
+
+def test_setup_mode_without_a_qr_text_shows_no_qr(cli):  # identity unavailable: the caller passes NULL
+    assert view(cli, mode="setup", apssid="calictl-esp-1A2B")["qr"] == ""
+
+
+def test_recovery_keeps_the_rows_and_a_tap_shows_the_qr_for_2_min(cli):
+    rec = SETUP.replace("ssid=", "ssid=Insel") + " apqr=" + AP_QR  # set up once, WiFi lost: the hotspot again
+    v = run(
+        cli,
+        "reset",
+        rec + " now=0",
+        rec + " touch=1 now=1000",
+        rec + " now=120999",
+        rec + " now=121000",
+        rec + " touch=1 now=130000",
+    )
+    assert [x["qr"] != "" for x in v] == [False, True, True, False, True]
+    assert v[0]["wifi"].startswith("amber|Hotspot")  # the rows say why: the hotspot is up
+    first = run(cli, "reset", rec + " pending=1 now=0")[0]  # a first-time setup that is not done: QR always
+    assert first["qr"] != ""
+
+
+def test_station_with_setup_pending_shows_the_address_qr(cli):
+    v = view(cli, mode="station", lang="en", pending=1)
+    assert v["qr"] == "http://192.168.178.86/#setup" and v["qr_title"] == "Join Insel, then scan"
+    assert v["qr_lines"] == "http://\\n192.168.178.86|http://calictl-esp.local"
+    assert view(cli, mode="station", pending=1)["qr_title"] == "Insel beitreten, dann scannen"
+
+
+def test_station_without_pending_shows_no_qr(cli):
+    assert view(cli, mode="station", pending=0)["qr"] == ""
 
 
 def test_footer_english(cli):
-    s, o = run(
-        cli,
-        BASE.replace("wmode=2 wstate=3", "wmode=1 wstate=1").replace("ip=3232281174", "ip=0")
-        + " now=1 lang=1",
-        BASE + " now=1 lang=1",
-    )
-    assert s["footer"] == "WiFi calictl-esp-setup · password calictl-setup"
-    assert o["footer"] == "http://calictl-esp.local"
+    assert view(cli, mode="station", lang="en")["footer"] == "http://calictl-esp.local"
 
 
 def test_wifi_off_with_reason(cli):
@@ -441,6 +521,22 @@ def test_wake_tap_is_swallowed_until_release(cli, pressed_awake, want):
     assert [ln.split("=")[1] for ln in run_raw(cli, *("gate=" + g for g in pressed_awake))] == want
 
 
+def test_failed_touch_read_keeps_the_wake_swallow(cli):
+    """A failed touch read (the #346 NACKs) reads as "released" for the widgets but does not end the
+    press: the wake press stays swallowed until a good read reports no touch. Third digit = read ok."""
+    seq = ["101", "110", "000", "111", "011", "111"]  # wake press, NACK mid-press, finger still down
+    assert [ln.split("=")[1] for ln in run_raw(cli, *("gate=" + g for g in seq))] == [
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+        "1",
+    ]
+    # a failed read while a delivered press is down reports released and keeps it delivered after
+    assert [ln.split("=")[1] for ln in run_raw(cli, "gate=111", "gate=010", "gate=111")] == ["1", "0", "1"]
+
+
 def bright_at(cli, *lux, **cfg):
     extra = "".join(" %s=%s" % kv for kv in cfg.items())
     return [
@@ -552,7 +648,7 @@ def test_station_footer_shows_the_battery(cli, batt, de, en):
 
 def test_setup_footer_ignores_the_battery(cli):
     (v,) = run(cli, "wmode=1 now=1 lang=1 bpct=50 usb=0 chg=0 brt=90")
-    assert v["setup"] == "1" and "Batt" not in v["footer"] and "%" not in v["footer"]
+    assert v["footer"] == ""
 
 
 def test_battery_changes_never_wake_the_screen(cli):
@@ -567,3 +663,172 @@ def test_battery_changes_never_wake_the_screen(cli):
     )
     assert out[0]["state"] == "on" and [v["state"] for v in out[1:]] == ["off"] * 3
     assert out[-1]["footer"].endswith("Akku 5 % ~9 min")
+
+
+@pytest.mark.parametrize(
+    "code,lang,want",
+    [
+        (4, 0, "amber|verbunden · Heizung: Max. Betriebsdauer erreicht"),
+        (4, 1, "amber|connected · heater: max. operating time reached"),
+        (3, 0, "amber|verbunden · Heizungsfehler 3"),
+        (3, 1, "amber|connected · heater error 3"),
+    ],
+)
+def test_camper_row_keeps_the_last_heater_fault(cli, code, lang, want):
+    """The unit clears a heater ErrorCode within seconds (ErrorCode 4 after 36 s and 7 s on the van), so the
+    screen shows the last one the satellite kept (``heater_fault``) on a connected camper row; a lost or
+    stale link keeps its own text."""
+    (v,) = run(cli, BASE + " hfault=%d now=7980000 lang=%d" % (code, lang))
+    assert v["camper"] == want
+    (v,) = run(cli, BASE.replace("link=1", "link=0") + " hfault=%d now=20000 lang=0" % code)
+    assert v["camper"] == "red|Verbindung verloren, verbinde neu"
+
+
+# ---- the LoRa screen (R_FW_LORA_SCREEN) ----------------------------------------------------------
+
+LORA = BASE + " lora=1 auto=0 max=60"  # max 60: the LoRa screen's full brightness (100) stands out
+
+
+def held(start, until, now0=1000, extra=""):
+    """One press seen every 200 ms from `start` ms held until `until` ms (inclusive), then released."""
+    lines = [LORA + f" now={now0 + p} touch=1 press={p}{extra}" for p in range(start, until + 1, 200)]
+    if (until - start) % 200:
+        lines.append(LORA + f" now={now0 + until} touch=1 press={until}{extra}")
+    return lines
+
+
+def test_long_press_opens_lora_screen(cli):
+    """A continuous 3 s press opens the LoRa screen at full brightness and asks for the setup while the
+    van has no TTN keys; 2999 ms does nothing.
+
+    .. test:: Display LoRa screen: the 3 s press opens it (setup request without TTN keys), the wake
+       press never counts, a tap or 120 s closes it, a further 3 s press rotates the transfer key, no
+       LoRa screen without the module
+       :id: T_FW_DISPLAY_LORA_SCREEN
+       :links: R_FW_LORA_SCREEN
+    """
+    v = run(cli, "reset", LORA + " now=0", *held(200, 3000), LORA + " now=4400")
+    assert [x["show"] for x in v] == ["0"] * 15 + ["1", "1"]
+    assert [x["req"] for x in v] == ["0"] * 15 + ["1", "0"]  # one-shot, on the firing tick
+    assert (v[-2]["state"], v[-2]["bright"]) == ("on", "100") and v[0]["bright"] == "60"
+    assert v[-1]["bright"] == "100"  # the release of the opening press does not close it
+    v = run(cli, "reset", LORA + " now=0", *held(200, 2999), LORA + " now=4400")
+    assert {x["show"] for x in v} == {"0"} and {x["req"] for x in v} == {"0"}
+    v = run(cli, "reset", LORA + " now=0 ttn=1", *held(200, 3000, extra=" ttn=1"))
+    assert (v[-1]["show"], v[-1]["req"]) == ("1", "0")  # TTN keys: the repair QR, no new transfer key
+
+
+def test_lora_screen_closes_on_tap_or_timeout(cli):
+    opened = ["reset", LORA + " now=0", *held(200, 3000), LORA + " now=4200"]  # open at 4000
+    v = run(cli, *opened, LORA + " now=5000 touch=1 press=150", LORA + " now=5200")
+    assert [x["show"] for x in v[-3:]] == ["1", "1", "0"]  # closed when the short press ends
+    assert (v[-1]["state"], v[-1]["bright"]) == ("on", "60")
+    v = run(cli, *opened, LORA + " now=5000 touch=1")  # a tap between two ticks
+    assert v[-1]["show"] == "0"
+    v = run(cli, *opened, LORA + " now=123999", LORA + " now=124000")
+    assert [x["show"] for x in v[-2:]] == ["1", "0"]
+    v = run(cli, *opened, BASE + " now=5000 lora=0 auto=0 max=60")  # the module went away
+    assert v[-1]["show"] == "0"
+
+
+def test_long_press_ignored_without_lora(cli):  # Review Focus 5
+    lines = ["reset", BASE + " now=0", *[x.replace(" lora=1", " lora=0") for x in held(200, 5000)]]
+    v = run(cli, *lines)
+    assert {x["show"] for x in v} == {"0"} and {x["req"] for x in v} == {"0"}
+    plain = run(cli, *[x.split(" press=")[0] for x in lines])  # the same ticks without the press duration
+    assert [{k: x[k] for k in ("state", "bright")} for x in v] == [
+        {k: x[k] for k in ("state", "bright")} for x in plain
+    ]
+
+
+def test_wake_tap_still_swallowed(cli):
+    """The press that wakes a dark (off or dim) screen never opens the LoRa screen, however long it is held."""
+    for dark in (400_000, 100_000):  # off, dim
+        v = run(cli, "reset", LORA + " now=0", *held(200, 5000, now0=dark), LORA + f" now={dark + 5200}")
+        assert {x["show"] for x in v} == {"0"}
+        assert v[1]["state"] == "on"  # it still wakes
+        v = run(cli, "reset", LORA + " now=0", *held(200, 400, now0=dark), *held(200, 3000, now0=dark + 1000))
+        assert v[-1]["show"] == "1"  # the next press, on the lit screen, counts
+    assert run_raw(cli, "gate=00", "gate=10", "gate=11", "gate=00") == [  # the gate is unchanged
+        "deliver=1",
+        "deliver=0",
+        "deliver=0",
+        "deliver=1",
+    ]
+
+
+def test_long_press_on_repair_qr_rotates(cli):
+    """Spec 5.3: a further 3 s press while the repair QR shows asks for a new transfer key and switches to
+    the setup QR; a 3 s press on the setup QR does nothing more."""
+    t = " ttn=1"
+    v = run(
+        cli,
+        "reset",
+        LORA + " now=0" + t,
+        *held(200, 3000, extra=t),
+        LORA + " now=4200" + t,
+        *held(200, 3000, now0=6000, extra=t),
+        LORA + " now=9200" + t,
+        *held(200, 3000, now0=10000, extra=t),
+    )
+    assert (v[16]["show"], v[16]["req"]) == ("1", "0")
+    rot = [x for x in v if x["req"] == "1"]
+    assert len(rot) == 1 and rot[0]["show"] == "2"
+    assert v[-1]["show"] == "2"
+    v = run(
+        cli,
+        "reset",
+        LORA + " now=0" + t,
+        *held(200, 3000, extra=t),
+        *held(200, 3000, now0=6000, extra=t),  # rotates at 9000
+        LORA + " now=128999" + t,
+        LORA + " now=129000" + t,
+    )
+    assert [x["show"] for x in v[-2:]] == ["2", "0"]  # 120 s from the rotation
+
+
+@pytest.mark.parametrize(
+    "inp,lang,hint,line",
+    [
+        ("qrok=0", 0, "Wird vorbereitet…", "nicht im Netz · noch keine Sendung bestätigt"),
+        (
+            "qrok=1 joined=1 conf=180",
+            1,
+            "Scan with the Open California remote app",
+            "joined · last uplink confirmed 3 min ago",
+        ),
+        (
+            "qrok=1 joined=1 conf=180",
+            0,
+            "Mit der Open-California-Fern-App scannen",
+            "im Netz · letzte Sendung bestätigt vor 3 min",
+        ),
+        (
+            "qrok=1 joined=0 conf=-1",
+            1,
+            "Scan with the Open California remote app",
+            "not joined · no uplink confirmed yet",
+        ),
+    ],
+)
+def test_lora_screen_texts(cli, inp, lang, hint, line):
+    """The LoRa screen's texts: "Preparing…" until the QR text exists, then the scan hint; the status
+    line names only uplinks the module confirmed (TX_DONE), never a mere send."""
+    v = run(cli, "reset", LORA + " now=0", *held(200, 3000, extra=f" {inp} lang={lang}"))
+    assert v[-1]["show"] == "1"
+    assert (v[-1]["lhint"], v[-1]["lline"]) == (hint, line)
+    assert v[0]["lhint"] == "" and v[0]["lline"] == ""  # closed: no text
+
+
+def test_press_held_across_the_close_never_reopens(cli):
+    """A press that is still held when the 120 s limit or the module going away closes the LoRa screen is
+    spent: it never reopens the screen nor asks for another transfer key."""
+    opened = ["reset", LORA + " now=0", *held(200, 3000), LORA + " now=4200"]  # open at 4000
+    v = run(cli, *opened, *held(200, 6000, now0=122_000))  # the timer closes at 124000, the press goes on
+    assert [x["show"] for x in v[-6:]] == ["0"] * 6 and [x["req"] for x in v[-20:]] == ["0"] * 20
+    back = [
+        x.replace(" lora=1", " lora=0") if 1400 <= int(x.split("press=")[1]) < 2000 else x
+        for x in held(200, 5000, now0=10_000)
+    ]
+    v = run(cli, *opened, *back)  # the module goes away during the press and comes back while it is held
+    assert v[-1]["show"] == "0" and {x["req"] for x in v[17:]} == {"0"}

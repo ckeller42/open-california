@@ -4,7 +4,7 @@ constants (#154 Task 1+). ``tools.gen_c_dict.generate_net()`` turns ``CONSTS`` i
 ``CONSTS`` dict, so the two languages can never drift on an SSID, a timeout or a size limit.
 
 Stdlib-only, no runtime import cost: plain data, safe to import from ``calictl/*`` at module top
-if a later task wants to (unlike ``bleak``/``paho``/etc, which stay lazy per the project's hard
+if a later task wants to (unlike ``bleak``/``influxdb_client``/etc, which stay lazy per the project's hard
 rule).
 
 .. req:: WiFi setup constants are generated for C from one Python source
@@ -12,7 +12,7 @@ rule).
    :status: implemented
    :tags: esp32, wifi, protocol
 
-   The ESP32 firmware's AP SSID/PSK, hostname, address, timeouts and buffer-size limits for its
+   The ESP32 firmware's AP SSID prefix, hostname, address, timeouts and buffer-size limits for its
    WiFi setup portal shall live in exactly one place, ``tools.wifi_consts.CONSTS``, and reach the
    C firmware only through the generated, freshness-checked ``csrc/net_consts.h``
    (``tools.gen_c_dict.generate_net``) — never hand-typed a second time in C or in the Python
@@ -20,8 +20,7 @@ rule).
 """
 
 CONSTS = {
-    "NET_AP_SSID": "calictl-esp-setup",
-    "NET_AP_PSK": "calictl-setup",
+    "NET_AP_SSID_PREFIX": "calictl-esp-",
     "NET_HOSTNAME": "calictl-esp",
     "NET_AP_ADDR": "192.168.4.1",
     "NET_AP_ADDR_U32": 0xC0A80401,

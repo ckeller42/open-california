@@ -46,7 +46,7 @@ in the repo's [`AGENTS.md`](https://github.com/ckeller42/open-california/blob/ma
 
 ## Unit tests
 
-`python3 -m pytest tests/ -q` runs everywhere with no BLE, MQTT or InfluxDB installed, because the
+`python3 -m pytest tests/ -q` runs everywhere with no BLE or InfluxDB installed, because the
 runtime is stdlib-only at import. Some guards in this suite protect repo-wide invariants:
 
 - `tests/test_signal_coverage.py`: every {term}`dictionary` field has a {term}`catalog` decision.

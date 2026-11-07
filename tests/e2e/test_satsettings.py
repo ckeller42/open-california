@@ -162,10 +162,11 @@ def test_deep_link_opens_the_settings_and_a_reload_stays_there(station):
         assert pg.evaluate("location.hash") == "#devicestatus"
 
 
-def test_setup_mode_lands_on_wifi_setup_and_station_mode_shows_home(setup):
-    """The setup hotspot: the app opens on the WiFi-setup screen (the join form + the pairing entry);
-    once the satellite runs in station mode the app shows Home as usual."""
-    with _open(setup, "/app", locale="en-US") as pg:
+def test_wifi_setup_over_the_hotspot_and_station_mode_shows_home(setup):
+    """The setup hotspot: WiFi setup (``#wifisetup``; the landing is now the setup wizard, see
+    test_first_setup.py) shows the join form + the pairing entry; once the satellite runs in station
+    mode the app shows Home as usual."""
+    with _open(setup, "/app#wifisetup", locale="en-US") as pg:
         _title(pg, "en", "WiFi setup")
         expect(pg.locator("#setup-title")).to_have_text("Connect to your WiFi")
         expect(pg.locator("#wifi-form")).to_be_visible()
@@ -194,7 +195,7 @@ def test_wifi_setup_pairs_in_place(setup):
     (start -> scanning -> waiting_passkey a few polls later): the wizard's 1 s poll must repaint the card
     on WiFi setup too (firmware-host e2e regression, PR #397)."""
     setup.pairing_scan_polls = 2
-    with _open(setup, "/app", locale="en-US") as pg:
+    with _open(setup, "/app#wifisetup", locale="en-US") as pg:
         _title(pg, "en", "WiFi setup")
         pg.locator("#unpaired-banner").get_by_role("button", name="Pair…").click()
         card = pg.locator("#pairing-card")
@@ -211,7 +212,7 @@ def test_wifi_setup_pairs_in_place(setup):
 def test_back_from_a_screen_opened_on_wifi_setup_returns_to_it(setup):
     """The landing is the entry's screen (history.replaceState): browser back from Device status opened on
     WiFi setup returns to WiFi setup, not Home (CodeRabbit, PR #397); ‹ there still stays in the app."""
-    with _open(setup, "/app", locale="en-US") as pg:
+    with _open(setup, "/app#wifisetup", locale="en-US") as pg:
         _title(pg, "en", "WiFi setup")
         _device_status(pg)
         pg.go_back()
@@ -222,8 +223,8 @@ def test_back_from_a_screen_opened_on_wifi_setup_returns_to_it(setup):
 
 
 def test_setup_landing_lets_the_owner_go_home(setup):
-    """WiFi setup is a landing, not a trap: ‹ goes to Home and stays there."""
-    with _open(setup, "/app", locale="en-US") as pg:
+    """WiFi setup is not a trap: ‹ goes to Home and stays there."""
+    with _open(setup, "/app#wifisetup", locale="en-US") as pg:
         _title(pg, "en", "WiFi setup")
         pg.click("#back")
         _title(pg, "en", "Open California")
@@ -233,20 +234,21 @@ def test_setup_landing_lets_the_owner_go_home(setup):
 
 @pytest.mark.parametrize("locale,lang", LOCALES)
 def test_device_status_shows_the_clock_row(station, locale, lang):
-    """Every status line lives in Device status' Satellite card: the clock (R_FW_TIME) with the boot
-    number joins storage, battery and resources; Satellite settings shows none of them."""
+    """Every status line lives in Device status' Satellite card: the clock (R_FW_TIME) joins storage,
+    battery and resources, in plain words (no "SNTP", no boot number: that is in Diagnostics);
+    Satellite settings shows none of them."""
     with _open(station, "/", locale=locale) as pg:
         _device_status(pg)
         card = pg.locator("#app .card", has=pg.get_by_role("heading", name=tr("Satellite", lang), exact=True))
         row = card.locator(".row", has=pg.get_by_text(tr("Clock", lang), exact=True))
-        expect(row).to_contain_text(tr("synced (SNTP) · boot {boot}", lang, boot=17))
+        expect(row.locator(".val")).to_have_text(tr("synced", lang))
         clock = station.fixtures["station"]["/api/state"]["device"]["time"]
         clock.update(synced=False)
-        expect(row).to_contain_text(tr("not synced yet · boot {boot}", lang, boot=17))
+        expect(row.locator(".val")).to_have_text(tr("not synced yet", lang))
         clock.update(source="unit")
-        expect(row).to_contain_text(tr("from the camper unit · boot {boot}", lang, boot=17))
+        expect(row.locator(".val")).to_have_text(tr("from the camper unit", lang))
         clock.update(source="none")
-        expect(row).to_contain_text(tr("no source · boot {boot}", lang, boot=17))
+        expect(row.locator(".val")).to_have_text(tr("no source", lang))
         pg.get_by_role("button", name=tr("Satellite settings ›", lang)).click()
         _title(pg, lang)
         for gone in ("Storage", "Clock"):
@@ -274,6 +276,7 @@ def test_boxes_in_order_and_camper_unit_links_to_device_status(station, locale, 
                     "Sensors",
                 )
             ]
+            + ["LoRa"]  # a name, the same in every language
         )
         expect(pg.locator("#pair-status")).to_have_text(tr("Paired ✓", lang))
         pg.locator("#pair").get_by_role("button", name=tr("Device status ›", lang)).click()
@@ -352,6 +355,41 @@ def test_auto_camper_usage_data_and_experimental_switch(station, locale, lang):
         expect(pg.locator("#exp-status")).to_have_text(tr("Sensors: on", lang))
         assert _posts(station, "/api/experimental") == [{"sensors": True}]
         expect(pg.locator("#sens")).to_be_visible()  # the Sensors box follows the switch
+
+
+def test_a_switch_stays_disabled_while_its_write_runs_and_its_error_is_announced(station):
+    """#511: a state poll does not re-enable a switch whose POST is still on the wire (one write per
+    tap), and every row's error line is a polite live region."""
+    held = []
+    with _settings(station) as pg:
+        pg.route("**/api/auto_camper", lambda r: held.append(r))
+        expect(pg.locator("#ac-status")).to_have_text("Auto camper on")
+        expect(pg.locator(".warn[id$='-msg']").first).to_be_attached()
+        for el in pg.locator(".warn[id$='-msg']").all():
+            expect(el).to_have_attribute("aria-live", "polite")
+        sw = pg.locator("#ac-toggle")
+        sw.click()
+        expect(sw).to_be_disabled()
+        pg.wait_for_timeout(3000)  # state polls run
+        expect(sw).to_be_disabled()
+        assert len(held) == 1
+        held[0].fulfill(status=200, content_type="application/json", body='{"ok":true}')
+        expect(sw).to_be_enabled()
+
+
+def test_hotspot_connect_is_disabled_while_the_join_posts(setup):
+    """#511: "Connect" over the hotspot is disabled while POST /api/wifi runs: one join per tap."""
+    held = []
+    with _open(setup, "/app#wifisetup") as pg:
+        pg.route("**/api/wifi", lambda r: held.append(r) if r.request.method == "POST" else r.continue_())
+        pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
+        pg.select_option("#ssid", "HomeNet")
+        pg.fill("#psk", "test-psk-1234")
+        pg.click("#connect")
+        expect(pg.locator("#connect")).to_be_disabled()
+        assert len(held) == 1
+        held[0].fulfill(status=200, content_type="application/json", body='{"ok":true}')
+        expect(pg.locator("#connect")).to_be_enabled()
 
 
 @pytest.mark.parametrize("locale,lang", LOCALES)
@@ -491,7 +529,7 @@ def test_over_the_hotspot_every_station_row_says_it_needs_the_home_wifi(setup, l
     suffix = " · " + tr("needs the home WiFi", lang)
     with _settings(setup, locale=locale) as pg:
         _title(pg, lang)
-        for row in ("ac", "pw", "ux", "exp", "scr-auto", "scr-prox", "scr-motion"):
+        for row in ("ac", "pw", "ux", "exp", "lora", "scr-auto", "scr-prox", "scr-motion"):
             expect(pg.locator("#%s-status" % row)).to_have_text(re.compile(re.escape(suffix) + "$"))
             expect(pg.locator("#%s-toggle" % row)).to_be_hidden()
         expect(pg.locator("#fw-status")).to_have_text(re.compile(re.escape(suffix) + "$"))
@@ -514,7 +552,7 @@ def test_settings_fit_a_phone_with_44px_targets(station):
     with _settings(station, viewport=PHONE) as pg:
         expect(pg.locator("#scr-prox-toggle")).to_be_visible()
         assert pg.evaluate("document.documentElement.scrollWidth") <= PHONE["width"]
-        for row in ("scr-auto", "scr-prox", "scr-motion", "ac", "pw", "ux", "exp"):
+        for row in ("scr-auto", "scr-prox", "scr-motion", "ac", "pw", "ux", "exp", "lora"):
             lbl = pg.locator("#%s-status" % row).bounding_box()
             sw = pg.locator("#%s-toggle" % row).bounding_box()
             assert sw["x"] > lbl["x"] + lbl["width"] - 1, row
@@ -617,15 +655,12 @@ def test_change_network_switches_and_comes_back(station, locale, lang):
         expect(panel).to_contain_text(tr("Join {ssid} with this phone, then open:", lang, ssid="minsel"))
         expect(panel).to_contain_text(
             tr(
-                "Back on {old} within a minute if the new password was wrong; otherwise join the setup hotspot {ap} (password {appsk}) and open:",
+                "Back on {old} within a minute if the new password was wrong; otherwise the satellite opens its setup hotspot: scan the QR code on its display.",
                 lang,
                 old="HomeNet",
-                ap=CONSTS["NET_AP_SSID"],
-                appsk=CONSTS["NET_AP_PSK"],
             )
         )
         expect(panel.locator('a[href="%s"]' % host).first).to_be_visible()
-        expect(panel.locator('a[href="http://%s"]' % CONSTS["NET_AP_ADDR"])).to_be_visible()
         held[0].continue_()
         _wait(pg, lambda: station.wifi_posts, "the join POST")
         assert station.wifi_posts == [{"ssid": "minsel", "psk": "test-psk-1234"}]
@@ -720,7 +755,7 @@ def test_hotspot_join_posts_at_once_and_retries_once(setup, locale, lang):
         else:
             route.fulfill(status=200, content_type="application/json", body='{"ok":true}')
 
-    with _open(setup, "/app", locale=locale, allow=("ERR_INTERNET_DISCONNECTED",)) as pg:
+    with _open(setup, "/app#wifisetup", locale=locale, allow=("ERR_INTERNET_DISCONNECTED",)) as pg:
         pg.route("**/api/wifi", on_post)
         pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
         pg.select_option("#ssid", "HomeNet")
@@ -739,7 +774,7 @@ def test_a_hotspot_join_that_works_stays_on_wifi_setup_with_the_link(setup):
     """A join made on WiFi setup that comes online keeps the screen (the "Connected as …" link the owner
     opens next), instead of the switch to Home a station-mode answer otherwise makes."""
     online = {"mode": "station", "ssid": "HomeNet", "ip": "192.168.1.57", "rssi": -58}
-    with _open(setup, "/app", locale="en-US") as pg:
+    with _open(setup, "/app#wifisetup", locale="en-US") as pg:
         pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
         pg.fill("#psk", "test-psk-1234")
         pg.click("#connect")
@@ -755,7 +790,7 @@ def test_a_hotspot_join_that_works_stays_on_wifi_setup_with_the_link(setup):
 
 @pytest.mark.parametrize("locale,lang", LOCALES)
 def test_hotspot_join_failure_says_why(setup, locale, lang):
-    with _open(setup, "/app", locale=locale) as pg:
+    with _open(setup, "/app#wifisetup", locale=locale) as pg:
         pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
         pg.fill("#psk", "test-psk-1234")
         pg.click("#connect")
@@ -784,7 +819,7 @@ def test_both_screens_have_a_help_sheet(station, setup, locale, lang):
     """⋮ → Help on Satellite settings and WiFi setup, translated (a missing DE key would fall back to
     English)."""
     texts = []
-    for stub, path in ((station, "/#satsettings"), (setup, "/app")):
+    for stub, path in ((station, "/#satsettings"), (setup, "/app#wifisetup")):
         with _open(stub, path, locale=locale) as pg:
             expect(pg.locator("#title")).to_have_text(
                 tr("Satellite settings" if stub is station else "WiFi setup", lang)

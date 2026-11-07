@@ -6,9 +6,9 @@ substantive findings over many nits (CodeRabbit already covers style).
 
 ## Hard invariants — flag any violation
 
-1. **Runtime `calictl/*` is stdlib-only at import.** `bleak`, `paho.mqtt`, `influxdb_client`, and
+1. **Runtime `calictl/*` is stdlib-only at import.** `bleak`, `influxdb_client`, and
    `yaml` must be imported **lazily inside functions**, never at module top level. A new top-level
-   `import bleak` / `import yaml` / `import paho` / `import influxdb_client` in `calictl/` is a bug
+   `import bleak` / `import yaml` / `import influxdb_client` in `calictl/` is a bug
    (tests run without these installed). Tooling in `tools/` may import PyYAML freely.
 2. **`serve` is the single BLE owner.** Never open a second BLE connection from the daemon path;
    all adapter access is serialized by the `asyncio.Lock` in `serve.py`. Flag any new BLE
@@ -47,7 +47,7 @@ The coverage guard checks presence + scale, **never interpretation**. Scrutinize
 ## Housekeeping the CI can't see
 
 - Surfacing/renaming a signal? The **Grafana dashboard doesn't auto-update** — flag a signal change
-  in `semantics.py`/`signals.yaml`/`mqtt.py`/`influx.py` that doesn't also touch
+  in `semantics.py`/`signals.yaml`/`influx.py` that doesn't also touch
   `calictl/deploy/camper-dashboard.json`.
 - New/changed public functions should carry Sphinx docstrings; requirements are authored as
   `sphinx-needs` `.. req::`/`.. test::` objects in the docstrings and traced to their tests.

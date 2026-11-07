@@ -27,7 +27,7 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.11"
-# The runtime lazily imports bleak/paho/influxdb_client/yaml INSIDE functions (stdlib-only at import
+# The runtime lazily imports bleak/influxdb_client/yaml INSIDE functions (stdlib-only at import
 # top-level), and they aren't installed in CI — so don't fail on their missing stubs.
 ignore_missing_imports = true
 # Pragmatic: catch REAL type errors (None-safety, bad returns, the int(None) class of bug) without

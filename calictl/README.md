@@ -1,7 +1,7 @@
 # calictl
 
-Read and control the VW California T7 **Camper Unit** over BLE, and bridge it to
-Home Assistant. Own-vehicle interoperability. Dictionary-driven: every field
+Read and control the VW California T7 **Camper Unit** over BLE, and feed its
+telemetry to InfluxDB. Own-vehicle interoperability. Dictionary-driven: every field
 layout comes from [`protocol/dictionary.yaml`](../protocol/dictionary.yaml) (the
 auto-extracted, live-verified protocol map).
 
@@ -20,9 +20,8 @@ sinks).
 | `session.py` | persistent-BLE-session supervisor (holds the slot while the web UI is active, releases it when idle, hands it over for roof moves) |
 | `control.py` | per-function full-packet control-frame builders (`BUILDERS`), shared by `set` and the daemon |
 | `postcheck.py` | post-write applied-check: did a control write land in the resulting state? |
-| `serve.py` | unified daemon: one BLE owner → InfluxDB + MQTT (HA discovery) + web UI + commands |
+| `serve.py` | unified daemon: one BLE owner → InfluxDB + web UI + commands |
 | `web.py` | stdlib HTTP server for the web UI + JSON API (never opens BLE) |
-| `mqtt.py` | Home Assistant MQTT-discovery entity configs |
 | `influx.py` | InfluxDB writes for the Grafana stack |
 | `history.py` | append-only JSONL helpers for the daemon's per-poll outcome log |
 | `observer.py` | passive camping/ignition observer (logs transitions, fast-poll burst; never actuates) |
@@ -41,24 +40,15 @@ python -m calictl get water              # one function: decoded + interpreted (
 python -m calictl raw cooler             # raw hex of the state characteristic
 python -m calictl set cooler power off   # control (writes + verifies readback)
 python -m calictl set cooler level 3
-python -m calictl serve --dry-run        # print HA discovery + one poll, no broker
-python -m calictl serve                  # unified daemon (InfluxDB + MQTT); config via env
+python -m calictl serve --dry-run        # print one poll, no InfluxDB
+python -m calictl serve                  # unified daemon (InfluxDB + web UI); config via env
 ```
-
-## Home Assistant
-
-`serve` (MQTT broker + InfluxDB from env: `MQTT_HOST/USER/PASSWORD`, `INFLUXDB_TOKEN`,
-…) publishes MQTT-discovery configs so the van appears as a
-device with entities (fresh/waste water %, fridge on/level, leisure battery
-V/level, DC-DC charging, USB charger, air heater, roof position) plus a fridge
-power **switch**. State is published to `calivan/<function>` as JSON; the switch
-subscribes to `calivan/cooler/set/power`.
 
 ## Deploy (on buspi)
 
 ```
-# needs: bleak (present in ~/cali-venv); paho-mqtt for the daemon
-~/cali-venv/bin/pip install paho-mqtt
+# needs: bleak (present in ~/cali-venv); influxdb_client for the InfluxDB sink
+~/cali-venv/bin/pip install influxdb_client
 # copy calictl/ and protocol/dictionary.yaml under one dir, then:
 cd ~/open-california && ~/cali-venv/bin/python -m calictl status
 ```

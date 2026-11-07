@@ -87,6 +87,8 @@
 #include "cali_pi_wake.h"
 #include "cali_ble_exp.h"
 #include "cali_time.h"
+#include "cali_lora.h"
+#include "cali_lora_setup.h"
 #include "cali_platform.h"
 #include "cali_sdlog.h"
 #include "cali_runner.h"
@@ -272,6 +274,17 @@ int cali_kv_get(const char *key, void *buf, size_t *len) {
     }
     return CALI_KV_MISSING;
 }
+int cali_kv_erase(const char *key) {
+    for (size_t i = 0; i < KV_N; i++)
+        if (s_kv[i].used && strcmp(s_kv[i].key, key) == 0) s_kv[i].used = 0;
+    return 0;
+}
+int cali_mac(uint8_t mac[6]) {   /* the host fake MAC 02:00:00:00:C0:FE */
+    static const uint8_t M[6] = {0x02, 0, 0, 0, 0xC0, 0xFE};
+    memcpy(mac, M, 6);
+    return 0;
+}
+void cali_random(void *buf, size_t len) { memset(buf, 7, len); }   /* a fixed byte: the hotspot password is 14 of one letter */
 uint64_t cali_uptime_ms(void) { return s_now; }
 static int64_t s_epoch_ms;   /* "ntp": the SNTP wall clock (fixed) */
 static int64_t fake_epoch(void) { return s_epoch_ms; }
@@ -493,10 +506,24 @@ int main(void) {
             cali_sdlog_init(put_rec);
         }
         else if (strcmp(w, "kvhex") == 0) {
-            unsigned char b[32];
+            static char hex[1025];   /* the 3rd token whole: a2 holds only 63 chars (th_cfg is 144 bytes) */
+            unsigned char b[512];
             size_t k = 0;
-            while (k < sizeof b && a2[2 * k] && sscanf(a2 + 2 * k, "%2hhx", &b[k]) == 1) k++;
+            memset(hex, 0, sizeof hex);   /* an odd-length token must not decode the previous token's digits */
+            (void)sscanf(line, "%*s %*s %1024s", hex);
+            while (k < sizeof b && hex[2 * k] && sscanf(hex + 2 * k, "%2hhx", &b[k]) == 1) k++;
             (void)cali_kv_set(a1, b, k);
+        }
+        else if (strcmp(w, "kvbig") == 0) {   /* kvbig <key> <hex up to CALI_LORA_XFER_MAX bytes> */
+            static char big[2 * CALI_LORA_XFER_MAX + 2];
+            static unsigned char bb[CALI_LORA_XFER_MAX];
+            size_t k = 0;
+            if (sscanf(line, "%*s %*s %640s", big) == 1)
+                while (k < sizeof bb && big[2 * k] && sscanf(big + 2 * k, "%2hhx", &bb[k]) == 1) k++;
+            (void)cali_kv_set(a1, bb, k);
+        }
+        else if (strcmp(w, "loracon") == 0) {   /* console "lora <args>" */
+            (void)cali_lora_console(strchr(line, ' ') ? strchr(line, ' ') + 1 : "");
         }
         else if (strcmp(w, "attempts") == 0) s_pair.attempts = (uint8_t)v;
         else if (strcmp(w, "pairerr") == 0) {

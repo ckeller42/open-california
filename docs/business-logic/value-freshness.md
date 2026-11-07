@@ -105,7 +105,7 @@ level rather than re-accepting the `1` latch — the firmware twin of `serve.py`
 shared UI (`semantics.js::adaptSatellite`) flags both tanks stale (`🕒 last measured`, no
 `stale_since` — the satellite has no wall clock). **Age of the held reading** (2026-10-11, like the
 app 5.4.0's "Updated: x ago"): buspi serves `water.measured_at` (epoch s a real read last
-adopted/confirmed `_water_good`, persisted as `water_measured_at`; web only, not MQTT/Influx), the ESP
+adopted/confirmed `_water_good`, persisted as `water_measured_at`; web only, not Influx), the ESP
 `device.water_held_age_ms` (session clock, only when measured on this boot); the UI shows
 `🕒 measured 2 h ago` / `🕒 vor 2 Std gemessen`, and `🕒 last measured` when the age is unknown. **Cold start** (since 2026-10-10, as buspi): a fresh ESP
 with no NVS baseline shows no water on the `1` latch until a level ≥ 2 has settled (the ramp
@@ -247,6 +247,11 @@ A poll landing mid-ramp is not a measurement either: buspi read **16 L** at 08:5
 
 - level ≤ 1 L with grey unchanged vs the baseline → not measured → hold the baseline (unchanged);
 - a reading equal to the baseline → adopted at once;
+- a reading with the unit's empty alarm (`FreshWaterInfoPopUp` 5) → adopted at once: the alarm comes
+  only from a measurement, so it needs no second read. A client that reads water once per link
+  (the iOS app) otherwise holds a full tank's last level against the unit's own empty reading, and
+  with camping off most links are too short for a second read (ESP SD log: median link 3.9 s; 10 of
+  254 links carried two water reads ≥ 5 s apart);
 - any other (fresh, grey) → adopted only once the **same** reading has been seen for
   `WATER_SETTLE_S` = 5 s (C/ESP `FRESH_SETTLE_MS`), on the caller's clock (serve:
   `time.monotonic()`, ESP: the session tick). Until then the baseline is served, flagged stale

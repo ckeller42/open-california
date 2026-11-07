@@ -62,8 +62,7 @@ Now [Reachability](https://ckeller42.github.io/open-california/protocol-sequence
 Not in the old numbering; all in the
 [canonical page](https://ckeller42.github.io/open-california/protocol-sequences.html): the
 [daemon poll cycle](https://ckeller42.github.io/open-california/protocol-sequences.html#daemon-poll-cycle)
-(`S_SEQ_POLL`), [Home Assistant over MQTT](https://ckeller42.github.io/open-california/protocol-sequences.html#home-assistant-over-mqtt)
-(`S_SEQ_MQTT`), the [cooler command](https://ckeller42.github.io/open-california/protocol-sequences.html#cooler-command-the-app-s-frame)
+(`S_SEQ_POLL`), the [cooler command](https://ckeller42.github.io/open-california/protocol-sequences.html#cooler-command-the-app-s-frame)
 (`S_SEQ_COOLER`), the [wake-up light and door contact](https://ckeller42.github.io/open-california/protocol-sequences.html#wake-up-light-and-door-contact-config-edit)
 edit (`S_SEQ_WAKEUP`) and the three
 [ESP32 satellite](https://ckeller42.github.io/open-california/protocol-sequences.html#esp32-satellite) flows

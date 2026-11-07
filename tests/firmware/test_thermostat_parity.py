@@ -7,7 +7,8 @@ return the same commands, reason, mode, status and next state for every case.
 
 .. test:: The C thermostat decision reproduces every Python vector
    :id: T_FW_THERMOSTAT_PARITY
-   :links: R_FW_THERMOSTAT_DECIDE, R_THERMOSTAT_SESSION, R_THERMOSTAT_CONTROL, R_THERMOSTAT_STATE
+   :links: R_FW_THERMOSTAT_DECIDE, R_THERMOSTAT_SESSION, R_THERMOSTAT_CONTROL, R_THERMOSTAT_STATE,
+      R_THERMOSTAT_NIGHT, R_THERMOSTAT_BLOCKED, R_THERMOSTAT_ETA
 """
 
 import json
@@ -38,8 +39,9 @@ def test_vectors_reach_every_reason():
     assert not UNREACHABLE & seen
     assert None in seen  # an idle step in mode OFF
     adopt = [c for c in V["cases"] if (c[4][0] or "").startswith("ADOPT_")]
-    assert adopt and not [c for c in adopt if c[4][10]]  # an adopt never sends a command
-    refused = [c[4][11:] for c in V["cases"] if (c[4][0] or "").startswith("AUTO_REFUSED_")]
+    # an adopt sends at most one command, and only ``level`` (flat out: [13] = count, then what/value pairs)
+    assert adopt and all(c[4][13:] == [0] or (c[4][13] == 1 and c[4][14] == "level") for c in adopt)
+    refused = [c[4][14:] for c in V["cases"] if (c[4][0] or "").startswith("AUTO_REFUSED_")]
     assert any(refused)  # a refusal sends nothing new; only a kept stop is re-sent
     assert all(cmds in ([], ["power", 0], ["permanent", 0]) for cmds in refused)
 
@@ -81,13 +83,38 @@ def test_vectors_have_the_sweep_and_the_sessions():
 def test_vectors_cover_the_control_branches():
     assert {
         "windup_low",
+        "windup_min_level",
         "windup_high",
+        "outside_lost",
+        "outside_found",
         "opposite_sign_integrates",
         "gap_frozen",
         "cur_level_none",
         "neg_half_p",
         "neg_half_level",
         "pos_half_level",
+        "adopt_to_demand",
+        "night_preset",
+        "night_wait_adopt",
+        "night_unconfirmed",
+        "night_confirm_past_wait",
+        "night_continuous_after_wait",
+        "night_confirm_cached_frame",
+        "owner_off_failed_level",
+        "night_wait_timeout",
+        "night_user_off",
+        "night_user_off_stops_run",
+        "night_user_off_stale_stops_later",
+        "panel_off_during_pending",
+        "night_skips_warm",
+        "continuous_hold_min",
+        "continuous_hold_overheat",
+        "blocked_known_frames",
+        "wait_left_ceil",
+        *(
+            "blocked_" + c
+            for c in ("NOT_INSTALLED", "FAULT", "TIMER_ARMED", "NO_CAMPING", "IGNITION", "NO_REFERENCE")
+        ),
     } <= gen.coverage()
 
 
@@ -130,6 +157,7 @@ def test_c_defaults_equal_python(cli):
 def test_c_twin_reproduces_every_vector(cli):
     cfgs = [list(c.values()) for c in V["cfgs"]]
     lines = ["H " + _line(cfgs[0], h_in) for h_in, _ in V["heater"]]
+    lines += ["E " + _line(e_in) for e_in, _ in V["eta"]]
     prev = None
     for _, k, inp, st, _, st2 in V["cases"]:  # st null = the previous case's st2
         lines.append("S " + _line(cfgs[k], inp, st or prev))
@@ -141,5 +169,7 @@ def test_c_twin_reproduces_every_vector(cli):
     assert len(outs) == len(lines)
     for h, line in zip(V["heater"], outs):
         assert line == _line(h[1]), h[0]
-    for n, (c, line) in enumerate(zip(V["cases"], outs[len(V["heater"]) :])):
+    for e, line in zip(V["eta"], outs[len(V["heater"]) :]):
+        assert line == _line(e[1]), e[0]
+    for n, (c, line) in enumerate(zip(V["cases"], outs[len(V["heater"]) + len(V["eta"]) :])):
         assert line == _line(c[4]) + " | " + _line(c[5]), n

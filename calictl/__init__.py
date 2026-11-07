@@ -8,7 +8,6 @@ auto-extracted, live-verified protocol map). Layers:
               energy ×0.1 V scale, per-function Installed feature gating, ...)
 - device   : robust BLE transport (connect-on-demand, adapter-reset recovery)
 - cli      : `calictl status | get | set`
-- mqtt     : Home Assistant discovery
 """
 
 __all__ = ["protocol", "semantics"]

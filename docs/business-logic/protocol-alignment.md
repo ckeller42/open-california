@@ -189,7 +189,7 @@ the wire captures. Corrections applied:
   `device.RoofStream` of STOP frames; a press switches that same stream to the move byte with the
   current counter, a release back to STOP. The counter is therefore validated before the press and the
   unit has no ~3 s withhold left (the app's motor started ~1.2 s after the press). A press without a
-  view (API/CLI/HA) still starts its own stream (fresh counter, ~3 s withhold). calictl omits the 1000 ms
+  view (API/CLI) still starts its own stream (fresh counter, ~3 s withhold). calictl omits the 1000 ms
   re-send, and auto-stops at end of travel on `InfoPopUp` 8 (`2308`) as the app does. Its own move is
   still never driven on the real unit (#230).
 

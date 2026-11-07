@@ -89,6 +89,7 @@
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 
+#include "cali_ap_identity.h"
 #include "cali_auto_camper.h"
 #include "cali_thermostat.h"
 #include "cali_pi_wake.h"
@@ -100,8 +101,11 @@
 #include "cali_display_model.h"
 #if CONFIG_CALI_DISPLAY
 #include "cali_display.h"
+#include "cali_lora_esp.h"
 #include "cali_sdcard_esp.h"
 #endif
+#include "cali_energy.h"
+#include "cali_lora.h"
 #include "cali_net_esp.h"
 #include "cali_ota_esp.h"
 #include "cali_platform.h"
@@ -212,10 +216,12 @@ typedef struct { uint64_t idle, at; int pct; } cpu_win_t;   /* cpu_pct's window 
 static int cpu_pct(cpu_win_t *w);
 
 /* Owner task, every tick: the boot event (retried until the card takes it), the diag record. */
+/* nimble_host and cali_core are the same "owner" (one of them exists: the core task only without the BT
+ * controller), so at most CALI_DIAG_STACKS (8) of these run at once and the record stays within its body. */
 static void diag_tick(uint64_t now) {
     static const char *const TASKS[][2] = {{"nimble_host", "owner"}, {"cali_core", "owner"}, {"cali_sd", "sd"},
                                            {"taskLVGL", "display"}, {"cali_ota", "ota"}, {"cali_console", "console"},
-                                           {"tiT", "lwip"}};
+                                           {"tiT", "lwip"}, {"cali_lora", "lora"}, {"cali_lora_rx", "lora_rx"}};
     static cpu_win_t win = {0, 0, -1};
     cali_diag_health_t h = {0};
     if (!s_boot_logged)
@@ -332,6 +338,8 @@ static void do_work(void) {
         cali_runner_tick(now);        /* BLE first: WiFi/web work (NVS writes, mode switches) never */
         cali_session_tick(now);       /* delays this tick's heartbeat decision */
         cali_sensors_tick(now, s_ble, cali_exp_sensors(), cali_runner_in_flow());   /* R_FW_SENSORS */
+        cali_energy_tick(now);        /* Wh since boot + the house load (R_FW_ENERGY_COUNTERS) */
+        cali_lora_tick(now);          /* R_FW_LORA: a snapshot to the LoRa task, its status back */
         cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
         cali_ac_tick(now);            /* auto camper (R_FW_AUTO_CAMPER): restore camping after park */
         cali_thermo_run_tick(now);    /* cabin thermostat (R_FW_THERMOSTAT_RUN): ships disabled */
@@ -487,16 +495,22 @@ static void console_init(void) {
 /* The network side, before the owner task starts (like cali_console_init). t: the BLE transport the
  * console runs on (the page's pairing address). */
 static void wifi_init(const cali_transport_t *t) {
+    char ap_ssid[NET_SSID_MAX + 1], ap_psk[NET_PSK_MAX + 1];
+    int id_rc = cali_ap_identity(ap_ssid, ap_psk);   /* the setup hotspot's own name + password */
     esp_err_t e = esp_netif_init();
     if (e == ESP_OK) {
         e = esp_event_loop_create_default();   /* NimBLE does not create it; tolerate one anyway */
         if (e == ESP_ERR_INVALID_STATE) e = ESP_OK;
     }
     if (e != ESP_OK) cali_log("net: esp_netif/event loop: %s", esp_err_to_name(e));
-    if (e != ESP_OK || cali_net_esp_init() != 0) {
+    if (id_rc == CALI_AP_UNSTORED) cali_log("wifi: setup hotspot password not stored");   /* the driver still starts */
+    if (id_rc < 0) cali_log("wifi: setup hotspot identity unavailable");
+    if (e != ESP_OK || id_rc < 0 || cali_net_esp_init(ap_ssid, ap_psk) != 0) {
         cali_log("wifi: driver unavailable");   /* exact text: test_qemu_boot.py */
+        memset(ap_psk, 0, sizeof ap_psk);
         return;
     }
+    memset(ap_psk, 0, sizeof ap_psk);
     s_wifi = 1;
     cali_wifi_run_init(&cali_net_esp);
     if (cali_web_init(&cali_net_esp, t, NET_HTTP_PORT) != 0) cali_log("http: cannot listen on port %d", NET_HTTP_PORT);
@@ -607,6 +621,7 @@ void app_main(void) {
     wifi_init(ble);
 #if CONFIG_CALI_DISPLAY
     if (cali_display_init(ble) == 0) cali_sdcard_esp_start();   /* -1: no screen (and no SD); BLE/WiFi carry on */
+    cali_lora_esp_start();   /* R_FW_LORA: idle, no pin touched, until exp_lora is on */
 #endif
 
     const esp_timer_create_args_t targs = {.callback = tick_cb, .name = "cali_tick"};

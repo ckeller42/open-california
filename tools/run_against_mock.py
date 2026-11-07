@@ -22,6 +22,7 @@ The single ``MockCamperUnit`` persists across calictl's connect-per-operation ca
 
 from __future__ import annotations
 
+import json
 import os
 
 # Set a mock BLE address before anything imports calictl.device (which resolves
@@ -58,7 +59,9 @@ def install_fake_pairing_transport() -> None:
 
 
 def main(argv=None) -> int:
-    install_fake_bleak()
+    # CALICTL_MOCK_SEED: JSON {function: {field: value}} over the mock's default seed (e2e: ignition on).
+    seed = os.environ.get("CALICTL_MOCK_SEED")
+    install_fake_bleak(MockCamperUnit(json.loads(seed)) if seed else None)
     install_fake_pairing_transport()
     from calictl import cli
 

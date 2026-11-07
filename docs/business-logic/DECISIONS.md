@@ -8,6 +8,18 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-11-07 — MQTT / Home Assistant integration removed (owner)
+
+Owner decision: remove the MQTT sink and the Home Assistant integration from calictl completely,
+not keep it optional. The only deployment (buspi) no longer runs Home Assistant or an MQTT broker
+(both removed the same day). The data path is now InfluxDB (Grafana) plus the web UI / HTTP API
+and the CLI. Control through Home Assistant, and with it HomeKit / Siri control through HA, is gone.
+Removed: `calictl/mqtt.py` (its `flatten` moved to `calictl.semantics.flatten`), the paho client in
+`serve`, `install.sh --with-sinks`'s MQTT credential prompt (`--with-sinks` now installs only
+`influxdb_client`), `calictl/deploy/homeassistant/`, the spec `S_SEQ_MQTT` with its requirements
+`R_MQTT_DISCOVERY_STATE` / `R_MQTT_COMMAND_TOPICS`, and the "Home Assistant" column of the
+features page. The `lighting brightness` command stays as an alias of `all`.
+
 ## 2026-10-22 — ESP idle policy: optional "off + periodic probe", default stays hold
 
 Owner question: no permanent link, yet frequent data and a quick live connect when the GUI opens.
@@ -123,7 +135,7 @@ calictl now does the same (`R_ROOF_VIEW_STREAM`, `device.RoofStream`): the web U
 `POST /api/roof {"action":"view"}` (refreshed every ~5 s; `leave` on leaving or hiding the page); the
 daemon claims the [persistent session](https://ckeller42.github.io/open-california/glossary.html#term-Persistent-session) and runs the [STOP stream](https://ckeller42.github.io/open-california/glossary.html#term-STOP-stream) on it; a press rides that stream, a
 release switches it back to STOP. Kept on purpose: no view → the press starts its own stream (today's
-behaviour, API/CLI/HA); the view lapses after `CALICTL_ROOF_VIEW_LAPSE_S` (15 s) without a refresh and
+behaviour, API/CLI); the view lapses after `CALICTL_ROOF_VIEW_LAPSE_S` (15 s) without a refresh and
 never streams forever (a move in flight holds it open; `leave` ends a held move with STOP); STOP is
 never gated and stays lock-free; the limit auto-stop now also fires on `InfoPopUp` 8 (end of travel,
 `2308`, ~1 s before the final Position — where the app stops); the 1000 ms re-press debounce stays (it
@@ -355,7 +367,7 @@ lighting profiles, roof dialogs) closed three gaps that were live in calictl:
 - **Run time is capped at 120 min.** `rf/b.java:199 D4()` writes the raw int unclamped, but the
   bound lives in the app's UI: its heating info page says immediate heating "is limited to 120
   minutes" and the unit reports `ErrorCode 4` HEATING_TIME_EXCEEDED beyond it. calictl accepted
-  0–255 (the field width) from CLI/API/HA — now `control.AIRHEATER_MAX_RUNTIME_MIN = 120`. The
+  0–255 (the field width) from CLI/API — now `control.AIRHEATER_MAX_RUNTIME_MIN = 120`. The
   slider's min/step were not recovered from the Compose code (UNRESOLVED).
 - **ErrorCode has names.** `rf/b.java:461-671`: 1 `AIR_HEATER_LOW_BATTERY`, 2 `FUEL_LOW`,
   3 `SYSTEM_ERROR`, 4 `HEATING_TIME_EXCEEDED`, 5 `OPERATION_NOT_POSSIBLE`, 0 clears. Each is a

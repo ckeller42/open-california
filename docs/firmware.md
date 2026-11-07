@@ -91,7 +91,9 @@ the QEMU image) — `firmware/components/cali_core/include/cali_console.h`:
   (host only — exits the process; no-op on the device), the WiFi commands `wifi set <ssid>
   <psk>`, `wifi status`, `wifi forget`, `wifi scan` (see [the network section](#network-wifi-setup-and-the-web-ui);
   `LOG wifi: not enabled` while WiFi is off), the sensor probe `sensors [on|off|add …|remove …]`
-  ([External sensors](#external-sensors-r_fw_sensors)), and `set <function> <what> [value]` — a control
+  ([External sensors](#external-sensors-r_fw_sensors)), the LoRa commands `lora on|off|status|forget` (`forget` erases every LoRa key and switches LoRa off, as `POST /api/lora` does without the confirm; `status` adds the setup state by the same names as `device.lora.setup`, never a key) and
+  `lora keys <deveui> <joineui> <appkey>` (hex; stored in NVS, never printed;
+  [LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora)), and `set <function> <what> [value]` — a control
   command in calictl's `set` vocabulary (`set cooler power on`, `set lighting kitchen 5`,
   `set lighting save_profile 3 amber`; the value is the rest of the line, `""` when absent), see
   [Control path](#control-path). The console is physical access (USB), so `set` works in every WiFi
@@ -340,7 +342,7 @@ is awake".
 ## Network: WiFi setup and the web UI
 
 The firmware joins a WiFi network and serves on port 80, in every WiFi mode, the calictl web UI (over
-the setup hotspot it opens on its WiFi-setup screen), a JSON state API, `POST /api/command` (station
+the setup hotspot it opens on its setup wizard), a JSON state API, `POST /api/command` (station
 mode only) and a minimal WiFi recovery page (`/device`). The host tier (`cali-host --http`) and the
 device run the same C code. Owner-facing steps:
 [How to put the ESP32 satellite on your WiFi](howto-esp-wifi-setup.md).
@@ -363,11 +365,36 @@ only through the `cali_net_t` socket/WiFi table in `include/cali_net.h`):
 Platforms: `components/platform/host/net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi,
 `cali_net_host.h`) and `components/platform/esp/net_esp.c` (esp_wifi + esp_netif + lwIP sockets +
 the `espressif/mdns` component, pinned `==1.13.1`). The constants are generated into
-`csrc/net_consts.h` from `tools/wifi_consts.py` (`R_NET_CONSTS_SINGLE_SOURCE`): setup SSID
-`calictl-esp-setup`, passphrase `calictl-setup`, address `192.168.4.1`, hostname `calictl-esp`
+`csrc/net_consts.h` from `tools/wifi_consts.py` (`R_NET_CONSTS_SINGLE_SOURCE`): setup SSID prefix
+`calictl-esp-` (plus the last four hex digits of the MAC; the passphrase is random per board, see
+[The setup hotspot's identity and the display QR codes](#the-setup-hotspots-identity-and-the-display-qr-codes)), address `192.168.4.1`, hostname `calictl-esp`
 (DHCP + mDNS `calictl-esp.local`, `_http._tcp` on port 80), `NET_AP_CLOSE_MS` 30000,
 `NET_RETRY_MIN_MS` 1000 -> `NET_RETRY_MAX_MS` 60000, `NET_SETUP_AFTER_MS` 300000, page poll
 `NET_PAGE_POLL_MS` 2000, `NET_JSON_MAX` 8192, SSID 1–32 bytes, PSK 8–63 bytes.
+
+### The setup hotspot's identity and the display QR codes
+
+`ap_identity.c` (`cali_ap_identity()`) gives the hotspot its WPA2 identity. The SSID is
+`calictl-esp-XXXX`: `NET_AP_SSID_PREFIX` plus the upper-case hex of MAC bytes 4 and 5. The password
+is 14 characters `xxxx-xxxx-xxxx` from the alphabet `23456789abcdefghijkmnpqrstuvwxyz`, drawn
+from `cali_random()` on the first call and stored in NVS key `ap_psk`. It stays across OTA and
+changes only after an NVS erase (a value that is missing or malformed is replaced). It reaches the
+radio and the display, and no log, no `/api/state`, no repo file.
+
+The status display draws a QR code while there is something to scan (`display_model.c`):
+
+- **Setup mode** — a WiFi QR code `WIFI:T:WPA;S:<ssid>;P:<psk>;;`, the SSID beside it, the password on a
+  full-width line under it. On a satellite that was set up once (a saved network, no setup
+  pending) and fell back to its hotspot, the status rows stay and a tap on the screen shows this
+  code for 2 minutes (`DISPLAY_RECOVERY_QR_MS`).
+- **Station mode with a setup pending** — a second QR code with `http://<ip>/#setup`, the title
+  *Join `<ssid>`, then scan*, the address and `http://calictl-esp.local`.
+
+A first-time setup is *pending* when `POST /api/wifi` saved the credentials while the satellite was in
+setup mode: NVS key `setup_qr` is set and `/api/state` reports `device.setup.pending`. `POST /api/setup`
+with `{"done":true}` erases the key (the wizard sends it when you go Home, or open *Satellite settings*
+from the checklist). A WiFi change in station mode never sets it, and in station mode a satellite
+without the key never shows the wizard or the second code. `/api/state` `device.wifi.ap_ssid` names the hotspot while it runs.
 
 ### The WiFi state machine
 
@@ -424,7 +451,7 @@ Not drawn: `CREDS_FORGET` (console `wifi forget`, `DELETE /api/wifi`) goes from 
   `off` otherwise (`UNPROVISIONED` = WiFi off, and a setup-flow or replacement join in progress).
 
 Console lines (`LOG wifi: …`, exact texts from `cali_wifi_run.h`/`console.c`): `setup hotspot up
-(calictl-esp-setup)`, `setup hotspot closed`, `joining <ssid>`, `online <a.b.c.d>`, `lost`,
+(calictl-esp-XXXX)`, `setup hotspot closed`, `joining <ssid>`, `online <a.b.c.d>`, `lost`,
 `failed <not_found|auth|other>`, `credentials cleared`, `credential erase failed`, `credentials
 replaced, reconnecting`, `replacement failed, back to <ssid>`, `storing the restored credentials
 failed`, `setup hotspot failed to start`, `captive DNS unavailable`; from `wifi set`
@@ -492,12 +519,13 @@ replies for a client that sends `Accept-Encoding: gzip` (`Vary: Accept-Encoding`
 
 | Method + path | Answer |
 |---|---|
-| `GET /`, `GET /app` | 200 `text/html; charset=utf-8` in **every** WiFi mode — the calictl web UI bundle, `app_bundle_gen.h`'s `WEB_APP_HTML_GZ` with `Content-Encoding: gzip` and `Cache-Control: no-cache` (see [the satellite UI](#the-satellite-ui-r_fw_shared_ui)). In setup/off mode the app opens on its **WiFi setup** screen by itself (the captive portal lands here). `/app` is the same (the manifest's `start_url`). Every static answer here and below carries a strong `ETag` (see *HTTP caching* above). |
+| `GET /`, `GET /app` | 200 `text/html; charset=utf-8` in **every** WiFi mode — the calictl web UI bundle, `app_bundle_gen.h`'s `WEB_APP_HTML_GZ` with `Content-Encoding: gzip` and `Cache-Control: no-cache` (see [the satellite UI](#the-satellite-ui-r_fw_shared_ui)). In setup/off mode, and while a first-time setup is pending, the app opens on its **setup wizard** (`#setup/<step>`) by itself (the captive portal lands here). `/app` is the same (the manifest's `start_url`). Every static answer here and below carries a strong `ETag` (see *HTTP caching* above). |
 | `GET /device` | 200 `text/html` in every mode, `Cache-Control: no-cache` — the **WiFi recovery page**: a way back onto WiFi if the UI fails. Plain HTML with a few lines of inline JS, EN + DE inline (by `navigator.language`), no external file, ~6 KB (`NET_HTTP_BODY_MAX` 8192 is its budget, flash only, `tests/test_web_strings.py`): the WiFi mode/network (`GET /api/wifi`), a join form (the scanned networks + "Other network…" with a name field, password with *Show password*, `POST /api/wifi`), the result with the `http://calictl-esp.local/` link, and *Open the camper UI* (`/`). `strings_gen.h`'s `WEB_INDEX_HTML`, generated from `firmware/web/index.html` by `tools/gen_c_dict.py`. One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
 | `GET /manifest.webmanifest`, `/sw.js`, `/apple-touch-icon.png`, `/icon-192.png`, `/maskable-icon-192.png`, `/favicon.ico`, `/favicon-32x32.png`, `/favicon-16x16.png` | 200 in **every** WiFi mode, the manifest `Cache-Control: no-cache`, the icons `max-age=86400` (never `immutable`: their URLs never change), each with an `ETag` — the home-screen files the UI bundle links (`application/manifest+json`, `image/png`, `image/x-icon`): `firmware/web/pwa_assets_gen.h`, generated by `tools/gen_c_dict.py` (`pwa_assets`) from the same `calictl/webui/` files buspi serves. The icons are byte-for-byte; the manifest is derived — only the icons served here (no 512 px, flash) and `start_url` `/app`, the UI in every mode. About 70 KB of flash, outside the bundle's `WEB_APP_GZ_MAX`. Plus `/sw.js` (`text/javascript`, `no-cache`), the offline shell's service worker, registered only on HTTPS (`R_UI_PWA_OFFLINE`). |
 | `GET /api/pairing` | 200 calictl's `pairing_snapshot()`: `{"state","attempts","error","address","radio_busy":false}` — the console `STATE` members (one emitter, `cali_snapshot_pairing`); `address` = the bonded identity while bonded, or idle/error with a stored bond. |
 | `POST /api/pairing` | calictl's wizard request `{"action":"start"\|"passkey"\|"cancel"\|"reset","value":"<6 digits>","confirm":true}`, in **every** WiFi mode (connection management, not a control write). web.py's checks in its order, calictl's error bodies `{"error":<code>}`: 400 `bad_json` (the fixed-shape parser: unknown keys, a non-string `action`, a non-bool `confirm`), 400 `bad_action`, 400 `confirm_required` (reset without `confirm:true`), 400 `bad_passkey` (not a 6-digit **string**), then 409 `busy` for `start`/`reset` while a control command is pending (the single link is in use). Then the runner — `start` = console `pair` (idempotent: ignored unless idle/error), `passkey` = `passkey N` (ignored unless waiting), `cancel` (only while a flow runs, scanning … verifying; otherwise a no-op, so a stale cancel never drops a bonded link), `reset` = `forget` (drops the bond) — and 200 with the post-action snapshot. Deliberate differences from calictl: Content-Type is not checked (calictl: 415), unknown keys / a non-string `action` / a non-bool `confirm` are `bad_json`, a `cancel` outside a flow changes nothing. |
-| `GET /api/state` | 200 JSON `{"fn","device"}` — `fn` = the `SNAP` object (every function the session holds a frame for, `codec_decode`d, `CODEC_CHARS` order); `device` = `pairing {state,address}`, `link {up,ready,rest,rest_next_s,last_snap_age_ms}` (`ready` = commands are accepted: the read pass is done and the heartbeat armed; `rest` = the power-save rest, `rest_next_s` = seconds to its next probe or `null`, `R_FW_BLE_REST`), `wifi {mode,ssid,ip,rssi}`, `control {writes}` (`POST /api/command` accepted: station mode), `uptime_ms`, `fw`, `ota {state,available_sha,progress_pct,error,channel}` (`R_FW_OTA`; `channel` `stable`/`latest`), `time {source,synced,boot}` (`R_FW_TIME`), `sd {state,total_mb,free_mb,dropped}` (`R_FW_SD_LOG`), `battery {pct,mv,usb,charging,runtime_min}` (`R_FW_BATTERY`; each `null` when unknown — host, QEMU), `auto_camper {enabled,state}` (`R_FW_AUTO_CAMPER`; `state` `idle`/`armed`/`restoring`), `thermostat {mode,target,t_ref,level,reason}` (`R_FW_THERMOSTAT_API`; only while a reference thermometer is selected; `mode` `OFF`/`AUTO`/`DEGRADED`/`STOPPING`, `target` and `t_ref` in centi-degrees C, `level` the heater level, each `null` when unknown, `reason` the last step's reason code), `pi_wake {enabled,last_s,reason,halt_after_min,halt_soc_pct,halt_in_s,halted,halt_last_s,halt_reason,batt_low}` (`R_FW_PI_WAKE`, `R_FW_PI_HALT`; `last_s` = seconds since the last wake pulse, `reason` `ignition`/`manual`, both `null` before the first; `halt_in_s` = seconds until the automatic halt, `null` while driving, halted or with no limit; `halt_last_s`/`halt_reason` (`timer`/`battery`/`manual`) `null` before the first halt; `batt_low` = the battery guard's reading), `ble {mode,exp,idle_min,rest_poll_min}` (`R_FW_BLE_MODE`, `R_FW_BLE_EXP`, `R_FW_BLE_IDLE`, `R_FW_BLE_REST`; `mode` `hold`/`quiet`/`off`, `exp` `null` or `{on,phase_min,from,to,phase,remaining_ms}` — `phase`/`remaining_ms` `null` between phases; every `GET /api/state` counts as a viewer and holds the experiment, [BLE modes](#ble-modes-r_fw_ble_mode)), `display {state,brightness_pct,sensor,auto,prox_wake,motion_wake,min,max,offset}` (`R_FW_DISPLAY_WAKE`; the live members `null` without a screen — host build, QEMU), `ux {enabled}` (the "Send usage data" switch, [UX telemetry](#ux-telemetry-r_ux_telemetry)), `experimental {sensors}` (the sensor track switch, [Sensor switch](#sensor-switch-r_fw_experimental)), `water_held` (`fn.water` is the held last-plausible reading), `water_held_age_ms` (only while held and the baseline was measured on this boot — an NVS-restored one has no time; the UI shows "🕒 measured 2 h ago"). Top-level `ext {<alias>:{type,<fields…>,age_s}}` (`type` first: `govee` / `victron_mppt` / `victron_battery`) (`R_FW_SENSORS`, [External sensors](#external-sensors-r_fw_sensors)) **only while** `exp_sensors` is on — off, the key is absent. **`?diag=1`** adds the diagnostics the page never shows by default ([Diagnostics on request](#diagnostics-on-request-r_fw_state_diag)): top-level `t` (= `uptime_ms`), `time.up` (the log's `up` now), `sd.last_seq`, `res {heap_free_kb,heap_min_kb,psram_free_kb,cpu_pct}` ([Device resources](#device-resources-deviceres)), `ble.probing` and `ble.unit_adv_seen_ms_ago` (ms since a sensor window last saw the bonded unit's own advert, `null` before the first sighting of the boot — the live check of the sleep indicator, no address), `display.lux`/`prox`/`motion` (the raw sensors; `motion` = the accel change in mg, `null` without a BMI270 reading) and `display.dfs`/`pm` (the live `esp_pm` config read each time — `true` when min < max, `pm` `"40-240"` MHz — `null` without PM: host, a build without `CONFIG_PM_ENABLE`). Built whole in one handler call into the `NET_JSON_MAX` (8192 B) buffer (a full 14-function snapshot is ~4.5 KB); overflow -> 500 + `LOG http: overflow`. |
+| `GET /api/state` | 200 JSON `{"fn","device"}` — `fn` = the `SNAP` object (every function the session holds a frame for, `codec_decode`d, `CODEC_CHARS` order); `device` = `pairing {state,address}`, `link {up,ready,rest,rest_next_s,last_snap_age_ms}` (`ready` = commands are accepted: the read pass is done and the heartbeat armed; `rest` = the power-save rest, `rest_next_s` = seconds to its next probe or `null`, `R_FW_BLE_REST`), `wifi {mode,ssid,ip,rssi,ap_ssid}`, `setup {pending}` (the first-time setup is not finished; `POST /api/setup` ends it), `control {writes}` (`POST /api/command` accepted: station mode), `uptime_ms`, `fw`, `ota {state,available_sha,progress_pct,error,channel}` (`R_FW_OTA`; `channel` `stable`/`latest`), `time {source,synced,boot}` (`R_FW_TIME`), `sd {state,total_mb,free_mb,dropped}` (`R_FW_SD_LOG`), `battery {pct,mv,usb,charging,runtime_min}` (`R_FW_BATTERY`; each `null` when unknown — host, QEMU), `auto_camper {enabled,state}` (`R_FW_AUTO_CAMPER`; `state` `idle`/`armed`/`restoring`), `thermostat {mode,target,t_ref,level,reason}` (`R_FW_THERMOSTAT_API`; only while a reference thermometer is selected; `mode` `OFF`/`AUTO`/`DEGRADED`/`STOPPING`/`WAITING`, `target` and `t_ref` in centi-degrees C, `level` the heater level, each `null` when unknown, `reason` the last step's reason code), `pi_wake {enabled,last_s,reason,halt_after_min,halt_soc_pct,halt_in_s,halted,halt_last_s,halt_reason,batt_low}` (`R_FW_PI_WAKE`, `R_FW_PI_HALT`; `last_s` = seconds since the last wake pulse, `reason` `ignition`/`manual`, both `null` before the first; `halt_in_s` = seconds until the automatic halt, `null` while driving, halted or with no limit; `halt_last_s`/`halt_reason` (`timer`/`battery`/`manual`) `null` before the first halt; `batt_low` = the battery guard's reading), `ble {mode,exp,idle_min,rest_poll_min}` (`R_FW_BLE_MODE`, `R_FW_BLE_EXP`, `R_FW_BLE_IDLE`, `R_FW_BLE_REST`; `mode` `hold`/`quiet`/`off`, `exp` `null` or `{on,phase_min,from,to,phase,remaining_ms}` — `phase`/`remaining_ms` `null` between phases; every `GET /api/state` counts as a viewer and holds the experiment, [BLE modes](#ble-modes-r_fw_ble_mode)), `display {state,brightness_pct,sensor,auto,prox_wake,motion_wake,min,max,offset}` (`R_FW_DISPLAY_WAKE`; the live members `null` without a screen — host build, QEMU), `ux {enabled}` (the "Send usage data" switch, [UX telemetry](#ux-telemetry-r_ux_telemetry)), `experimental {sensors,lora}` (the sensor track switch, [Sensor switch](#sensor-switch-r_fw_experimental), and the LoRa switch, [LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora)), `energy {boot,solar_wh,load_wh,batt_net_wh,load_a}` ([Energy counters](#energy-counters-r_fw_energy_counters)), `lora {module,joined,at_unanswered,sf,last_s,airtime_ms_24h,airtime_charged_ms_24h,unconfirmed_sends,downlinks_24h,uplinks,note,setup,has_ttn_keys,dev_eui}` **only while** `exp_lora` is on (`last_s` = seconds since the last uplink the module CONFIRMED with `+EVT:TX_DONE`; `airtime_ms_24h` counts only those, `airtime_charged_ms_24h` also what the budget charged without a confirmation; `setup` `none`/`keys_made`/`joined`/`ttn_keys`/`error` (`error` = `lora_dev` or `lora_ttn` could not be read or is unusable — corrupt, wrong size, or a `lora_ttn` the repair QR cannot show; only a missing `lora_dev` is ever regenerated), `has_ttn_keys`, `dev_eui` = the 16-hex DevEUI or `null`; no key is ever reported, `R_FW_LORA_SETUP`), `water_held` (`fn.water` is the held last-plausible reading), `water_held_age_ms` (only while held and the baseline was measured on this boot — an NVS-restored one has no time; the UI shows "🕒 measured 2 h ago"). Top-level `ext {<alias>:{type,<fields…>,age_s}}` (`type` first: `govee` / `victron_mppt` / `victron_battery`) (`R_FW_SENSORS`, [External sensors](#external-sensors-r_fw_sensors)) **only while** `exp_sensors` is on — off, the key is absent. **`?diag=1`** adds the diagnostics the page never shows by default ([Diagnostics on request](#diagnostics-on-request-r_fw_state_diag)): top-level `t` (= `uptime_ms`), `time.up` (the log's `up` now), `sd.last_seq`, `res {heap_free_kb,heap_min_kb,psram_free_kb,cpu_pct}` ([Device resources](#device-resources-deviceres)), `ble.probing` and `ble.unit_adv_seen_ms_ago` (ms since a sensor window last saw the bonded unit's own advert, `null` before the first sighting of the boot — the live check of the sleep indicator, no address), `display.lux`/`prox`/`motion` (the raw sensors; `motion` = the accel change in mg, `null` without a BMI270 reading) and `display.dfs`/`pm` (the live `esp_pm` config read each time — `true` when min < max, `pm` `"40-240"` MHz — `null` without PM: host, a build without `CONFIG_PM_ENABLE`). Built whole in one handler call into the `NET_JSON_MAX` (8192 B) buffer (a full 14-function snapshot is ~4.5 KB); overflow -> 500 + `LOG http: overflow`. |
+| `POST /api/setup` | Body exactly `{"done":true}` (fixed-shape parser), in every WiFi mode: ends the first-time setup -> 200 `{"ok":true}`; any other body 400 `bad_json`; a failed store write 500 `store`; any other method 405 `method`. |
 | `GET /api/wifi` | 200 JSON `{"mode","ssid","ip","rssi","last_error","reverted","scan":[{"ssid","rssi","secure"}]}` (the last scan's list, up to 16); `last_error` is why the last join failed (`"not_found"`, `"auth"`, `"other"`) or `null` (none yet, or cleared by new credentials or by joining); `reverted` is `true` after a failed replacement put the previous network back (`ssid` = that network, `last_error` = the replacement's reason, kept across its rejoin) until the next POST or forget — the web UI turns both into one sentence; in setup mode and while `ONLINE` it also asks for a fresh scan for the next GET (at most one per 30 s, held while BLE pairs). |
 | `POST /api/wifi` | Body exactly `{"ssid":"…","psk":"…"}` (fixed-shape parser). SSID 1–32 bytes, PSK 8–63 bytes (open networks unsupported) -> stored in the kv store, handed to the runner -> 200 `{"ok":true}`; else 400 `{"ok":false,"error":"json"|"ssid"|"psk"}`, a kv failure 500 `"store"`. |
 | `DELETE /api/wifi` | Forget the WiFi (-> `SETUP_AP`) -> 200 `{"ok":true}`. |
@@ -505,19 +533,20 @@ replies for a client that sends `Accept-Encoding: gzip` (`Vary: Accept-Encoding`
 | `GET /api/log?since=<seq>&max=<n>` | One page of the SD log for buspi's `calictl esp-ingest` (`R_FW_LOG_API`, [below](#sd-log-r_fw_sd_log)), in every WiFi mode: 200 `application/x-ndjson`, the record lines with `seq > since`, oldest first, at most `max` (default 2000) and what fits the 400 KB PSRAM page buffer, then the trailer `{"next":<last seq sent, or since>,"more":<bool>,"boot":<current boot>,"lost":<n>}`. 400 `bad_value` (any other query), 503 `no_card` / `sd_read`, 409 `busy`, 405 `method`. |
 | `POST /api/ota` | `{"action":"check"\|"install"}` (`R_FW_OTA`, [Firmware update from GitHub](#firmware-update-from-github-r_fw_ota)): starts the OTA task -> 200 `{"ok":true}` at once, progress in `/api/state` `device.ota`. Station mode only (403 `setup_mode`), 400 `bad_json`/`bad_action`, 409 `busy`, 503 `ota_unavailable` (host build, QEMU). `{"channel":"stable"\|"latest"}` (never together with `action`) stores the release channel (kv `ota_channel`) -> 200 `{"ok":true}`, the next check uses it, `device.ota.channel`; 400 `bad_value` for another string, 500 `store` (works without OTA I/O too). |
 | `POST /api/auto_camper` | `{"enabled":<bool>}` (exactly that object; serve's endpoint, `R_FW_AUTO_CAMPER`): saves the toggle -> 200 `{"ok":true,"auto_camper":<bool>}`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
-| `GET /api/thermostat`, `POST /api/thermostat` | The cabin thermostat (`R_FW_THERMOSTAT_API`). GET -> 200 `{rev,mode,target,runtime_min,ref,backup,out,outside_on,cfg,status}`: `target` in centi-degrees C, `ref`/`backup`/`out` the thermometer aliases or `null`, `cfg` all settings by name, `status` = `enabled`, `mode`, `reason`, `heater`, `t_ref`, `t_out`, `target`, `level`, `active` (the alias of the thermometer in use), `outside_active`, `end` (`run` while the heater is in a normal run that ends by itself, else `none`). The thermostat ships off (`enabled` false): while off, an AUTO request is refused with the reason `AUTO_REFUSED_DISABLED` and nothing is sent. POST takes any of `enabled`, `mode` (`AUTO`/`OFF`), `target` (500..3000, steps of 50), `runtime_min` (10..120), `ref`/`backup`/`out` (the alias of a configured Govee, or `null`), `outside_on`, `cfg` (an object of settings), `rev` and `confirm`; `enabled`, `mode` `AUTO` and `cfg` need `"confirm":true`. A `rev` other than the current one -> 409 `stale_rev`, except for a body that is only `mode` `OFF` (with or without `rev`): a stop is never blocked; every accepted POST counts `rev`; a POST without `rev` is accepted. All values are checked before anything changes. -> 200 the GET body. The settings, target, run time, aliases and `outside_on` persist (`th_cfg`), the switch too (`th_on`), the mode never (OFF after boot). Errors: 400 `bad_json` (also an unknown `cfg` key), 400 `bad_value`, 400 `unknown_sensor`, 400 `confirm_required`, 409 `stale_rev`, 403 `setup_mode` (POST; GET works in every mode), 500 `store`, 405. |
+| `GET /api/thermostat`, `POST /api/thermostat` | The cabin thermostat (`R_FW_THERMOSTAT_API`). GET -> 200 `{rev,mode,target,runtime_min,ref,backup,out,outside_on,night,cfg,status}`: `target` in centi-degrees C, `ref`/`backup`/`out` the thermometer aliases or `null`, `night` the night setting for the next AUTO request ([Night mode](#night-mode)), `cfg` all settings by name, `status` = `enabled`, `mode`, `reason`, `heater`, `t_ref`, `t_out`, `target`, `level`, `active` (the alias of the thermometer in use), `outside_active`, `end` (`run` while the heater is in a normal run that ends by itself, else `none`), `blocked` (the first entry check that blocks a start now, without the `AUTO_REFUSED_` prefix: `NOT_INSTALLED`, `FAULT`, `TIMER_ARMED`, `NO_CAMPING`, `IGNITION`, `NO_REFERENCE`; `null` when nothing blocks), `wait_left_s` (the seconds left of the night wait in mode `WAITING`, else `null`), `night` (the night setting of the current run; in mode `OFF` the stored one), `eta_s` and `eta_ends_first` (the time-to-target estimate in seconds and whether it falls after the end of the run time, [Time to target](#time-to-target); `null` and `false` without an estimate). `blocked` is computed at each GET from the current inputs, `wait_left_s` at each GET from the end of the wait; the other status members are the last step's (before the first step: `night` false). The thermostat ships off (`enabled` false): while off, an AUTO request is refused with the reason `AUTO_REFUSED_DISABLED` and nothing is sent. POST takes any of `enabled`, `mode` (`AUTO`/`OFF`), `target` (500..3000, steps of 50), `runtime_min` (10..120), `ref`/`backup`/`out` (the alias of a configured Govee, or `null`), `outside_on`, `night` (bool), `cfg` (an object of settings), `rev` and `confirm`; `enabled`, `mode` `AUTO` and `cfg` need `"confirm":true`. In one body, `enabled` applies before the AUTO request: `{"enabled":true,"mode":"AUTO","confirm":true}` switches the thermostat on and asks for AUTO. A `rev` other than the current one -> 409 `stale_rev`, except for a body that is only `mode` `OFF` (with or without `rev`): a stop is never blocked; every accepted POST counts `rev`; a POST without `rev` is accepted. All values are checked before anything changes. -> 200 the GET body. The settings, target, run time, aliases, `outside_on` and `night` persist (`th_cfg`; a record of an older firmware without the night members loads with them at their defaults), the switch too (`th_on`), the mode never (OFF after boot). Errors: 400 `bad_json` (also an unknown `cfg` key), 400 `bad_value`, 400 `unknown_sensor`, 400 `confirm_required`, 409 `stale_rev`, 403 `setup_mode` (POST; GET works in every mode), 500 `store`, 405. |
 | `POST /api/pi_wake` | `{}` or no body (`R_FW_PI_WAKE`, [Pi wake](#pi-wake-r_fw_pi_wake)): one manual wake, GPIO9 low 200 ms -> 200 `{"ok":true}`; 409 `busy` while a pulse is in progress. Station mode only (403 `setup_mode`), 400 `bad_json` (any other body). |
 | `POST /api/pi_halt` | `{}` or no body (`R_FW_PI_HALT`, [Pi halt](#pi-halt-r_fw_pi_halt)): one manual halt, GPIO8 low 500 ms -> 200 `{"ok":true}`; 409 `busy` while either Pi line is low. Station mode only (403 `setup_mode`), 400 `bad_json` (any other body). |
 | `POST /api/pi_wake_setting` | any non-empty subset of `{"enabled":<bool>,"halt_after_min":0..1440,"halt_soc_pct":0..100}`, each key once (`R_FW_PI_WAKE`, `R_FW_PI_HALT`): Satellite settings' "Wake on ignition" switch and the two shutdown selects -> kv `pw_ign` / `ph_min` / `ph_soc` -> 200 `{"ok":true,"pi_wake":<bool>,"halt_after_min":n,"halt_soc_pct":n}`. Station mode only (403 `setup_mode`), 400 `bad_json` (an unknown or repeated key, a wrong type, `{}`), 400 `bad_value` (out of range), 500 `store` (keys saved before the failing one stay saved). |
 | `POST /api/display` | `{"auto"?,"prox_wake"?,"motion_wake"?,"min"?,"max"?,"offset"?,"dfs"?}` (`R_FW_DISPLAY_WAKE`, [Screen wake and brightness](#screen-wake-and-brightness-r_fw_display_wake)): merged into the stored settings -> 200 `{"ok":true}`. `dfs` (bool) is not a setting: it switches the CPU's dynamic frequency scaling at once and is never stored (a boot starts at the sdkconfig default) — the touch-read A/B knob ([Touch read diagnostics](#touch-read-diagnostics)); `device.display.dfs`/`pm` show the live result. Station mode only (403 `setup_mode`), 400 `bad_json` (another key, a key twice, a non-bool flag, a non-integer percent), 400 `bad_value` (min 1–50, max 20–100, min < max, offset −50…50), 500 `store`; a body with only `dfs` stores nothing, and 500 `pm` when PM exists but the new config did not take. |
 | `POST /api/ux` | The web UI's usage beacon (`R_UX_TELEMETRY`, [UX telemetry](#ux-telemetry-r_ux_telemetry)): calictl's `web.ux_batch` shape and rules. Station mode only (403 `setup_mode`), body > 2048 B 413 (the core's 2 KB request buffer answers most of those first); "Send usage data" off -> 204, nothing recorded; not exactly the shape -> 400 `{"error":"bad_ux"}` (calictl's body); else one SD record per event and 204. Content-Type is not checked (a beacon string is text/plain). |
 | `POST /api/ux_setting` | `{"enabled":<bool>}` (exactly that object): Satellite settings' "Send usage data" switch -> kv `ux_on` -> 200 `{"ok":true,"ux":<bool>}`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
-| `POST /api/experimental` | `{"sensors":<bool>}` (exactly that object): Satellite settings' "Sensors" switch (`R_FW_EXPERIMENTAL`) -> kv `exp_sensors` -> 200 `{"ok":true,"sensors":<bool>}`; applied at once, no reboot; `LOG exp: sensors on\|off`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
+| `POST /api/experimental` | `{"sensors":<bool>}` or `{"lora":<bool>}` (exactly one of the two per body): Satellite settings' "Sensors" switch (`R_FW_EXPERIMENTAL`) -> kv `exp_sensors` -> 200 `{"ok":true,"sensors":<bool>}`, or Satellite settings' "LoRa" switch (`R_FW_LORA`; off by default, only for a satellite with a RAK3172) -> kv `exp_lora` -> 200 `{"ok":true,"lora":<bool>}`; applied at once, no reboot; `LOG exp: sensors on\|off` / `LOG exp: lora on\|off`. Station mode only (403 `setup_mode`), 400 `bad_json` (also both keys at once), 500 `store`. |
 | `GET /api/sensors` | `R_FW_SENSORS` ([External sensors](#external-sensors-r_fw_sensors)), every WiFi mode: 200 `{"configured":[{id,type,alias,last_seen_s,value,has_key}],"seen":[{id,type,model,rssi}],"scan":"ok"\|"paused"}` (`value` = the fields object while the last reading is < 10 min old, else `null`; `last_seen_s` `null` before the first reading) and a kick (a window soon). 404 `{"ok":false,"error":"disabled"}` while `exp_sensors` is off. |
 | `POST /api/sensors` | Exactly one of `{"add":<id>,"alias"?:"…","key"?:"<32 hex>"}`, `{"remove":<id>}`, `{"id":<id>,"alias":"…"}` (rename) — keys in any order, each once, ids 0–65535 -> 200 the `GET` body. 400 `bad_json` (not one of those shapes), `bad_alias` (not `[a-z0-9_-]{1,16}`, taken, or omitted for a type already configured), `bad_key` (not 32 hex digits), `key_mismatch`, `unknown_id` (not seen in the last 10 min for `add`; not configured for `remove`/rename), `full` (16); 500 `store`. Every WiFi mode (the setup hotspot too); 404 `disabled` while the flag is off. |
+| `POST /api/lora` | `{"forget":true,"confirm":true}` (exactly these two keys, in any order; no other body, no key upload: keys come by QR and downlink): Satellite settings' "Forget LoRa" (`R_FW_LORA_SETUP`) -> `cali_lora_forget()` switches `exp_lora` off, then erases `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys` -> 200 `{"ok":true}`; `device.lora` is gone from the next `GET /api/state`. 400 `confirm_required` (`confirm` missing or false), 400 `bad_json` (any other shape, also `forget` false), 403 `setup_mode` (station mode only), 404 `disabled` while `exp_lora` is off, 500 `store`. |
 | `GET /api/ble` | 200 the `device.ble` object `{"mode","probing","exp","idle_min","rest_poll_min","unit_adv_seen_ms_ago"}` (`R_FW_BLE_EXP`, `R_FW_BLE_IDLE`, `R_FW_BLE_REST`, [BLE modes](#ble-modes-r_fw_ble_mode)). |
 | `POST /api/ble` | any of `{"mode":"hold"\|"quiet"\|"off"}`, `{"probe":true}`, `{"exp_min":1..720,"from"?:0..23,"to"?:0..23}` (the night experiment; window default 22-06 Berlin time), `{"exp_min":0}` (stop it, back to `hold`), `{"idle_min":0..60}` (the idle policy, stored in NVS: `R_FW_BLE_IDLE`), `{"warm_ms":0..5000}` (the read pass's heartbeat warm-up, not stored: `R_FW_BLE_WARM`), `{"rest_poll_min":0..240}` (the power-save rest's probe interval, stored in NVS: `R_FW_BLE_REST`), `{"connect":true}` (leave the rest and reconnect after the 7 s cooldown: `R_FW_BLE_REST`); keys combinable, each once -> 200 the new `device.ble`. Station mode only (403 `setup_mode`), 400 `bad_json` (an unknown or repeated key, a wrong type, none of `mode`/`probe`/`exp_min`/`idle_min`/`warm_ms`/`rest_poll_min`/`connect`), 400 `bad_value` (another mode, a number out of range), 409 `no_time` (`exp_min` without a wall clock: no SNTP and no unit clock; nothing applied), 409 `busy` (a probe already runs or no bond), 409 `not_paired` (`connect` without a bond), 500 `store` (`idle_min` or `rest_poll_min` not stored). |
-| other method on `/api/state`, `/api/wifi`, `/api/command`, `/api/ota`, `/api/auto_camper`, `/api/thermostat` (GET/POST only), `/api/pi_wake`, `/api/pi_halt`, `/api/ble` (GET/POST only), `/api/pi_wake_setting`, `/api/display`, `/api/ux`, `/api/ux_setting`, `/api/experimental`, `/api/sensors` or `/api/pairing` | 405 `{"ok":false,"error":"method"}` |
+| other method on `/api/state`, `/api/wifi`, `/api/command`, `/api/ota`, `/api/auto_camper`, `/api/thermostat` (GET/POST only), `/api/pi_wake`, `/api/pi_halt`, `/api/ble` (GET/POST only), `/api/pi_wake_setting`, `/api/display`, `/api/ux`, `/api/ux_setting`, `/api/experimental`, `/api/sensors`, `/api/lora` or `/api/pairing` | 405 `{"ok":false,"error":"method"}` |
 | an OS captive-portal probe path (setup mode) | 302 `Location: http://192.168.4.1/` — `/generate_204`, `/gen_204` (Android), `/hotspot-detect.html`, `/library/test/success.html` (Apple), `/connecttest.txt`, `/ncsi.txt` (Windows), `/canonical.html`, `/success.txt` (Firefox) |
 | any other path | setup mode: 302 `Location: /`; station mode: 404 |
 
@@ -546,9 +575,9 @@ camper unit is paired yet* banner's *Pair…*, Device status → *Pair…*, or t
 `/api/pairing` answers in calictl's contract, so `calictl/webui/app.js` runs it unchanged. The
 endpoint is a thin mapping onto the runner the console drives — `start` = `pair`, `passkey` =
 `passkey N`, `reset` = `forget`, plus `cancel` — so the console and the page can never disagree
-(both read one emitter). It works over the **setup hotspot** too: there the UI opens on WiFi setup,
-which shows the unpaired banner's *Pair…* (or the wizard) right there, read-only (controls stay
-station-only). Only the device-specific hints differ from buspi's: no Pi scanner, daemon or
+(both read one emitter). It works over the **setup hotspot** too: the wizard's pairing step runs in
+station mode, and the *WiFi setup* screen (`#wifisetup`) shows the unpaired banner's *Pair…* (or the
+wizard) there, read-only (controls stay station-only). Only the device-specific hints differ from buspi's: no Pi scanner, daemon or
 `CALICTL_ADDR` advice; instead *until the satellite connects*, *stop a Raspberry Pi with calictl
 near the van*, *Saved on the satellite — survives a restart*. `radio_busy` is always `false` (no
 co-resident scanner). When a flow ends without a new bond — cancelled, failed (`error`) or reset —
@@ -650,9 +679,10 @@ angeben* (`WAKEUP_UNKNOWN`, which calictl answers too).
 **Screens.** Device and WiFi details are the calictl UI's ⋮ menu "Device status"; its Satellite
 card's *Satellite settings ›* opens the **Satellite settings** screen (satellite only,
 `#satsettings`): WiFi (current network, *Change network…*), Camper unit, Restore camping, Screen,
-Firmware update, Advanced (Send usage data, Sensors). Over the setup hotspot the app
-lands on the **WiFi setup** screen (`#wifisetup`: the join form, the pairing entry, the hotspot
-explained once); once the satellite runs in station mode it shows Home, unless the join was made
+Firmware update, Advanced (Send usage data, Sensors). Over the setup hotspot, and in station mode while `device.setup.pending` is true, the app
+lands on the **setup wizard** (`#setup/<step>`: welcome, wifi, pair, victron, sensors, home, done; over the
+hotspot only welcome and wifi exist, WiFi cannot be skipped). The **WiFi setup** screen (`#wifisetup`: the join form,
+the pairing entry, the hotspot explained once) stays reachable; once the satellite runs in station mode it shows Home, unless the join was made
 there (it keeps the result and the `http://calictl-esp.local` link). Every screen is in the URL hash
 (`#devicestatus`, `#satsettings`, `#wifisetup`, `#<function>`), so a reload stays on it; `#pair`
 opens the wizard. The `/device` recovery page (Endpoints, above) is the fallback if
@@ -865,6 +895,10 @@ stores it at once; the next check reads that release's manifest and an install d
 same release (the channel is read once per request, so a change mid-download cannot mix releases).
 Satellite settings' *Firmware update* box has a *Channel* select.
 
+After a downgrade, an older build uses its defaults for a stored record that it cannot read. The
+thermostat settings (kv `th_cfg`) are one such record: a build from before the night settings starts
+with the default thermostat settings, target and thermometer choices.
+
 | Partition | Offset | Size |
 |---|---|---|
 | `nvs` (bonds, WiFi, water baseline) | 0x9000 | 0x6000 |
@@ -911,6 +945,16 @@ record buffer) and the lwIP/WiFi buffers (`CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP`
 buffers) in PSRAM. With IDF's defaults they live in internal RAM, and large `/` and `/api/log`
 responses plus a download exhaust the internal heap (a failed download, dropped `/api/log` pages)
 while the 8 MB PSRAM sits unused ([evidence ledger](business-logic/evidence-ledger.md)).
+AES runs in software (`CONFIG_MBEDTLS_HARDWARE_AES=n`): the hardware AES would need internal
+{term}`DMA bounce buffers <DMA bounce buffer>` (up to 8 KB in and out) for each TLS record in PSRAM, and with about 21–26 KB of
+internal heap free that allocation fails and the download stops at 0 % (`esp-aes: Failed to
+allocate memory`, then `ota error: download`). At 240 MHz software AES is as fast.
+Static data lives in PSRAM too (`CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY`): IDF moves the `.bss`
+of lwIP, the WiFi driver and Bluetooth by itself, and `firmware/components/cali_core/linker.lf` moves
+`cali_core`'s (the web, console and SD-log buffers and the per-function `static` buffers). The
+platform-free core runs only in tasks, never in an interrupt or with the flash cache off, and hands no
+buffer to a DMA engine directly, so PSRAM is safe for it. This keeps about 85 KB of internal heap free
+at idle and about 40 KB at the low point of an OTA download.
 
 ## Time (`R_FW_TIME`)
 
@@ -1020,7 +1064,7 @@ try-lock: a concurrent caller, a full queue or a body that does not fit `CALI_SD
 
 | `ev` / `kind` | When | Fields |
 |---|---|---|
-| `diag` | every 60 s (app_main) | `heap_free`, `heap_min` (internal heap, B), `psram_free`, `cpu_pct` (since the previous diag), `stack_min` `{owner, sd, display, ota, console, lwip}` (high-water mark, B; `owner` is the NimBLE host task that runs `cali_core`), `wifi_rssi`, `ble_rssi` (`null` offline / unlinked), `link_up`, `uptime_s` |
+| `diag` | every 60 s (app_main) | `heap_free`, `heap_min` (internal heap, B), `psram_free`, `cpu_pct` (since the previous diag), `stack_min` `{owner, sd, display, ota, console, lwip, lora, lora_rx}` (high-water mark, B; `lora`/`lora_rx` only while the LoRa task runs; `owner` is the NimBLE host task that runs `cali_core`), `wifi_rssi`, `ble_rssi` (`null` offline / unlinked), `link_up`, `uptime_s` |
 | `screen` | every 60 s (app_main), once the screen has a reading | `lux`, `prox`, `motion` (the raw screen sensors, as `/api/state?diag=1` shows them; each `null` when unknown) |
 | `evt` `boot` | once per boot, when the card takes it | `reset_reason` (`esp_reset_reason`: `poweron`/`sw`/`panic`/`task_wdt`/`int_wdt`/`brownout`/…), `fw`, `boot`, `prev_up_s` (the previous boot's last diag uptime, RTC no-init RAM: survives a reset, `null` after power-on) |
 | `evt` `panic` | right after `boot`, when the previous boot panicked (`R_FW_PANIC_CAPTURE`, below) | `task` (the task running on the panicking core), `reason` (the exception, or abort()/assert's details; <= 47 chars), `bt` (up to 16 backtrace PCs, innermost first, space-separated bare hex) |
@@ -1177,12 +1221,11 @@ any of them and never cuts the heater's power. It starts the burner only on the 
 ### Disabled by default
 
 The thermostat ships **disabled**. The switch is the kv key `th_on` (missing = off). While it is
-off, every AUTO request is refused with `AUTO_REFUSED_DISABLED` (while a stop caused by switching it off still runs, the answer is `STOPPING`), nothing is sent, and the card
-shows *Thermostat disabled* with no AUTO switch. The switch changes only through the API, with an
-explicit confirmation:
+off, every AUTO request is refused with `AUTO_REFUSED_DISABLED` (while a stop caused by switching it off still runs, the answer is `STOPPING`) and nothing is sent. The switch changes only with an
+explicit confirmation. The card's confirmation window, asked at every AUTO start, sends both in one body:
 
 ```text
-POST /api/thermostat {"enabled": true, "confirm": true}
+POST /api/thermostat {"enabled": true, "mode": "AUTO", "confirm": true}
 ```
 
 Switching it off while AUTO runs is a safety stop with the cause `DISABLED`: the heater is stopped
@@ -1193,12 +1236,59 @@ normally, and an AUTO request is ignored with `STOPPING` until that stop is done
 The card sits on the Air heater screen of the satellite's web UI. It shows only while at least one
 configured Govee thermometer exists ([External sensors](#external-sensors-r_fw_sensors)), which needs
 the sensor track switch (*Sensors* in Satellite settings, [Sensor switch](#sensor-switch-r_fw_experimental))
-on, and not on a display-only satellite. It holds the {term}`AUTO (thermostat)` switch with its state (*level 4 • running*, *on backup*, *degraded*,
-*stopping*, *off*; *on backup* shows in mode `AUTO` while the backup is the active thermometer, *degraded* in mode `DEGRADED`), the {term}`reference thermometer` reading, the target with
-minus and plus buttons (0.5 °C steps, 5 to 30 °C), the run time (10 to 120 min in steps of 10,
+on, and not on a display-only satellite. It holds the {term}`AUTO (thermostat)` switch with its state (*level 4 · ends 23:40*, *Night · level 4 · no end*,
+*level 4 · running*, *on backup*, *degraded*, *waiting*, *stopping*, *off*; *on backup* shows in mode `AUTO` while the backup is the active thermometer (at night as *Night · level 4 · on backup · no end*), *degraded* in mode `DEGRADED`), the {term}`reference thermometer` reading, the target with
+minus and plus buttons (0.5 °C steps, 5 to 30 °C), the run time (10 to 120 min in steps of 10, or *Night*,
 shown only while the heater is off) and the last reason (`status.reason`) in plain words, in English and German.
-Starting AUTO asks for a confirmation: it starts the fuel-burning heater. Switching AUTO off sends
-`{"mode":"OFF"}` without `rev`, so a change made elsewhere never blocks the stop.
+The end time of a timed run is the unit's remaining run time (1702 `RunningTimeinAction`) added to the
+page clock; it shows only while the data is live (the link pill shows *live*), else the state reads *level 4 · running*. A run that ends by itself (`RUN_ENDED`, `CONTINUOUS_ENDED`, `NIGHT_WAIT_ENDED`) and the
+owner's own `USER_OFF` show no reason: the card simply shows AUTO off.
+
+The AUTO switch is always on the card. A tap with AUTO off opens a confirmation window every time:
+by day it names the target, the thermometer and the run time (with {term}`Dauerbetrieb` already on, it
+says that the thermostat takes it over and holds the target until switched off); with *Night* it names the step at the
+panel (switch on {term}`Dauerbetrieb` and answer its question with *Ja*). While `status.blocked` is set
+and AUTO is off, the switch is dimmed and a hint under it names the reason: *Camping mode is off* with a
+link to the camping mode screen (the card never switches camping mode on), *Choose a thermometer first*
+that opens the thermometer sheet, *Stop the timer first*, or the plain text for `IGNITION`, `FAULT` and
+`NOT_INSTALLED`. In mode `WAITING` the card shows the panel step and the time left of the night wait
+(`wait_left_s`). Switching AUTO off sends `{"mode":"OFF"}` without `rev` and without a confirmation, so a
+change made elsewhere never blocks the stop.
+
+### Time to target
+
+While mode `AUTO` heats, a line under the target says when the reference thermometer reaches the target:
+*18.0 °C in about 35 min (≈10:35)*, in 5-minute steps and never under 5 min. When that time falls after
+the end of the unit's run time (1702 `RunningTimeinAction`, not at night), the line says *The run time ends
+before 18.0 °C* instead; the run time left is the frame's value less the frame's age. Without an estimate,
+or while the data is not live (the link pill does not show *live*), the line is not there.
+
+The satellite takes one reference reading per minute while mode `AUTO` heats and draws a straight line
+from the oldest reading of the last 10 minutes to the newest (`calictl.thermostat.eta`, the C twin
+`cali_thermo_eta`, held equal by the golden vectors). It gives no estimate in the first 6 minutes of a run
+(the heater's dead time is 4 to 5 minutes), for a rise slower than 0.05 K per minute, or within 0.5 K of
+the target, where the controller holds the temperature. Each reading carries the time it was
+measured, not the time of the step. Leaving mode `AUTO` or a switch between the reference and the backup
+thermometer clears the readings, and a new target clears the estimate until the next step.
+
+The line is optimistic near the target and does not know the after-heat. In one run on the van (level 10, target
+14.0 °C, outside about 7 °C) the reference rose about 0.25 K per minute after the dead time; the controller
+lowered the level to 9 and 8 near the target, and the 30-minute run ended at 13.1 °C. The cabin then rose
+to 14.1 °C three minutes later and to 15.5 °C in total. So the card says "about", and a run that ends first
+says that the run time ends, never that the target is not reached.
+
+```{decision} The time to target is a straight line, computed on the satellite
+:id: AD_THERMOSTAT_ETA
+:status: accepted
+:tags: thermostat, esp32, ui
+:links: R_THERMOSTAT_ETA, R_FW_THERMOSTAT_API
+
+A straight line over the last 10 minutes fits the runs on the van (0.22 to 0.30 K per minute at levels
+4 and 10); three runs are too few for a model of the outside temperature or of the level. The satellite
+computes it because it has the readings all the time; a browser estimate would start again after each
+page load and show nothing for 6 minutes. A run that ends before the target shows the end of the run
+time, not "not reached": the after-heat can still carry the cabin to the target.
+```
 
 A tap on *Thermometer* opens the thermometer sheet with three groups of radio buttons, each showing
 alias, temperature and age of the reading (a stale reading is marked and cannot be picked):
@@ -1207,8 +1297,10 @@ alias, temperature and age of the reading (a stale reading is marked and cannot 
 - **Backup**: optional. The satellite switches to it when the reference is lost. The reference is not offered here.
 - **Outside**: optional. An outside thermometer for the outside compensation. The reference is not offered here.
 
-The sheet also holds the **Outside compensation** switch. The choices, the target, the run time and
-the switch persist (kv `th_cfg`); the mode never does.
+The sheet also holds the **Outside compensation** switch. The choices, the target, the run time, the
+night setting and the switch persist (kv `th_cfg`); the mode never does. A firmware older than the
+night settings does not read this record: after a downgrade (for example to `esp-stable`) it starts
+with the default settings, target and thermometer choices.
 
 ### Entering AUTO
 
@@ -1228,6 +1320,10 @@ these hold; otherwise the step answers `AUTO_REFUSED_<WHY>` and sends nothing:
 With the feature on and the link down (for example after the idle policy let it go), the AUTO request
 first wakes the link and waits up to 30 s (`CALI_THERMO_LINK_WAIT_MS`) for it; only then are the
 conditions checked, so the tap does not end in `AUTO_REFUSED_NO_LINK` while the link comes up.
+In mode OFF the satellite does not re-read `1702`: an idle heater sends no notification, so its
+reading soon becomes older than `heater_stale_ms`. The AUTO request then holds the session, which reads
+`1702` at once, and waits for the fresh reading in the same 30 s, so the tap does not end in
+`AUTO_REFUSED_STALE_HEATER`.
 
 If a safety stop (overheat, target exceeded, low battery, feature switched off) is still pending or
 waits for the link, a new AUTO request is ignored with `STOPPING`. The owner's own pending stop is
@@ -1236,8 +1332,52 @@ dropped by a valid AUTO request: the last request of the owner wins.
 What happens next depends on the heater:
 
 - **Heater off**: the satellite sends `runtime` (the run time of the card), `level` (the demand's first level) and `power on`, in this order. The reason is `START`. The `power on` is checked against the next fresh reading of 1702 and retried at most once, and only while the entry conditions still hold. If the heater does not start, the reason is `START_NOT_CONFIRMED` and AUTO ends.
-- **Heater running** (normal operation): AUTO takes it over without any command (`ADOPT_RUN`). The run time already set stays; the controller starts at the heater's current level without a jump.
-- **Continuous heating** already on: AUTO takes it over without any command (`ADOPT_CONTINUOUS`) and regulates the level only. The satellite never starts continuous heating.
+- **Heater running** (normal operation): AUTO takes it over (`ADOPT_RUN`). The run time already set stays, and no `runtime` is sent. The controller starts from the demand; with a valid reference and a demand that differs from the heater's current level, the satellite sends `level` at once.
+- **Continuous heating** already on: AUTO takes it over (`ADOPT_CONTINUOUS`) and regulates the level only. The controller starts from the demand; with a valid reference and a demand that differs from the heater's current level, the satellite sends `level` at once. The satellite never starts continuous heating.
+
+`status.blocked` tells the card before the tap whether a start is possible now. Each
+`GET /api/thermostat` runs the checks 3 to 6 on the last heater reading (whatever its age) and on
+the last-known frames, also from an earlier link while the link is down or rests: camping mode
+(1202 `State`), shore power (1602 `StateLandAfs`) and the ignition (1004 `TerminalOneFive` or 1202
+`Enable`; with neither frame the ignition is unknown, which blocks). It names the first check that
+fails. After a reboot no frame is known until the first link. The checks 1, 2
+and 7 are not in it: the confirmation switches the feature on, the request wakes the link, and a
+warm cabin is no fault.
+
+### Night mode
+
+With `night` set (`POST /api/thermostat {"night":true}`), an AUTO request prepares a night of
+{term}`continuous heating <Dauerbetrieb>` that the owner starts at the unit's panel; the satellite
+never starts it. The request skips check 7, and the setting is latched for this run:
+
+- **Heater off**: the satellite sends only `level` (the demand's first level), so the panel's
+  *Dauerbetrieb* starts at that level, and enters mode `WAITING` (`WAITING_FOR_CONTINUOUS`).
+  A failed `level` is not repeated.
+- **Heater running** (an immediate run): mode `WAITING` without any command.
+- **Continuous heating** already on: AUTO takes it over at once (`ADOPT_CONTINUOUS`).
+
+In mode `WAITING` the satellite sends nothing. Continuous heating that is first seen in the wait and
+that a 1702 reading taken `night_confirm_ms` later still shows is taken over (`ADOPT_CONTINUOUS`,
+then mode `AUTO`); a shorter one keeps the wait with its remaining time. Without continuous heating,
+the wait ends after `night_wait_ms` with `NIGHT_WAIT_ENDED`; continuous heating first seen after
+that time is not taken over. An owner OFF or the feature switched off stops the heater that runs: an immediate
+run with `power off`, continuous heating still in its confirm window with `permanent off`; an off heater
+gets no command. With the link down or the 1702 reading stale, the satellite stops what the last
+fresh reading of the wait showed: the stop waits in mode `STOPPING` and goes out on the next fresh
+reading only if the heater is unchanged. A heater fault (also
+ErrorCode 1, low battery) ends the wait without a command. `status.wait_left_s` counts the wait down
+at each GET.
+
+In mode `WAITING` the satellite steps every 5 s (`CALI_THERMO_WAIT_STEP_MS`, or every `period_ms` when
+that is shorter), so it samples the confirm window from the last 1702 frame every few seconds. The
+unit sends a 1702 notification when the panel starts or ends continuous heating (the night-flow test
+in [cooler-airheater.md](business-logic/cooler-airheater.md)), so a panel start is seen within a step;
+the regular 1702 re-read of the held session is the fallback for a missed notification. The control law still runs
+only once per `period_ms`.
+
+While the satellite regulates continuous heating (night or not), it never stops the heater for being
+warm: instead of `OVERHEAT` or `TARGET_EXCEEDED_AT_MIN_LEVEL` it holds `min_level`
+(`HOLD_AT_MIN_LEVEL`).
 
 ### How it regulates
 
@@ -1246,8 +1386,8 @@ regulate. Once per `period_ms`, and never while a command waits for its result, 
 demand `u = p + i + u_out` in milli-levels from the error `target - t_ref`:
 
 - `p` is `kp` times the error.
-- `i` is the integrator (`ki` per minute of error). It is frozen when a step comes more than three periods late, and while the demand is at a limit with the error pushing further (anti-windup). On a start, a switch between reference and backup, a return from degraded mode and a target change the integrator is set so that the demand equals the current level: no jump.
-- `u_out` is the outside {term}`feed-forward <outside compensation>`: `ka` per degree below the target at the outside thermometer, capped at `u_out_max`. It is zero when the switch is off or the outside reading is invalid (reason `OUTSIDE_INACTIVE` when it is switched on but not available).
+- `i` is the integrator (`ki` per minute of error). It is frozen when a step comes more than three periods late, and while the demand is below `min_level` or above level 10 with the error pushing further (anti-windup). When AUTO takes over a running heater, the integrator starts at 0, so the demand starts at `p + u_out` and a valid reference can send a different level at once. When the controller switches between reference and backup or returns from degraded mode, the integrator is set so that the demand equals the current level: no jump. A target change keeps the integrator, so `p` follows the new target at once.
+- `u_out` is the outside {term}`feed-forward <outside compensation>`: `ka` per degree below the target at the outside thermometer, capped at `u_out_max`. It is zero when the switch is off or the outside reading is invalid (reason `OUTSIDE_INACTIVE` when it is switched on but not available). When the outside reading appears or disappears while the level is known, its share moves into the integrator, so the demand does not jump; after that, `u_out` follows the outside temperature.
 
 The wanted level is the demand divided by 1000 and rounded, kept between `min_level` and 10. The
 level changes only when the demand is at least `500 + hyst` milli-levels away from the current level
@@ -1260,8 +1400,9 @@ target (`OVERHEAT`), and the reference more than `band_hi` above the target at t
 `hot_hold_ms` (`TARGET_EXCEEDED_AT_MIN_LEVEL`). A stop sends `power off` (or `permanent off` for
 continuous heating) and ends AUTO.
 
-While AUTO runs, the thermostat holds the BLE session: no power-save rest and no idle demotion, and
-1702 is read again every minute. When AUTO is off, the session behaves as before.
+While AUTO runs, and during the night wait, the thermostat holds the BLE session: no power-save rest
+and no idle demotion, and 1702 is read again every minute. The night wait needs fresh 1702 readings
+to see the continuous heating started at the panel. When AUTO is off, the session behaves as before.
 
 ### Failures
 
@@ -1273,15 +1414,15 @@ While AUTO runs, the thermostat holds the BLE session: no power-save rest and no
 | A reading outside -40 to 60 °C, or one that changes more than 3 °C per minute against the last accepted one (the time difference is floored at one minute, so up to 3 °C between two quick adverts is accepted) | The reading is invalid; the sensor counts as lost | as above |
 | The heater reports ErrorCode 2, 3 or 5 to 15 | AUTO ends, no command, never retried | `FAULT_<n>` |
 | The fault bit with ErrorCode 0, or the heater reported as not installed during a run | AUTO ends, no command | `HEATER_UNKNOWN` |
-| ErrorCode 4 (heater locked until the van has driven) | AUTO ends, no command. A new AUTO request is refused until the lock clears | `LOCKED`, then `AUTO_REFUSED_FAULT` |
+| ErrorCode 4 (heater locked until the van has driven) | AUTO ends, no command. A new AUTO request is refused until the lock clears. The unit can clear the code within a minute, so a new `1702` frame with a fault steps at once, not at the next `period_ms` | `LOCKED`, then `AUTO_REFUSED_FAULT` |
 | ErrorCode 1 (low battery, the heater's own report) | A normal stop, then AUTO is off | `BATTERY_LOW` |
 | The second battery stays below `batt_min_dv` for `batt_hold_ms` | A normal stop, then AUTO is off | `BATTERY_LOW` |
 | Someone else changes the heater (the unit's panel, the phone app, the normal level slider of the satellite) | AUTO ends and leaves the heater as it is | `FOREIGN_CHANGE` |
-| The run time ends or the heater stops by itself | AUTO ends | `RUN_ENDED` / `CONTINUOUS_ENDED` |
+| The run time ends or the heater stops (also while a level command of the satellite waits for its readback) | AUTO ends | `RUN_ENDED` / `CONTINUOUS_ENDED` |
 | The 1702 reading is older than `heater_stale_ms` | No command until a fresh reading; AUTO stays on | `HEATER_UNKNOWN` |
 | A command is not applied after one retry | AUTO ends | `NOT_APPLIED` |
 | The link is down when a stop is due | Mode `STOPPING`. After the link is back, a heater that the satellite left running is stopped; a heater that changed meanwhile is left alone | `STOPPING`, then `STOP_DROPPED` / `RUN_ENDED` / `CONTINUOUS_ENDED` |
-| The owner taps AUTO off | A normal stop of what the satellite left running | `USER_OFF` |
+| The owner taps AUTO off | A normal stop of what the satellite left running, also when a level command fails in the same step | `USER_OFF` |
 | The satellite reboots | Mode `OFF`, and no blind resume: the mode is never stored. An immediate run ends by itself; continuous heating continues at its last level | none |
 
 A level command is never sent when the link is down. A command that returned `BUSY` or
@@ -1326,6 +1467,9 @@ A level command is never sent when the link is down. A command that returned `BU
 | `USER_OFF` | The owner stopped AUTO |
 | `STOPPING` | A stop is sent or waits for the link |
 | `STOP_DROPPED` | The heater changed before the stop; it was not stopped |
+| `WAITING_FOR_CONTINUOUS` | Night mode: waits for continuous heating started at the panel |
+| `NIGHT_WAIT_ENDED` | Night mode: no continuous heating within `night_wait_ms`; AUTO ends |
+| `HOLD_AT_MIN_LEVEL` | Continuous heating above the target: the level stays at `min_level`, no stop |
 
 ### Settings
 
@@ -1351,6 +1495,8 @@ A level command is never sent when the link is down. A command that returned `BU
 | `batt_hold_ms` | 300000 | ms | time below that limit before the stop |
 | `verify_ms` | 10000 | ms | time before an unconfirmed command is checked |
 | `runtime_min` | 120 | min | run time of an AUTO start from off (10 to 120) |
+| `night_wait_ms` | 300000 | ms | night mode: longest wait for continuous heating at the panel |
+| `night_confirm_ms` | 30000 | ms | night mode: continuous heating counts after it held this long |
 
 The target is not a setting of this table: 500 to 3000 centi-°C in steps of 50 (default 2000).
 
@@ -1513,6 +1659,8 @@ The CoreS3 screen is dark when nobody uses it:
   normal parked data-age sawtooth (2 s -> ~31 s) never wakes it; a lost link still does.
 - **A wake tap is swallowed:** a press that starts while the screen is dim or off only wakes it; LVGL
   sees no press until that finger lifts (`cali_display_touch_gate`, inside `display.c`'s touch read).
+  Only a successful read without a touch counts as lifting: a failed read is "released" for that tick
+  but the press, its swallow and the LoRa screen's 3 s count go on.
 - **A failed touch read never aborts** (`R_FW_TOUCH_NO_ABORT`): esp_lvgl_port's own touch read
   `ESP_ERROR_CHECK`s the FT5x06 I2C read, and the touch controller shares the board package's I2C bus
   with the LTR-553 and AXP2101 reads and the init probes, so one transient error would abort the
@@ -1525,7 +1673,7 @@ The CoreS3 screen is dark when nobody uses it:
   that fails touch is off (logged; the hand-near wake still works), never back on the aborting read.
   The I2C driver serializes the devices on the bus itself (`bus_lock_mux`), so the LTR (owner task,
   under the display lock) and AXP (owner task, outside it) reads need no LVGL lock; they keep their
-  10 ms timeouts, the touch read waits without one (`esp_lcd` I2C default).
+  30 ms timeouts, the touch read waits without one (`esp_lcd` I2C default).
 - **Brightness** follows the room light: a log curve from `min` at ≤ 1 lux to `max` at ≥ 1000 lux,
   an EMA on log10(lux) with a 3 s time constant, and the applied level moves only on a change of
   more than 15 % (a 1 s headlight sweep does not move it). Dim = 30 % of the on level, at least 3 %.
@@ -1543,7 +1691,7 @@ The CoreS3 screen is dark when nobody uses it:
   reaches no ESP GPIO. The lux formula is Lite-On's family formula (cited in `display.c`); absolute
   lux behind the cover glass is uncalibrated.
 - **Motion wake:** the BMI270 accelerometer (I2C `0x69` on the same bus — M5Unified's CoreS3 address)
-  is read every tick next to the LTR-553 (`ACC_X..Z` `0x0C..0x11`, ±8 g, 10 ms timeout). The model's
+  is read every tick next to the LTR-553 (`ACC_X..Z` `0x0C..0x11`, ±8 g, 30 ms timeout). The model's
   `motion` is the length of the change of the accel vector against the previous read, in mg; above
   `DISPLAY_MOTION_WAKE_MG` (200) for two reads in a row it is a wake — the rising edge only: it re-arms
   only after every read stayed below `DISPLAY_MOTION_STILL_MG` (50) for `DISPLAY_MOTION_REARM_MS` (10 s),
@@ -1594,6 +1742,43 @@ pins the CPU at 240 MHz (`{"dfs":true}` back to 40–240); it is not stored, and
 report the **live** `esp_pm` config, so a boot's DFS state is a fact, not a flag. Both are debug
 aids, to be removed once the cause of the NACKs is known.
 
+The owner task's sensor reads (LTR-553, BMI270, AXP2101) wait at most `LTR_IO_MS` = 30 ms per
+transfer. The I2C driver's wait ends on a FreeRTOS tick boundary (`CONFIG_FREERTOS_HZ` 100), so a
+1-tick wait can end microseconds after a transfer starts and fail it with `ESP_ERR_TIMEOUT`; 3 ticks
+leave at least 20 ms. A failed sensor read is counted per device, and
+`LOG display: sensor read errors ltr n ERR bmi n ERR axp n ERR` (the counts since boot and each
+device's last error) comes at most once per `CALI_DIAG_PERIOD_MS` when a count grew.
+
+At init, `i2c_master_bus_reset` clocks the bus free before the probes: a reset in the middle of a
+transfer does not reset the I2C chips, and a chip that still holds SDA makes the probes fail
+(`display: unavailable (axp2101)`).
+
+## LoRa screen (`R_FW_LORA_SCREEN`)
+
+The status screen has one hidden second screen, for the LoRa setup ([LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora)):
+
+- **Open:** press the lit screen for 3 s (`DISPLAY_LORA_PRESS_MS`) without lifting the finger. It
+  opens only while `exp_lora` is on and the module answers. The press that wakes a dim or dark screen
+  never counts, however long it is held (it is swallowed as before); lift and press again.
+- **What it shows:** before the van has the TTN keys, the ESP makes a new transfer key (and the AppKey
+  on the first open) and shows the **setup QR**; after, it shows the **repair QR**. Until the QR text
+  exists, and while a new transfer key is still being made, it shows "Preparing…" instead of a QR, so an
+  old transfer key is never shown. Beside the QR: "Scan with the Open California remote app" and one
+  status line — joined or not, and how long ago the module confirmed the last uplink with `TX_DONE`
+  (never a send without that confirmation). German or English as the status rows.
+- **Rotation** (a lost phone or a leaked key): while the repair QR shows, press 3 s again. The ESP makes
+  a new transfer key (the AppKey stays) and shows the setup QR.
+- **Close:** a tap, 120 s after it opened or rotated (`DISPLAY_LORA_SHOW_MS`), or the module going away.
+  The backlight is at 100 % while it is up.
+- **The QR:** alphanumeric mode, error correction L, whole pixels per module (`240 / (modules + 8)`), at
+  least a 4-module white quiet zone, black on white, in a 240 × 240 box on the left. `display.c` calls
+  LVGL's bundled `qrcodegen` itself (`CONFIG_LV_USE_QRCODE=y` compiles it): the `lv_qrcode` widget of
+  LVGL 9.6.0 encodes in byte mode at error correction M and keeps a copy of the text on the heap.
+- **Keys stay off the wire:** the QR text exists only for the paint (polled once a second, repainted
+  only when it changes, wiped at once; a 32-bit hash tells a change). The bitmap is cleared when the
+  screen closes. While it is up, the console `screenshot` sends no frame
+  (`LOG display: screenshot failed (lora screen)`), and no log line carries any part of the text.
+
 ## Battery (`R_FW_BATTERY`)
 
 The {term}`CoreS3` has a 500 mAh cell. With WiFi + BLE linked it drains about 0.33 %/min (~100 mA),
@@ -1633,6 +1818,91 @@ is touched. No chip, a failed read or no screen (host, QEMU): every member `null
    log and the diag records never read it. ``POST /api/experimental {"sensors":bool}`` applies at
    once; ``device.experimental.sensors`` reports it; the boot log prints ``LOG exp: sensors on|off``.
 ```
+
+## Energy counters (`R_FW_ENERGY_COUNTERS`)
+
+The requirement lives with the API: see {doc}`firmware-api` (`cali_energy.h`). Once a second the owner
+task integrates three counters since boot at the second battery's voltage: `solar_wh` (the Victron
+chargers' positive battery-side current plus the unit's own solar when installed), `load_wh` (the
+house load of [signals.md](business-logic/signals.md#house-load-derived), the C twin of the web UI's
+`houseLoad()`, parity-tested against `calictl.semantics` over random frames) and `batt_net_wh` (the
+second battery's signed net current). A step counts only with the unit's energy frame from the current
+link (with the second battery's voltage and current in it) and a session update in the last 60 s. The
+chargers' share of `solar_wh` also needs every configured charger's reading at most 60 s old (the
+unit's own solar counts without them). `load_wh` needs that, a value for every installed unit source
+(DC-DC, shore, solar), and a result of at least -0.5 A. A gap of more than 5 s between two ticks is not
+integrated into any counter. The ESP has no wall clock without the router, so a reader takes
+differences between readings of the same `boot`: a lost reading lowers the resolution, never the total.
+The counters are 24-bit deci-Wh (the LoRa uplink's width) and wrap.
+
+## LoRaWAN telemetry (`R_FW_LORA`)
+
+The requirement lives with the API: see {doc}`firmware-api` (`cali_lora.h`). **Experimental, off by
+default.** Why: the router (WiFi + LTE) and the Pi draw too much to run all the time while the van is
+parked; a RAK3172 {term}`LoRaWAN` module on the satellite sends battery, water, solar and the energy
+balance through The Things Network's gateways while they stay off, and the phone reads it from The
+Things Stack far away. The module runs in class C, so it listens all the time and a downlink arrives
+within seconds; a downlink that switches camping mode on (and with it the router) is a later step.
+
+- **Hardware:** M5Stack Module LoRaWAN-EU868 (RAK3172, RUI3 AT firmware) on the CoreS3's M-Bus: UART1
+  TX GPIO43, RX GPIO18, RST GPIO5 (DIP 1, 7 and 12 on). GPIO43 is UART0 TX: the ROM bootloader prints
+  its banner into the module at every reset; the driver resets the module before use. GPIO18 is also
+  Port C. With the switch off, `cali_lora` never installs the UART or drives RST.
+- **Setup:** an application and one device per van in The Things Stack (OTAA, EU868, class C), the
+  generated formatter `firmware/components/cali_lora/ttn_formatter.js` as the uplink formatter
+  (`python3 -m tools.gen_lora_dict` writes it from the dictionary, with the same decoder as the remote
+  app's `calictl/webui/lora_decode.js`; CI checks both are fresh), and the
+  {term}`Storage Integration`. The device uses the module's own DevEUI. Opening the setup on the satellite makes
+  the AppKey (once) and a new transfer key; the module then gets the AppKey and joins again. The setup
+  QR carries the DevEUI, the AppKey and the transfer key to the phone. Without these keys the satellite
+  does not join and notes "no keys: open the LoRa screen". For the bench, `lora keys <deveui> <joineui>
+  <appkey>` still works when no setup was opened (the next join attempt uses them). Then the "LoRa" switch in Satellite settings, `lora on` or `POST /api/experimental {"lora":true}`.
+- **Key transfer:** the phone sends the TTN keys (cluster, application and device IDs, a read key and a
+  command key) back on FPort 12, encrypted with the transfer key and cut into fragments of at most
+  51 bytes (the sequence byte and 50 bytes; only the last fragment is shorter). The satellite puts the fragments together, decrypts them and stores the keys only when the
+  tag is valid and the keys can be shown as the repair QR. It answers on FPort 12 as soon as the daily
+  airtime and downlink budgets have room (a full budget waits, it costs no try), ahead of the other ports: status 0 (stored), 1 (bad tag or unusable keys),
+  2 (fragments missing, with a bitmap of the received ones) or 3 (no transfer key). A fragment that
+  arrives without a transfer key while the TTN keys are stored gets status 0 again (the earlier answer
+  was lost), not 3. A fragment that arrives while the status 0 of its transfer key still waits to go
+  out is the app's probe or resend: the satellite keeps the status 0 and answers nothing else. When the module does
+  not confirm the answer with `+EVT:TX_DONE`, the satellite sends it again after at least a minute, and
+  gives up after five tries. Ten minutes without an answer, the app sends the last fragment again as a
+  probe: the satellite answers with the bitmap of what it has, or with status 0. The app sends at most
+  8 setup downlinks in 24 hours. After the module confirms a status-0
+  answer, the satellite erases the transfer key, unless a new setup has made a new one in the meantime.
+  A new setup start drops a pending status-2 answer only. Every fragment counts as one of the day's downlinks. From then on
+  the LoRa screen shows the repair QR (the TTN keys) instead of the setup QR. No key and no fragment
+  byte goes into a log line (the module's `+EVT:RX_…:12:` line is logged as `<redacted>`). Forget LoRa
+  erases the keys, and the LoRa task erases them once more on its next pass with the switch off, so a key
+  that it was writing at the same moment does not survive. A setup start that stored a new AppKey but
+  failed to store the transfer key still makes the module join again when a later start succeeds; keys
+  stored with `lora keys` after the module was found are taken on the next pass. When LoRa is switched off, the task forgets the module state, so switching
+  it on again starts like the first use.
+- **Uplinks:** port 2 (50 B: the raw energy and water frames, the first Victron charger, the battery
+  sense (each 0xFF when its reading is older than 60 s), the
+  [energy counters](#energy-counters-r_fw_energy_counters)) at the interval the airtime budget allows:
+  at most as many a day as fit in 60 % of 25 s at the current spreading factor, in any rolling 24 h
+  (with 13 B of LoRaWAN overhead: 118 ms on air at SF7 = every 681 s, 698 ms at SF10 = every 69 min,
+  2793 ms at SF12 = 5 a day, every 4.8 h; never below 10 min); port 3 (the
+  functions whose raw frame changed, every one at least every 12 h); port 4 (the general frame, uptime
+  and firmware version) daily and after each join. The formatter returns raw fields only, so the
+  reader interprets them with `semantics.js` like the WiFi path.
+- **Honest status:** airtime counts as on air only when the module confirms a send with
+  `+EVT:TX_DONE`; a send without it is charged to the budget but shown apart (so is each join request: 23 B, 1482 ms
+  at SF12; with no room the join waits, `note` "join waits: airtime budget"; without stored keys no
+  join is sent, `note` "no keys: console lora keys"), and its port 3 functions
+  and port 4 stay pending. With 8 downlinks in the last 24 h no uplink goes out until one ages out. Three AT commands in a
+  row without an answer reset the module and drop `joined`; while it stays silent the task retries every
+  10 min. A spike bench run showed why: a hung module that the old firmware counted as "sending"
+  looked joined for three days while nothing reached the network.
+- **Forget LoRa:** Satellite settings shows a LoRa box while the switch is on (the module, joined, the last
+  uplink the module confirmed, airtime confirmed and charged, the setup state in words, the DevEUI, the
+  hint to hold the screen for 3 seconds and scan the code with the remote app). "Forget LoRa" asks in the
+  page, then posts `POST /api/lora`; the box disappears because the switch is off. The device stays
+  registered at The Things Network until the owner deletes it there. The console has `lora forget`.
+- **Not yet:** the PWA source switch and its LoRa badge, the pairing of the phone, the camping-mode command, and a van test of
+  antenna and coverage.
 
 ## External sensors (`R_FW_SENSORS`)
 
@@ -1831,8 +2101,9 @@ record's `stack_min`. Its high-water mark on the van is 5180 B free of 8192.
 
 **Memory and network.** `CONFIG_SPIRAM=y` (8 MB, quad, 80 MHz); mbedTLS and the lwIP/WiFi buffers
 in PSRAM (`CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`, `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP`, 8 static WiFi
-TX buffers) so the internal heap is not exhausted
-([Firmware update from GitHub](#firmware-update-from-github-r_fw_ota)); `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040`
+TX buffers) so the internal heap is not exhausted, and software AES (`CONFIG_MBEDTLS_HARDWARE_AES=n`,
+no internal DMA buffers), and the static `.bss` of the network stack and `cali_core` in PSRAM
+(`CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY`, `cali_core/linker.lf`) ([Firmware update from GitHub](#firmware-update-from-github-r_fw_ota)); `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040`
 (the UI transfer speed, [Endpoints](#network-wifi-setup-and-the-web-ui)); `CONFIG_LWIP_MAX_SOCKETS=6`;
 `CONFIG_ESP_WIFI_NVS_ENABLED=n` (the credentials are in the firmware's kv store);
 `CONFIG_LWIP_DHCP_GET_NTP_SRV=y` with two SNTP servers ([Time](#time-r_fw_time)).
@@ -1869,7 +2140,7 @@ can be checked on the CoreS3 only. They are the expected behaviours; none of the
 1. **BLE + WiFi coexistence.** The S3 shares one 2.4 GHz radio (IDF's default software coex).
    With the setup hotspot up and a phone attached, the BLE link must hold, the `1003` heartbeat keep
    its period and `SNAP`s keep their cadence; the same while the station scans and joins.
-2. **Captive portal per OS.** Join `calictl-esp-setup` from iOS, macOS, Android and Windows: the
+2. **Captive portal per OS.** Join `calictl-esp-XXXX` (scan the display's QR code, or type its password) from iOS, macOS, Android and Windows: the
    sign-in sheet should open the page by itself (DNS answers everything with `192.168.4.1`, probe
    paths get a 302). Record per OS whether it pops, and that `http://192.168.4.1` always works.
 3. **mDNS.** `http://calictl-esp.local` from iOS, macOS and Android (Android's `.local` support
@@ -1972,6 +2243,20 @@ collected here. `firmware/README.md` has the human-readable version of the same 
    ``/api/state`` in ``localStorage`` and shows it at start, read-only behind the neutral
    "Connecting…" banner with its age, until the first live poll answers.
 
+.. req:: The public remote app talks only to The Things Stack
+   :id: R_UI_REMOTE_APP
+   :status: open
+   :tags: web, lora
+
+   The public remote app talks only to The Things Stack, never to the owner's router, Pi or satellite; it sets a van up for LoRa from a full-rights application key that it deletes afterwards, and reads the van's uplinks with a read key.
+   It sends a key only to a cluster host under ``thethings.network`` or ``thethings.industries``. A
+   TTS call or body read that does not end within 20 s fails as a timeout, and the next poll goes on.
+   An uplink at the read cursor is acted on once. During the setup it pushes at most 8 downlinks in
+   24 h per van, counted across setups, and holds the rest until there is room; a push without an
+   answer stays counted; 10 min without a confirmation it pushes the last
+   fragment again as a probe; while it asks for a new scan, the van's repair QR with the stored keys
+   ends the setup as a success, and a repair QR always ends a setup that waits.
+
 .. req:: The web UI tells a sleeping van from an unreachable backend
    :id: R_UI_LINK_STATE
    :status: implemented
@@ -1979,7 +2264,8 @@ collected here. `firmware/README.md` has the human-readable version of the same 
 
    One link state shall drive both the status pill and one persistent ``role=status`` banner above
    the page: *live* (no banner); *asleep* (the backend answered, the unit is offline: amber "van
-   asleep" with the last data's time and age); *unpaired* (offline, no data ever and the backend
+   asleep" banner with the last data's time and age, pill "unit offline" / DE "Einheit offline" —
+   naming the camper unit, so the pill tells a sleeping unit from an unreachable backend at a glance); *unpaired* (offline, no data ever and the backend
    reports no paired unit: neutral "Not paired yet — no data", pill "not paired", never "asleep");
    *connecting* (no answer yet in this page life, e.g. a
    restored snapshot: neutral "Connecting…", never red); *unreachable* (no answer for 15 s, timed
@@ -1989,6 +2275,18 @@ collected here. `firmware/README.md` has the human-readable version of the same 
    connection is retried; the first good answer clears the red banner. The banner's text changes
    only with the state; its age ticks in an ``aria-hidden`` child. No buttons, except on the
    satellite's rest card (``R_UI_REST_CARD``).
+
+.. req:: The web UI keeps a failed write visible and takes one write per tap
+   :id: R_UI_VISIBLE_FAILURES
+   :status: implemented
+   :tags: web, esp32
+
+   A failure reason shall stay on screen until the owner acts: an error toast stays until it is
+   dismissed (a tap, or its "Dismiss" button from the keyboard), while confirmations still go after
+   4 s; a failed pairing request is a row in the pairing card until the next request; a satellite
+   setting's error line is a polite live region. While a write is on the wire its control shall be
+   disabled and say so, and a state poll shall not re-enable it: the BLE session pill ("Connecting…"
+   or "Disconnecting…"), the pairing card's buttons, a satellite switch and the WiFi "Connect".
 
 .. req:: The web UI shows the satellite's power-save rest as the app's card, with Reconnect
    :id: R_UI_REST_CARD
@@ -2118,11 +2416,26 @@ collected here. `firmware/README.md` has the human-readable version of the same 
 - **`R_UI_PWA_OFFLINE`** — verified by `T_UI_PWA_OFFLINE`, `T_UI_PWA_UPDATE`, `T_UI_PWA_INSECURE`,
   `T_UI_PWA_SATELLITE` (`tests/e2e/test_pwa.py`, Chromium on 127.0.0.1, a secure context) and
   `T_FW_SW_SERVED` (`tests/firmware/test_web_handlers.py`).
+- **`R_UI_REMOTE_APP`** — verified so far by `T_UI_TTN_CLIENT` (`tests/test_ttn_js.py`, `ttn.js` against the fake TTN
+  `tests/e2e/fake_ttn.py`) and `T_UI_REMOTE_NO_ROUTER` (`tests/e2e/test_remote_app.py`: the remote mode against the
+  fake TTN shows battery, water, solar and the cooler with their ages and a "LoRa · age" badge, every control
+  read-only, an unknown uplink version says "update the app", and no request reaches the page's own `/api/*` or any
+  host but the fake TTN; `api()` and `satFetch()` refuse before any request). The decoder's C round trip and the
+  version refusal: `tests/firmware/test_lora.py`; the ESP bundle without the remote-only scripts:
+  `tests/test_app_bundle.py`. The static build `tools/build_remote.py` is verified by `T_UI_REMOTE_BUILD`
+  (`tests/test_build_remote.py`: the page policy, the remote flag as a file, the manifest, the own cache name, the
+  ESP bundle untouched, and the built page loaded in Chromium under its policy without a violation). The
+  requirement stays `open` until the live check: the public repository, its Pages site and the first setup with
+  a real van are the owner's steps.
 - **`R_UI_LINK_STATE`** — verified by `T_UI_LINK_ASLEEP`, `T_UI_LINK_UNREACHABLE`,
   `T_UI_LINK_UNPAIRED` (`tests/e2e/test_link_state.py`, page.clock over a fixed calictl state: blip, hung poll, hidden
   tab, asleep-then-unreachable, DE copy + the quiet live region) and `T_UI_LINK_RESTORED`
   (`tests/e2e/test_pwa.py`); the satellite's 4 s command stall by
   `test_a_pending_command_does_not_trip_the_offline_banner`.
+- **`R_UI_VISIBLE_FAILURES`** — verified by `T_UI_VISIBLE_FAILURES` (`tests/e2e/test_gui.py`, the session
+  pill), `test_a_failed_pairing_request_stays_in_the_card_as_translated_text` and
+  `tests/e2e/test_satsettings.py`'s `test_a_switch_stays_disabled_while_its_write_runs_and_its_error_is_announced` /
+  `test_hotspot_connect_is_disabled_while_the_join_posts`.
 - **`R_FW_SHARED_UI`** — verified by `T_SEMANTICS_JS_PARITY` (`tests/test_semantics_js_parity.py`,
   `semantics.js` vs the Python golden vectors), `T_FW_APP_BUNDLE` (`tests/test_app_bundle.py`, the
   generated bundle) and `T_FW_SHARED_UI_HOST` (`tests/firmware/test_web_e2e.py`, the host tier's
@@ -2251,6 +2564,32 @@ collected here. `firmware/README.md` has the human-readable version of the same 
   `exp: sensors on|off`, its 403/400/500/405 codes) and `T_FW_EXPERIMENTAL_UI`
   (`tests/firmware/test_web_e2e.py`: Satellite settings' Sensors switch, EN + DE). The boot
   line `LOG exp: sensors off` is checked on QEMU (`tests/firmware/test_qemu_boot.py`).
+- **`R_FW_ENERGY_COUNTERS`** — verified by `T_FW_ENERGY_COUNTERS` (`tests/firmware/test_energy.py`: the
+  house load equals the web UI's formula over `calictl.semantics` on 300 random frames, the DC-DC +2 A
+  correction, a stale charger, the deci-Wh integration without rounding loss, the 24-bit wrap, a tick
+  only with a fresh live frame and no gap) and `T_FW_SENSORS_TYPE_SUM` (`tests/firmware/test_sensors.py`:
+  the chargers' sum, unknown with one stale reading). Not yet checked on the board.
+- **`R_FW_LORA`** — verified by `T_FW_LORA` (`tests/firmware/test_lora.py`: the AT parser incl. RUI
+  4.2.4's colon link check, the send outcome (confirmed only with `TX_DONE`), the airtime formula against
+  measured values, the 24-h budgets, the port 2/3/4 layouts and a round trip through the generated
+  formatter back to `calictl.protocol.decode`, the change tracker that commits only after a good send,
+  `device.lora`, the switch and the key store that never prints a key, the display's QR text by setup
+  state, `T_FW_LORA_QR_SOURCE`), `T_FW_LORA_SWITCH`, `T_FW_LORA_NO_SECRETS`
+  (`tests/firmware/test_web_handlers.py`: `POST /api/experimental {"lora":…}` and `device.lora` only
+  while on), `T_FW_LORA_FORGET_API` (the same file: `POST /api/lora` and the console `lora forget` erase the keys and switch
+  LoRa off, every error code), `T_UI_SAT_LORA` and `T_UX_NO_SECRETS_LORA` (`tests/e2e/test_satsettings_lora.py`: the box
+  hidden while off, its values in words, Forget LoRa asks then posts, no key or DevEUI in a usage beacon, EN + DE) and `T_FW_LORA_FORMATTER_FRESH` (`tests/test_gen_lora_dict.py`). The UART task
+  (`lora_esp.c`) runs only on the board: the bench spike (M5Stack CoreS3 + RAK3172) carried the same
+  driver and loop; class C, the DevEUI read from the module, the key-transfer downlink and its
+  confirmation are compiled, not yet run on the board.
+- **`R_FW_LORA_SCREEN`** — verified by `T_FW_DISPLAY_LORA_SCREEN` (`tests/firmware/test_display_model.py`:
+  the 3 s press opens it at 100 % and asks for the setup only without TTN keys, 2999 ms does not, the
+  wake press never counts on a dim or dark screen, a tap, the 120 s limit or the module going away
+  closes it, the rotation press, nothing without the module, the texts in EN + DE) and
+  `T_FW_LORA_SETUP_QR` (`tests/firmware/test_lora.py`: the setup QR text also after the TTN keys
+  arrived, none and a zeroed buffer without a transfer key or on a store error). The LVGL view (the
+  press clock in the touch read, the QR canvas, the poll, the screenshot refusal) is compiled, not yet
+  run on the board.
 - **`R_FW_SENSORS`** — verified by `T_FW_SENSORS_CORE` (`tests/firmware/test_sensors.py`: both Govee
   layouts, the seen table (16 rows, unknown manufacturer ids ignored, boot-local ids), add / rename /
   remove rules, the list surviving a reboot, the `ext` record and its once-a-minute limit, the

@@ -79,11 +79,10 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.e2e.test_gui.test_favourite_save_is_not_an_activation
 ```
 
-## Sinks (MQTT / Home Assistant)
+## Sinks (InfluxDB)
 
 ```{eval-rst}
-.. autofunction:: calictl.mqtt.command_topics
-.. autofunction:: calictl.mqtt.render_discovery
+.. autofunction:: calictl.semantics.flatten
 ```
 
 ## Automation
@@ -97,9 +96,27 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: calictl.thermostat.track
 .. autofunction:: calictl.thermostat.initial_state
 .. autofunction:: calictl.thermostat.step
+.. autofunction:: calictl.thermostat.blocked
+.. autofunction:: calictl.thermostat.eta
+.. autofunction:: tests.e2e.test_thermostat_card.test_eta_line
 .. autofunction:: tests.test_thermostat.test_cold_cabin_raises_level
 .. autofunction:: tests.test_thermostat.test_heater_state_table
 .. autofunction:: tests.test_thermostat.test_auto_from_off_sends_runtime_level_power_in_order
+.. autofunction:: tests.test_thermostat.test_adopt_goes_to_demand
+.. autofunction:: tests.test_thermostat.test_night_start_presets_level_and_waits
+.. autofunction:: tests.test_thermostat.test_night_waits_30s_of_continuous_then_adopts
+.. autofunction:: tests.test_thermostat.test_night_unconfirmed_panel_start_keeps_waiting
+.. autofunction:: tests.test_thermostat.test_night_wait_ends_quietly
+.. autofunction:: tests.test_thermostat.test_waiting_user_off_stops_what_runs
+.. autofunction:: tests.test_thermostat.test_waiting_user_off_stale_heater_stops_later
+.. autofunction:: tests.test_thermostat.test_waiting_target_change_no_second_preset
+.. autofunction:: tests.test_thermostat.test_night_skips_warm_refusal
+.. autofunction:: tests.test_thermostat.test_continuous_hold_at_min_level_instead_of_stop
+.. autofunction:: tests.test_thermostat.test_running_still_stops_when_too_warm
+.. autofunction:: tests.test_thermostat.test_panel_off_during_night_ends_quietly
+.. autofunction:: tests.test_thermostat.test_panel_off_during_pending_level_ends_quietly
+.. autofunction:: tests.test_thermostat.test_blocked_codes
+.. autofunction:: tests.test_thermostat.test_blocked_uses_known_frames
 .. autofunction:: calictl.automation.auto_camper_restore_decide
 .. autoclass:: calictl.automation.AutoCamper
   :members: step, set_enabled, snapshot, to_state_dict, load
@@ -150,9 +167,9 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.test_persistent_session
 .. automodule:: tests.test_roof
 .. automodule:: tests.test_history
-.. automodule:: tests.test_ha
 .. autofunction:: tests.e2e.test_gui.test_wakeup_light_time_and_switch_reach_the_unit
 .. autofunction:: tests.e2e.test_gui.test_door_contact_switch_round_trips
+.. autofunction:: tests.e2e.test_gui.test_front_door_lights_switch_follows_the_unit_screen
 .. autofunction:: tests.e2e.test_gui.test_all_lights_master_stays_on
 .. autofunction:: tests.e2e.test_gui.test_favourite_save_then_activate
 .. autofunction:: tests.e2e.test_gui.test_favourite_tiles_are_a_b_c_d_mapped_to_1_5_6_7
@@ -170,6 +187,7 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.e2e.test_satellite.test_auto_camper_toggle_on_a_firmware_that_reports_it
 .. autofunction:: tests.e2e.test_satellite.test_victron_readings_on_the_energy_screen
 .. autofunction:: tests.e2e.test_satellite.test_govee_readings_on_the_vehicle_screen_and_tile
+.. autofunction:: tests.e2e.test_satellite.test_a_low_sensor_battery_badges_the_vehicle_tile
 .. autofunction:: tests.e2e.test_satellite.test_sensors_card_shows_only_unknown_types
 .. autofunction:: tests.e2e.test_satellite.test_diagnostics_screen_polls_the_diag_state_only_while_open
 .. autofunction:: tests.e2e.test_satellite.test_an_unchanged_state_costs_a_304
@@ -183,12 +201,14 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.e2e.test_link_state.test_asleep_van_shows_the_amber_banner
 .. autofunction:: tests.e2e.test_link_state.test_backend_down_turns_red_at_15_s_and_recovers
 .. autofunction:: tests.e2e.test_link_state.test_unpaired_never_says_not_paired_not_asleep
+.. autofunction:: tests.e2e.test_gui.test_session_pill_shows_busy_then_a_persistent_error
 .. autofunction:: tests.e2e.test_satellite.test_beacons_carry_views_controls_values_errors
 .. autofunction:: tests.e2e.test_satellite.test_a_control_without_a_value_omits_the_key_and_a_number_is_a_string
 .. autofunction:: tests.e2e.test_satellite.test_secrets_never_reach_a_beacon
 .. autofunction:: tests.test_web.test_ux_control_value_is_optional_printable_ascii_up_to_32
 .. automodule:: tests.e2e.test_satsettings
 .. automodule:: tests.e2e.test_satsettings_sensors
+.. automodule:: tests.e2e.test_satsettings_lora
 .. autofunction:: tests.test_web.test_ux_beacon_recorded_any_content_type
 .. autofunction:: tests.test_web.test_api_state_etag_ignores_the_ticking_members_and_answers_304
 .. autofunction:: tests.test_state_etag_parity.test_the_ticking_members_are_the_same_on_calictl_and_the_satellite
@@ -317,6 +337,17 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.firmware.test_sensors
 .. automodule:: tests.firmware.test_sensors_parity
 .. automodule:: tests.firmware.test_sensors_e2e
+.. automodule:: tests.firmware.test_energy
+.. automodule:: tests.firmware.test_lora
+.. automodule:: tests.firmware.test_lora_setup
+.. automodule:: tests.firmware.test_lora_aead
+.. automodule:: tests.test_gen_lora_dict
+.. automodule:: tests.test_lora_setup_js
+.. automodule:: tests.test_ttn_js
+.. automodule:: tests.e2e.test_remote_app
+.. automodule:: tests.e2e.test_remote_setup
+.. automodule:: tools.build_remote
+.. automodule:: tests.test_build_remote
 .. automodule:: calictl.esp_ingest
 .. automodule:: tests.test_esp_ingest
 .. automodule:: tests.test_esplab_sensors_setup
@@ -324,6 +355,7 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.test_wifi_sm_ref
 .. automodule:: tests.test_web_strings
 .. automodule:: tests.test_ux_gallery_esp_fixtures
+.. automodule:: tests.firmware.test_ap_identity
 .. automodule:: tests.firmware.test_display_model
 .. automodule:: tests.test_display_font
 .. automodule:: tests.test_display_touch

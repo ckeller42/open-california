@@ -1,8 +1,8 @@
 # Feature Availability — How CaliforniaOnTour Decides Which Functions a Camper Unit Has
 
-Reverse-engineered from the decompiled VW CaliforniaOnTour app (JADX output). Goal: give a
-Home Assistant integration a concrete, reproducible rule for "does *this* vehicle have function
-X" — so the integration only creates entities for hardware that's actually fitted, instead of a
+Reverse-engineered from the decompiled VW CaliforniaOnTour app (JADX output). Goal: give an
+integration (calictl, the satellite) a concrete, reproducible rule for "does *this* vehicle have
+function X" — so the integration only shows hardware that's actually fitted, instead of a
 fixed list for "a California".
 
 Source root (all `file:line` below are relative to this):
@@ -42,10 +42,10 @@ VIN/model → feature table** anywhere in the app. Instead:
    `cooler-airheater.md:261-267`. **Do not use vehicle model/variant as your gating signal —
    use the per-function `Installed` bit.**
 
-**Recommended rule for the HA integration**: for each function, subscribe to its state
+**Recommended rule for an integration**: for each function, subscribe to its state
 characteristic (you have to anyway, to get live values) and read the `Installed` bit given in the
-table below on every notification (or at least the first one after connect). Only create/enable
-the corresponding HA entities while `Installed == true`. Treat characteristics with no
+table below on every notification (or at least the first one after connect). Only show
+the corresponding values and controls while `Installed == true`. Treat characteristics with no
 `Installed` bit (see "Always-on functions" below) as unconditionally present.
 
 ## Part 1 — The mechanism: `Installed` bit → `te.k.b4()`
@@ -107,7 +107,7 @@ Notes on the table:
   (`cf.b` for fresh, `nf.a` for waste) that share the same underlying `Installed`/`b4()` flow
   (`pf/k.java`: `this.f21208w0 = bVar4; this.f21210x0 = bVar4;`).
 
-## Part 2 — Exceptions and edge cases (read before you build the HA rule)
+## Part 2 — Exceptions and edge cases (read before you build the detection rule)
 
 ### 2a. Campingmode — `Installed` is decoded but silently ignored
 
@@ -211,7 +211,7 @@ the live BLE `CarVariant` byte — a different, static/account-side signal, agai
 feature-presence gate.
 
 **Conclusion for interop: model/variant is not a reliable or fully-wired feature-gating signal in
-this codebase. Don't build your HA integration's capability detection around it.**
+this codebase. Don't build an integration's capability detection around it.**
 
 ### 2f. Connect-time version gate (ex080) and the ECO gate — APP-OBSERVED 2026-09-27
 
@@ -231,7 +231,7 @@ Observed with app 5.0.8.3028 against the fake unit (`tools/applab`, session inve
   `vehicle.CarVariant=2` (which the 5.0.8 app read as CALIFORNIA_7, not Grand California — raw 1 is GC,
   §2e). **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; the SOURCE of `N0` is **RESOLVED (#154): 1602 bit 10 `PvInstalled`**, contradicting the observation above. **Likely cause of the contradiction (decompile cross-check 2026-10-06, enigma `46f982d3`, medium confidence): a stale first read.** `ak/a.b` reads `N0`'s raw value without a Compose state read (`ak/a.java:714`) and is composed at `:196`, before `:197` subscribes the same flow; the proxy StateFlow (`yg/j.t1`, `a40/y`) refreshes only while subscribed, so the first visit sees the seed (false) and `b()` is then skipped. App-lab retest owed: with `PvInstalled=1`, a **second visit** to the Energy page in the same app session (or an energy-mode change). **APP-OBSERVED 2026-10-06 (settles it):** with `PvInstalled=1` on the wire, the first visit to Vehicle Information > Energy Mode offers Normal / Max; leaving and opening it again in the same app session offers **ECO / Normal / Max**. ECO is gated by `PvInstalled`; the 2026-09-27 screens were first visits.
 
-## Part 3 — Recommended detection rule for the HA integration
+## Part 3 — Recommended detection rule for an integration
 
 1. **Connect and always read the General/Vehicle service (`0x1000`) first** — it's unconditional,
    gives you firmware version + VIN for logging/diagnostics, and its `CarVariant` byte is worth

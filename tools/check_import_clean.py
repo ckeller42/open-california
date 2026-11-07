@@ -1,6 +1,6 @@
 """Guard: importing the runtime package must NOT pull in the lazy third-party deps.
 
-`calictl/*` is stdlib-only AT IMPORT — bleak/paho/influxdb_client/yaml are imported inside
+`calictl/*` is stdlib-only AT IMPORT — bleak/influxdb_client/yaml are imported inside
 functions, never at module top (so tests + the CLI run without them installed). This asserts that
 invariant. Shared by the Makefile, the pre-commit hook, and CI so there's ONE source of truth.
 
@@ -16,7 +16,6 @@ import calictl.control  # noqa: E401,F401
 import calictl.device
 import calictl.firmware  # noqa: F401
 import calictl.influx
-import calictl.mqtt
 import calictl.observer
 import calictl.overrides
 import calictl.pairing  # noqa: F401
@@ -28,7 +27,7 @@ import calictl.serve
 import calictl.session  # noqa: F401
 import calictl.web  # noqa: F401
 
-BANNED = {"bleak", "paho", "paho.mqtt", "influxdb_client", "yaml", "dbus_fast"}
+BANNED = {"bleak", "influxdb_client", "yaml", "dbus_fast"}
 
 
 def main() -> int:

@@ -2,14 +2,12 @@
 
 This page lists, for each function of the VW California camper unit, what calictl shows, what it
 can control, where, and how well that is proven. It is generated from the code (the signal catalog,
-the command builders, the Home Assistant entities and the satellite's write list), so it changes
-when the code changes.
+the command builders and the satellite's write list), so it changes when the code changes.
 
-**Where** has three columns:
+**Where** has two columns:
 
 - **buspi** — the calictl daemon on the Raspberry Pi: its web UI, the `calictl set` command line
   and the HTTP API. The web UI shows only the functions fitted to the van.
-- **Home Assistant** — the entity calictl publishes over MQTT, with its name.
 - **Satellite** — the ESP32 satellite's web UI (the same web UI, served by the satellite). It writes
   to five functions only; for anything else it answers "Only via buspi or the app".
 
@@ -43,16 +41,16 @@ The evidence for each claim is in the [evidence ledger](https://ckeller42.github
 
 **You can control** (`calictl set cooler <command> <value>`):
 
-| Command | Label | Values | buspi | Home Assistant | Satellite | Note |
-|---|---|---|---|---|---|---|
-| `power` | Refrigerator box (Kühlbox) | on / off | yes | Fridge Power | yes | — |
-| `level` | Cooling level (Kühlstufe) | 1–5 | yes | Fridge Set Level | yes | — |
-| `mode` | Quiet mode (Flüstermodus) | normal / quiet / timer_quiet | yes | — | yes | off / manual / automatic (by the hours below); only while the box is on |
-| `night_on` | Quiet mode starts at (Flüstermodus startet um) | hour 0–23 | yes | — | yes | only while the box is on and its state is known |
-| `night_off` | Quiet mode ends at (Flüstermodus endet um) | hour 0–23 | yes | — | yes | only while the box is on and its state is known |
-| `timer_set` | Cooling starts at (Kühlen startet um) | HH:MM | yes | — | yes | only while the box is off |
-| `timer_start` | Start timer (Timer starten) | — | yes | — | yes | only while the box is off |
-| `timer_cancel` | Cancel timer (Timer abbrechen) | — | yes | — | yes | — |
+| Command | Label | Values | buspi | Satellite | Note |
+|---|---|---|---|---|---|
+| `power` | Refrigerator box (Kühlbox) | on / off | yes | yes | — |
+| `level` | Cooling level (Kühlstufe) | 1–5 | yes | yes | — |
+| `mode` | Quiet mode (Flüstermodus) | normal / quiet / timer_quiet | yes | yes | off / manual / automatic (by the hours below); only while the box is on |
+| `night_on` | Quiet mode starts at (Flüstermodus startet um) | hour 0–23 | yes | yes | only while the box is on and its state is known |
+| `night_off` | Quiet mode ends at (Flüstermodus endet um) | hour 0–23 | yes | yes | only while the box is on and its state is known |
+| `timer_set` | Cooling starts at (Kühlen startet um) | HH:MM | yes | yes | only while the box is off |
+| `timer_start` | Start timer (Timer starten) | — | yes | yes | only while the box is off |
+| `timer_cancel` | Cancel timer (Timer abbrechen) | — | yes | yes | — |
 
 ## Camping mode (Campingmodus)
 
@@ -63,17 +61,17 @@ The evidence for each claim is in the [evidence ledger](https://ckeller42.github
 | Web UI label | Value | Unit |
 |---|---|---|
 | — | `enable` | — |
-| Exterior and interior lighting (Außen- und Innenbeleuchtung) | `lights_on` | — |
+| Lights off when front doors open (Licht aus, wenn vordere Türen öffnen) | `lights_on` | — |
 | Camping mode (Campingmodus) | `master_on` | — |
 | Rear USB ports (Hintere USB-Anschlüsse) | `usb_charger` | — |
 
 **You can control** (`calictl set campingmode <command> <value>`):
 
-| Command | Label | Values | buspi | Home Assistant | Satellite | Note |
-|---|---|---|---|---|---|---|
-| `master` | Camping mode (Campingmodus) | on / off | yes | Camping Mode | yes | the web UI greys it while the ignition is on |
-| `lights` | Exterior and interior lighting (Außen- und Innenbeleuchtung) | on / off | yes | Camping Lights Switch | yes | only while camping mode is on |
-| `usb` | Rear USB ports (Hintere USB-Anschlüsse) | on / off | yes | Rear USB Ports Switch | yes | only while camping mode is on |
+| Command | Label | Values | buspi | Satellite | Note |
+|---|---|---|---|---|---|
+| `master` | Camping mode (Campingmodus) | on / off | yes | yes | the web UI greys it while the ignition is on |
+| `lights` | Lights off when front doors open (Licht aus, wenn vordere Türen öffnen) | on / off | yes | yes | only while camping mode is on; inverted: `on` lets the front lights come on, so the switch shows off |
+| `usb` | Rear USB ports (Hintere USB-Anschlüsse) | on / off | yes | yes | only while camping mode is on |
 
 ## Lighting (Beleuchtung)
 
@@ -91,25 +89,25 @@ The evidence for each claim is in the [evidence ledger](https://ckeller42.github
 
 **You can control** (`calictl set lighting <command> <value>`):
 
-| Command | Label | Values | buspi | Home Assistant | Satellite | Note |
-|---|---|---|---|---|---|---|
-| `power` | All lights (Alle Lichter) | on / off | yes | Interior Lights | yes | restores the lamps' saved levels |
-| `reading-1` | Reading lights (Leselichter) · Left (Links) | 0–11 | yes | — | yes | — |
-| `reading-2` | Reading lights (Leselichter) · Right (Rechts) | 0–11 | yes | — | yes | — |
-| `reading-3` | Reading lights (Leselichter) · Front passenger (Beifahrer) | 0–11 | yes | — | yes | — |
-| `kitchen` | Kitchen (Küche) · Cooking (Kochen) | 0–11 | yes | — | yes | — |
-| `roof-ambient` | Pop-up roof (Aufstelldach) · Background lighting (Ambientelicht) | 0–11 | yes | — | yes | — |
-| `outside-rear` | Exterior light (Außenlicht) · Rear surroundings (Umgebung hinten) | 0–11 | yes | — | yes | — |
-| `kitchen-ambient` | Kitchen (Küche) · Background lighting (Ambientelicht) | 0–11 | yes | — | yes | — |
-| `kitchen-cabinet` | Kitchen (Küche) · Cabinet (Schrank) | 0–11 | yes | — | yes | — |
-| `roof-reading` | Pop-up roof (Aufstelldach) · Reading light (Leselicht) | 0–11 | yes | — | yes | only while the pop-up roof is open |
-| `entrance` | Exterior light (Außenlicht) · Entrance (Eingang) | 0–11 | yes | — | yes | — |
-| `all` | Every lamp | 0–11 | yes | — | yes | sets every fitted lamp to one level |
-| `brightness` | Every lamp | 0–11 | yes | All Lights Brightness | — | the same as `all`; the Home Assistant slider uses it |
-| `profile` | Favourite | 0–13 except 8 | yes | — | yes | 1–7 = a stored favourite, 0 = all off, 12 = all on; a favourite the unit reports empty is refused |
-| `save_profile` | Save favourite | N [colour] | yes | — | yes | N = 1–7; colour = one of warm-white, blood-orange, amber, pistachio, peppermint, mint, azure, dark-blue, red, salmon |
-| `door_contact` | Sliding door light | on / off | yes | — | yes | the rear interior lights come on when the sliding door opens |
-| `wakeup` | Wake-up light (Wecklicht) | HH:MM [areas] [brightness] [ramp] [on/off] | yes | — | yes, with the web page's clock | areas 1–4 (comma list), brightness 0–10, ramp 0/10/20/30 min |
+| Command | Label | Values | buspi | Satellite | Note |
+|---|---|---|---|---|---|
+| `power` | All lights (Alle Lichter) | on / off | yes | yes | restores the lamps' saved levels |
+| `reading-1` | Reading lights (Leselichter) · Left (Links) | 0–11 | yes | yes | — |
+| `reading-2` | Reading lights (Leselichter) · Right (Rechts) | 0–11 | yes | yes | — |
+| `reading-3` | Reading lights (Leselichter) · Front passenger (Beifahrer) | 0–11 | yes | yes | — |
+| `kitchen` | Kitchen (Küche) · Cooking (Kochen) | 0–11 | yes | yes | — |
+| `roof-ambient` | Pop-up roof (Aufstelldach) · Background lighting (Ambientelicht) | 0–11 | yes | yes | — |
+| `outside-rear` | Exterior light (Außenlicht) · Rear surroundings (Umgebung hinten) | 0–11 | yes | yes | — |
+| `kitchen-ambient` | Kitchen (Küche) · Background lighting (Ambientelicht) | 0–11 | yes | yes | — |
+| `kitchen-cabinet` | Kitchen (Küche) · Cabinet (Schrank) | 0–11 | yes | yes | — |
+| `roof-reading` | Pop-up roof (Aufstelldach) · Reading light (Leselicht) | 0–11 | yes | yes | only while the pop-up roof is open |
+| `entrance` | Exterior light (Außenlicht) · Entrance (Eingang) | 0–11 | yes | yes | — |
+| `all` | Every lamp | 0–11 | yes | yes | sets every fitted lamp to one level |
+| `brightness` | Every lamp | 0–11 | yes | — | the same as `all` (an alias) |
+| `profile` | Favourite | 0–13 except 8 | yes | yes | 1–7 = a stored favourite, 0 = all off, 12 = all on; a favourite the unit reports empty is refused |
+| `save_profile` | Save favourite | N [colour] | yes | yes | N = 1–7; colour = one of warm-white, blood-orange, amber, pistachio, peppermint, mint, azure, dark-blue, red, salmon |
+| `door_contact` | Sliding door light | on / off | yes | yes | the rear interior lights come on when the sliding door opens |
+| `wakeup` | Wake-up light (Wecklicht) | HH:MM [areas] [brightness] [ramp] [on/off] | yes | yes, with the web page's clock | areas 1–4 (comma list), brightness 0–10, ramp 0/10/20/30 min |
 
 Lamp levels: 0 = off, 1–10 = 10–100 %, 11 = the lamp's default.
 
@@ -131,15 +129,15 @@ Lamp levels: 0 = off, 1–10 = 10–100 %, 11 = the lamp's default.
 
 **You can control** (`calictl set airheater <command> <value>`):
 
-| Command | Label | Values | buspi | Home Assistant | Satellite | Note |
-|---|---|---|---|---|---|---|
-| `power` | Immediate heating (Sofortheizen) | on / off | yes | Air Heater Power | yes | on is refused while the unit reports the heater not possible (engine running or water heater on) |
-| `permanent` | Continuous heating (Dauerbetrieb) | off | yes | — | yes | can only be started from inside the vehicle |
-| `level` | Heating temperature (Heizstufe) | 1–10 | yes | Air Heater Set Level | yes | 10 = HI |
-| `runtime` | Run time (Laufzeit) | 10–120 min | yes | — | yes | not during continuous heating |
-| `timer` | Start heating at (Heizen startet um) | HH:MM | yes | — | yes | not while the timer is on |
-| `timer_start` | Start timer (Timer starten) | — | yes | — | yes | the heater then starts at the set time for the run time |
-| `timer_cancel` | Stop timer (Timer stoppen) | — | yes | — | yes | — |
+| Command | Label | Values | buspi | Satellite | Note |
+|---|---|---|---|---|---|
+| `power` | Immediate heating (Sofortheizen) | on / off | yes | yes | on is refused while the unit reports the heater not possible (engine running or water heater on) |
+| `permanent` | Continuous heating (Dauerbetrieb) | off | yes | yes | can only be started from inside the vehicle |
+| `level` | Heating temperature (Heizstufe) | 1–10 | yes | yes | 10 = HI |
+| `runtime` | Run time (Laufzeit) | 10–120 min | yes | yes | not during continuous heating |
+| `timer` | Start heating at (Heizen startet um) | HH:MM | yes | yes | not while the timer is on |
+| `timer_start` | Start timer (Timer starten) | — | yes | yes | the heater then starts at the set time for the run time |
+| `timer_cancel` | Stop timer (Timer stoppen) | — | yes | yes | — |
 
 ## Water (Wasser)
 
@@ -192,9 +190,9 @@ Nothing to control.
 
 **You can control** (`calictl set energy <command> <value>`):
 
-| Command | Label | Values | buspi | Home Assistant | Satellite | Note |
-|---|---|---|---|---|---|---|
-| `mode` | Energy mode (Energiemodus) | normal / max_charge / eco | yes | — | yes | refused while the unit locks the energy mode |
+| Command | Label | Values | buspi | Satellite | Note |
+|---|---|---|---|---|---|
+| `mode` | Energy mode (Energiemodus) | normal / max_charge / eco | yes | yes | refused while the unit locks the energy mode |
 
 ## Roof (Aufstelldach)
 
@@ -209,11 +207,11 @@ Nothing to control.
 
 **You can control** (`calictl set roof <command>`):
 
-| Command | Label | Values | buspi | Home Assistant | Satellite | Note |
-|---|---|---|---|---|---|---|
-| `open` | Open (Öffnen) | — | yes | — | — | press and hold; release stops |
-| `close` | Close (Schließen) | — | yes | — | — | press and hold; release stops |
-| `stop` | Stop (Stopp) | — | yes | — | — | calictl never refuses it |
+| Command | Label | Values | buspi | Satellite | Note |
+|---|---|---|---|---|---|
+| `open` | Open (Öffnen) | — | yes | — | press and hold; release stops |
+| `close` | Close (Schließen) | — | yes | — | press and hold; release stops |
+| `stop` | Stop (Stopp) | — | yes | — | calictl never refuses it |
 
 ## Vehicle (Fahrzeug)
 
@@ -239,9 +237,9 @@ Nothing to control.
 
 | Web UI label | Value | Unit |
 |---|---|---|
-| Firmware (amb · cm · comm) (Firmware (Umg. · CM · Komm)) | `amb_sw_version` | — |
-| Firmware (amb · cm · comm) (Firmware (Umg. · CM · Komm)) | `cm_sw_version` | — |
-| Firmware (amb · cm · comm) (Firmware (Umg. · CM · Komm)) | `comm_version` | — |
+| Firmware | `amb_sw_version` | — |
+| Firmware | `cm_sw_version` | — |
+| Firmware | `comm_version` | — |
 
 Nothing to control.
 
@@ -265,10 +263,10 @@ Nothing to control.
 
 **You can control** (`calictl set stairs <command> <value>`):
 
-| Command | Label | Values | buspi | Home Assistant | Satellite | Note |
-|---|---|---|---|---|---|---|
-| `move` | Move | extend / retract / stop | yes | — | — | — |
-| `mode` | Mode | 0–3 | yes | — | — | — |
+| Command | Label | Values | buspi | Satellite | Note |
+|---|---|---|---|---|---|
+| `move` | Move | extend / retract / stop | yes | — | — |
+| `mode` | Mode | 0–3 | yes | — | — |
 
 ## Living-room heater
 
@@ -287,12 +285,12 @@ Nothing to control.
 
 **You can control** (`calictl set livingroomheater <command> <value>`):
 
-| Command | Label | Values | buspi | Home Assistant | Satellite | Note |
-|---|---|---|---|---|---|---|
-| `air` | Air heating | on / off | yes | — | — | — |
-| `water` | Water heating | on / off | yes | — | — | — |
-| `temperature` | Temperature (Temperatur) | 0–255 | yes | — | — | the unit's raw value; its scale is unknown |
-| `temperatureair` | Temperature (Temperatur) | 0–255 | yes | — | — | the same as `temperature` |
+| Command | Label | Values | buspi | Satellite | Note |
+|---|---|---|---|---|---|
+| `air` | Air heating | on / off | yes | — | — |
+| `water` | Water heating | on / off | yes | — | — |
+| `temperature` | Temperature (Temperatur) | 0–255 | yes | — | the unit's raw value; its scale is unknown |
+| `temperatureair` | Temperature (Temperatur) | 0–255 | yes | — | the same as `temperature` |
 
 ## Roof air conditioning
 
@@ -310,12 +308,12 @@ Nothing to control.
 
 **You can control** (`calictl set roofaircondition <command> <value>`):
 
-| Command | Label | Values | buspi | Home Assistant | Satellite | Note |
-|---|---|---|---|---|---|---|
-| `power` | Power | on / off | yes | — | — | — |
-| `mode` | Mode | 0–3 | yes | — | — | automatic / cooling / heating / venting |
-| `fanspeed` | Fan speed | 0–4 | yes | — | — | 4 = automatic |
-| `temperature` | Temperature (Temperatur) | 0–255 | yes | — | — | the unit's raw value; its scale is unknown |
+| Command | Label | Values | buspi | Satellite | Note |
+|---|---|---|---|---|---|
+| `power` | Power | on / off | yes | — | — |
+| `mode` | Mode | 0–3 | yes | — | automatic / cooling / heating / venting |
+| `fanspeed` | Fan speed | 0–4 | yes | — | 4 = automatic |
+| `temperature` | Temperature (Temperatur) | 0–255 | yes | — | the unit's raw value; its scale is unknown |
 
 ## Satellite dish
 

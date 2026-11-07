@@ -427,7 +427,8 @@ the microSD on the LCD's `SPI3_HOST` under `bsp_display_lock` and runs that task
 The board build paints a 320 x 240 status screen: title + `fw <version>`, then three rows with a
 coloured dot — **Gerät/Device** (running · uptime), **WLAN/WiFi** (setup hotspot / joining /
 retrying = amber, SSID · IP · RSSI = green, not connected + reason = red), **Camper** (not paired
-= grey, connecting / pairing / enter the code = amber, connected · data age = green, link lost /
+= grey, connecting / pairing / enter the code / connected · the last heater error (kept until the heater
+runs again) = amber, connected · data age = green, link lost /
 no data for more than 90 s / pairing failed = red) — and a footer: `http://calictl-esp.local`, or
 in setup mode the hotspot SSID and passphrase. The full row table with the German texts is in
 `docs/howto-esp-wifi-setup.md` "What the screen tells you". Pieces: `cali_core/status.c` (one
@@ -468,10 +469,12 @@ in setup mode the hotspot SSID and passphrase. The full row table with the Germa
 
 ### Remote screen check (`screenshot`)
 
+Never commit a capture of the setup screen: it shows the hotspot password.
+
 On a CoreS3 build the console command `screenshot` streams the live screen as `[SHOT 320 240 RLE16 <n>]`,
 base64 lines of 76 characters, `[/SHOT]` (kws-de's format). Capture the serial log, then
 `python -m tools.esp_shot decode <log> <out_dir>` writes one PNG per frame. Refusals are
-`LOG display: screenshot failed (no screen|no host|no memory|busy|snapshot)`; `no host` means no reader is
+`LOG display: screenshot failed (no screen|lora screen|no host|no memory|busy|snapshot)` (`lora screen`: the LoRa screen with its QR is up); `no host` means no reader is
 attached to the USB-Serial/JTAG port (the command needs one, else printing could block BLE). It runs on the NimBLE host task and
 blocks it while printing (manual debug command). The host check only sees the USB bus, not an open
 port: on the bench (2026-10-01) three `screenshot`s whose sender closed the port at once left BLE

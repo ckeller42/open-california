@@ -26,6 +26,8 @@ from tests.firmware.api_shape import (
     DEVICE_KEYS,
     DISPLAY_DIAG_KEYS,
     DISPLAY_KEYS,
+    ENERGY_KEYS,
+    EXPERIMENTAL_KEYS,
     EXT_ENTRY_KEYS,
     LINK_KEYS,
     OTA_KEYS,
@@ -38,6 +40,7 @@ from tests.firmware.api_shape import (
     SENSORS_KEYS,
     STATE_DIAG_KEYS,
     STATE_KEYS,
+    STATE_WIFI_KEYS,
     TIME_DIAG_KEYS,
     TIME_KEYS,
     WIFI_GET_KEYS,
@@ -65,6 +68,8 @@ def test_state_fixture_shape(fixtures, mode):
     assert set(d["link"]) == LINK_KEYS
     assert set(d["ota"]) == OTA_KEYS
     assert set(d["time"]) == TIME_KEYS | TIME_DIAG_KEYS
+    assert set(d["experimental"]) == EXPERIMENTAL_KEYS and set(d["energy"]) == ENERGY_KEYS
+    assert d["energy"]["boot"] == d["time"]["boot"]  # both are cali_time_boot()
     assert (
         set(d["sd"]) == SD_KEYS | SD_DIAG_KEYS
         and set(d["res"]) == RES_KEYS
@@ -72,7 +77,9 @@ def test_state_fixture_shape(fixtures, mode):
         and set(d["display"]) == DISPLAY_KEYS | DISPLAY_DIAG_KEYS
     )
     assert set(d["control"]) == CONTROL_KEYS and d["control"]["writes"] is (mode != "setup")
-    assert set(d["wifi"]) == WIFI_KEYS and d["wifi"]["mode"] == ("station" if mode == "satellite" else mode)
+    assert set(d["wifi"]) == STATE_WIFI_KEYS and d["wifi"]["mode"] == (
+        "station" if mode == "satellite" else mode
+    )
     assert d["uptime_ms"] == state["t"]
     pairing = fixtures[mode]["/api/pairing"]  # GET /api/pairing: calictl's snapshot, as web.c
     assert set(pairing) == PAIRING_API_KEYS and pairing["radio_busy"] is False
@@ -94,7 +101,9 @@ def test_sensors_fixture_shape(fixtures):
 def test_wifi_fixture_shape(fixtures, mode):
     w = fixtures[mode]["/api/wifi"]
     assert set(w) == WIFI_GET_KEYS
-    assert {k: w[k] for k in WIFI_KEYS} == fixtures[mode]["/api/state"]["device"]["wifi"]
+    assert {k: w[k] for k in WIFI_KEYS} == {
+        k: fixtures[mode]["/api/state"]["device"]["wifi"][k] for k in WIFI_KEYS
+    }
     for ap in w["scan"]:
         assert set(ap) == AP_KEYS
 
@@ -145,3 +154,26 @@ def test_stub_diag_split_is_the_firmwares():
         ("device", "ble"): BLE_DIAG_KEYS,
         ("device", "display"): DISPLAY_DIAG_KEYS,
     }
+
+
+def test_espstub_first_setup_flips_to_station_pending_and_done_clears_it():
+    import json
+    import urllib.request
+
+    from tools import ux_gallery
+
+    def post(stub, path, body):
+        r = urllib.request.Request(
+            stub.base + path, json.dumps(body).encode(), {"Content-Type": "application/json"}
+        )
+        return json.load(urllib.request.urlopen(r))
+
+    def pending(stub):
+        return json.load(urllib.request.urlopen(stub.base + "/api/state"))["device"]["setup"]["pending"]
+
+    with ux_gallery.EspStub("setup") as s:
+        s.joins = True
+        assert pending(s) is False
+        post(s, "/api/wifi", {"ssid": "van", "psk": "secret123"})
+        assert s.mode == "station" and pending(s) is True
+        assert post(s, "/api/setup", {"done": True}) == {"ok": True} and pending(s) is False

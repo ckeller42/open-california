@@ -3,8 +3,9 @@
  * argv "defaults": print CALI_THERMO_DEFAULTS in the settings-table order.
  * stdin, one case per line, space-separated tokens, "-" = None (the flat lists of
  * tools/gen_thermostat_vectors.py):
- *   H <cfg x17> <heater x8> <age>          -> state level code
- *   S <cfg x17> <in ...> <state ...>       -> <out ...> | <state ...>
+ *   H <cfg x19> <heater x8> <age>          -> state level code
+ *   S <cfg x19> <in ...> <state ...>       -> <out ...> | <state ...>
+ *   E <span_ms> <rise> <gap> <rem_s>       -> seconds ends_first
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,12 +51,13 @@ static const char *why(void) {
 }
 
 static void cfg_read(cali_thermo_cfg_t *c) {
-    int32_t *f[17] = {&c->period_ms,    &c->kp,          &c->ki,          &c->ka,          &c->u_out_max,
+    int32_t *f[19] = {&c->period_ms,    &c->kp,          &c->ki,          &c->ka,          &c->u_out_max,
                       &c->hyst,         &c->min_dwell_ms, &c->band_hi,    &c->hot_hold_ms, &c->overheat,
                       &c->min_level,    &c->stale_after_ms, &c->heater_stale_ms, &c->batt_min_dv,
-                      &c->batt_hold_ms, &c->verify_ms,   &c->runtime_min};
+                      &c->batt_hold_ms, &c->verify_ms,   &c->runtime_min, &c->night_wait_ms,
+                      &c->night_confirm_ms};
     int k;
-    for (k = 0; k < 17; k++) *f[k] = i32();
+    for (k = 0; k < 19; k++) *f[k] = i32();
 }
 
 static int heater_read(cali_thermo_heater_t *h) {
@@ -137,15 +139,18 @@ static void state_print(const cali_thermo_state_t *st) {
     snap_print(st->has_stop_snapshot, &st->stop_snapshot);
     pstr(st->has_stop_snapshot ? st->stop_why : NULL);
     p64(st->last_ctl_ms);
+    printf(" %d", st->night);
+    p64(st->wait_until_ms);
+    p64(st->cont_since_ms);
 }
 
 static void defaults(void) {
     cali_thermo_cfg_t c = CALI_THERMO_DEFAULTS;
-    printf("%ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld\n", (long)c.period_ms, (long)c.kp,
+    printf("%ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld\n", (long)c.period_ms, (long)c.kp,
            (long)c.ki, (long)c.ka, (long)c.u_out_max, (long)c.hyst, (long)c.min_dwell_ms, (long)c.band_hi,
            (long)c.hot_hold_ms, (long)c.overheat, (long)c.min_level, (long)c.stale_after_ms,
            (long)c.heater_stale_ms, (long)c.batt_min_dv, (long)c.batt_hold_ms, (long)c.verify_ms,
-           (long)c.runtime_min);
+           (long)c.runtime_min, (long)c.night_wait_ms, (long)c.night_confirm_ms);
 }
 
 int main(int argc, char **argv) {
@@ -160,6 +165,15 @@ int main(int argc, char **argv) {
         cali_thermo_cfg_t cfg;
         cali_thermo_heater_t h;
         int kind = next()[0], hp, k;
+        if (kind == 'E') {
+            int64_t span = i64();
+            int32_t rise = i32(), gap = i32(), rem = i32();
+            int ends;
+            int32_t e = cali_thermo_eta(span, rise, gap, rem, &ends);
+            if (e == CALI_THERMO_NONE) printf("- %d\n", ends);
+            else printf("%ld %d\n", (long)e, ends);
+            continue;
+        }
         cfg_read(&cfg);
         if (kind == 'H') {
             int level, code, s;
@@ -198,8 +212,12 @@ int main(int argc, char **argv) {
             next();
             snprintf(res, sizeof res, "%.*s", (int)sizeof res - 1, tok);
             in.cmd_result = none() ? NULL : res;
+            in.night = flag();
+            in.known_camping_on = flag();
+            in.known_shore_on = flag();
+            in.known_ignition_on = flag();
 
-            st.mode = name(cali_thermo_mode_names, 4);
+            st.mode = name(cali_thermo_mode_names, 5);
             st.active = name(ACTIVE, 2);
             st.ctl.i = i32();
             st.ctl.last_change_ms = i64();
@@ -219,6 +237,9 @@ int main(int argc, char **argv) {
             snap_read(&st.has_stop_snapshot, &st.stop_snapshot);
             st.stop_why = why();
             st.last_ctl_ms = i64();
+            st.night = flag();
+            st.wait_until_ms = i64();
+            st.cont_since_ms = i64();
 
             cali_thermo_step(&in, &cfg, &st, &out);
 
@@ -229,7 +250,10 @@ int main(int argc, char **argv) {
             p32(out.status.target);
             p32(out.status.level);
             pstr(out.status.active_alias);
-            printf(" %d %s %d", out.status.outside_active, out.status.end, out.n);
+            printf(" %d %s", out.status.outside_active, out.status.end);
+            pstr(out.status.blocked);
+            p32(out.status.wait_left_s);
+            printf(" %d %d", out.status.night, out.n);
             for (k = 0; k < out.n; k++) {
                 printf(" %s", out.cmds[k].what);
                 p32(out.cmds[k].value);

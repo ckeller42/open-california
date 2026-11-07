@@ -1,8 +1,9 @@
 """Browser e2e of the cabin thermostat card on the Air heater screen (R_FW_THERMOSTAT_API).
 
 The card exists only on the ESP satellite (``GET /api/thermostat``) and only while a Govee
-thermometer is configured; it ships DISABLED (no AUTO switch). Every test fails on an uncaught JS
-error (``error_gated_page``). OPT-IN like test_satellite.py: skipped without Playwright + Chromium.
+thermometer is configured. The AUTO switch is always there: a tap with AUTO off opens a confirmation
+every time, which enables the thermostat and starts AUTO in one POST. Every test fails on an uncaught
+JS error (``error_gated_page``). OPT-IN like test_satellite.py: skipped without Playwright + Chromium.
 """
 
 import json
@@ -84,9 +85,66 @@ def test_card_absent_on_buspi(error_gated_page):
             assert "/api/thermostat" not in stub.requests
 
 
-def test_disabled_card_has_no_auto_switch(heater):
-    expect(_card(heater).get_by_text("Thermostat disabled")).to_be_visible()
-    assert _card(heater).get_by_role("switch", name="AUTO").count() == 0
+def _posted(stub, pg, n=1):
+    for _ in range(50):
+        if len(stub.thermostat_posts) >= n:
+            break
+        pg.wait_for_timeout(100)
+    return stub.thermostat_posts
+
+
+def test_switch_shown_while_disabled(heater):
+    """The AUTO switch shows while the thermostat is disabled."""
+    expect(_card(heater).get_by_role("switch", name="AUTO")).to_be_enabled()
+    assert _card(heater).get_by_text("Thermostat disabled").count() == 0
+
+
+@pytest.mark.parametrize(
+    "lang,hint,link,title",
+    [
+        ("en", "Camping mode is off", "Open camping mode ›", "Camping mode"),
+        ("de", "Campingmodus ist aus", "Campingmodus öffnen ›", "Campingmodus"),
+    ],
+)
+def test_blocked_no_camping_dims_switch_and_links(stub, error_gated_page, lang, hint, link, title):
+    """A blocked start dims the switch and names the reason, with a link to camping mode."""
+    _enable(stub, blocked="NO_CAMPING")
+    cm, pg = _open(stub, error_gated_page, lang)
+    try:
+        card = _card(pg)
+        expect(card.get_by_role("switch", name="AUTO")).to_be_disabled()
+        expect(card.locator(".thermo-hint")).to_contain_text(hint)
+        card.get_by_role("button", name=link).click()
+        expect(pg.locator("#title")).to_have_text(title)
+        assert stub.thermostat_posts == []
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_blocked_no_reference_opens_the_sheet(stub, error_gated_page):
+    _enable(stub, blocked="NO_REFERENCE")
+    stub.fixtures["satellite"]["/api/thermostat"]["ref"] = None
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        _card(pg).get_by_role("button", name="Choose a thermometer first").click()
+        expect(pg.get_by_role("radiogroup", name="Regulate on")).to_be_visible()
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "code,want",
+    [("TIMER_ARMED", "Stop the timer first"), ("IGNITION", "Ignition is on or not known yet")],
+)
+def test_blocked_text_only(stub, error_gated_page, code, want):
+    _enable(stub, blocked=code)
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).locator(".thermo-hint")).to_have_text(want)
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_be_disabled()
+        assert _card(pg).locator(".thermo-hint button").count() == 0
+    finally:
+        cm.__exit__(None, None, None)
 
 
 def test_select_reference_posts_alias(stub, error_gated_page):
@@ -123,7 +181,7 @@ def test_stale_sensor_not_selectable(stub, error_gated_page):
 
 
 def test_auto_needs_confirm(stub, error_gated_page):
-    _enable(stub)
+    """AUTO asks every time; OK enables and starts in one POST."""
     cm, pg = _open(stub, error_gated_page)
     try:
         seen = []
@@ -142,7 +200,9 @@ def test_auto_needs_confirm(stub, error_gated_page):
             if stub.thermostat_posts:
                 break
             pg.wait_for_timeout(100)
-        assert stub.thermostat_posts == [{"mode": "AUTO", "confirm": True, "rev": 1}]
+        assert stub.thermostat_posts == [{"enabled": True, "mode": "AUTO", "confirm": True, "rev": 1}]
+        assert "21.0 °C" in seen[0] and "cabin" in seen[0] and "120 min" in seen[0]
+        assert "not live-verified" not in seen[0]
     finally:
         cm.__exit__(None, None, None)
 
@@ -158,6 +218,37 @@ def test_target_buttons_step_half_a_degree(stub, error_gated_page):
             pg.wait_for_timeout(100)
         assert stub.thermostat_posts == [{"target": 2150, "rev": 1}]
         expect(_card(pg).get_by_text("21.5 °C")).to_be_visible()
+        # #517: the rebuilt stepper cannot be a live region; the stable #sr-status reads the new target
+        expect(pg.locator("#sr-status")).to_have_text("Target 21.5 °C")
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_quick_target_taps_on_a_slow_satellite_add_up(stub, error_gated_page):
+    """Four quick taps on + with slow POST replies end at +2 °C: an earlier reply or the poll never
+    shows an older target in between, and no tap is lost."""
+    _enable(stub)
+    stub.thermostat_delay_s = 0.8
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        card = _card(pg)
+        expect(card.get_by_text("21.0 °C")).to_be_visible()
+        pg.evaluate("""() => { window.__seen = [];
+          setInterval(() => { const v = [...document.querySelectorAll('.card.thermo .row .sval')]
+            .map(e => e.textContent).find(x => /^\\d+\\.\\d °C$/.test(x));
+            if (window.__seen[window.__seen.length - 1] !== v) window.__seen.push(v); }, 20); }""")
+        for _ in range(4):
+            card.get_by_role("button", name="Warmer").click()
+            pg.wait_for_timeout(250)
+        _posted(stub, pg, 4)
+        pg.wait_for_function(
+            "() => document.querySelectorAll('.card.thermo').length && window.__seen.includes('23.0 °C')",
+            timeout=8000,
+        )
+        pg.wait_for_timeout(2500)  # replies and polls after the last tap
+        assert [b["target"] for b in stub.thermostat_posts] == [2150, 2200, 2250, 2300]
+        seen = pg.evaluate("window.__seen")
+        assert seen == sorted(seen) and seen[-1] == "23.0 °C", seen
     finally:
         cm.__exit__(None, None, None)
 
@@ -213,9 +304,9 @@ def test_reason_line_shows_the_reason_not_the_end_kind(stub, error_gated_page):
 @pytest.mark.parametrize(
     "mode,active,want",
     [
-        ("AUTO", "bed", "level 4 • on backup"),
-        ("AUTO", "cabin", "level 4 • running"),
-        ("DEGRADED", "bed", "level 4 • degraded"),
+        ("AUTO", "bed", "level 4 · on backup"),
+        ("AUTO", "cabin", "level 4 · running"),
+        ("DEGRADED", "bed", "level 4 · degraded"),
     ],
 )
 def test_state_on_backup_and_degraded(stub, error_gated_page, mode, active, want):
@@ -269,5 +360,308 @@ def test_switch_names_follow_the_ui_language(stub, error_gated_page):
         _card(pg).get_by_role("button", name="Thermometer: cabin").click()
         expect(_card(pg).get_by_role("switch", name="Außentemperatur-Ausgleich")).to_be_visible()
         expect(_card(pg).get_by_role("switch", name="AUTO")).to_be_visible()
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_night_choice_posts_and_confirm_names_the_panel(stub, error_gated_page):
+    """Night in the run-time select posts night; its confirmation names the panel steps."""
+    cm, pg = _open(stub, error_gated_page, "de")
+    try:
+        seen = []
+        pg.on("dialog", lambda d: (seen.append(d.message), d.accept()))
+        _card(pg).get_by_role("combobox", name="Laufzeit").select_option("night")
+        assert _posted(stub, pg) == [{"night": True, "rev": 1}]
+        expect(_card(pg).get_by_role("combobox", name="Laufzeit")).to_have_value("night")
+        _card(pg).get_by_role("switch", name="AUTO").click()
+        assert _posted(stub, pg, 2)[1] == {"enabled": True, "mode": "AUTO", "confirm": True, "rev": 2}
+        assert "Dauerbetrieb" in seen[0] and "Bedienteil" in seen[0] and "„Ja“" in seen[0]
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_auto_waits_for_a_pending_night_post(stub, error_gated_page):
+    """AUTO waits for a pending run-time POST, so its confirmation names the chosen run."""
+    cm, pg = _open(stub, error_gated_page)
+    held = []
+    try:
+        pg.route(
+            "**/api/thermostat", lambda r: held.append(r) if r.request.method == "POST" else r.continue_()
+        )
+        _card(pg).get_by_role("combobox", name="Run time").select_option("night")
+        for _ in range(30):
+            if held:
+                break
+            pg.wait_for_timeout(100)
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_be_disabled()
+        held.pop().continue_()
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_be_enabled()
+        seen = _first_dialog(pg, lambda: _card(pg).get_by_role("switch", name="AUTO").click())
+        assert seen and "Heat for the night" in seen[0]
+    finally:
+        for r in held:
+            r.continue_()
+        pg.unroute("**/api/thermostat")
+        cm.__exit__(None, None, None)
+
+
+def test_minute_choice_clears_night(stub, error_gated_page):
+    stub.fixtures["satellite"]["/api/thermostat"]["night"] = True
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        sel = _card(pg).get_by_role("combobox", name="Run time")
+        expect(sel).to_have_value("night")
+        sel.select_option("60")
+        assert _posted(stub, pg) == [{"night": False, "runtime_min": 60, "rev": 1}]
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "lang,want",
+    [
+        ("en", "Switch on “Dauerbetrieb” on the panel now and confirm with “Yes”. Waiting 4:32 min."),
+        (
+            "de",
+            "Jetzt am Bedienteil „Dauerbetrieb“ einschalten und mit „Ja“ bestätigen. Wartet noch 4:32 min.",
+        ),
+    ],
+)
+def test_waiting_shows_the_countdown(stub, error_gated_page, lang, want):
+    """WAITING tells the owner the panel step and counts down."""
+    _enable(stub, mode="WAITING", reason="WAITING_FOR_CONTINUOUS", wait_left_s=272, night=True)
+    stub.fixtures["satellite"]["/api/thermostat"].update(mode="WAITING", night=True)
+    cm, pg = _open(stub, error_gated_page, lang)
+    try:
+        expect(_card(pg).locator(".thermo-line")).to_have_text(want)
+        _card(pg).get_by_role("switch", name="AUTO").click()  # WAITING -> off, no confirm
+        assert _posted(stub, pg) == [{"mode": "OFF"}]
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize("reason", ["RUN_ENDED", "CONTINUOUS_ENDED", "NIGHT_WAIT_ENDED", "USER_OFF"])
+def test_quiet_endings_show_no_reason(stub, error_gated_page, reason):
+    """A run that ends by itself shows nothing on the card."""
+    _enable(stub, reason=reason)
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_have_attribute("aria-checked", "false")
+        expect(_card(pg).locator(".thermo-line")).to_have_count(0)
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_hold_at_min_level_text(stub, error_gated_page):
+    _enable(stub, mode="AUTO", heater="CONTINUOUS", level=1, reason="HOLD_AT_MIN_LEVEL", night=True)
+    stub.fixtures["satellite"]["/api/thermostat"].update(mode="AUTO", night=True)
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).locator(".thermo-line")).to_have_text("Warmer than the target at the lowest level")
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_night_auto_shows_no_end_in_german(stub, error_gated_page):
+    _enable(stub, mode="AUTO", heater="CONTINUOUS", level=4, reason="HOLD", night=True)
+    stub.fixtures["satellite"]["/api/thermostat"].update(mode="AUTO", night=True)
+    cm, pg = _open(stub, error_gated_page, "de")
+    try:
+        expect(_card(pg).get_by_text("Nacht · Stufe 4 · kein Ende", exact=True)).to_be_visible()
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_day_auto_shows_the_end_time(stub, error_gated_page):
+    """Day AUTO on a running heater shows when the run ends."""
+    _enable(stub, mode="AUTO", heater="RUNNING", level=4, active="cabin", reason="HOLD", end="run")
+    stub.fixtures["satellite"]["/api/thermostat"]["mode"] = "AUTO"
+    # the unit's own 1702: an immediate run at level 4 with 30 min left
+    stub.fixtures["satellite"]["/api/state"]["fn"]["airheater"].update(
+        NormalOperation=1, HeatingLevel=4, RunningTime=60, RunningTimeinAction=30
+    )
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).locator(".sval").first).to_contain_text("level 4 · ends ")
+        # the card rendered before this evaluate: across a minute boundary it may show the minute before
+        want = pg.evaluate(
+            "() => [0, 1].map((k) => { const d = new Date(Date.now() + (30 - k) * 60000);"
+            " return hhmm(d.getHours(), d.getMinutes()); })"
+        )
+        assert _card(pg).locator(".sval").first.text_content() in ["level 4 · ends " + w for w in want]
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_day_auto_hides_the_end_time_on_old_data(stub, error_gated_page):
+    """With the satellite's data older than its offline limit the card names no end time."""
+    _enable(stub, mode="AUTO", heater="RUNNING", level=4, active="cabin", reason="HOLD", end="run")
+    stub.fixtures["satellite"]["/api/thermostat"]["mode"] = "AUTO"
+    state = stub.fixtures["satellite"]["/api/state"]
+    state["fn"]["airheater"].update(NormalOperation=1, HeatingLevel=4, RunningTime=60, RunningTimeinAction=30)
+    state["device"]["link"]["last_snap_age_ms"] = 600000
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).get_by_text("level 4 · running", exact=True)).to_be_visible()
+        assert "ends" not in _card(pg).locator(".sval").first.text_content()
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "lang,want",
+    [("en", "Night · level 4 · on backup · no end"), ("de", "Nacht · Stufe 4 · auf Reserve · kein Ende")],
+)
+def test_night_on_backup_keeps_the_night_label(stub, error_gated_page, lang, want):
+    _enable(stub, mode="AUTO", heater="CONTINUOUS", level=4, active="bed", reason="HOLD", night=True)
+    stub.fixtures["satellite"]["/api/thermostat"].update(mode="AUTO", night=True, backup="bed")
+    cm, pg = _open(stub, error_gated_page, lang)
+    try:
+        expect(_card(pg).get_by_text(want, exact=True)).to_be_visible()
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "lang,want,never",
+    [
+        ("en", "Take over the running “Dauerbetrieb”", "120 min"),
+        ("de", "Den laufenden „Dauerbetrieb“ mit dem Thermostat übernehmen?", "120 min"),
+    ],
+)
+def test_day_confirm_on_continuous_names_no_run_time(stub, error_gated_page, lang, want, never):
+    """With Dauerbetrieb already on, the day confirmation says the thermostat holds it until switched off."""
+    _enable(stub, heater="CONTINUOUS", level=6)
+    stub.fixtures["satellite"]["/api/state"]["fn"]["airheater"].update(
+        NormalOperation=1, PermanentOperation=1, HeatingLevel=6
+    )
+    cm, pg = _open(stub, error_gated_page, lang)
+    try:
+        seen = []
+        pg.on("dialog", lambda d: (seen.append(d.message), d.dismiss()))
+        _card(pg).get_by_role("switch", name="AUTO").click()
+        for _ in range(30):
+            if seen:
+                break
+            pg.wait_for_timeout(100)
+        assert seen and want in seen[0] and never not in seen[0] and "21.0 °C" in seen[0]
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_night_degraded_keeps_the_night_label(stub, error_gated_page):
+    _enable(stub, mode="DEGRADED", heater="CONTINUOUS", level=4, reason="DEGRADED", night=True)
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).get_by_text("Night · level 4 · degraded · no end", exact=True)).to_be_visible()
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def _first_dialog(pg, switch_click):
+    seen = []
+    pg.on("dialog", lambda d: (seen.append(d.message), d.dismiss()))
+    switch_click()
+    for _ in range(30):
+        if seen:
+            break
+        pg.wait_for_timeout(100)
+    return seen
+
+
+def test_confirm_on_continuous_wins_over_night(stub, error_gated_page):
+    _enable(stub, heater="CONTINUOUS", level=6)
+    stub.fixtures["satellite"]["/api/thermostat"]["night"] = True
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        seen = _first_dialog(pg, lambda: _card(pg).get_by_role("switch", name="AUTO").click())
+        assert (
+            seen and "Take over the running “Dauerbetrieb”" in seen[0] and "Heat for the night" not in seen[0]
+        )
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_confirm_on_running_heater_names_no_duration_and_skips_enabled(stub, error_gated_page):
+    """A timed run keeps its timer (no runtime is sent), and an enabled feature is not re-enabled."""
+    _enable(stub, heater="RUNNING", level=4)
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        pg.on("dialog", lambda d: d.accept())
+        _card(pg).get_by_role("switch", name="AUTO").click()
+        for _ in range(50):
+            if stub.thermostat_posts:
+                break
+            pg.wait_for_timeout(100)
+        assert stub.thermostat_posts == [{"mode": "AUTO", "confirm": True, "rev": 1}]
+        assert "at most" not in pg.evaluate("() => thermoConfirmText(THERMO)")
+        assert "Take over the running air heater" in pg.evaluate("() => thermoConfirmText(THERMO)")
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "lang,eta,first,want",
+    [
+        ("en", 2040, False, "18.0 °C in about 35 min (≈{t})"),
+        ("de", 2040, False, "18.0 °C in etwa 35 min (≈{t})"),
+        ("en", 60, False, "18.0 °C in about 5 min (≈{t})"),
+        ("en", 960, True, "The run time ends before 18.0 °C"),
+        ("de", 960, True, "Die Laufzeit endet vor 18.0 °C"),
+    ],
+)
+def test_eta_line(stub, error_gated_page, lang, eta, first, want):
+    """While AUTO heats, the card shows the firmware's time-to-target estimate in 5-min steps, always
+    "about"; an estimate later than the run's end says so instead of naming a time.
+
+    .. test:: Thermostat card: the time-to-target line
+       :id: T_THERMOSTAT_CARD_ETA
+       :links: R_THERMOSTAT_ETA, AD_THERMOSTAT_ETA
+    """
+    _enable(stub, mode="AUTO", heater="RUNNING", level=10, active="cabin", reason="HOLD", end="run",
+            target=1800, eta_s=eta, eta_ends_first=first)  # fmt: skip
+    stub.fixtures["satellite"]["/api/thermostat"].update(mode="AUTO", target=1800)
+    cm, pg = _open(stub, error_gated_page, lang)
+    try:
+        line = _card(pg).locator(".thermo-eta")
+        expect(line).to_have_count(1)
+        if "{t}" in want:
+            mins = int(want.split(" min")[0].split()[-1])
+            ok = pg.evaluate(
+                "(m) => [0, 1].map((k) => { const d = new Date(Date.now() + (m - k) * 60000);"
+                " return hhmm(d.getHours(), d.getMinutes()); })",
+                mins,
+            )
+            assert line.text_content() in [want.format(t=w) for w in ok]
+        else:
+            expect(line).to_have_text(want)
+    finally:
+        cm.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize("mode,eta", [("AUTO", None), ("OFF", 600), ("WAITING", 600)])
+def test_eta_line_hidden_without_an_estimate(stub, error_gated_page, mode, eta):
+    """No estimate, or a mode other than AUTO: no line."""
+    _enable(stub, mode=mode, heater="RUNNING", level=10, reason="HOLD", eta_s=eta)
+    stub.fixtures["satellite"]["/api/thermostat"]["mode"] = mode
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_be_visible()
+        expect(_card(pg).locator(".thermo-eta")).to_have_count(0)
+    finally:
+        cm.__exit__(None, None, None)
+
+
+def test_eta_line_hidden_on_old_data(stub, error_gated_page):
+    """With the satellite's data older than its offline limit the card names no time to target."""
+    _enable(
+        stub, mode="AUTO", heater="RUNNING", level=10, active="cabin", reason="HOLD", end="run", eta_s=2040
+    )
+    stub.fixtures["satellite"]["/api/thermostat"]["mode"] = "AUTO"
+    stub.fixtures["satellite"]["/api/state"]["device"]["link"]["last_snap_age_ms"] = 600000
+    cm, pg = _open(stub, error_gated_page)
+    try:
+        expect(_card(pg).get_by_role("switch", name="AUTO")).to_have_attribute("aria-checked", "true")
+        expect(_card(pg).locator(".thermo-eta")).to_have_count(0)
     finally:
         cm.__exit__(None, None, None)

@@ -1,0 +1,204 @@
+"""Generate the Things Stack uplink formatter for the satellite's LoRaWAN telemetry (R_FW_LORA).
+
+The formatter turns ports 2, 3 and 4 (layout: ``firmware/components/cali_core/include/cali_lora.h``)
+back into the unit's RAW state fields per function, exactly as :func:`calictl.protocol.decode` slices
+them, so a reader interprets LoRa data with Open California's own semantics and the two paths cannot
+drift. The field table comes from ``protocol/dictionary.yaml`` (+ :mod:`calictl.overrides`); the
+function index on port 3 is the ``CODEC_CHARS`` order of ``csrc/codec_chars.h`` (the same sorted list
+:func:`tools.gen_c_dict.generate_chars` emits). The Things Stack's JavaScript formatter has no
+``require()``, so the table is inlined into one file.
+
+The same decoder also goes into ``calictl/webui/lora_decode.js``, the remote app's classic script
+(``loraDecodeUplink(port, bytes)``), so the phone and the TTS console can never decode differently.
+
+Usage::
+
+    python3 -m tools.gen_lora_dict           # write ttn_formatter.js and calictl/webui/lora_decode.js
+    python3 -m tools.gen_lora_dict --check   # exit 1 when either checked-in file is stale
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+from calictl import overrides, protocol
+
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "firmware" / "components" / "cali_lora" / "ttn_formatter.js"
+WEB_OUT = ROOT / "calictl" / "webui" / "lora_decode.js"
+
+# The decoder itself: shared byte for byte by the TTS formatter and the web UI's lora_decode.js, so the phone and
+# the TTS console can never decode differently. decodeFrame() answers {port, version?, fn, ...} (raw fields per
+# function, as calictl.protocol.decode), {port, version, fn: {}} for a version it does not know, {port: 12,
+# confirm} for a key-transfer confirmation (not interpreted here), or {port, error}.
+_BODY = """\
+var VERSION = 1;
+var FUNCTIONS = __FUNCTIONS__;
+
+function be(b, i, n) { var v = 0; for (var k = 0; k < n; k++) v = v * 256 + b[i + k]; return v; }
+function sbe(b, i, n) { var v = be(b, i, n), m = Math.pow(2, 8 * n); return v >= m / 2 ? v - m : v; }
+function allFF(b, i, n) { for (var k = 0; k < n; k++) if (b[i + k] !== 255) return false; return true; }
+
+// MSB-first: bit i = byte[i/8] >> (7 - i%8) & 1; only fields that fully fit len bytes
+function slice(fn, b, start, len) {
+  var out = {};
+  for (var k = 0; k < fn.fields.length; k++) {
+    var f = fn.fields[k], v = 0;
+    if (f[1] + f[2] > len * 8) continue;
+    for (var i = 0; i < f[2]; i++) {
+      var bit = f[1] + i;
+      v = v * 2 + ((b[start + (bit >> 3)] >> (7 - (bit & 7))) & 1);
+    }
+    out[f[0]] = v;
+  }
+  return out;
+}
+
+function byName(name) { for (var i = 0; i < FUNCTIONS.length; i++) if (FUNCTIONS[i].name === name) return FUNCTIONS[i]; return null; }
+function opt(b, i, n, k, signed) { return allFF(b, i, n) ? null : (signed ? sbe(b, i, n) : be(b, i, n)) / k; }
+
+function decodeEnergy(b) {
+  if (b.length > 0 && b[0] !== VERSION) return { port: 2, version: b[0], fn: {} };
+  if (b.length !== 50) return { port: 2, error: "port 2 needs 50 bytes, version 1" };
+  var fn = {};
+  if (!allFF(b, 3, 22)) fn.energy = slice(byName("energy"), b, 3, 22);
+  if (!allFF(b, 25, 6)) fn.water = slice(byName("water"), b, 25, 6);
+  var net = be(b, 47, 3);
+  return { port: 2, version: b[0], boot: be(b, 1, 2), fn: fn,
+    ext: { victron_mppt: { battery_current: opt(b, 31, 2, 10, true), pv_power: opt(b, 33, 2, 1),
+                           yield_today_kwh: opt(b, 35, 2, 100), charge_state: opt(b, 37, 1, 1), error_code: opt(b, 38, 1, 1) },
+           victron_battery: { battery_voltage: opt(b, 39, 2, 100) } },
+    counters: { solar_wh: be(b, 41, 3) / 10, load_wh: be(b, 44, 3) / 10, batt_net_wh: (net >= 0x800000 ? net - 0x1000000 : net) / 10 } };
+}
+
+function decodeChanged(b) {
+  var fn = {}, i = 0;
+  while (i < b.length) {
+    if (i + 2 > b.length || b[i] >= FUNCTIONS.length || i + 2 + b[i + 1] > b.length) return { port: 3, error: "port 3: bad entry at byte " + i };
+    var f = FUNCTIONS[b[i]];
+    fn[f.name] = slice(f, b, i + 2, b[i + 1]);
+    i += 2 + b[i + 1];
+  }
+  return { port: 3, fn: fn };
+}
+
+function decodeDaily(b) {
+  if (b.length > 0 && b[0] !== VERSION) return { port: 4, version: b[0], fn: {} };
+  if (b.length !== 24) return { port: 4, error: "port 4 needs 24 bytes, version 1" };
+  var fw = "";
+  for (var i = 16; i < 24 && b[i]; i++) fw += String.fromCharCode(b[i]);
+  var fn = {};
+  if (!allFF(b, 7, 9)) fn.general = slice(byName("general"), b, 7, 9);
+  return { port: 4, version: b[0], boot: be(b, 1, 2), uptime_s: be(b, 3, 4), fn: fn, fw: fw };
+}
+
+function decodeFrame(port, b) {
+  switch (port) {
+    case 2: return decodeEnergy(b);
+    case 3: return decodeChanged(b);
+    case 4: return decodeDaily(b);
+    case 12: return { port: 12, confirm: Array.prototype.slice.call(b) };
+    default: return { port: port, error: "unknown port " + port };
+  }
+}
+"""
+
+_TEMPLATE = """\
+// ttn_formatter.js — GENERATED by tools/gen_lora_dict.py from protocol/dictionary.yaml
+// (+ calictl/overrides.py). DO NOT EDIT. Regenerate: python3 -m tools.gen_lora_dict
+// The Things Stack uplink formatter for the satellite's LoRaWAN telemetry (R_FW_LORA, cali_lora.h):
+// returns the unit's RAW state fields per function (as calictl.protocol.decode), never interpreted values.
+// The decoder is the same as the web UI's calictl/webui/lora_decode.js.
+__BODY__
+function decodeUplink(input) {
+  var d = decodeFrame(input.fPort, input.bytes || []);
+  if (d.error) return { errors: [d.error] };
+  if (d.version !== undefined && d.version !== VERSION) return { errors: ["port " + d.port + ": unknown version " + d.version] };
+  return { data: d };
+}
+
+if (typeof module !== "undefined") module.exports = { decodeUplink: decodeUplink, FUNCTIONS: FUNCTIONS };
+"""
+
+_WEB_TEMPLATE = """\
+// @ts-nocheck
+// lora_decode.js — GENERATED by tools/gen_lora_dict.py from protocol/dictionary.yaml
+// (+ calictl/overrides.py). DO NOT EDIT. Regenerate: python3 -m tools.gen_lora_dict
+// The remote app's LoRa uplink decoder (R_UI_REMOTE_APP): the same decoder as the TTS formatter
+// firmware/components/cali_lora/ttn_formatter.js. A classic script: the only global is loraDecodeUplink.
+// NOT served by the ESP — the remote app loads it.
+
+/**
+ * One uplink's FPort and bytes -> {port, version?, fn: {[function]: raw fields}, ext?, counters?, boot?, uptime_s?,
+ * fw?}; {port, version, fn: {}} for a version other than `.VERSION`; {port: 12, confirm: number[]}; or {port, error}.
+ * @type {((port: number, bytes: Uint8Array | number[]) => any) & {VERSION: number}}
+ */
+const loraDecodeUplink = (function () {
+__BODY__
+decodeFrame.VERSION = VERSION;
+return decodeFrame;
+})();
+"""
+
+
+def functions() -> list[dict]:
+    """The functions with a state char, in ``CODEC_CHARS`` order, with their placed state fields.
+
+    :returns: ``[{"name", "fields": [[name, offset, width], ...]}]``
+    """
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    return [
+        {"name": name, "fields": [[f.name, f.offset, f.width] for f in funcs[name].state_fields if f.placed]}
+        for name in sorted(funcs)
+        if funcs[name].state_char
+    ]
+
+
+def body() -> str:
+    """The decoder both files carry.
+
+    :returns: the JavaScript text (deterministic)
+    """
+    return _BODY.replace("__FUNCTIONS__", json.dumps(functions(), separators=(",", ":")))
+
+
+def generate() -> str:
+    """Render the TTS formatter.
+
+    :returns: the JavaScript text (deterministic)
+    """
+    return _TEMPLATE.replace("__BODY__", body())
+
+
+def generate_web() -> str:
+    """Render the web UI's decoder (``calictl/webui/lora_decode.js``, a classic script).
+
+    :returns: the JavaScript text (deterministic)
+    """
+    return _WEB_TEMPLATE.replace("__BODY__", body())
+
+
+def main() -> int:
+    outs = ((OUT, generate()), (WEB_OUT, generate_web()))
+    if "--check" in sys.argv:
+        stale = [p for p, text in outs if not p.is_file() or p.read_text(encoding="utf-8") != text]
+        for p in stale:
+            print(
+                "STALE: %s does not match a fresh regeneration — run python3 -m tools.gen_lora_dict" % p,
+                file=sys.stderr,
+            )
+        if stale:
+            return 1
+        print("fresh: %s" % ", ".join(str(p) for p, _ in outs))
+        return 0
+    for p, text in outs:
+        p.write_text(text, encoding="utf-8")
+        print("wrote %s" % p)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

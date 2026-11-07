@@ -25,6 +25,7 @@ howto-pair-your-camper
 howto-esp-first-flash
 howto-esp-wifi-setup
 howto-esp-standalone
+howto-lora-remote-setup
 ```
 
 ```{toctree}

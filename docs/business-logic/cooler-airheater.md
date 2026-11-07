@@ -198,6 +198,16 @@ unlike Cooler's single `af.a`). State/read-back characteristic `00001702-...`; l
 `<-- Incoming Data for AirHeater:` (`rf/b.java:393-402`). Service UUID `00001700-...`
 (`rf/b.java:121`).
 
+**Hardware on this van** (the heater's type plate, owner photo): Eberspächer **Airtronic M2**,
+version D4A, diesel, 12 V, rated 40 W electrical and 3.5 kW heat output, VW part 7T0 010 025. `batt2`
+is the net current of the second battery, so it also carries the other loads and any charging;
+it shows the heater's phases, not the heater's own consumption. During one run it read about
+−9 A while the glow plug starts the heater (about 2 min), about −2.7 A at level 10, about −1 A at
+levels 9 and 8, and a short −6 A at the shutdown burn-off (DEVICE). An Airtronic sets its own output in steps from the air
+temperature at its own sensor against a set temperature; that the unit's `HeatingLevel` is such a
+set temperature, not a fixed output per level, matches the small step from level 9 to level 8 but
+is UNVERIFIED.
+
 ### 1. Action → field map
 
 | Method | Interface | Signature | Field set | Value | Cite |
@@ -300,8 +310,9 @@ then reads "Timer: On").
   activated when the engine is running or when the auxiliary water heater is activated. If the
   auxiliary air heater is active, it will be switched off when the engine is running or when the
   auxiliary water heater is activated." `FaultTriggerBit=1` alone shows nothing. The web UI's
-  `AIRHEATER_ERROR_MSG` mirrors these titles (so `heating_time_exceeded` reads "Emission limit
-  exceeded", `not_possible` "deactivated — engine / water heater running").
+  `AIRHEATER_ERROR_MSG` mirrors these titles (`not_possible` reads "deactivated — engine / water
+  heater running"), except `heating_time_exceeded`: it uses the unit panel's own words, "Max.
+  Betriebsdauer erreicht" ("Max. operating time reached"), not the app's "Emission limit exceeded".
 - **ErrorCode** (read-back only): `0` = none/cleared, `1` = low battery, `2` = low fuel,
   `3` = system error, `4` = heating time exceeded, `5` = operation not possible; app 5.4.0
   adds `6` = engine running (`AIR_HEATER_ENGINE_ON`) and `7` = auxiliary heater active
@@ -376,8 +387,10 @@ Send the full 10-field frame every time (shared-send behavior above).
   immediate heating "is limited to 120 minutes" (`infoPage_heating_immediate_description`).
   `ErrorCode 4` is named HEATING_TIME_EXCEEDED in the app (text "Emission limit exceeded … switched
   on again when moving ≥ 5 km/h"); the T7 limits per a third-party manual copy / dealer explainer
-  are ≤ 120 min per run and ≤ 180 min in total, then locked until driven. That the unit reports
-  code 4 for such a run is **not verified on this van**. The app's slider writes only
+  are ≤ 120 min per run and ≤ 180 min in total, then locked until driven. This van reports code 4
+  after about 150 min of heating in one day without a drive, on a run of 77 min, and refuses each
+  later start with code 4 for 6 to 40 s (DEVICE, `evidence-ledger.md`). The exact limits stay
+  unverified, and so does the release by a drive. The app's slider writes only
   10–120 (index 1–12 × 10, 5.4.0 `d9/u.java:45-176`); calictl enforces the same **10–120** in
   `control._airheater` (`AIRHEATER_MIN_RUNTIME_MIN`/`AIRHEATER_MAX_RUNTIME_MIN`); the 8-bit width
   is not the valid range),
@@ -387,7 +400,9 @@ Send the full 10-field frame every time (shared-send behavior above).
   0 clears. The app raises the dialogs from **every 1702 decode**, not after a refused start
   (5.4.0 `ig/b.O`, `ig/b.java:292-721`): codes 5, 6, 7 always; codes 1–4 only after the app has
   seen a code 0 since the subscribe of the current connection (latch `e0`, gate
-  `e0 || code < 1 || code >= 5`, `ig/b.java:319`; reset per connect); each code's dialog once,
+  `e0 || code < 1 || code >= 5`, `ig/b.java:319`; reset per connect — APP-OBSERVED 2026-11-03: code 2
+  already present at the subscribe raises no dialog until a 0 and then a 2 arrive, code 6 present at
+  the subscribe raises its dialog at once); each code's dialog once,
   until the code returns to 0. The dashboard "error" flag uses the same latch. Only code 5 is tied
   to a tap: ON under code 5 writes nothing and re-shows its dialog. DECOMPILE 5.4.0.3036 (2026-11-02); texts of all
   seven codes APP-OBSERVED 2026-11-02 (odelly lab). Code 4 says the heater "can be switched on
@@ -410,13 +425,22 @@ Send the full 10-field frame every time (shared-send behavior above).
   writes RunningTime alone (owner rule: no heater short cycles; unverified on the unit — OPEN).
 - "Start heating at": **greyed** (tap does nothing) while the timer is armed.
 - Start timer while continuous heating is on: "Continuous heating will turn off when the timer
-  ends. Would you like to proceed?"
+  ends. Would you like to proceed?" (the app spells it "Continious"). "Yes, start the timer" writes
+  only `3f3b017f1f3f` (+ neutral): no start time, and no `PermanentOperationRequest=0` — the app does
+  not end continuous heating itself. Cancel writes nothing (APP-OBSERVED 2026-11-03, odelly lab).
 - Status bar while active with the timer armed: "Active • Remaining time: N • Timer starts: HH:MM";
   continuous + armed: "Active • Continuous heating • Timer starts in HH:MM".
 - No ignition / engine / battery gate. Permanent-heating card while off: a clickable card that opens
   "Continuous heating can be initiated only in the vehicle." (no write).
 - calictl mirrors the refusals in `control.command_precondition` (Python + the ESP's C twin,
   `REASON_AIRHEATER_*`) and the greying/confirms/status in the shared web UI.
+- Dashboard tile icon (Vehicle tab): idle → `3d7b007f1f3f`, heating → `3c7b007f1f3f`, each + neutral
+  ~500 ms later — the same frames as *Immediate heating*. Under continuous heating the icon opens
+  "Turn off continuous heating?"; *Turn off* → `0f7b007f1f3f`, Cancel → no write (APP-OBSERVED
+  2026-11-03, odelly lab).
+- The "Heating & Cooling" page (5.4.0 `wi/b`, departure timer for other heater combinations) is not
+  reachable on this T7: no tile, menu entry or link on the Vehicle tab, Vehicle Information, the
+  heater page or How-to & Info (APP-OBSERVED 2026-11-03, odelly lab).
 - Elsewhere in the app (recorded, not mirrored): the dashboard tile says "Error" for codes 1–5 and
   "Warning" for 6–7; `Installed=0` hides the tile; disconnected greys every quick button; energy
   `WarningLevelActive=1` ("Battery is flat. Charge now!") and `SleepWarning=1` (charging cable still
@@ -496,6 +520,98 @@ Send the full 10-field frame every time (shared-send behavior above).
   initiated only in the vehicle. / This feature can be disabled from the mobile app, but it can be
   activated only using the in-vehicle systems." [Got it] — no write. While running, the app greys
   nothing else. The run-time slider shows 10…120 with 12 ticks.
+
+**Run through the ESP satellite (DEVICE 2026-11-03, ESP fw `0de992e`, owner at the panel, ignition
+off, camping mode off):** the ESP's own control path (`control.c` + the sequencer over NimBLE)
+drives the real heater. Each write through `POST /api/command` applied; 1702 read back after each:
+
+| Time | Command | 1702 readback | Unit panel |
+|---|---|---|---|
+| 13:43:33 | `runtime 10` | `RunningTime` 10 | "Heizdauer 10 min" |
+| 13:43:37 | `power on` | `NormalOperation` 1, `RunningTimeinAction` 10 | "Sofort heizen" on, heater icon in the status bar |
+| 13:44:14 | `level 3` | `HeatingLevel` 3 | "Heizstufe 3" |
+| 13:44:52 | `power off` | `NormalOperation` 0 | |
+| 13:45:10 | `level 8`, `runtime 30` (restore) | `HeatingLevel` 8, `RunningTime` 30 | |
+
+- `ErrorCode` 0 throughout; the thermostat stayed disabled (`enabled=false`, mode OFF).
+- After an OFF the remaining time stays latched: `RunningTimeinAction` 9 after the stop (a run that
+  ends by itself reads 0 afterwards, see above).
+- The panel greys "Heizdauer" while immediate heating runs. The heater icon left the status bar
+  within ~10 min of the OFF (run-on).
+- The panel's "Startzeit" page offers one device ("Gerät auswählen: Luftstandheizung") and shows the
+  immediate-heating values it will use ("Heizdauer 30 min, Heizstufe 8"): the departure timer has
+  no settings of its own. Its "Luftzufuhr" line is empty while 1702 `AirDistribution` is 0.
+- The panel calls the page "Heizen & Lüften"; its (i) shows only an energy note, no run-time limit.
+
+**Continuous heating from the panel, level and OFF from the ESP (DEVICE 2026-11-03, same setup):**
+the owner started "Dauerbetrieb" on the panel (confirm "Möchten Sie die Luftstandheizung dauerhaft
+aktivieren?") → 1702 `PermanentOperation` 1, `NormalOperation` 0, level 9. ESP `level 3` →
+`HeatingLevel` 3 with `PermanentOperation` still 1, panel "Heizstufe 3". ESP `permanent off`
+(`0f7b007f1f3f`) → `PermanentOperation` 0, panel "Dauerbetrieb" off and the heater icon gone. Level 9
+restored. `ErrorCode` 0 throughout. This is the thermostat's actuator path: a panel start, level
+changes and the OFF all from the ESP.
+
+**First thermostat AUTO run (DEVICE 2026-11-03 22:31–23:02, ESP fw `e276eab`, owner in the van,
+ignition off, roof closed, outdoor steady at 6.7 °C, reference `unten`):** immediate heating started
+from the ESP (`runtime 120`, `level 10`, `power on`); camping mode on, the thermostat enabled with
+target 16 °C and `POST /api/thermostat {"mode":"AUTO"}` → `ADOPT_RUN` with no command and no level
+jump. At 22:45 the target changed to 13 °C; the controller stepped the level down on its own.
+Settings: the shipped placeholders (`kp` 1500, `ki` 50, `ka` 100, `min_dwell` 5 min, outside
+compensation on).
+
+| Time | Event | `unten` °C | Level | Battery 2 current |
+|---|---|---|---|---|
+| 22:31 | immediate heating on | 7.6 | 10 | |
+| 22:38 | AUTO `ADOPT_RUN`, target 16 | 8.3 | 10 | −3.6 to −3.7 A (22:42) |
+| 22:45 | target 13 | 9.8 | 10 | |
+| 22:47 | controller step | 10.4 | 5 | −0.9 A (22:50) |
+| 22:52 | controller step | 11.5 | 4 | |
+| 22:56 | controller step | 12.6 | 3 | −1.5 A (22:58) |
+| 23:01 | mode OFF → `USER_OFF`, heater off within 5 s | 13.5 | — | |
+
+- The cabin responds about 5 min after a level change; then `unten` rises 0.22–0.25 K/min at level 10.
+- The approach overshot: 13.5 °C at the stop and still rising 0.2 K/min at level 3. The run ended
+  before the hold level showed, and a door opened near the end.
+- `govee` (in a cupboard) rose only from +1.4 to +2.2 K over outdoor. `dach` sits in the closed
+  pop-top roof, a space mostly separate from the cabin while the roof is down: it rose from +0.0 to
+  +0.5 K. It says nothing about the cabin air until the roof is open.
+- Level 10 draws about 3.6–3.7 A at 13.2 V (≈ 48 W, the whole second-battery load); levels 3–5 about
+  1–1.5 A. The run took about 1.3 Ah.
+- `GET /api/thermostat` `status.heater` shows the heater state of the last step: it reads `RUNNING`
+  for up to one period (60 s) after the stop, then `OFF`.
+
+**Night-flow test (DEVICE 2026-11-04 13:29–13:52, ESP fw `e276eab`, owner at the panel, ignition off,
+roof closed, outdoor 8.7–8.9 °C, reference `unten`, placeholder gains):** camping mode on, thermostat
+enabled with target 18.0 °C (13:29:36).
+
+- **Unanswered panel question.** The owner started Dauerbetrieb on the panel and did not answer
+  "Möchten Sie die Luftstandheizung dauerhaft aktivieren?". 1702 byte 0 went `10` (13:29:33) →
+  `12`, then `14` (13:30:06) → `10` (13:30:26), `ErrorCode` 0. The ESP sent no command. AUTO
+  adopted at 13:30:08 (`ADOPT_CONTINUOUS`) and ended at 13:31:08 (`CONTINUOUS_ENDED`).
+- **The panel starts at the stored level.** Here level 1, the thermostat's own last step on
+  2026-11-03 at 23:01:25 (`LEVEL_DOWN` 3 → 1, three seconds before the owner's OFF).
+- **Second start, confirmed with „Ja“ on the panel.** Seen 13:32:07, `ADOPT_CONTINUOUS` at level 1 at 13:32:08. The bumpless
+  adopt set the integrator to −14 620. The level climbed 1 → 3 (13:37) → 4 (13:43) and stayed at 4
+  until 13:52, with the cabin still 6.6 K below the target: the integrator's rise (about
+  0.35 level/min, computed from the ESP thermo records, fields `i` and `u`, not measured) was cancelled by the falling proportional share (`kp` × about 0.25 K/min, computed from the same records). This is
+  the reason for the rule that an owner-requested takeover starts from the computed demand.
+
+| Time | Level | `unten` °C | Battery 2 current |
+|---|---|---|---|
+| 13:32 | 1 | 8.3 | −1.7 A |
+| 13:33–13:34 | 1 | 8.3–8.4 | −9.4 A (start phase, glow plug) |
+| 13:37 | 3 | 8.6 | −2.8 A |
+| 13:43 | 4 | 9.5 | −2.3 A |
+| 13:47 | 4 | 10.4 | −2.1 A |
+| 13:52 | 4 | 11.4 | −1.6 A |
+
+- `govee` (cupboard) rose +0.5 K and `dach` (closed roof) +0.3 K in 20 min.
+- Solar charging of about 7 W was active, so the current does not follow the level (L3 −2.8 A,
+  L4 −2.1 A).
+- The response delay is about 4 min. Level 4 warmed `unten` 0.22–0.30 K/min, about as fast as level 10
+  on 2026-11-03 (outdoor 6.7 °C, night).
+- 13:52: thermostat OFF (`USER_OFF`) → `permanent off`, heater off, `ErrorCode` 0. Thermostat
+  disabled, camping mode off.
 
 ---
 

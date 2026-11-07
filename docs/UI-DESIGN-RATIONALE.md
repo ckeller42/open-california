@@ -27,7 +27,7 @@ It serves two purposes at once:
 | icons (vendor drawables are **not** committed; neutral placeholders) | control *type* per field (toggle for a bit, slider for a 0–N level) |
 | layout / composition / navigation shell | value ranges + units (from the protocol field width/scale) |
 | — | safety confirmations imposed by the firmware (roof, heater) |
-| — | controls greyed (with the reason) in states the unit or the app refuses: camping master while terminal 15 is on, camping lights/USB while master is off, roof open/close under a blocking InfoPopUp (as the app's camping and roof screens do), quiet mode while the refrigerator box is off, its timer while on |
+| — | controls greyed (with the reason) in states the unit or the app refuses: camping master while terminal 15 is on, camping lights/USB while master is off, roof open/close under a blocking InfoPopUp or while terminal 15 is off (as the app's camping and roof screens do), quiet mode while the refrigerator box is off, its timer while on |
 | — | the vocabulary itself ({term}`Immediate heating` / {term}`Continuous heating`, Manual / Automatic {term}`quiet mode`, {term}`Second battery`, Vehicle power, …) — the unit's own terms, EN + DE |
 
 The vendor's trademarks appear only nominatively, to identify the vehicle the interface controls
@@ -41,12 +41,12 @@ Char bases per subsystem are in `docs/hardware.md`; field bit-layout is
 | Screen | Subsystem / `Installed` source | Core widgets → why (functional) | Trace (protocol field · app behaviour) |
 |---|---|---|---|
 | Cooler | `cooler` char `1100`/`1102`, `Installed` bit | on/off toggle (compressor is on/off); level slider 1–5 (setpoint is a small enum); quiet-mode toggle + schedule; cooling-timer start + Arm/Cancel | `State`/`Level`/`Mode`/`TimerHourSet`·`TimerMinSet`/`NightTimerHourOn`·`Off` · the app's cooler view model |
-| Camping mode | `campingmode` char `1200`/`1202` (always shown — `Installed` decoded but not wired, mirrors the app) | master toggle (greyed while terminal 15 is on — the unit refuses camping master ON while driving); one combined lighting toggle + USB toggle (each an on/off load), both greyed until master is on | `State`/`InteriorLight`/`OutsideLight`/`UsbCharger`/`Enable`(=terminal 15) · the app's camping screen (always visible; its master switch greyed on ignition) |
+| Camping mode | `campingmode` char `1200`/`1202` (always shown — `Installed` decoded but not wired, mirrors the app) | master toggle (greyed while terminal 15 is on — the unit refuses camping master ON while driving); one front-door lights switch in the unit's wording ("Lights off when front doors open", `R_CAMPING_DOOR_LIGHTS_ROW`) + USB toggle, both greyed until master is on | `State`/`InteriorLight`/`OutsideLight`/`UsbCharger`/`Enable`(=terminal 15) · the app's camping screen (always visible; its master switch greyed on ignition) |
 | Lighting | `lighting` char `1500`/`1502`, `Installed` bit | per-zone brightness sliders (each zone is a 0–10 enum); profile selection | `BrightnessLOne…LOneSix`/`ProfileNumber`/`LightValue` · the app's lighting screen and its brightness enum |
 | Water | `water` char `1300`/`1302`, `Installed` bit | separate fresh + waste readouts (two independent tank sensors) — read-only | `Level`/`Volume` (fresh + waste) · water decode notes, `docs/business-logic/value-freshness.md` |
 | Energy | `energy` char `1600`/`1602`, `Installed` bit | battery/DC-DC/shore/solar readouts; charge-mode select (firmware exposes a mode enum) | `EnergyModeSet` + battery/current fields · the app's energy setter and charging screen |
 | Air heater | `airheater` char `1700`/`1702`, `Installed` bit | power toggle; heating-level slider; timer/runtime (firmware exposes level + timer) | `NormalOperation`/`HeatingLevel`/timer fields · the app's air-heater view model |
-| Roof (pop-top) | `roof` char `1400`/`1402`, live `Installed=1` | hold-to-move open / stop / close (firmware is press-and-hold with a dead-man safety counter; release anywhere = STOP) + **safety confirmation**; open/close greyed under a blocking `InfoPopUp` (1/4/5/7/9/10/11 or Position 15 — sensor_error 6 only warns), STOP never greyed | direction bytes open `0x01`/stop `0x00`/close `0x04`, SafetyCounter, `InfoPopUp` · the app's roof screen (its movable check) and its SafetyCounter engine |
+| Roof (pop-top) | `roof` char `1400`/`1402`, live `Installed=1` | hold-to-move open / stop / close (firmware is press-and-hold with a dead-man safety counter; release anywhere = STOP, the on-screen STOP is sent at once, outside the command queue; Space/Enter on a focused button holds too) + **safety confirmation**: a checkbox with the app's pre-open checklist, ticked once per visit of the roof page and never a dialog inside the press (a dialog lifts the finger, and that release stops the move); open/close greyed until it is ticked, while the ignition is off (the app's "Switch on the ignition") and under a blocking `InfoPopUp` (1/4/5/7/9/10/11 or Position 15 — sensor_error 6 only warns), STOP never greyed | direction bytes open `0x01`/stop `0x00`/close `0x04`, SafetyCounter, `InfoPopUp` · the app's roof screen (its movable check) and its SafetyCounter engine |
 
 **Not-installed subsystems** (stairs, roof-A/C, satellite, living-room heater on the reference van)
 have `Installed=0` and are hidden — their screens exist as specs only, never rendered.
@@ -72,6 +72,35 @@ satellite) keeps all help text in one table, `HELP` in `app.js` (English), with 
 
 `tests/test_webui_help.py` checks every linked page exists; the e2e test
 `test_every_screen_has_a_help_sheet_en_and_de` opens every sheet in English and German.
+
+## Wording that follows the unit
+
+Where the vendor app and the unit's own screen describe the same bits in different words, the web UI
+follows the unit's screen: the owner reads it next to our app.
+
+```{req} The camping front-door lights row reads like the unit's screen
+:id: R_CAMPING_DOOR_LIGHTS_ROW
+:status: implemented
+:tags: campingmode, ui
+
+The web UI shall show the camping front-door lights setting with the unit's own wording, "Lights off
+when front doors open" / "Licht aus, wenn vordere Türen öffnen", on when both light bits are 1, so the
+switch matches the unit's screen. The command stays `lights on|off` (on = both bits 0, the front lights
+come on when a door opens) and the decoded `lights_on` keeps the app's sense.
+```
+
+```{decision} The unit's wording beats the app's for the front-door lights
+:id: AD_CAMPING_DOOR_LIGHTS_UNIT_WORDING
+:status: accepted
+:tags: campingmode, ui
+:links: R_CAMPING_DOOR_LIGHTS_ROW
+
+The app says "Opening front door activates the exterior and interior lighting at the front" (enabled at
+bits 0/0); the unit says "Licht aus, wenn vordere Türen öffnen" (on at 1/1). Both are true. The owner
+reads the unit's screen and our app side by side, so our label follows the unit (owner decision).
+The evidence is in the camping section of `business-logic/climate-stairs.md`. The earlier label "Exterior and interior lighting" dropped the door condition and read like a light
+switch. Only the label and the switch direction change; the frames, the API and `lights_on` do not.
+```
 
 ## Out of scope (deliberately not modeled)
 

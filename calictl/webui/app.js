@@ -28,10 +28,11 @@
  * @typedef {{source: string, synced: boolean, boot: number}} SatTime
  * @typedef {{state: string, available_sha: string|null, progress_pct: number, error: string|null, channel: string}} SatOta
  * @typedef {{state: string|null, lux: number|null, brightness_pct: number|null, sensor: string|null, auto: boolean, prox_wake: boolean, motion_wake: boolean, min: number, max: number, offset: number}} SatDisplay
- * @typedef {{mode?: string, ssid?: string|null, ip?: string|null, rssi?: number|null}} SatWifi
+ * @typedef {{mode?: string, ssid?: string|null, ip?: string|null, rssi?: number|null, ap_ssid?: string|null}} SatWifi
  * @typedef {SatWifi & {last_error?: string|null, reverted?: boolean, scan?: {ssid: string, rssi: number, secure: boolean}[]}} SatWifiGet  GET /api/wifi
  * @typedef {{id: number, type: string, alias: string, last_seen_s: number|null, value: Record<string, number|null>|null}} SatSensCfg
  * @typedef {{id: number, type: string, model: string, rssi: number}} SatSensSeen
+ * @typedef {{module: string, joined: boolean, at_unanswered: number, last_s: number|null, airtime_ms_24h: number, airtime_charged_ms_24h: number, setup: string, dev_eui: string|null}} SatLora  device.lora (R_FW_LORA_SETUP)
  * @typedef {{configured: SatSensCfg[], seen: SatSensSeen[], scan: string, error?: string}} SatSensors  GET/POST /api/sensors
  * @typedef {{enabled: boolean, last_s: number|null, reason: string|null, halt_after_min?: number, halt_soc_pct?: number,
  *   halt_in_s?: number|null, halted?: boolean, halt_last_s?: number|null, halt_reason?: string|null, batt_low?: boolean}} SatPiWake
@@ -52,8 +53,9 @@
  * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
  * @property {boolean} [restored]           set only by restoreLastState(): the saved offline snapshot shown until a live poll answers
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
+ * @property {{ages: Record<string, number>, version: number|null}} [remote]  set only by adaptSatellite() for remote.js's body: each function's age in s, an unknown uplink version
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora_on?: boolean|null, lora?: ?SatLora, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -181,8 +183,9 @@
  * `disabled(s)` returns true/a-reason-string when the current state forbids the control
  * (greyed + blocked, mirroring the app), a falsy value when it's available.
  * @typedef {{ what: string, label: string, confirm?: ConfirmSpec, disabled?: (s: FnState) => (boolean|string|undefined) }} ControlBase
- * @typedef {ControlBase & { kind: 'toggle', state: keyof FnState }} ToggleControl
- * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, step?: number, unit?: string }} SliderControl
+ * @typedef {ControlBase & { kind: 'toggle', state: keyof FnState, invert?: boolean }} ToggleControl  invert: the switch shows the
+ *   opposite of `state` (the unit's own wording); the command still sends the value for `state`
+ * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, step?: number, unit?: string, fmt?: (v: number) => string }} SliderControl
  * @typedef {ControlBase & { kind: 'select', options: SelectOption[], current?: (s: FnState) => (string|null|undefined) }} SelectControl
  * @typedef {ControlBase & { kind: 'hour', current?: (s: FnState) => number }} HourControl
  * @typedef {ControlBase & { kind: 'time', current?: (s: FnState) => (string|null) }} TimeControl
@@ -250,6 +253,7 @@ function setLang(l) {
   try { localStorage.setItem("calictl.lang", l); } catch (e) { /* storage blocked */ }
   closeMenu();
   render();
+  menuEl.focus();   // the menu item that called this is gone: keep focus on ⋮, not the page top
 }
 
 // --- topbar context menu (UX: pairing chrome lives here, not in the main flow) ---------------
@@ -278,17 +282,18 @@ function closeMenu() {
   window.removeEventListener("resize", closeMenu);
 }
 
-/** The URL of screen `v`: `#<screen>` (Home: none), so a reload reopens the screen. @param {string} v */
-const viewUrl = (v) => location.pathname + location.search + (v === "home" ? "" : "#" + v);
+/** The URL of screen `v`: `#<screen>` (Home: none; the first-time setup: `#setup/<step>`), so a reload
+ * reopens the screen. @param {string} v */
+const viewUrl = (v) => location.pathname + location.search + (v === "home" ? "" : "#" + v + (v === "setup" ? "/" + setupAt : ""));
 
-/** Deep links, taken once the runtime is known (the first `_meta`): a screen's hash (`#devicestatus`,
+/** Deep links, taken once the runtime is known (the first `_meta`; the remote app at its start): a screen's hash (`#devicestatus`,
  * `#satsettings`, `#wifisetup`, `#<function>`; the satellite screens are Home on calictl) opens it as
  * this entry's screen, so a reload stays there; `#pair` (the wizard at the top of Home) is an action
  * and consumed. A deep link wins over the setup landing. */
 function openFromHash() {
-  const h = location.hash.slice(1);
-  const screen = h === "devicestatus" || ORDER.includes(h) || ((SAT_VIEWS.includes(h) || h === "satdiag") && satellite());
-  if (!STATE._meta || !(screen || h === "pair" || SAT_VIEWS.includes(h))) return;
+  const full = location.hash.slice(1), h = full.split("/")[0], step = full.slice(h.length + 1);
+  const screen = REMOTE ? ORDER.includes(h) || REMOTE_VIEWS.includes(h) : h === "devicestatus" || ORDER.includes(h) || ((SAT_VIEWS.includes(h) || h === "satdiag") && satellite());
+  if (!(STATE._meta || REMOTE) || !(screen || h === "pair" || SAT_VIEWS.includes(h))) return;
   landChecked = true;
   if (h === "pair") {
     history.replaceState(null, "", viewUrl("home"));
@@ -296,8 +301,10 @@ function openFromHash() {
     return;
   }
   const v = screen ? h : "home";
-  if (screen && v === view) return;   // back/forward between our own entries fires hashchange too: popstate showed it
-  try { history.replaceState({ v: v }, "", viewUrl(v)); } catch (e) { /* no history API */ }
+  // back/forward between our own entries fires hashchange too: popstate showed it
+  if (screen && v === view && (v !== "setup" || step === setupAt)) return;
+  if (v === "setup") { setupAt = setupStep(setupState(), step); satDom = null; }
+  try { history.replaceState({ v: v, step: setupAt }, "", viewUrl(v)); } catch (e) { /* no history API */ }
   if (SAT_VIEWS.includes(v)) satDom = null;
   closeMenu();
   show(v, 0);
@@ -306,6 +313,7 @@ function openFromHash() {
 
 /** The in-app Device-status screen (from the ⋮ menu or the status pill). */
 function openDeviceStatus() {
+  if (REMOTE) return;   // the local app's screen: the remote app has no device to show there
   closeMenu();
   goto("devicestatus");
   // The load-time /api/pairing fetch may have failed (PAIRING still null): retry on open so
@@ -336,8 +344,11 @@ menuEl.onclick = (ev) => {
   // 2026-10-15): it lives in the unpaired banner, Device status's Camper-unit card and the `#pair` link.
   /** @type {HTMLElement[][]} */
   const groups = [[], []];
-  // The in-app Device-status screen, on both flavors (the satellite's settings open from it).
-  groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));   // also before the first answer (M1)
+  // The in-app Device-status screen, on both flavors (the satellite's settings open from it). The remote app
+  // (R_UI_REMOTE_APP) has its setup screens there instead.
+  if (REMOTE) groups[0].push(menuItem(T("Set up LoRa"), () => remoteOpen("remotesetup")),
+    menuItem(T("Scan the van's code"), () => remoteOpen("remotescan")), menuItem(T("Remove this van"), () => remoteOpen("remoteremove")));
+  else groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));   // also before the first answer (M1)
   if (HELP[view]) groups[1].push(menuItem(/** @type {string} */ (t("Help")), openHelp));   // per-screen help (#314)
   // Language toggle: label names the language you'd switch TO.
   groups[1].push(menuItem(LANG === "de" ? "English" : "Deutsch", () => { setLang(LANG === "de" ? "en" : "de"); }));
@@ -427,6 +438,7 @@ function uxFlush() {
     uxQueue = [];
     let s = JSON.stringify(body);
     while (s.length > UX_MAX_BYTES && body.events.length > 1) { body.events.shift(); s = JSON.stringify(body); }
+    remoteGuard("/api/ux");
     if (navigator.sendBeacon) navigator.sendBeacon("/api/ux", s);
   } catch (e) { /* telemetry never breaks the page */ }
 }
@@ -538,7 +550,8 @@ const ENERGY_FAULT_MSG = {
 // The unit's own dialog titles + gist for ErrorCode 1–7 (1–5 app-observed 2026-09-16, tools/applab):
 // 1 "Battery voltage too low — your second battery looks low; connect external power or charge",
 // 2 "Low fuel — switched off, activates again with sufficient fuel", 3 "fault, contact workshop",
-// 4 "Emission limit exceeded — switched off automatically; on again at ≥ 5 km/h",
+// 4 "Emission limit exceeded — switched off automatically; on again at ≥ 5 km/h" (the unit's panel says
+//   "Luftstandheizung: Max. Betriebsdauer erreicht."; the message below uses the panel's words),
 // 5 "deactivated — not while the engine runs or the auxiliary water heater is active";
 // 6/7 (app 5.4.0, decompile only) split 5 into "engine running" / "auxiliary heater active".
 /** @type {Record<string, string>} */
@@ -546,7 +559,7 @@ const AIRHEATER_ERROR_MSG = {
   low_battery: "⚠ Battery voltage too low — charge the second battery or connect external power",
   low_fuel: "⚠ Low fuel — the heater switched off, please refuel",
   system_error: "⚠ Auxiliary air heater fault — please contact your workshop",
-  heating_time_exceeded: "⚠ Emission limit exceeded — the heater switched off, drive ≥ 5 km/h to re-enable",
+  heating_time_exceeded: "⚠ Max. operating time reached — the heater switched off, drive ≥ 5 km/h to re-enable",
   not_possible: "⚠ Heater deactivated — not while the engine or the auxiliary water heater is running",
   // 6/7 new in app 5.4.0 (ig/b.java:606-700) — the app's own dialog texts
   engine_running: "⚠ Auxiliary air heater deactivated due to engine running.",
@@ -635,7 +648,8 @@ const HELP = {
     + "looks for an update, Install loads it and restarts the satellite.\n\nAdvanced: Send usage data "
     + "sends which screens and controls are used (never values). Sensors turns on the scan for "
     + "add-on Bluetooth sensors; below it add the ones that are yours (a Victron needs its "
-    + "encryption key), rename or remove them.\n\nOver the setup hotspot these switches need the home "
+    + "encryption key), rename or remove them. LoRa turns on the LoRa module; switch it on only on a "
+    + "satellite that has one (RAK3172). Forget LoRa deletes its LoRa keys.\n\nOver the setup hotspot these switches need the home "
     + "WiFi."],
   wifisetup: ["firmware.html",
     "The satellite runs its setup hotspot: it has no home WiFi yet, or cannot reach it. Choose the "
@@ -651,7 +665,7 @@ const HELP = {
     + "Quiet mode and timer are not yet verified on the van. Banners show what the unit reports: the door "
     + "is not fully closed, emergency mode, or an error for the workshop."],
   campingmode: ["business-logic/auto-camper-mode.html",
-    "Camping mode is the unit's master switch for the camper functions. Exterior and interior lighting and "
+    "Camping mode is the unit's master switch for the camper functions. The front-door light setting and "
     + "the rear USB ports only work while it is on; the rear USB ports are off whenever camping mode is off.\n\n"
     + "The unit turns camping mode off when the engine starts and does not allow it while the ignition is "
     + "on: it is only possible when stationary.\n\n"
@@ -717,6 +731,7 @@ function openHelp() {
   const d = document.createElement("dialog");
   d.className = "help";
   const head = document.createElement("h2");
+  head.id = "help-title"; d.setAttribute("aria-labelledby", head.id);
   head.textContent = t("Help") + " · " + titleEl.textContent;
   d.appendChild(head);
   for (const para of /** @type {string} */ (t(h[1])).split("\n\n")) {
@@ -731,14 +746,31 @@ function openHelp() {
   close.onclick = () => d.close();
   d.append(a, close);
   d.onclick = (ev) => { if (ev.target === d) d.close(); };   // tap on the backdrop closes
-  d.onclose = () => d.remove();
+  d.onclose = () => { d.remove(); menuEl.focus(); };   // closeMenu() dropped the opener: back to ⋮
   document.body.appendChild(d);   // outside #app: survives the 2 s re-render
   d.showModal();
 }
+// Tile icons: Lucide 0.460.0 (ISC, see ICONS.md), the bodies of the 24x24 stroke icons.
+/** @type {Record<string, string>} */
+const ICONS = {
+  snowflake: '<path d="M2 12h20M12 2v20"/><path d="m20 16-4-4 4-4"/><path d="m4 8 4 4-4 4"/><path d="m16 4-4 4-4-4"/><path d="m8 20 4-4 4 4"/>',
+  tent: '<path d="M3.5 21 14 3"/><path d="M20.5 21 10 3"/><path d="M15.5 21 12 15l-3.5 6"/><path d="M2 21h20"/>',
+  lightbulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+  heater: '<path d="M11 8c2-3-2-3 0-6"/><path d="M15.5 8c2-3-2-3 0-6"/><path d="M6 10h.01"/><path d="M6 14h.01"/><path d="M10 16v-4"/><path d="M14 16v-4"/><path d="M18 16v-4"/><path d="M20 6a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3"/><path d="M5 20v2"/><path d="M19 20v2"/>',
+  droplet: '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+  battery: '<path d="M15 7h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/><path d="M6 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1"/><path d="m11 7-3 5h4l-3 5"/><path d="M22 11v2"/>',
+  caravan: '<path d="M18 19V9a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v8a2 2 0 0 0 2 2h2"/><path d="M2 9h3a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2"/><path d="M22 17v1a1 1 0 0 1-1 1H10v-9a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v9"/><circle cx="8" cy="19" r="2"/>',
+  car: '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+};
+/** A decorative tile icon: the tile's text label carries the meaning. */
+const iconSvg = (/** @type {string|undefined} */ name) => name && ICONS[name]
+  ? `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" ` +
+    `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`
+  : "";
 /** @type {Record<string, Feature>} */
 const FEATURES = {
   cooler: {
-    title: "Cooler", icon: "❄️",
+    title: "Cooler", icon: "snowflake",
     controls: [
       { what: "power", kind: "toggle", label: "Refrigerator box", state: "on" },
       { what: "level", kind: "slider", label: "Cooling level", state: "level", min: CTL_COOLER_LEVEL_RANGE[0], max: CTL_COOLER_LEVEL_RANGE[1] },
@@ -781,7 +813,7 @@ const FEATURES = {
     summary: (s) => (t(COOLER_FAULT_MSG[/** @type {string} */ (s.fault)]) || (s.on ? `${t("On")} · ${t("level")} ${s.level}` : t("Off"))),
   },
   campingmode: {
-    title: "Camping mode", icon: "🏕️",
+    title: "Camping mode", icon: "tent",
     controls: [
       // The unit sheds camping master when terminal-15 comes on and refuses it while driving
       // (camping-watch: every `ignition 0->1` pairs with `master_on 1->0`; the app gates its
@@ -797,7 +829,11 @@ const FEATURES = {
       // Gate on the OPTIMISTIC master value (what the master switch itself shows), not the raw
       // polled state: after tapping master ON the real state lands only after the BLE write +
       // readback (0.6-3 s live), and greying lights/USB for that window reads as a failed tap.
-      { what: "lights", kind: "toggle", label: "Exterior and interior lighting", state: "lights_on",
+      // The unit's own screen names these bits "Licht aus, wenn vordere Türen öffnen" (on = both
+      // bits 1); the app's row says the opposite sentence (lights_on = both bits 0). Show the
+      // unit's wording and direction, so the switch matches the unit screen; the command stays
+      // `lights on|off` (on = the front lights come on when a door opens).
+      { what: "lights", kind: "toggle", label: "Lights off when front doors open", state: "lights_on", invert: true,
         disabled: (s) => !optOn("campingmode", "master", !!s.master_on) && "Turn camping mode on first" },
       { what: "usb", kind: "toggle", label: "Rear USB ports", state: "usb_powered",
         disabled: (s) => !optOn("campingmode", "master", !!s.master_on) && "Turn camping mode on first" },
@@ -806,14 +842,14 @@ const FEATURES = {
     summary: (s) => onoff(s.master_on),
   },
   lighting: {
-    title: "Lighting", icon: "💡", lighting: true,   // custom renderer (renderLighting)
+    title: "Lighting", icon: "lightbulb", lighting: true,   // custom renderer (renderLighting)
     summary: (s) => onoff(s.any_on),
   },
   airheater: {
-    title: "Air heater", icon: "🔥",
-    // Fuel-burning: every START prompts. Turning continuous heating OFF is the one write here that
-    // can't arm anything, and it has its own prompt below — no feature-level one on top.
-    confirm: (w, v) => (w === "permanent" || w === "timer_cancel" ? null : tf("Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?", { w: w })),
+    title: "Air heater", icon: "heater",
+    // Fuel-burning: only a real START prompts — Immediate heating ON and arming the timer. Level,
+    // run time, start time and every OFF write no dialog (ui/screens/air-heater.yaml).
+    confirm: (w, v) => ((w === "power" && v === "on") || w === "timer_start" ? t("Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?") : null),
     controls: [
       // "Immediate heating" = NormalOperation (start now, for `runtime` minutes). Never greyed (app
       // 5.4.0): under ErrorCode 5 the server refuses ON with the app's dialog text; under continuous
@@ -829,7 +865,8 @@ const FEATURES = {
         confirm: (v) => (v === "off" ? t("Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?") : null) },
       // The app's temperature scale is 1–9 + "HI" (level 10); its run-time slider spans 10–120 min
       // (both observed on the app's heater page, tools/applab 2026-09-16).
-      { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: CTL_AIRHEATER_LEVEL_RANGE[0], max: CTL_AIRHEATER_LEVEL_RANGE[1] },
+      { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: CTL_AIRHEATER_LEVEL_RANGE[0], max: CTL_AIRHEATER_LEVEL_RANGE[1],
+        fmt: (/** @type {number} */ v) => (v >= 10 ? "HI" : String(v)) },
       // App 5.4.0 (2026-10-11): 10-min steps, greyed under continuous heating; a change while heating
       // asks first (the app then writes OFF, RunningTime, ON — calictl writes RunningTime only).
       { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 10, max: 120, step: 10, unit: "min",
@@ -848,7 +885,7 @@ const FEATURES = {
         confirm: (b, s) => (b.what === "timer_start" && s && s.permanent ? t("Continuous heating will turn off when the timer ends. Would you like to proceed?") : null) },
     ],
     readouts: [
-      { label: "Heating temperature", get: (s) => (s.level == null ? "—" : s.level >= 10 ? "HI" : `${t("Level")} ${s.level}`) },
+      { label: "Heating temperature", get: (s) => (s.level == null || s.level < 1 ? "—" : s.level >= 10 ? "HI" : `${t("Level")} ${s.level}`) },
       { label: "Run time", get: (s) => withUnit(s.running_time, "min") },
       // RunningTimeinAction only counts down while heating; parked it just echoes the configured
       // run time (60 = 60 live), which would read as "60 min left" on an idle heater.
@@ -878,7 +915,7 @@ const FEATURES = {
     },
   },
   water: {
-    title: "Water", icon: "💧",
+    title: "Water", icon: "droplet",
     readouts: [
       // Composed values: translate the suffix here (renderReadout's t() can't match a concatenation).
       { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  " + measuredText(s, /** @type {string} */ (t("🕒 last measured"))) : ""),
@@ -897,7 +934,7 @@ const FEATURES = {
     summary: (s) => (s.fresh ? `${t("Fresh")} ${s.fresh.percent}%${s.fresh.stale ? " " + measuredText(s, /** @type {string} */ (t("(last meas.)"))) : ""}` : ""),
   },
   energy: {
-    title: "Energy", icon: "🔋",
+    title: "Energy", icon: "battery",
     controls: [
       { what: "mode", kind: "select", label: "Energy mode",
         // ECO only as the app offers it: when the unit reports a solar panel (PvInstalled = 1 ->
@@ -943,10 +980,10 @@ const FEATURES = {
         : s.age_min != null ? `${s.age_min} min` : "—") },
     ],
     // Starter-battery staleness is the "Starter data age" row; the why lives in the Help (⋮, #314).
-    summary: (s) => (s.soc2_pct != null ? `${t("Battery")} ${s.soc2_pct}%` : ""),
+    summary: (s) => (s.soc2_pct != null ? `${t("Second battery")} ${s.soc2_pct}%` : ""),
   },
   roof: {
-    title: "Roof", icon: "🚐", roof: true,
+    title: "Roof", icon: "caravan", roof: true,
     readouts: [
       { label: "Position", get: (s) => (s.position_name ? cap(s.position_name) : (s.position ?? "—")) },
       { label: "Safety valid", get: (s) => yn(s.safety_valid) },
@@ -958,7 +995,7 @@ const FEATURES = {
                      : (s && s.position_name ? /** @type {string} */ (t(cap(s.position_name))) : "")),
   },
   vehicle: {
-    title: "Vehicle", icon: "🚗",
+    title: "Vehicle", icon: "car",
     readouts: [
       { label: "Ignition", get: (s) => onoff(s.ignition_on) },
       // 1004 CarVariant -> the app's model name (semantics._CAR_MODEL); unknown raw -> "—"
@@ -973,14 +1010,27 @@ const FEATURES = {
           : levelGauges(s.level_roll, s.level_pitch, roofIsUp())) },
       { label: "Vehicle clock", get: (s) => s.car_clock ?? "—", tick: true },
       { ext: "govee" },
-      { label: "Firmware (amb · cm · comm)",
+      // the unit's three sub-versions are jargon: behind a disclosure, never shown by default
+      { label: "Firmware",
         get: () => {
           const fw = (STATE._meta && STATE._meta.firmware) || {};
           if (fw.amb_sw_version == null && fw.comm_version == null) return "—";
-          return `${fw.amb_sw_version ?? "?"} · ${fw.cm_sw_version ?? "?"} · ${fw.comm_version ?? "?"}`
-            + (fw.untested ? t("  ⚠ untested") : t("  ✓ tested"));
+          return String(fw.untested ? t("  ⚠ untested") : t("  ✓ tested")).trim();
+        },
+        widget: () => {
+          const fw = (STATE._meta && STATE._meta.firmware) || {};
+          if (fw.amb_sw_version == null && fw.comm_version == null) return null;
+          const det = document.createElement("details"); det.className = "note";
+          det.open = fwDetailsOpen;
+          det.ontoggle = () => { fwDetailsOpen = det.open; };   // survives a re-render
+          const sum = document.createElement("summary"); sum.textContent = /** @type {string} */ (t("Details"));
+          const code = document.createElement("code");
+          code.textContent = `amb ${fw.amb_sw_version ?? "?"} · cm ${fw.cm_sw_version ?? "?"} · comm ${fw.comm_version ?? "?"}`;
+          det.append(sum, code);
+          return det;
         } },
     ],
+    warn: () => lowSensorBatteries(),
     // The climate inside when the ESP reads a Govee (the first by alias), else the ignition.
     summary: (s) => {
       const g = extEntries("govee")[0];
@@ -997,6 +1047,7 @@ const FEATURES = {
  * @returns {Promise<any>}
  */
 async function api(path, opts) {
+  remoteGuard(path);
   // Defence in depth: the satellite serves /api/state, /api/pairing and, when it accepts writes,
   // /api/command (+ /api/auto_camper if reported) -- never let any caller fan out to a calictl-only
   // endpoint there; refuse before any network request.
@@ -1038,6 +1089,16 @@ function installed(fn) {
 const readOnly = () => !STATE._meta || !!STATE._meta.read_only;
 // The ESP32 satellite (semantics.js adaptSatellite): no session API.
 const satellite = () => !!(STATE._meta && STATE._meta.satellite);
+// The public remote app (R_UI_REMOTE_APP, the remote build's index.html sets it): the data comes from The Things
+// Stack only (remote.js); the page never calls its own /api/*, whoever serves it.
+const REMOTE = /** @type {any} */ (window).OC_REMOTE === true;
+const REMOTE_POLL_MS = 300000;   // TTS read while visible; the van sends every >= 10 min
+const REMOTE_VIEWS = ["remotesetup", "remotescan", "remoteremove"];   // remote.js remoteRender()
+/** Remote mode: refuse every same-origin /api/* path BEFORE any request. Every /api/* call goes through it. @param {string} path */
+function remoteGuard(path) {
+  const u = new URL(path, location.href);
+  if (REMOTE && u.origin === location.origin && u.pathname.startsWith("/api/")) throw new Error("remote: no " + u.pathname);
+}
 // The satellite inlines this script into its page (no src); calictl serves it as /app.js. Known before
 // the first answer, so the first poll of a page load can already say "seen" to the satellite.
 const SAT_BUNDLE = !(/** @type {HTMLScriptElement|null} */ (document.currentScript))?.src;
@@ -1066,10 +1127,20 @@ const CMD_LINK_WAIT_MS = 45000;
  * @param {number} [ms]
  */
 function toast(msg, kind, ms = 4000) {
-  const d = document.createElement("div");
+  const d = document.createElement("div"), box = /** @type {HTMLElement} */ (document.getElementById("toasts"));
   d.className = "toast" + (kind ? " " + kind : "");
   d.textContent = /** @type {string} */ (t(msg));
-  (/** @type {HTMLElement} */ (document.getElementById("toasts"))).appendChild(d);
+  if (kind === "error")   // a repeated failure replaces its earlier toast: the stack never grows with retries
+    for (const o of Array.from(box.querySelectorAll(".toast.error"))) if (o.firstChild && o.firstChild.textContent === d.textContent) o.remove();
+  box.appendChild(d);
+  if (kind === "error") {   // the failure reason: stays until the owner dismisses it (tap, or the ✕ button)
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "toast-x";
+    x.setAttribute("aria-label", /** @type {string} */ (t("Dismiss")));
+    d.appendChild(x);
+    d.onclick = () => d.remove();
+    return d;
+  }
   if (ms) setTimeout(() => d.remove(), ms);   // 0 = stays until removed
   return d;
 }
@@ -1106,8 +1177,9 @@ const leftNow = (s) => (typeof s === "number" ? Math.max(0, s - (Date.now() - st
 const connEl = /** @type {HTMLElement} */ (document.getElementById("conn"));
 let connKey = "";
 
-/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"|"satellite"|"rest"|"redial"} */
+/** @returns {"live"|"asleep"|"never"|"unpaired"|"connecting"|"unreachable"|"satellite"|"rest"|"redial"|"lora"} */
 function linkState() {
+  if (REMOTE) return "lora";   // LoRa data is minutes old by design: its age is the pill, never "offline"
   if (waitingSince != null && Date.now() - waitingSince >= UNREACHABLE_MS) return "unreachable";
   const m = STATE._meta;
   // serve --no-ble: this Pi never opens BLE, the ESP satellite talks to the unit (no offline banner)
@@ -1139,20 +1211,21 @@ function backendName() {
 }
 
 /** @type {Record<ReturnType<typeof linkState>, [string, string]>} every link state (tsc checks the set) */
-const LINK_PILL = { live: ["live", "ok"], asleep: ["offline", "warn"], never: ["offline", "warn"],
+const LINK_PILL = { live: ["live", "ok"], asleep: ["unit offline", "warn"], never: ["unit offline", "warn"],
   unpaired: ["not paired", ""],
   connecting: ["connecting…", ""], unreachable: ["unreachable", "error"],
-  satellite: ["🛰 Satellite mode", ""], rest: ["power saving", ""], redial: ["reconnecting…", ""] };
+  satellite: ["🛰 Satellite mode", ""], rest: ["power saving", ""], redial: ["reconnecting…", ""], lora: ["LoRa", ""] };
 
 // Paint the pill + the persistent #conn banner (outside #app: a hung poll never reaches render(),
 // the 2 s tick still lands here). #conn is a role=status region: its text is replaced only when the
 // state/wording changes; the ticking {ago} (or "Checked" clock) lives in an aria-hidden child.
 function paintLink() {
   const s = linkState();
-  if (!hasWork()) setStatus(LINK_PILL[s][0], LINK_PILL[s][1]);   // a command keeps "Sending…"
   const m = STATE._meta;
   const clock = m && m.last_seen ? clockText(m.last_seen) : null;
   const ago = agoText(m && m.age_s != null ? m.age_s + (Date.now() - stateAt) / 1000 : null);
+  if (s === "lora") setStatus(tf("LoRa · {ago}", { ago: ago }), remoteProblem ? "warn" : "");   // the newest frame's age
+  else if (!hasWork()) setStatus(LINK_PILL[s][0], LINK_PILL[s][1]);   // a command keeps "Sending…"
   let cls = "offline", tmpl = "", tick = "ago", restNext = "";
   /** @type {Record<string, any>} */
   let vars = { clock: clock, ago: ago };
@@ -1181,7 +1254,13 @@ function paintLink() {
     tmpl = "Offline — no data yet (van asleep since the monitor started). Checked {clock}.";
     vars.clock = clockText(/** @type {number} */ (lastAnswerAt) / 1000);
     tick = "clock";
-  } else if (s === "unpaired" && view !== "wifisetup") {   // WiFi setup: its unpaired banner says it once
+  } else if (s === "lora") {
+    const version = m && m.remote ? m.remote.version : null;
+    if (version != null) tmpl = "The van sends data in a newer format — please update the app.";
+    else if (remoteProblem === "setup") tmpl = "LoRa is not set up on this phone.";
+    else if (remoteProblem === "ttn") tmpl = clock ? "The Things Stack does not answer. Last data {clock} ({ago})."
+      : "The Things Stack does not answer.";
+  } else if (s === "unpaired" && view !== "wifisetup" && view !== "setup") {   // WiFi setup: its unpaired banner says it once
     cls += " unpaired";   // neutral: nothing is broken, the setup is not done yet
     tmpl = "Not paired yet — no data.";
   }
@@ -1245,6 +1324,41 @@ async function restConnect() {
   await refreshState(true);
 }
 
+// Remote mode: the last TTS read's start (ms) and what went wrong ("" | "setup": no configuration on this phone |
+// "ttn": TTS refused or did not answer). The error's text is never shown: it names no key, but stays out anyway.
+let remoteAt = 0, remoteProblem = "";
+/** One TTS read (remote.js) -> the satellite-shaped body. @returns {Promise<any>} */
+async function remotePoll() {
+  remoteAt = Date.now();
+  const cfg = remoteCfg();
+  if (!cfg) { remoteProblem = "setup"; throw new Error("no LoRa configuration"); }
+  try {
+    const body = await remoteState(cfg, Date.now());
+    remoteProblem = "";
+    return body;
+  } catch (e) {
+    // the van changed while the read was out (removed, a repair QR): its answer is dropped, the next tick reads anew
+    if (e instanceof RemoteStale) { remoteAt = 0; throw e; }
+    remoteProblem = "ttn";
+    remoteAt = Date.now() - REMOTE_POLL_MS + 30000;   // a failed read: try again in 30 s, not after the full interval
+    // nothing on screen yet (no snapshot restored): the frames stored with the last read, with their ages
+    const b = !STATE._meta && remoteCached(cfg, Date.now());
+    if (b) { STATE = /** @type {State} */ (adaptSatellite(b, Date.now())); stateAt = Date.now(); render(); }
+    throw e;
+  }
+}
+
+/** Remote mode, between two TTS reads: repaint every 10 s so the ages ("5 min ago") count on, also while TTS fails;
+ * never under a control in use or on the setup screens (they repaint themselves). */
+function remoteAges() {
+  const ae = /** @type {HTMLInputElement} */ (document.activeElement);
+  if (!STATE._meta || REMOTE_VIEWS.includes(view) || (ae && (ae.type === "range" || ae.type === "time" || ae.tagName === "SELECT"))) return;
+  const sig = lastRender.replace(/\|\d+$/, "|" + Math.floor((Date.now() - stateAt) / 10000));
+  if (sig === lastRender) return;
+  lastRender = sig;
+  render();
+}
+
 /** @param {boolean} [force] */
 async function refreshState(force) {
   // The satellite answers POST /api/command only after the unit's ACK (<= 4 s) and serves nothing
@@ -1253,6 +1367,7 @@ async function refreshState(force) {
   // WebKit (Safari, iPhone) does not and would stack a connection per 2 s tick on the stalled core,
   // then drain them oldest-first (tests/e2e/test_satellite.py pins "at most one waiting", both engines).
   if (polling) { forceNext = forceNext || !!force; seenNext = seenNext || !!force; return; }
+  if (REMOTE && !force && Date.now() - remoteAt < REMOTE_POLL_MS) { remoteAges(); return; }   // the 2 s tick only repaints
   const seen = !!force || seenNext;
   seenNext = false;
   polling = true;
@@ -1266,18 +1381,22 @@ async function refreshState(force) {
     // as input (R_FW_BLE_VIEWER_KEEP's idle cap); the 2 s tick is a plain poll. Satellite only.
     // the Diagnostics screen adds ?diag=1 (R_FW_STATE_DIAG): the members the plain poll leaves out
     const q = [seen && (SAT_BUNDLE || satellite()) ? "seen=1" : "", diagAsked ? "diag=1" : ""].filter(Boolean);
-    // no-store: the browser cache never answers (a cached 200 would reset every age); the page sends
-    // the ETag itself and handles the 304
-    const res = await fetch("/api/state" + (q.length ? "?" + q.join("&") : ""), { signal: ac.signal, cache: "no-store",
-      headers: !diagAsked && stateEtag && Date.now() - stateAt < STATE_REFRESH_MS ? { "If-None-Match": stateEtag } : {} });
-    if (res.status === 304 && lastBody) { await res.text(); next = null; }   // unchanged: keep STATE (the empty body
-    // read to its end, so the request finishes instead of being cancelled)
+    if (REMOTE) next = await remotePoll();
     else {
-      next = await res.json();
-      // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
-      // unreachable clock
-      if (!isSatelliteBody(next) && !(next && typeof next === "object" && next._meta)) throw new Error("no state");
-      if (!diagAsked) { stateEtag = res.headers.get("ETag"); lastBody = next; }
+      // no-store: the browser cache never answers (a cached 200 would reset every age); the page sends
+      // the ETag itself and handles the 304
+      remoteGuard("/api/state");
+      const res = await fetch("/api/state" + (q.length ? "?" + q.join("&") : ""), { signal: ac.signal, cache: "no-store",
+        headers: !diagAsked && stateEtag && Date.now() - stateAt < STATE_REFRESH_MS ? { "If-None-Match": stateEtag } : {} });
+      if (res.status === 304 && lastBody) { await res.text(); next = null; }   // unchanged: keep STATE (the empty body
+      // read to its end, so the request finishes instead of being cancelled)
+      else {
+        next = await res.json();
+        // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
+        // unreachable clock
+        if (!isSatelliteBody(next) && !(next && typeof next === "object" && next._meta)) throw new Error("no state");
+        if (!diagAsked) { stateEtag = res.headers.get("ETag"); lastBody = next; }
+      }
     }
   } catch (e) {
     paintLink();   // a failure alone changes nothing: unreachable is time-based (UNREACHABLE_MS)
@@ -1300,17 +1419,20 @@ async function refreshState(force) {
   // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the
   // Device status's "Unpair…". Taken the first time a `_meta` answers (calictl or the satellite) -- also when
   // the first poll failed (daemon restarting) -- and never on an unknown runtime.
-  if (STATE._meta && !pairingFetched) { pairingFetched = true; await pairingFetch(); openFromHash(); }
-  // The setup hotspot (device.wifi.mode setup/off): the app lands on WiFi setup once per load; back in
+  if (STATE._meta && !pairingFetched && !REMOTE) { pairingFetched = true; await pairingFetch(); openFromHash(); }
+  // The setup hotspot (device.wifi.mode setup/off) or a first-time setup not done yet (device.setup.pending):
+  // the app lands on the setup wizard once per load, at the step the state allows (setupStep). Back in
   // station mode WiFi setup gives way to Home (unless the join was made here: it shows the result).
-  const wm = satellite() && STATE._meta && STATE._meta.sat && STATE._meta.sat.wifi ? STATE._meta.sat.wifi.mode : null;
+  const sat = satellite() && STATE._meta && STATE._meta.sat, wm = sat && sat.wifi ? sat.wifi.mode : null;
   let landed = false;
   if (STATE._meta && !landChecked) {
     landChecked = true;
-    if ((wm === "setup" || wm === "off") && view === "home") { view = "wifisetup"; satDom = null; landed = true; }
+    if (view === "home" && (wm === "setup" || wm === "off" || (wm === "station" && !!(sat && sat.setup && sat.setup.pending)))) {
+      setupAt = setupStep(setupState(), ""); view = "setup"; satDom = null; landed = true;
+    }
   } else if (view === "wifisetup" && wm === "station" && !joinedHere) { view = "home"; landed = true; }
   // the entry shows the new screen: back from a screen opened here returns to it (not pushed: ‹ stays in the app)
-  if (landed) try { history.replaceState(Object.assign({}, history.state, { v: view }), "", viewUrl(view)); } catch (e) { /* no history API */ }
+  if (landed) try { history.replaceState(Object.assign({}, history.state, { v: view, step: setupAt }), "", viewUrl(view)); } catch (e) { /* no history API */ }
   // Auto-camper give-up/stand-down notice: the daemon stamps a one-time {ts,msg} when it stands
   // down (low battery) or gives up (keeps dropping). Show it as a toast once.
   const acn = STATE._meta && STATE._meta.auto_camper && STATE._meta.auto_camper.notice;
@@ -1318,6 +1440,7 @@ async function refreshState(force) {
   paintLink();
   // the satellite screens keep their DOM (a typed password, an open step): a poll updates them in place
   if (SAT_VIEWS.includes(view) && satDom && satDom.view === view && !landed) { satUpdate(); return; }
+  if (REMOTE_VIEWS.includes(view)) return;   // the setup screens repaint themselves (remote.js)
   if (landed) { lastRender = ""; force = true; }
   if (view === "airheater") await thermoLoad();   // the thermostat card's own answer (satellite only)
   // don't repaint out from under a control the user is actively using — a poll-driven re-render
@@ -1484,14 +1607,15 @@ function act(fn, what, value) {
 // reopens it: openFromHash): the browser's back and the iOS edge swipe walk the screens back (from Home
 // they leave the app, as before), each with its scroll position; ‹ goes back the same way, or to the
 // screen's parent on a fresh page.
-/** @param {string} v */
-function goto(v) {
+/** @param {string} v @param {string} [step] the setup wizard's step (each step is an entry too) */
+function goto(v, step) {
   if (SAT_VIEWS.includes(v) && !satellite()) v = "home";   // calictl never shows the satellite screens
-  const fwd = v !== view;
+  const fwd = v !== view || (v === "setup" && !!step && step !== setupAt);
+  if (v === "setup" && step) setupAt = step;
   if (fwd) {
     try {
       history.replaceState(Object.assign({}, history.state, { y: scrollY }), "");
-      history.pushState({ v: v, pushed: true }, "", viewUrl(v));
+      history.pushState({ v: v, step: setupAt, pushed: true }, "", viewUrl(v));
     } catch (e) { /* no history API (a sandboxed frame): ‹ still works */ }
     if (SAT_VIEWS.includes(v)) satDom = null;   // a fresh visit, a fresh form
   }
@@ -1501,6 +1625,8 @@ function goto(v) {
 /** Render screen `v`, scroll to `y` (null: stay) and move the focus to its heading.
  * @param {string} v @param {number|null} y */
 function show(v, y) {
+  // only Home ends the wizard (‹, "Open the app"); a detour (Device status, Help) comes back to it
+  if (view === "setup" && v === "home") setupLeft();
   view = v;
   if (v === "satdiag") refreshState(false);   // its values come only with ?diag=1: fetch them at once
   ux({ type: "view", screen: uxId(v) });
@@ -1515,6 +1641,7 @@ window.addEventListener("popstate", (ev) => {
   const s = ev.state || {};
   const v = s.v && (!(SAT_VIEWS.includes(s.v) || s.v === "satdiag") || satellite()) ? s.v : "home";
   if (SAT_VIEWS.includes(v)) satDom = null;
+  if (v === "setup" && s.step) setupAt = s.step;
   closeMenu();
   show(v, s.y || 0);
 });
@@ -1535,6 +1662,12 @@ function back() {
 function measuredText(s, unknown) {
   if (typeof s.measured_at !== "number") return unknown;
   return tf("🕒 measured {ago}", { ago: agoText(Math.max(0, Math.round(Date.now() / 1000 - s.measured_at))) });
+}
+
+/** Remote mode: the age of a function's newest LoRa frame ("5 min ago"), else "". @param {string} fn */
+function remoteAgo(fn) {
+  const r = STATE._meta && STATE._meta.remote;
+  return r && typeof r.ages[fn] === "number" ? agoText(ageNow(r.ages[fn])) : "";
 }
 
 /**
@@ -1572,6 +1705,8 @@ function clockText(epochSec) {
 // disconnect. When the session is merely idle in auto mode the daemon is still polling normally —
 // showing a "Connect" button there falsely reads as "no connection", so we hide it (the fast path
 // warms automatically the moment you interact). The main status pill still shows live/offline.
+/** the /api/session action on the wire ("" = none) */
+let sessionBusy = "";
 function sessionToggle() {
   const m = /** @type {Meta} */ (STATE._meta || {});
   const mode = m.session_mode, st = m.session;
@@ -1582,6 +1717,7 @@ function sessionToggle() {
   else if (st === "connecting" || st === "degraded") { spec = { cls: "busy", text: "🟡 Connecting" }; action = "disconnect"; }
   else if (st === "asleep") { spec = { cls: "", text: "⚪ Asleep — tap to wake" }; action = "connect"; }
   else return null;   // idle in auto mode while polling normally — not a disconnection, don't imply one
+  if (sessionBusy) spec = { cls: "busy", text: sessionBusy === "connect" ? "Connecting…" : "Disconnecting…" };   // a poll keeps it
   const el = document.createElement("button");
   el.type = "button";
   el.className = "session-pill" + (spec.cls ? " " + spec.cls : "");
@@ -1590,12 +1726,18 @@ function sessionToggle() {
     ? "Connect the fast BLE session (warm it before controlling)"
     : "Disconnect — release this session now (it also auto-releases when idle)"));
   el.setAttribute("aria-label", el.title);
+  el.disabled = !!sessionBusy;   // one POST per tap, also across the re-renders while it runs
   el.onclick = async () => {
-    el.disabled = true;
+    sessionBusy = action;
+    el.disabled = true; el.className = "session-pill busy";
+    el.textContent = /** @type {string} */ (t(action === "connect" ? "Connecting…" : "Disconnecting…"));
+    let res = null;
     try {
-      await api("/api/session", { method: "POST", headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ action }) });
-    } catch (e) { /* the state refresh below reflects whatever actually happened */ }
+      res = await api("/api/session", { method: "POST", headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ action }) });
+    } catch (e) { /* res stays null */ }
+    sessionBusy = "";
+    if (!res || res.error) toast("Couldn't change the Bluetooth connection", "error");
     await refreshState(true);
   };
   return el;
@@ -1681,7 +1823,7 @@ function levelGauge(deg, van, label) {
   g.className = "lg-gauge";
   g.innerHTML =
     `<svg viewBox="0 0 ${2 * C} ${2 * C}" class="lg-svg${ok ? " ok" : ""}" role="img" ` +
-    `aria-label="${label} ${fmtLevel(deg)}">` +
+    `aria-label="${label} ${deg.toFixed(1)}°">` +
     `<circle cx="${C}" cy="${C}" r="76" class="lg-ring"/>` +
     `<circle cx="${C}" cy="${C}" r="${FACE}" class="lg-face"/>` + ticks +
     `<g transform="${turn}">` +
@@ -1729,12 +1871,22 @@ function roofIsUp() {
 // dashboard poll stays at 2 s. See .superpowers/sdd/2026-08-31-guided-pairing.
 let pairingOpen = false;
 let pairingReady = false;              // "I'm on that screen" checkbox
+let fwDetailsOpen = false;             // the Vehicle screen's Firmware "Details" disclosure
 let pairingAdvOpen = false;            // the bonded step's "Advanced" disclosure (calictl only)
 // True for the brief window between opening the wizard and the fresh `pairingFetch()` landing,
 // but ONLY when the cached PAIRING snapshot might be stale (see openPairingWizard): renders a
 // neutral loading step instead of flashing a leftover passkey/bonded/error/etc. step from a
 // flow the server has since moved on from (e.g. it restarted while this tab stayed open).
 let pairingLoading = false;
+let pairingBusy = false;               // a POST /api/pairing is on the wire
+let pairingReqError = "";              // the last failed request's text (EN key), shown in the card
+/** The wizard step last read out in `#sr-status` (the card is rebuilt each poll, so it cannot be the live region). */
+let pairingSaid = /** @type {?string} */ (null);
+/** Read `text` out once via the stable `#sr-status` live region (outside #app: survives a re-render).
+ * @param {string} text */
+function announce(text) {
+  (/** @type {HTMLElement} */ (document.getElementById("sr-status"))).textContent = text;
+}
 /** @type {{state:string, attempts:number, error:string|null, address:string|null, radio_busy?: boolean}|null} */
 let PAIRING = null;
 let pairingFetched = false;            // the one-off load-time fetch (refreshState) has run
@@ -1761,7 +1913,8 @@ function startPairingPoll() {
     pairingPolling = true;
     try { await pairingFetch(); } finally { pairingPolling = false; }
     const ae = document.activeElement;
-    if (!(ae && ae.id === "pairing-passkey")) {      // don't clobber the user mid-type
+    // don't clobber the user mid-type (the field is focused on entry), but leave a step that has ended
+    if (!(ae && ae.id === "pairing-passkey" && PAIRING && PAIRING.state === "waiting_passkey")) {
       if (wizardView()) render();                    // the card only shows on Home and WiFi setup
     }
     if (PAIRING && PAIRING_TERMINAL_STATES.has(PAIRING.state)) stopPairingPoll();
@@ -1816,23 +1969,30 @@ const SAT_PAIRING_ERROR_HINT = {
  * @param {boolean} [confirmFlag]
  */
 async function pairingAction(action, value, confirmFlag) {
+  if (pairingBusy) return;   // one POST per tap: the card's buttons are disabled while it runs
   if (action === "start" || action === "reset") startPairingPoll();  // re-arm: a new flow begins
   /** @type {Record<string, any>} */
   const body = { action };
   if (value !== undefined) body.value = value;
   if (confirmFlag) body.confirm = true;
-  let res;
+  pairingBusy = true; pairingReqError = "";
+  render();
+  let res = null;
   try {
-    res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  } catch (e) { toast("Pairing request failed", "error"); return; }
+    // above the daemon's 30 s pairing bridge: a stalled POST frees the card's buttons (Cancel) again
+    res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+                                      signal: AbortSignal.timeout(35000) });
+  } catch (e) { /* res stays null */ }
+  pairingBusy = false;
   if (res && res.state) PAIRING = res;              // a real snapshot -> adopt it
-  // never a raw error enum: known request errors get their own text, anything else the generic one
-  else toast(PAIRING_REQUEST_ERROR_MSG[(res && res.error) || ""] || "Pairing request failed", "warn");
+  // never a raw error enum: known request errors get their own text, anything else the generic one.
+  // A row in the card, not a toast: it stays until the next request.
+  else pairingReqError = PAIRING_REQUEST_ERROR_MSG[(res && res.error) || ""] || "Pairing request failed";
   render();
 }
 
 /** The screens that show the pairing wizard's card (the hotspot pairs from WiFi setup, no home WiFi). */
-const wizardView = () => view === "home" || view === "wifisetup";
+const wizardView = () => view === "home" || view === "wifisetup" || view === "setup";
 
 // Open the wizard on demand (from the topbar context menu, or auto on true first-run).
 async function openPairingWizard() {
@@ -1882,8 +2042,8 @@ function pairingCard() {
   head.appendChild(hlbl);
   const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
   closeBtn.textContent = /** @type {string} */ (t("Close"));
-  closeBtn.onclick = () => { pairingOpen = false; pairingLoading = false; stopPairingPoll(); render(); };
-  head.appendChild(closeBtn);
+  closeBtn.onclick = () => { pairingOpen = false; pairingLoading = false; pairingReqError = ""; pairingSaid = null; stopPairingPoll(); render(); };
+  if (view !== "setup") head.appendChild(closeBtn);   // the setup wizard has its own Skip
   card.appendChild(head);
 
   if (pairingLoading) {
@@ -1899,10 +2059,16 @@ function pairingCard() {
   }
 
   const p = PAIRING || { state: "idle", attempts: 0, error: null, address: null };
+  let say = /** @type {string} */ (hlbl.textContent);   // the step text read out on a state change
   if (p.radio_busy) {
     const busy = document.createElement("div"); busy.className = "warn"; busy.id = "pairing-radio-busy";
     busy.textContent = /** @type {string} */ (t("Another app on this Pi keeps Bluetooth scanning — pairing will likely fail until it stops (for example the Home Assistant Bluetooth integration)."));
     card.appendChild(busy);
+  }
+  if (pairingReqError) {
+    const err = document.createElement("div"); err.className = "warn"; err.id = "pairing-req-error";
+    err.textContent = /** @type {string} */ (t(pairingReqError));
+    card.appendChild(err);
   }
   const sat = satellite();
   if (p.state === "idle") {
@@ -1928,7 +2094,7 @@ function pairingCard() {
     card.appendChild(crow);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const startBtn = document.createElement("button"); startBtn.type = "button"; startBtn.className = "btn";
-    startBtn.textContent = /** @type {string} */ (t("Pair now")); startBtn.disabled = !pairingReady;
+    startBtn.textContent = /** @type {string} */ (t("Pair now")); startBtn.disabled = !pairingReady || pairingBusy;
     startBtn.onclick = () => pairingAction("start");
     btns.appendChild(startBtn);
     card.appendChild(btns);
@@ -1937,22 +2103,27 @@ function pairingCard() {
     row.appendChild(spinner());
     const lbl = document.createElement("span"); lbl.className = "lbl";
     lbl.textContent = /** @type {string} */ (t(p.state === "scanning" ? "Searching…" : "Connecting to the unit…"));
+    say = lbl.textContent;
     row.appendChild(lbl);
     card.appendChild(row);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const cancelBtn = document.createElement("button"); cancelBtn.type = "button"; cancelBtn.className = "btn";
     cancelBtn.textContent = /** @type {string} */ (t("Cancel"));
     cancelBtn.onclick = () => pairingAction("cancel");
+    cancelBtn.disabled = pairingBusy;
     btns.appendChild(cancelBtn);
     card.appendChild(btns);
   } else if (p.state === "waiting_passkey") {
-    const instr = document.createElement("div"); instr.className = "note";
+    const instr = document.createElement("div"); instr.className = "note"; instr.id = "pairing-passkey-instr";
     instr.textContent = /** @type {string} */ (t("Enter the passcode now shown on the camper unit (it replaced ---). A fresh code each attempt."));
     card.appendChild(instr);
+    say = instr.textContent;
     const row = document.createElement("div"); row.className = "row";
     const inp = document.createElement("input");
     inp.type = "text"; inp.inputMode = "numeric"; inp.pattern = "[0-9]{6}"; inp.maxLength = 6;
     inp.id = "pairing-passkey";
+    inp.setAttribute("aria-labelledby", instr.id);
+    if (pairingSaid !== p.state) queueMicrotask(() => inp.focus());   // on entry; render() attaches the card first
     inp.placeholder = "123456";
     row.appendChild(inp);
     const sendBtn = document.createElement("button"); sendBtn.type = "button"; sendBtn.className = "btn";
@@ -1962,6 +2133,7 @@ function pairingCard() {
       if (!/^[0-9]{6}$/.test(v)) { toast("The passcode has 6 digits", "warn"); return; }
       pairingAction("passkey", v);
     };
+    sendBtn.disabled = pairingBusy;
     row.appendChild(sendBtn);
     card.appendChild(row);
   } else if (p.state === "pairing" || p.state === "verifying" || p.state === "resetting") {
@@ -1969,12 +2141,14 @@ function pairingCard() {
     row.appendChild(spinner());
     const lbl = document.createElement("span"); lbl.className = "lbl";
     lbl.textContent = /** @type {string} */ (t(p.state === "pairing" ? "Pairing…" : p.state === "verifying" ? "Verifying…" : "Resetting…"));
+    say = lbl.textContent;
     row.appendChild(lbl);
     card.appendChild(row);
   } else if (p.state === "bonded") {
     const ok = document.createElement("div"); ok.className = "note";
     ok.textContent = p.address ? (t("✓ Paired — ") + p.address) : /** @type {string} */ (t("paired — address cache unavailable (see logs)"));
     card.appendChild(ok);
+    say = /** @type {string} */ (ok.textContent);
     if (p.address && sat) {
       const saved = document.createElement("div"); saved.className = "note";
       saved.textContent = /** @type {string} */ (t("Saved on the satellite — survives a restart. No further action needed."));
@@ -2000,6 +2174,7 @@ function pairingCard() {
     errRow.textContent = /** @type {string} */ (t("Error: "))
       + (/** @type {string} */ (t(PAIRING_ERROR_MSG[perr])) || /** @type {string} */ (t(PAIRING_ERROR_FALLBACK)));
     card.appendChild(errRow);
+    say = errRow.textContent;
     const hint = (sat && SAT_PAIRING_ERROR_HINT[perr]) || PAIRING_ERROR_HINT[perr];
     if (hint) {
       const hintRow = document.createElement("div"); hintRow.className = "note";
@@ -2010,6 +2185,7 @@ function pairingCard() {
     const retryBtn = document.createElement("button"); retryBtn.type = "button"; retryBtn.className = "btn";
     retryBtn.textContent = /** @type {string} */ (t("Try again"));
     retryBtn.onclick = () => pairingAction("start");
+    retryBtn.disabled = pairingBusy;
     btns.appendChild(retryBtn);
     card.appendChild(btns);
   }
@@ -2020,13 +2196,16 @@ function pairingCard() {
     const resetBtn = document.createElement("button"); resetBtn.type = "button"; resetBtn.className = "btn";
     resetBtn.textContent = /** @type {string} */ (t("Unpair…"));
     resetBtn.onclick = () => unpair();
+    resetBtn.disabled = pairingBusy;
     rbtns.appendChild(resetBtn);
     card.appendChild(rbtns);
   }
+  if (pairingSaid !== p.state) { pairingSaid = p.state; announce(say); }
   return card;
 }
 
 function render() {
+  if (REMOTE && !REMOTE_VIEWS.includes(view)) rsCamStop();   // the camera runs on a scan screen only
   backEl.hidden = view === "home";
   backEl.onclick = back;
   stopClockTicker();          // any live vehicle-clock ticker belongs to the old DOM; restarted on re-render
@@ -2035,13 +2214,15 @@ function render() {
   if (sp) app.appendChild(sp);
   paintLink();   // the asleep / unreachable banner lives in #conn, above #app
   // WiFi setup explains the hotspot once itself (its Camper unit box), not as a read-only warning
-  if (readOnly() && STATE._meta && !STATE._meta.restored && view !== "wifisetup") {
+  if (readOnly() && STATE._meta && !STATE._meta.restored && view !== "wifisetup" && view !== "setup" && !REMOTE_VIEWS.includes(view)) {
     const b = document.createElement("div");
     b.className = "readonly";
-    b.textContent = /** @type {string} */ (satellite() ? t("Satellite — display only")
+    b.textContent = /** @type {string} */ (REMOTE ? t("LoRa — display only") : satellite() ? t("Satellite — display only")
       : t("🔒 Read-only — control is disabled on this daemon."));
     app.appendChild(b);
   }
+  const kw = REMOTE ? remoteKeyWarn() : null;   // a full-rights key that may be live at TTN (remote.js)
+  if (kw) app.appendChild(kw);
   const fw = STATE._meta && STATE._meta.firmware;
   if (fw && fw.untested) {
     const b = document.createElement("div");
@@ -2061,6 +2242,7 @@ function render() {
   else if (view === "devicestatus") renderDeviceStatus();
   else if (view === "satdiag") renderSatDiag();
   else if (SAT_VIEWS.includes(view)) renderSat();
+  else if (REMOTE_VIEWS.includes(view)) remoteRender(view);
   else renderFeature(view);
   roofViewSync();
 }
@@ -2104,14 +2286,13 @@ function batteryText(b) {
 
 // device.time -> the Clock row (R_FW_TIME)
 /** @type {Record<string, string>} */
-const SAT_CLOCK = { synced: "synced (SNTP) · boot {boot}", waiting: "not synced yet · boot {boot}",
-  none: "no source · boot {boot}", unit: "from the camper unit · boot {boot}" };
+const SAT_CLOCK = { synced: "synced", waiting: "not synced yet", none: "no source", unit: "from the camper unit" };
 
 // The camper unit's connection, in linkState()'s words (the pill + banner): online / asleep / not paired
 /** @type {Record<ReturnType<typeof linkState>, string>} every link state (tsc checks the set) */
 const LINK_WORD = { live: "online", asleep: "asleep", never: "asleep", unpaired: "not paired",
   connecting: "connecting…", unreachable: "unreachable", satellite: "🛰 Satellite mode", rest: "power saving",
-  redial: "reconnecting…" };
+  redial: "reconnecting…", lora: "LoRa" };
 
 /** A Device-status card: its heading names the device (UX review 3.2: one card per device).
  * @param {string} title @returns {HTMLElement} */
@@ -2170,9 +2351,9 @@ function renderDeviceStatus() {
       [w.ssid, w.ip, typeof w.rssi === "number" ? w.rssi + " dBm" : ""].filter(Boolean).join(" · ")));
     if (sat.uptime_ms != null)
       card.appendChild(sumRow(/** @type {string} */ (t("Uptime")), uptimeText(sat.uptime_ms + (Date.now() - stateAt))));
-    const tm = sat.time;   // the clock the SD log stamps with (R_FW_TIME), with the boot number
-    if (tm) card.appendChild(sumRow(/** @type {string} */ (t("Clock")), tf(SAT_CLOCK[tm.source === "none" || tm.source === "unit"
-      ? tm.source : tm.synced ? "synced" : "waiting"], { boot: tm.boot })));
+    const tm = sat.time;   // the clock the SD log stamps with (R_FW_TIME); its boot number only in Diagnostics ›
+    if (tm) card.appendChild(sumRow(/** @type {string} */ (t("Clock")), /** @type {string} */ (t(SAT_CLOCK[tm.source === "none" || tm.source === "unit"
+      ? tm.source : tm.synced ? "synced" : "waiting"]))));
     if (sat.sd) card.appendChild(sumRow(/** @type {string} */ (t("Storage")), sdText(sat.sd)));
     const batt = sat.battery && batteryText(sat.battery);
     if (batt) card.appendChild(sumRow(/** @type {string} */ (t("Battery")), batt));
@@ -2190,7 +2371,7 @@ function renderDeviceStatus() {
 // screen is open refreshState asks with ?diag=1. By the device object that holds them, as web.c sends
 // them: null = every member of that object.
 /** @type {[string, string[]|null][]} */
-const SAT_DIAG = [["res", null], ["sd", ["last_seq"]], ["time", ["up"]], ["ble", ["probing", "unit_adv_seen_ms_ago"]],
+const SAT_DIAG = [["res", null], ["sd", ["last_seq"]], ["time", ["up", "boot"]], ["ble", ["probing", "unit_adv_seen_ms_ago"]],
   ["display", ["lux", "prox", "motion", "dfs", "pm"]]];
 
 function renderSatDiag() {
@@ -2211,9 +2392,9 @@ function renderSatDiag() {
 // a typed password, an open confirm step or a sensor name must survive the 2 s poll, so a poll only
 // updates them in place (satUpdate). Their endpoints are the firmware's (web.c, firmware/docs):
 // GET/POST /api/wifi, /api/sensors; POST /api/auto_camper, /api/display, /api/ota, /api/ux_setting,
-// /api/experimental, /api/pi_wake, /api/pi_halt, /api/pi_wake_setting, /api/ble — reached through satFetch, never api() (which refuses them by design).
-const SAT_VIEWS = ["satsettings", "wifisetup"];
-/** @type {{view: string, lang: string, root: HTMLElement}|null} the open satellite screen's DOM */
+// /api/experimental, /api/lora, /api/pi_wake, /api/pi_halt, /api/pi_wake_setting, /api/ble — reached through satFetch, never api() (which refuses them by design).
+const SAT_VIEWS = ["satsettings", "wifisetup", "setup"];
+/** @type {{view: string, lang: string, root: HTMLElement, step?: string}|null} the open satellite screen's DOM */
 let satDom = null;
 let landChecked = false;   // the setup landing is decided once per load (on the first `_meta`)
 const SAT_STATION_ONLY = "needs the home WiFi";   // the firmware answers 403 setup_mode over the hotspot
@@ -2251,6 +2432,7 @@ const sqInput = (id) => /** @type {HTMLInputElement} */ (sq(id));
  * @returns {Promise<{status: number, body: any}>}
  */
 async function satFetch(path, body, ms = POLL_TIMEOUT_MS) {
+  remoteGuard(path);
   if (!satellite()) throw new Error("not a satellite: " + path);
   const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms);
   try {
@@ -2266,7 +2448,7 @@ const satCard = (id, title, ...kids) => h("section", { class: "card dcard", id: 
 const satSwitchRow = (id) => h("div", { class: "row" }, h("span", { class: "lbl", id: id + "-status" }),
   h("button", { type: "button", class: "switch", role: "switch", id: id + "-toggle", "aria-labelledby": id + "-status" }));
 /** A row's error line. @param {string} id */
-const satMsg = (id) => h("p", { class: "warn", id: id });
+const satMsg = (id) => h("p", { class: "warn", id: id, "aria-live": "polite" });
 
 /** The WiFi box (both screens): online "Connected to <ssid> · ip · dBm" + Change network…; the join
  * form over the hotspot, after Change network…, or while a hotspot join runs; the Switching panel. */
@@ -2307,10 +2489,16 @@ function satPairBox() {
     h("div", { class: "btnrow" }, ds));
 }
 
+/** A fresh satellite screen: no join watched, no open form, a new sensors poll. */
+function satReset() {
+  joining = null; wifiOpen = false; formShown = false; sensOn = false; sensBusy = false; sensGen++;
+  if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
+}
+
 /** @param {string} v the satellite screen to build @returns {NonNullable<typeof satDom>} */
 function buildSat(v) {
-  joining = null; wifiOpen = false; formShown = false; sensOn = false; sensBusy = false;
-  if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
+  satReset();
+  sensOnly = null;
   const root = h("div", { class: "sat" });
   satDom = { view: v, lang: LANG, root: root };   // sq() works from here on
   root.append(satWifiBox(), satPairBox());
@@ -2357,15 +2545,26 @@ function buildSat(v) {
       satSwitchRow("exp"), satMsg("exp-msg")),
     satCard("sens", null, h("p", { class: "note" }, T("Nearby sensors appear below; add the ones that are yours.")),
       h("div", { id: "sens-cfg" }), h("div", { id: "sens-seen" }), h("p", { class: "warn", id: "sens-msg", "aria-live": "polite" })));
+  const forget = satBtn(T("Forget LoRa"), "danger", "lora-forget");
+  const lacts = h("div", { class: "btnrow", id: "lora-acts" }, forget);
+  forget.onclick = () => satAsk(lacts, [h("span", null, T("Forget LoRa? The satellite deletes its LoRa keys and switches LoRa off. The device stays registered at The Things Network until you delete it there."))],
+    T("Forget LoRa"), "danger", satLoraForget, "lora-msg");
+  root.append(satCard("lora", "LoRa", h("p", { class: "note" }, T("Only for a satellite with a LoRa module (RAK3172). Off: the LoRa pins stay untouched.")),
+    satSwitchRow("lora"),
+    h("div", { id: "lora-on" }, ...LORA_ROWS.map(([id, label]) => h("div", { class: "row" }, h("span", { class: "lbl" }, T(label)), h("span", { class: "val", id: "lora-" + id }))),
+      h("p", { class: "note" }, T("Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app.")), lacts),
+    satMsg("lora-msg")));
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
   toggle("pw", "/api/pi_wake_setting", "Couldn't change the Pi wake", "enabled", "pw-msg");
   toggle("ux", "/api/ux_setting", "Couldn't change usage data", "enabled", "ux-msg");
   toggle("exp", "/api/experimental", "Couldn't change the switch", "sensors", "exp-msg");
+  toggle("lora", "/api/experimental", "Couldn't change the switch", "lora", "lora-msg");
   for (const [id, k] of SAT_SCR_ROWS) toggle("scr-" + id, "/api/display", "Couldn't change the screen setting", k, "scr-msg");
   return satDom;
 }
 
 function renderSat() {
+  if (view === "setup") { renderSetup(); return; }
   titleEl.textContent = T(view === "wifisetup" ? "WiFi setup" : "Satellite settings");
   if (!satDom || satDom.view !== view || satDom.lang !== LANG) buildSat(view);
   app.appendChild(/** @type {NonNullable<typeof satDom>} */ (satDom).root);
@@ -2376,12 +2575,251 @@ function renderSat() {
   satUpdate();
 }
 
+// --- The first-time setup wizard (`#setup/<step>`, the ESP satellite only) -----------------------
+// A fresh satellite (setup hotspot) or one just joined from it (device.setup.pending) lands here. WiFi
+// cannot be skipped (every later step needs the home WiFi); the others can. The place is derived from
+// the state plus the URL hash (setupStep), so a page that lost the hotspot resumes on the station address.
+const SETUP_STEPS = ["welcome", "wifi", "pair", "victron", "sensors", "home", "done"];
+let setupAt = "welcome";   // the wizard's step (in the URL: #setup/<step>)
+let setupPairSkipped = false;
+let setupDonePosted = false;
+const PAIR_CODE_S = 30;   // an estimate: the unit shows a passcode for about 30 s (no start time in /api/pairing)
+/** @type {number|null} when this page first saw the passcode step */
+let pairCodeSince = null;
+/** @type {ReturnType<typeof setInterval>|null} */
+let setupTimer = null;
+
+/**
+ * The step to show: `hash` when it names a step not before the first unfinished one; else that one.
+ * Over the hotspot only welcome and wifi exist (nothing after WiFi works without the home WiFi).
+ * @param {{station: boolean, paired: boolean, pairSkipped: boolean}} s @param {string} hash
+ * @returns {string}
+ */
+function setupStep(s, hash) {
+  const i = SETUP_STEPS.indexOf(hash);
+  if (!s.station) return hash === "wifi" ? "wifi" : "welcome";
+  const first = s.paired || s.pairSkipped ? "victron" : "pair";
+  return i >= SETUP_STEPS.indexOf(first) ? hash : first;
+}
+
+/** setupStep's input from STATE. */
+function setupState() {
+  const m = STATE._meta, w = m && m.sat && m.sat.wifi;
+  return { station: !!w && w.mode === "station", paired: !!(m && m.paired), pairSkipped: setupPairSkipped };
+}
+
+/** "Done" = finished, or left the wizard after WiFi: POST /api/setup {done: true} once (station only). */
+async function setupFinish() {
+  if (setupDonePosted || !setupState().station) return true;
+  try { setupDonePosted = !!(await satFetch("/api/setup", { done: true })).body.ok; } catch (e) { /* not done */ }
+  return setupDonePosted;
+}
+/** Leaving the wizard for Home (or the checklist's Satellite settings ›): done (after WiFi, which the
+ * server cannot undo), and its pairing card does not follow onto Home. */
+function setupLeft() {
+  setupFinish();
+  pairingOpen = false; pairingLoading = false; stopPairingPoll();
+}
+
+/** A step's button row. @param {...HTMLElement} btns */
+const setupBtns = (...btns) => h("div", { class: "btnrow" }, ...btns);
+/** A button that goes to `step`. @param {string} label @param {string} step @param {string} [cls] @param {string} [id] */
+function setupNext(label, step, cls, id) {
+  const b = satBtn(T(label), cls, id);
+  b.onclick = () => goto("setup", step);
+  return b;
+}
+/** The sensors box satRenderSens fills, for the type prefix `only`. @param {string} only */
+function setupSens(only) {
+  sensOnly = only;
+  return h("div", { id: "setup-sens" }, h("section", { id: "sens", hidden: "" },
+    h("div", { id: "sens-cfg" }), h("div", { id: "sens-seen" }), h("p", { class: "warn", id: "sens-msg", "aria-live": "polite" })));
+}
+/** POST the Sensors switch on (the wizard turns it on only on a yes). @returns {Promise<boolean>} */
+async function setupSensorsOn() {
+  const msg = sq("setup-msg");
+  let ok = false;
+  try { ok = !!(await satFetch("/api/experimental", { sensors: true })).body.ok; } catch (e) { /* ok stays false */ }
+  msg.textContent = ok ? "" : T("Couldn't change the switch");
+  await refreshState(true);
+  return ok;
+}
+
+function renderSetup() {
+  titleEl.textContent = T("Set up the satellite");
+  if (!satDom || satDom.view !== "setup" || satDom.lang !== LANG || satDom.step !== setupAt) buildSetup();
+  app.appendChild(/** @type {NonNullable<typeof satDom>} */ (satDom).root);
+  satUpdate();
+}
+
+/** The open step's DOM (#setup-step), built once per step. */
+function buildSetup() {
+  satReset();
+  sensOnly = null;
+  const step = setupAt, root = h("div", { class: "sat" });
+  satDom = { view: "setup", lang: LANG, root: root, step: step };
+  const card = h("section", { class: "card dcard", id: "setup-step" },
+    h("p", { class: "note" }, tf("Step {n} of {total}", { n: SETUP_STEPS.indexOf(step) + 1, total: SETUP_STEPS.length })));
+  root.append(card);
+  /** @param {string} text @param {string} [id] */
+  const p = (text, id) => h("p", { id: id }, text);
+  if (step === "welcome") {
+    card.append(p(T("This page sets up your satellite in about 5 minutes. You need the camper unit's screen and, if you have Victron devices, VictronConnect on this phone."), "setup-welcome"),
+      setupBtns(setupNext("Next", "wifi", "primary")));
+  } else if (step === "wifi") {
+    card.append(p(T("No router in the van? Use your phone's hotspot. iPhone: Settings → Personal Hotspot → Maximize Compatibility on.")));
+    // the join's result under the box, where Connect was tapped
+    root.append(satWifiBox(), h("p", { class: "card dcard", id: "setup-next-addr", "aria-live": "polite", hidden: "" }));
+  } else if (step === "pair") {
+    pairingOpen = true;
+    const start = satBtn(T("Pair now"), "primary", "setup-pair-start");
+    start.onclick = () => pairingAction("start");
+    card.append(h("div", { id: "setup-pair-intro" },
+      p(T("Close the California app. On the camper unit open Einstellungen → Bluetooth → Gerät verbinden, then press Pair now.")),
+      h("p", { class: "warn", id: "setup-pair-err", "aria-live": "polite" }), setupBtns(start)),
+      h("p", { class: "note", id: "setup-count", "aria-live": "off" }), h("div", { id: "setup-paircard" }),
+      p("", "setup-paired"), setupBtns(setupNext("Next", "victron", "primary", "setup-pair-next"),
+        setupSkip("victron", () => { setupPairSkipped = true; }, "setup-pair-skip")));
+    if (setupTimer === null) setupTimer = setInterval(setupTick, 1000);
+    // back from a detour or a reload in the code window: the card follows the flow again
+    if (PAIRING && !PAIRING_TERMINAL_STATES.has(PAIRING.state)) startPairingPoll();
+  } else if (step === "victron") {
+    const yes = satBtn(T("Yes"), "primary"), no = setupNext("No", "sensors");
+    const ask = setupBtns(yes, no);
+    yes.onclick = async () => {
+      yes.disabled = true;
+      // the answered question goes; the focus moves on with it (never left on a hidden button)
+      if (await setupSensorsOn()) { ask.hidden = true; sq("setup-victron").hidden = false; satUpdate(); sq("setup-victron-next").focus(); }
+      yes.disabled = false;
+    };
+    card.append(p(T("Do you have Victron devices (battery monitor, solar charger)?")), ask,
+      h("div", { id: "setup-victron", hidden: "" },
+        p(T("In VictronConnect: open the device → ⋮ → Product info → Instant readout details → Show — copy the encryption key.")),
+        setupSens("victron"), setupBtns(setupNext("Next", "sensors", "primary", "setup-victron-next"))));
+  } else if (step === "sensors") {
+    const search = satBtn(T("Search for sensors"), "primary", "setup-sens-on");
+    search.onclick = async () => { search.disabled = true; await setupSensorsOn(); search.disabled = false; };
+    card.append(p(T("Which temperature sensors do you have? Every Govee sensor the satellite hears is listed; give each one a name (for example innen, dach).")),
+      setupBtns(search), setupSens("govee"), setupBtns(setupNext("Next", "home", "primary"), setupSkip("home")));
+  } else if (step === "home") {
+    const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua), android = /Android/.test(ua);
+    const m = STATE._meta, w = m && m.sat && m.sat.wifi, ip = w && w.ip;
+    card.append(h("div", { id: "setup-home" }, ios || !android ? p(T("Tap Share, then Add to Home Screen.")) : null,
+      android || !ios ? p(T("Tap ⋮, then Add to Home screen.")) : null,
+      ip ? h("p", null, T("Address") + ": ", satLink("http://" + ip + "/")) : null,
+      h("p", { id: "setup-mdns", "aria-live": "polite" })), setupBtns(setupNext("Next", "done", "primary")));
+    // "Add to Home Screen" saves this URL: the app's start URL (the manifest's), not #setup/home
+    try { history.replaceState(history.state, "", "/app"); } catch (e) { /* no history API */ }
+    setupProbe();
+  } else {
+    const done = satBtn(T("Done"), "primary", "setup-done");
+    const home = satBtn(T("Open the app"), "", "setup-home-btn");
+    home.hidden = true;
+    home.onclick = () => goto("home");
+    done.onclick = async () => {
+      done.disabled = true;
+      const ok = await setupFinish();
+      sq("setup-done-msg").textContent = T(ok ? "✓ Setup done" : "Couldn't finish the setup");
+      done.hidden = ok; home.hidden = !ok; done.disabled = false;
+      if (ok) home.focus();
+    };
+    card.append(h("div", { id: "setup-check" }), h("p", { id: "setup-done-msg", "aria-live": "polite" }), setupBtns(done, home));
+    setupCheck();
+  }
+  if (step !== "wifi") card.append(h("p", { class: "warn", id: "setup-msg", "aria-live": "polite" }));   // WiFi: the box's own
+}
+
+/** Skip to `step` (after `then`). @param {string} step @param {() => void} [then] @param {string} [id] */
+function setupSkip(step, then, id) {
+  const b = satBtn(T("Skip"), "", id);
+  b.onclick = () => { if (then) then(); goto("setup", step); };
+  return b;
+}
+
+/** Fill the open step from STATE (every poll). @param {Meta} m @param {NonNullable<Meta["sat"]>} s */
+function setupUpdate(m, s) {
+  const step = setupAt;
+  if (step === "wifi") satRenderWifi(/** @type {SatWifi} */ (s.wifi));
+  if (step === "pair") {
+    const p = PAIRING, paired = !!m.paired || !!(p && p.state === "bonded");
+    const live = !!p && p.state !== "idle";
+    sq("setup-pair-intro").hidden = paired || live;
+    sq("setup-pair-err").textContent = pairingReqError ? T(pairingReqError) : "";   // a failed request stays (R_UI_VISIBLE_FAILURES)
+    /** @type {HTMLButtonElement} */ (sq("setup-pair-start")).disabled = pairingBusy;
+    const ae = document.activeElement;
+    if (!(ae && ae.id === "pairing-passkey")) {   // never under a code being typed
+      const pc = live ? pairingCard() : null;
+      sq("setup-paircard").replaceChildren(...(pc ? [pc] : []));
+    }
+    sq("setup-paired").textContent = paired && !live ? T("Paired ✓") : "";
+    sq("setup-pair-next").hidden = !paired;
+    sq("setup-pair-skip").hidden = paired;
+    setupTick();
+  }
+  const box = /** @type {HTMLElement|null} */ (satDom && satDom.root.querySelector("#sens"));
+  if (box) {
+    const vic = satDom && satDom.root.querySelector("#setup-victron");
+    box.hidden = !s.experimental || (!!vic && /** @type {HTMLElement} */ (vic).hidden);
+    const on = satDom && satDom.root.querySelector("#setup-sens-on");
+    if (on) /** @type {HTMLElement} */ (on.parentElement).hidden = !!s.experimental;
+    if (!box.hidden && !sensOn) { sensOn = true; satSensPoll(); }
+  }
+}
+
+/** The passcode countdown (1 s, while the pair step is open): from the first sight of the passcode step. */
+function setupTick() {
+  if (view !== "setup" || setupAt !== "pair" || !satDom) {
+    if (setupTimer !== null) { clearInterval(setupTimer); setupTimer = null; }
+    pairCodeSince = null;
+    return;
+  }
+  const code = !!PAIRING && PAIRING.state === "waiting_passkey";
+  if (!code) pairCodeSince = null;
+  else if (pairCodeSince === null) pairCodeSince = Date.now();
+  const left = pairCodeSince === null ? null : PAIR_CODE_S - Math.floor((Date.now() - pairCodeSince) / 1000);
+  sq("setup-count").textContent = left === null ? "" : left > 0 ? tf("{n} s left", { n: left })
+    : T("The code may have expired — press Pair now again.");
+}
+
+/** Does `<hostname>.local` resolve from this phone? Yes: move there (a home-screen link that survives
+ * a new address); no: advise a DHCP reservation. */
+async function setupProbe() {
+  const host = NET_HOSTNAME + ".local";
+  if (location.hostname === host) return;
+  let ok = false;
+  try { await fetch("http://" + host + "/api/state", { mode: "no-cors", signal: AbortSignal.timeout(3000) }); ok = true; } catch (e) { /* no mDNS here */ }
+  if (!satDom || setupAt !== "home") return;
+  if (ok) { location.href = "http://" + host + "/#setup/home"; return; }
+  sq("setup-mdns").textContent = T("Ask your router to always give the satellite the same address (DHCP reservation), so the home-screen link keeps working.");
+}
+
+/** The Done step's checklist: what is set up; a skipped row links to Satellite settings. */
+async function setupCheck() {
+  /** @type {SatSensors|null} */
+  let sens = null;
+  try { const r = await satFetch("/api/sensors"); if (r.status === 200) sens = r.body; } catch (e) { /* the switch is off: none */ }
+  if (!satDom || setupAt !== "done") return;
+  const m = STATE._meta, w = m && m.sat && m.sat.wifi;
+  const n = (/** @type {string} */ pre) => sens ? sens.configured.filter((c) => c.type.startsWith(pre)).length : 0;
+  const nv = n("victron"), ng = n("govee");
+  /** @param {string} label @param {string|null} ok the done text; null: not set up */
+  const row = (label, ok) => {
+    const r = sumRow(T(label), ok || T("not set up"));
+    if (!ok) { const b = satBtn(T("Satellite settings ›")); b.onclick = () => { setupLeft(); goto("satsettings"); }; r.append(b); }
+    return r;
+  };
+  sq("setup-check").replaceChildren(row("WiFi", w && w.ssid ? w.ssid + " ✓" : null),
+    row("Camper unit", m && m.paired ? T("Paired ✓") : null),
+    row("Victron", nv ? nv + " ✓" : null), row("Sensors", ng ? ng + " ✓" : null));
+}
+
 /** Fill the open satellite screen from STATE (every poll; never rebuilds). */
 function satUpdate() {
   const m = STATE._meta, s = m && m.sat;
   if (!satDom || !m || !s || !s.wifi) return;
   const w = s.wifi, st = w.mode === "station";
   satWifi = w;
+  if (satDom.view === "setup") { setupUpdate(m, s); return; }
   satRenderWifi(w);
   sq("pair-status").textContent = T(m.paired ? "Paired ✓" : "Not paired");
   sq("pair-status").hidden = !m.paired && satDom.view === "wifisetup";   // there the unpaired banner says it
@@ -2411,6 +2849,9 @@ function satUpdate() {
   satRow("exp", [T(s.experimental ? "Sensors: on" : "Sensors: off")], !!s.experimental, st);
   satRenderScreen(s.display || null, st);
   satRenderFw(s.ota || null, s.fw, st);
+  satRow("lora", [T(s.lora_on ? "LoRa: on" : "LoRa: off")], !!s.lora_on, st);
+  sq("lora").hidden = s.lora_on == null;   // a firmware without the switch: no switch that cannot work
+  satRenderLora(s.lora || null, st);
   sq("sens").hidden = !s.experimental;
   if (s.experimental && !sensOn) { sensOn = true; satSensPoll(); }
 }
@@ -2422,7 +2863,7 @@ function satRow(id, parts, on, st) {
   const b = /** @type {HTMLButtonElement} */ (sq(id + "-toggle"));
   sq(id + "-status").textContent = [...parts, st ? "" : T(SAT_STATION_ONLY)].filter(Boolean).join(" · ");
   b.hidden = !st;
-  b.disabled = false;
+  b.disabled = b.classList.contains("pending");   // a poll never re-enables a switch whose write still runs
   b.setAttribute("aria-checked", String(on));
 }
 
@@ -2431,10 +2872,11 @@ function satRow(id, parts, on, st) {
 async function satToggle(path, id, err, key, msgId) {
   const b = /** @type {HTMLButtonElement} */ (sq(id + "-toggle")), msg = sq(msgId), on = b.getAttribute("aria-checked") !== "true";
   msg.textContent = "";
-  b.disabled = true;   // one POST per tap
+  b.disabled = true; b.classList.add("pending");   // one POST per tap
   ux({ type: "control", fn: "satellite", control: uxId(id) });
   let ok = false;
   try { ok = !!(await satFetch(path, { [key]: on })).body.ok; } catch (e) { /* ok stays false */ }
+  b.classList.remove("pending");
   if (!ok) msg.textContent = T(err);
   await refreshState(true);
   if (satDom) b.disabled = false;
@@ -2692,11 +3134,11 @@ function satConnect() {
   satAsk(sq("wifi-acts"), [h("span", null, tf("The satellite leaves {ssid} now. If the new password is wrong, it returns to {ssid} by itself.", { ssid: old }))],
     T("Switch network"), "danger", (close) => {
       close();
-      const p = sq("wifi-switch"), url = "http://" + NET_HOSTNAME + ".local", ap = "http://" + NET_AP_ADDR;
+      const p = sq("wifi-switch"), url = "http://" + NET_HOSTNAME + ".local";
       p.replaceChildren(h("h3", null, T("Switching networks")),
         h("p", null, (ssid === old ? T("Reload this page in ~30 s, or open:") : tf("Join {ssid} with this phone, then open:", { ssid: ssid })) + " ", satLink(url)),
-        h("p", null, tf("Back on {old} within a minute if the new password was wrong; otherwise join the setup hotspot {ap} (password {appsk}) and open:",
-          { old: old, ap: NET_AP_SSID, appsk: NET_AP_PSK }) + " ", satLink(ap)));
+        h("p", null, tf("Back on {old} within a minute if the new password was wrong; otherwise the satellite opens its setup hotspot: scan the QR code on its display.",
+          { old: old })));
       p.hidden = false;
       sq("wifi-now").textContent = "";   // it is leaving that network
       sq("wifi-form").hidden = true;
@@ -2708,8 +3150,9 @@ function satConnect() {
 /** POST /api/wifi and watch the join. @param {string} ssid @param {string} psk
  * @param {boolean} hotspot over the hotspot a lost answer is retried once; online it means the satellite already left */
 async function satJoin(ssid, psk, hotspot) {
-  const msg = sq("setup-msg");
+  const msg = sq("setup-msg"), connect = /** @type {HTMLButtonElement} */ (sq("connect"));
   const send = () => satFetch("/api/wifi", { ssid: ssid, psk: psk }, NET_CONNECT_TIMEOUT_MS);
+  connect.disabled = true; connect.classList.add("pending");   // one join per tap, the retry included
   try {
     let r = null;
     try { r = await send(); } catch (e) {
@@ -2742,7 +3185,7 @@ async function satJoin(ssid, psk, hotspot) {
     msg.className = "warn";
     msg.textContent = T("No answer from the satellite.");
     sq("wifi-switch").hidden = true;
-  }
+  } finally { connect.disabled = false; connect.classList.remove("pending"); }
 }
 
 /** One look at GET /api/wifi while a join runs (every NET_PAGE_POLL_MS until it ends). */
@@ -2755,7 +3198,14 @@ async function satWatchJoin() {
     j.polls++;
     if (w.mode !== "setup") j.left = true;
     if (w.mode !== "station") j.away = true;
-    if (w.mode === "station" && w.ip && j.away) {   // online again: only once it left and came back
+    if (w.mode === "station" && w.ip && j.away && satDom.view === "setup") {   // the wizard: on to its station address
+      const a = sq("setup-next-addr");
+      msg.textContent = "";
+      a.replaceChildren(tf("Join {ssid} with this phone, then scan the new QR code on the satellite's display — or open:", { ssid: j.ssid }) + " ",
+        satLink("http://" + w.ip + "/#setup"));
+      a.hidden = false;
+      joining = null;
+    } else if (w.mode === "station" && w.ip && j.away) {   // online again: only once it left and came back
       msg.className = w.reverted ? "warn" : "note";
       msg.replaceChildren(w.reverted   // PR D: the new network failed, back on the old one
         ? tf("The new network didn't work ({why}); back on {ssid}.", { why: T(JOIN_WHY[w.last_error || ""] || "could not join"), ssid: w.ssid || "" })
@@ -2784,14 +3234,50 @@ function satAsk(acts, nodes, okText, okCls, ok, msgId) {
   acts.className = cls + " open";
   acts.replaceChildren(...nodes);
   const b = acts.appendChild(satBtn(okText, okCls)), c = acts.appendChild(satBtn(T("Cancel")));
+  const msg = sq(msgId);   // this screen's: a reply that lands after another screen opened never looks it up there
   const close = () => {
     acts.className = cls;
     acts.replaceChildren(...old);
-    sq(msgId).textContent = "";
+    if (msg) msg.textContent = "";
   };
   b.onclick = async () => { b.disabled = true; await ok(close); b.disabled = false; };
   c.onclick = close;
   (nodes[0] instanceof HTMLInputElement ? nodes[0] : c).focus();
+}
+
+// --- LoRa (R_FW_LORA, R_FW_LORA_SETUP): the switch always; the values while device.lora is there (the switch is on); Forget LoRa switches it off
+/** @type {[string, string][]} the box's value rows: id, label */
+const LORA_ROWS = [["module", "Module"], ["net", "Network"], ["last", "Last uplink"], ["air", "Airtime (24 h)"], ["setup", "Setup"], ["eui", "DevEUI"]];
+/** @type {Record<string, string>} device.lora.module / .setup -> the text */
+const LORA_WORDS = { present: "Found", absent: "Not found", checking: "Checking …", none: "Not set up", keys_made: "Keys made, waiting for the app",
+  joined: "Joined, waiting for the keys", ttn_keys: "Set up", error: "Key storage unreadable" };
+
+/** @param {?SatLora} l @param {boolean} st station mode */
+function satRenderLora(l, st) {
+  sq("lora-on").hidden = !l;
+  if (!l) return;
+  /** @param {string} id @param {string} text */
+  const set = (id, text) => { sq("lora-" + id).textContent = text; };
+  set("module", T(LORA_WORDS[l.module] || l.module));
+  set("net", T(l.at_unanswered > 0 ? "Module not answering" : l.joined ? "Joined" : "Not joined"));
+  // only an uplink the module confirmed is ever reported as one
+  set("last", l.last_s === null ? T("none confirmed yet") : tf("confirmed {n} min ago", { n: Math.floor(/** @type {number} */ (ageNow(l.last_s)) / 60) }));
+  set("air", tf("{a} s confirmed / {c} s charged", { a: (l.airtime_ms_24h / 1000).toFixed(1), c: (l.airtime_charged_ms_24h / 1000).toFixed(1) }));
+  set("setup", T(LORA_WORDS[l.setup] || l.setup));
+  set("eui", l.dev_eui || "—");
+  sq("lora-forget").hidden = !st;   // station only (403 setup_mode over the hotspot)
+}
+
+/** POST /api/lora {forget, confirm}; the next state has no device.lora, so the box goes. @param {() => void} close */
+async function satLoraForget(close) {
+  const msg = sq("lora-msg");
+  msg.textContent = "";
+  ux({ type: "control", fn: "satellite", control: "lora_forget" });
+  let ok = false;
+  try { ok = !!(await satFetch("/api/lora", { forget: true, confirm: true })).body.ok; } catch (e) { /* ok stays false */ }
+  if (!ok) { msg.textContent = T("Couldn't forget LoRa"); return; }
+  close();
+  await refreshState(true);
 }
 
 // --- Sensors (R_FW_SENSORS): shown while the Sensors switch is on; its own 10 s poll (a GET kicks a scan window)
@@ -2801,13 +3287,17 @@ const SENS_TYPE = { govee: "Thermo-hygrometer (Govee)", victron_mppt: "Solar cha
 const SENS_ERR = { bad_alias: "Name already used", bad_key: "Key must be 32 hex digits",
   key_mismatch: "Key does not match this device", full: "Sensor list is full (16)" };
 /** a field name -> its unit, in display order (the rest is not shown here) @type {[RegExp, string][]} */
-const SENS_UNIT = [[/_c$/, "°C"], [/humidity/, "%"], [/voltage/, "V"], [/power/, "W"], [/kwh/, "kWh"], [/current/, "A"]];
+const SENS_UNIT = [[/_c$/, "°C"], [/humidity/, "%"], [/voltage/, "V"], [/power/, "W"], [/kwh/, "kWh"], [/current/, "A"], [/^battery$/, "%"]];   // battery: the sensor's own, "🔋 49 %"
 let sensOn = false, sensBusy = false;
+let sensGen = 0;   // bumped by each screen build: an older screen's poll loop ends
+/** @type {string|null} the setup wizard lists only this type prefix ("victron", "govee"); null: all */
+let sensOnly = null;
 
-async function satSensPoll() {
-  if (!(sensOn = !!satDom && view === "satsettings" && !sq("sens").hidden)) return;
+async function satSensPoll(gen = sensGen) {
+  if (gen !== sensGen) return;
+  if (!(sensOn = !!satDom && SAT_VIEWS.includes(view) && !!satDom.root.querySelector("#sens:not([hidden])"))) return;
   try { await sensFetch(); } catch (e) { /* the next poll */ }
-  setTimeout(satSensPoll, 10000);
+  setTimeout(() => satSensPoll(gen), 10000);
 }
 /** GET /api/sensors and show it (also the e2e tests' "poll now"). */
 async function sensFetch() { satRenderSens((await satFetch("/api/sensors")).body); }
@@ -2818,7 +3308,7 @@ function sensVals(v) {
   const out = [];
   for (const [k, x] of Object.entries(v)) {
     const i = SENS_UNIT.findIndex(([re]) => re.test(k));
-    if (i >= 0 && x !== null) out.push([i, x + " " + SENS_UNIT[i][1]]);
+    if (i >= 0 && x !== null) out.push([i, (k === "battery" ? "🔋 " : "") + x + " " + SENS_UNIT[i][1]]);
   }
   return out.sort((a, b) => a[0] - b[0]).slice(0, 3).map((e) => e[1]);
 }
@@ -2841,14 +3331,19 @@ function sensErr(text) {
   m.textContent = T(text);
   m.scrollIntoView({ block: "nearest" });
 }
-/** A sensor row: what it is, then its buttons. @param {string} text @returns {[HTMLElement, HTMLElement]} the row, its buttons */
-function sensRow(text) {
+/** A sensor row: what it is, then its buttons. @param {string} text @param {string} [cls] @returns {[HTMLElement, HTMLElement]} the row, its buttons */
+function sensRow(text, cls) {
   const acts = h("span", { class: "acts" });
-  return [h("div", { class: "row srow" }, h("span", { class: "lbl" }, text), acts), acts];
+  return [h("div", { class: "row srow" + (cls ? " " + cls : "") }, h("span", { class: "lbl" }, text), acts), acts];
 }
 /** @param {SatSensors} s */
 function satRenderSens(s) {
-  if (!satDom || sq("sens").querySelector(".open")) return;   // a confirmation or a name/key being typed
+  const box = satDom && satDom.root.querySelector("#sens");
+  if (!box || box.querySelector(".open")) return;   // gone, or a confirmation or a name/key being typed
+  if (sensOnly) {
+    const only = sensOnly;
+    s = Object.assign({}, s, { configured: s.configured.filter((c) => c.type.startsWith(only)), seen: s.seen.filter((r) => r.type.startsWith(only)) });
+  }
   const cfg = sq("sens-cfg"), seen = sq("sens-seen");
   cfg.replaceChildren(); seen.replaceChildren();
   for (const c of s.configured) {
@@ -2868,7 +3363,7 @@ function satRenderSens(s) {
     seen.appendChild(h("p", { class: "note" }, T(s.scan === "paused" ? "Scan paused while pairing"
       : s.configured.length ? "No other sensors nearby (the scan runs every minute)." : "No sensors found yet (the scan runs every minute).")));
   for (const r of s.seen) {
-    const [row, acts] = sensRow([T(SENS_TYPE[r.type] || r.type), r.model, r.rssi + " dBm"].join(" · "));
+    const [row, acts] = sensRow([T(SENS_TYPE[r.type] || r.type), r.model, r.rssi + " dBm"].join(" · "), "seen-row");
     // a name (optional for the first of a type: the firmware then names it after the type id), a key
     // for a key type; then Add posts
     acts.appendChild(satBtn(T("Add"), "primary")).onclick = () => {
@@ -2926,14 +3421,16 @@ function renderSummary() {
   const w = STATE.water || {};
   if (installed("water")) {
     const f = w.fresh, g = w.waste;
-    if (f && f.liters != null) rows.push(sumRow(/** @type {string} */ (t("Fresh water")), `${f.liters} / ${f.capacity_l} l${f.stale ? " 🕒" : ""}`));
-    if (g && g.liters != null) rows.push(sumRow(/** @type {string} */ (t("Waste water")), `${g.liters} / ${g.capacity_l} l${g.stale ? " 🕒" : ""}`));
+    const wa = remoteAgo("water") ? " · " + remoteAgo("water") : "";
+    if (f && f.liters != null) rows.push(sumRow(/** @type {string} */ (t("Fresh water")), `${f.liters} / ${f.capacity_l} l${f.stale ? " 🕒" : ""}${wa}`));
+    if (g && g.liters != null) rows.push(sumRow(/** @type {string} */ (t("Waste water")), `${g.liters} / ${g.capacity_l} l${g.stale ? " 🕒" : ""}${wa}`));
   }
   /** @type {FnState} */
   const e = STATE.energy || {};
   if (e.soc2_pct != null) {
     const h = e.batt2_remaining_h;
-    rows.push(sumRow(/** @type {string} */ (t("Second battery")), `${e.soc2_pct}%` + (h ? ` · ${h} h` : "")));
+    rows.push(sumRow(/** @type {string} */ (t("Second battery")), `${e.soc2_pct}%` + (h ? ` · ${h} h` : "")
+      + (remoteAgo("energy") ? " · " + remoteAgo("energy") : "")));
   }
   if (!rows.length) return null;
   const card = document.createElement("div"); card.className = "card summary";
@@ -2950,7 +3447,7 @@ function renderSummary() {
 const CHARGE_STATES = { 0: "off", 2: "fault", 3: "bulk", 4: "absorption", 5: "float", 6: "storage", 7: "equalize",
   245: "starting up", 247: "recondition", 252: "external control" };
 const SENSOR_STALE_S = 600;   // the firmware's /api/sensors drops a reading this old too
-const LOW_SENSOR_BATTERY = 20;   // % — below it the Govee's battery joins its temperature row
+const LOW_SENSOR_BATTERY = 20;   // % — below it the Govee's battery joins its temperature row and badges the Vehicle tile
 
 /** @param {unknown} v @param {number} digits @param {string} [unit] @returns {string} a number, else "—" */
 const fix = (v, digits, unit = "") => (typeof v === "number" ? v.toFixed(digits) + unit : "—");
@@ -3012,6 +3509,19 @@ function houseLoad(s) {
   if (amps < -0.5) return "—";
   const a = Math.max(0, amps);
   return `${Math.round(a * s.batt2_v)} W · ${a.toFixed(1)} A`;
+}
+
+/**
+ * The Govees whose own battery is below LOW_SENSOR_BATTERY, as one warning (the Vehicle tile's ⚠ badge
+ * and its page's banner); null when none. An old reading still warns and names its age: a sensor that
+ * went quiet at 15 % must not look healthy.
+ * @returns {string|null}
+ */
+function lowSensorBatteries() {
+  const low = extEntries("govee").filter(([, e]) => typeof e.battery === "number" && e.battery < LOW_SENSOR_BATTERY)
+    .map(([alias, e]) => `${cap(alias)} ${e.battery} %`
+      + (extStale(e) ? ` 🕒 ${agoText(ageNow(/** @type {number|null} */ (e.age_s)))}` : ""));
+  return low.length ? tf("⚠ Sensor battery low: {list}", { list: low.join(", ") }) : null;
 }
 
 /** @param {string} type @returns {[string, SensorReading][]} the `ext` entries of a type, by alias */
@@ -3134,9 +3644,16 @@ function renderDashboard() {
     const alertMsg = f.warn ? f.warn(s) : null;
     tile.className = "tile" + (alertMsg ? " alert" : "");
     tile.innerHTML = (alertMsg ? `<div class="tbadge">⚠</div>` : "") +
-      `<div class="ti">${f.icon || ""}</div><div class="tt">${t(f.title)}</div>` +
-      `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>`;
-    if (alertMsg) tile.title = alertMsg;
+      `<div class="ti">${iconSvg(f.icon)}</div><div class="tt">${t(f.title)}</div>` +
+      `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>` +
+      (remoteAgo(fn) ? `<div class="tv">🕒 ${remoteAgo(fn)}</div>` : "");
+    if (alertMsg) {
+      const msg = /** @type {string} */ (t(alertMsg));
+      tile.title = msg;   // pointer hover; touch and VoiceOver get the cause from the accessible name
+      const val = tile.querySelector(".tv")?.textContent || "";   // keep the value in the name too
+      // a fault the value already names (cooler, heater, roof) is not spoken twice
+      tile.setAttribute("aria-label", [t(f.title), val, val.includes(msg) ? "" : msg].filter(Boolean).join(". "));
+    }
     tile.onclick = () => goto(fn);
     grid.appendChild(tile);
   }
@@ -3189,7 +3706,7 @@ function renderLighting(s) {
   mrow.appendChild(mlbl);
   if (pending_is("lighting", "power")) mrow.appendChild(spinner());
   const msw = document.createElement("button"); msw.className = "switch";
-  msw.setAttribute("role", "switch"); msw.setAttribute("aria-label", "All lights");
+  msw.setAttribute("role", "switch"); msw.setAttribute("aria-label", /** @type {string} */ (t("All lights")));
   msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = readOnly();
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
   mrow.appendChild(msw); mc.appendChild(mrow);
@@ -3250,7 +3767,7 @@ function renderLighting(s) {
       // clamp the thumb (11 ≈ full) but zero it for the no-reading markers; label shows the truth
       inp.value = /** @type {any} */ (val >= 13 ? 0 : Math.min(val, LIGHT_MAX));
       inp.disabled = readOnly() || roofBlocked;
-      inp.setAttribute("aria-label", grp.group + " " + lamp.label + " brightness");
+      inp.setAttribute("aria-label", t(grp.group) + " " + t(lamp.label) + " " + t("Brightness"));
       const out = document.createElement("span"); out.className = "sval";
       out.textContent = brightnessText(val);
       inp.oninput = () => (out.textContent = inp.value);
@@ -3309,7 +3826,7 @@ function renderLighting(s) {
   wrow.appendChild(wl);
   if (pending_is("lighting", "wakeup")) wrow.appendChild(spinner());
   const wsw = document.createElement("button"); wsw.className = "switch";
-  wsw.setAttribute("role", "switch"); wsw.setAttribute("aria-label", "Wake-up light");
+  wsw.setAttribute("role", "switch"); wsw.setAttribute("aria-label", /** @type {string} */ (t("Wake-up light")));
   wsw.setAttribute("aria-checked", wk && wk.enabled ? "true" : "false"); wsw.disabled = wkOff;
   wsw.onclick = () => wakeCmd({ on: !(wk && wk.enabled) });
   wrow.appendChild(wsw); wf.appendChild(wrow);
@@ -3317,13 +3834,13 @@ function renderLighting(s) {
   const tl = document.createElement("span"); tl.className = "lbl"; tl.textContent = /** @type {string} */ (t("Wake-up time"));
   const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time
     : (typeof wkOpt === "string" && wkOpt.split(/\s+/).find((x) => x.includes(":"))) || "";   // empty, never 00:00
-  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = readOnly();   // live even while unknown (R5 pull)
+  tin.setAttribute("aria-label", /** @type {string} */ (t("Wake-up time"))); tin.disabled = readOnly();   // live even while unknown (R5 pull)
   tin.onchange = () => { if (tin.value) wakeCmd({ time: tin.value }); };
   trow.append(tl, tin); wf.appendChild(trow);
   const rrow = document.createElement("div"); rrow.className = "row";
   const rl = document.createElement("span"); rl.className = "lbl"; rl.textContent = /** @type {string} */ (t("Lead time"));
   const rsel = document.createElement("select"); rsel.disabled = wkOff;
-  rsel.setAttribute("aria-label", "Lead time");
+  rsel.setAttribute("aria-label", /** @type {string} */ (t("Lead time")));
   for (const m of [0, 10, 20, 30]) {
     const o = document.createElement("option"); o.value = /** @type {any} */ (m); o.textContent = tf("{n} min", { n: m });
     o.selected = (wk ? wk.ramp : 0) === m; rsel.appendChild(o);
@@ -3334,7 +3851,7 @@ function renderLighting(s) {
   const bl = document.createElement("span"); bl.className = "lbl"; bl.textContent = /** @type {string} */ (t("Brightness"));
   const bin = document.createElement("input"); bin.type = "range"; bin.min = /** @type {any} */ (0); bin.max = /** @type {any} */ (LIGHT_MAX);
   bin.value = /** @type {any} */ (wk ? wk.brightness : 0); bin.disabled = wkOff;
-  bin.setAttribute("aria-label", "Wake-up brightness");
+  bin.setAttribute("aria-label", /** @type {string} */ (t("Wake-up brightness")));
   bin.onchange = () => wakeCmd({ brightness: Number(bin.value) });
   brow.append(bl, bin); wf.appendChild(brow);
   const arow = document.createElement("div"); arow.className = "row areas";
@@ -3429,6 +3946,11 @@ function renderFeature(fn) {
   /** @type {FnState} */
   const s = STATE[fn] || {};
   titleEl.textContent = /** @type {string} */ (t(f.title));
+  if (remoteAgo(fn)) {                  // remote mode: when this function's values came over LoRa
+    const b = document.createElement("div");
+    b.className = "note"; b.textContent = tf("Values via LoRa, {ago}", { ago: remoteAgo(fn) });
+    app.appendChild(b);
+  }
   if (f.warn) {                         // dynamic FAULT banner (e.g. fridge door open) — red/alert
     /** @type {string|null|undefined} */
     let w;
@@ -3495,6 +4017,9 @@ function renderControl(fn, c, s) {
       : (typeof offReason === "string" ? t(offReason) : "");
     if (why) row.title = why;
   }
+  // The state's reason also shows as text under the row: a title never shows on a touch tap and
+  // VoiceOver does not speak it. (Read-only mode keeps only the title: it is the same on every row.)
+  const whyText = !readOnly() && typeof offReason === "string" ? /** @type {string} */ (t(offReason)) : "";
   // fire() applies a per-control "not verified" confirm (c.confirm) on top of the feature-level
   // one in act(); c.confirm(value) returns the prompt, or null/false to skip.
   /** @param {string|number} val */
@@ -3504,16 +4029,22 @@ function renderControl(fn, c, s) {
     act(fn, c.what, val);
   };
   if (c.kind === "toggle") {
-    const on = optOn(fn, c.what, !!s[c.state]);
+    const lit = optOn(fn, c.what, !!s[c.state]);   // the value of `state` (what a command sets)
+    const on = c.invert ? !lit : lit;
     const sw = document.createElement("button");
     sw.className = "switch" + (isPending ? " pending" : "");
-    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", c.label);
+    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", /** @type {string} */ (t(c.label)));
     sw.setAttribute("aria-checked", on ? "true" : "false");
     sw.disabled = ro;
-    sw.onclick = () => fire(on ? "off" : "on");
+    sw.onclick = () => fire(lit ? "off" : "on");
     row.appendChild(sw);
   } else if (c.kind === "slider") {
-    const val = optNum(fn, c.what, /** @type {number} */ (s[c.state] != null ? s[c.state] : c.min));
+    // Clamp to [min, max]: a value off the scale (the unit's HeatingLevel 0) parks the thumb at min
+    // and reads "—", never "0" below the control's own minimum.
+    const raw = optNum(fn, c.what, /** @type {number} */ (s[c.state] != null ? s[c.state] : c.min));
+    const val = Math.min(c.max, Math.max(c.min, raw));
+    /** @param {number|string} v */
+    const shown = (v) => (c.fmt ? c.fmt(Number(v)) : v) + (c.unit ? " " + c.unit : "");
     const inp = document.createElement("input");
     inp.type = "range";
     inp.min = /** @type {any} */ (c.min);
@@ -3523,8 +4054,8 @@ function renderControl(fn, c, s) {
     inp.disabled = ro;
     const out = document.createElement("span");
     out.className = "sval";
-    out.textContent = val + (c.unit ? " " + c.unit : "");
-    inp.oninput = () => (out.textContent = inp.value + (c.unit ? " " + c.unit : ""));
+    out.textContent = raw === val ? shown(val) : "—";
+    inp.oninput = () => (out.textContent = shown(inp.value));
     inp.onchange = () => fire(Number(inp.value));
     row.appendChild(inp);
     row.appendChild(out);
@@ -3560,7 +4091,9 @@ function renderControl(fn, c, s) {
     const inp = document.createElement("input");
     inp.type = "time";
     inp.disabled = ro;
-    if (c.current && c.current(s)) inp.value = /** @type {string} */ (c.current(s));
+    // through the optimistic overlay: a re-render while the command is in flight keeps the sent time
+    const cur = optSel(fn, c.what, c.current ? c.current(s) : null);
+    if (cur) inp.value = /** @type {string} */ (cur);
     inp.onchange = () => { if (inp.value) fire(inp.value); };
     row.appendChild(inp);
   } else if (c.kind === "buttons") {             // momentary action buttons (cooler on/off timer)
@@ -3580,6 +4113,14 @@ function renderControl(fn, c, s) {
       grp.appendChild(btn);
     }
     row.appendChild(grp);
+  }
+  if (whyText) {
+    const why = document.createElement("div");
+    why.className = "ctl-why";
+    why.id = "why-" + fn + "-" + c.what;
+    why.textContent = whyText;
+    row.appendChild(why);
+    for (const el of row.querySelectorAll("button, input, select")) el.setAttribute("aria-describedby", why.id);
   }
   return row;
 }
@@ -3611,7 +4152,9 @@ function startClockTicker(el) {
   stopClockTicker();
   const base = parseClock(/** @type {FnState} */ (STATE.vehicle || {}).car_clock);
   if (base == null) { el.textContent = "—"; return; }
-  const anchor = stateAt - (STATE._meta && STATE._meta.age_s ? STATE._meta.age_s * 1000 : 0);
+  // remote: the vehicle frame's own age (an energy or water uplink after it is newer than its clock)
+  const r = STATE._meta && STATE._meta.remote, age = r && typeof r.ages.vehicle === "number" ? r.ages.vehicle : STATE._meta && STATE._meta.age_s;
+  const anchor = stateAt - (age ? age * 1000 : 0);
   const paint = () => { el.textContent = fmtClock(base + (Date.now() - anchor)); };
   paint();
   clockTimer = setInterval(paint, 1000);
@@ -3679,16 +4222,21 @@ function spinner() {
 
 // --- Cabin thermostat card (R_FW_THERMOSTAT_API), Air heater screen, ESP satellite only -------------
 // GET/POST /api/thermostat exist on the satellite only (buspi: no card). The card shows while a Govee is
-// configured (ext) and the satellite accepts writes. The firmware ships it DISABLED: then the card says so and offers no AUTO switch
-// (enabling is API-only, with confirm). The heater unit's own safety concept stays authoritative.
-/** @typedef {{enabled:boolean, mode:string, reason:?string, heater:string, t_ref:?number, target:?number, level:?number, active:?string, end:string}} ThermoStatus end: "run" (a normal run that ends by itself) or "none" */
-/** @typedef {{rev:number, mode:string, target:number, runtime_min:number, ref:?string, backup:?string, out:?string, outside_on:boolean, status:ThermoStatus}} Thermo */
+// configured (ext) and the satellite accepts writes. The AUTO switch is always there: the firmware ships the thermostat
+// disabled, and the confirmation window asked at every start enables it and starts AUTO in one POST. A start that
+// status.blocked says would be refused dims the switch and names the reason first. The heater unit's own safety
+// concept stays authoritative.
+/** @typedef {{enabled:boolean, mode:string, reason:?string, heater:string, t_ref:?number, target:?number, level:?number, active:?string, end:string, blocked:?string, wait_left_s:?number, night:boolean, eta_s?:?number, eta_ends_first?:boolean}} ThermoStatus end: "run" (a normal run that ends by itself) or "none"; blocked: the refusal an AUTO request would get now (NO_CAMPING, IGNITION, …) */
+/** @typedef {{rev:number, mode:string, target:number, runtime_min:number, ref:?string, backup:?string, out:?string, outside_on:boolean, night:boolean, status:ThermoStatus}} Thermo night: the stored run-time choice "Night" (no time limit) */
 /** @type {?Thermo} */
 let THERMO = null;
 let thermoSheet = false;    // the thermometer sheet is open (survives the 2 s re-render)
 let thermoLoading = false;  // a GET /api/thermostat is in flight
 let thermoAsked = false;    // the first fetch of this page load went out
 let thermoChain = Promise.resolve();   // POSTs run one at a time, each with the then-current rev
+let thermoBusy = 0;         // queued or running POSTs: an AUTO start waits, its confirm reads the settings
+/** @type {?number} */
+let thermoWant = null;      // the target the owner tapped: shown until every queued POST returned (a reply or poll is older)
 const THERMO_STEP = 50, THERMO_MIN = 500, THERMO_MAX = 3000;   // centi-°C
 
 // Reason code -> text (English source; the German is the strings.de.js entry of the same text).
@@ -3706,6 +4254,9 @@ const THERMO_REASON = {
   AUTO_REFUSED_TIMER_ARMED: "Stop the timer first",
   AUTO_REFUSED_STALE_HEATER: "Heater state not known yet — try again in a moment",
   AUTO_REFUSED_WARM: "Already warm enough — heater not started",
+  WAITING_FOR_CONTINUOUS: "Waiting for continuous heating",
+  NIGHT_WAIT_ENDED: "Continuous heating not switched on — AUTO off",
+  HOLD_AT_MIN_LEVEL: "Warmer than the target at the lowest level",
   START: "Heater started",
   ADOPT_RUN: "Taking over the running heater",
   ADOPT_CONTINUOUS: "Taking over continuous heating",
@@ -3730,6 +4281,9 @@ const THERMO_REASON = {
   STOPPING: "Stopping the heater",
   STOP_DROPPED: "The stop was not confirmed — check the heater",
 };
+
+// A run that ends by itself (or the owner's own OFF) shows nothing: the card simply shows AUTO off.
+const THERMO_QUIET = new Set(["RUN_ENDED", "CONTINUOUS_ENDED", "NIGHT_WAIT_ENDED", "USER_OFF"]);
 
 /** @param {string} code @returns {string} the English source text of a reason code ("" = unknown) */
 function thermoReasonText(code) {
@@ -3756,6 +4310,7 @@ async function thermoLoad() {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
   try {
+    remoteGuard("/api/thermostat");
     const r = await fetch("/api/thermostat", { cache: "no-store", signal: ac.signal });
     const b = r.ok ? await r.json() : null;
     THERMO = b && typeof b.rev === "number" && b.status ? b : null;
@@ -3774,8 +4329,9 @@ function thermoAsk() {
  * rev, also with no state loaded: the firmware never blocks a stop. @param {Record<string, any>} patch */
 function thermoPost(patch) {
   const off = Object.keys(patch).length === 1 && patch.mode === "OFF";
+  thermoBusy++;
   thermoChain = thermoChain.then(async () => {
-    if (!THERMO && !off) return;
+    if (!THERMO && !off) { if (--thermoBusy === 0) thermoWant = null; return; }
     try {
       const body = off ? patch : Object.assign({}, patch, { rev: /** @type {Thermo} */ (THERMO).rev });
       const r = await api("/api/thermostat", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -3786,19 +4342,94 @@ function thermoPost(patch) {
         toast("The thermostat was changed elsewhere — reloaded, please try again", "warn");
       } else toast("Couldn't change the thermostat", "error");
     } catch (e) { toast("Couldn't change the thermostat", "error"); }
+    if (--thermoBusy === 0) thermoWant = null;
     render();
   });
 }
 
-/** @param {Thermo} th @returns {string} e.g. "level 4 • running" */
+/** @param {Thermo} th @returns {string} e.g. "level 4 · ends 23:40" */
 function thermoStatusText(th) {
   const st = th.status;
   if (st.mode === "OFF") return /** @type {string} */ (t("off"));
   if (st.mode === "STOPPING") return /** @type {string} */ (t("stopping"));
-  const lv = st.level != null ? tf("level {n}", { n: st.level }) + " • " : "";
-  if (st.mode === "DEGRADED") return lv + t("degraded");
-  if (st.active && st.active === th.backup && th.backup !== th.ref) return lv + t("on backup");
+  if (st.mode === "WAITING") return /** @type {string} */ (t("waiting"));
+  const lv = st.level != null ? tf("level {n}", { n: st.level }) + " · " : "";
+  if (st.mode === "DEGRADED") {
+    if (st.night) return st.level != null ? tf("Night · level {n} · degraded · no end", { n: st.level }) : /** @type {string} */ (t("Night · degraded · no end"));
+    return lv + t("degraded");
+  }
+  const backup = !!st.active && st.active === th.backup && th.backup !== th.ref;
+  if (st.night) {
+    if (backup) return st.level != null ? tf("Night · level {n} · on backup · no end", { n: st.level }) : /** @type {string} */ (t("Night · on backup · no end"));
+    return st.level != null ? tf("Night · level {n} · no end", { n: st.level }) : /** @type {string} */ (t("Night · no end"));
+  }
+  if (backup) return lv + t("on backup");
+  // a timed run ends when the unit's remaining run time (1702 RunningTimeinAction, min) is up, on the page clock;
+  // the value counts down only while the unit reports it heating (parked it echoes the setting), and is
+  // shown only on live data (an old reading would name a past end)
+  const ah = /** @type {FnState} */ (STATE.airheater || {}), rem = ah.running_time_remaining;
+  if (st.heater === "RUNNING" && ah.running && rem != null && linkState() === "live") {
+    // anchored to the poll's reading time (stateAt - _meta.age_s, as the unit clock), so it does not drift later
+    const d = new Date(stateAt - (STATE._meta && STATE._meta.age_s ? STATE._meta.age_s * 1000 : 0) + rem * 60000);
+    return lv + tf("ends {t}", { t: hhmm(d.getHours(), d.getMinutes()) });
+  }
   return lv + (st.heater === "CONTINUOUS" ? t("continuous") : t("running"));
+}
+
+/** The time-to-target line (R_THERMOSTAT_ETA): the firmware's straight-line estimate, in 5-min steps and
+ * always "about" (it is optimistic near the target and ignores the after-heat), or null when it has none.
+ * @param {ThermoStatus} st @returns {?string} */
+function thermoEtaText(st) {
+  // only on live data: an old snapshot would name a time the estimate no longer supports
+  if (st.mode !== "AUTO" || st.eta_s == null || st.target == null || linkState() !== "live") return null;
+  const target = (st.target / 100).toFixed(1);
+  if (st.eta_ends_first) return tf("The run time ends before {target} °C", { target: target });
+  const min = Math.max(5, Math.round(st.eta_s / 300) * 5), d = new Date(Date.now() + min * 60000);
+  return tf("{target} °C in about {min} min (≈{t})", { target: target, min: min, t: hhmm(d.getHours(), d.getMinutes()) });
+}
+
+/** @param {number} s seconds left @returns {string} the night wait line, e.g. "… Waiting 4:32 min." */
+function thermoWaitText(s) {
+  return tf("Switch on “Dauerbetrieb” on the panel now and confirm with “Yes”. Waiting {m}:{ss} min.",
+    { m: Math.floor(s / 60), ss: String(s % 60).padStart(2, "0") });
+}
+
+/** The confirmation asked at every AUTO start: the day run, or the night's step at the panel.
+ * @param {Thermo} th @returns {string} */
+function thermoConfirmText(th) {
+  const v = { target: (th.target / 100).toFixed(1), alias: th.ref || t("none"), min: th.runtime_min };
+  const ah = /** @type {FnState} */ (STATE.airheater || {});
+  // Dauerbetrieb already on: AUTO takes it over, and it has no run time
+  if (th.status.heater === "CONTINUOUS" || ah.permanent)
+    return tf("Take over the running “Dauerbetrieb” with the thermostat? It holds {target} °C (thermometer “{alias}”) until you switch it off.", v);
+  if (th.night)
+    return tf("Heat for the night? 1. Tap OK. 2. Switch on “Dauerbetrieb” on the panel in the van and confirm its question with “Yes”. The thermostat then takes over and holds {target} °C (thermometer “{alias}”) until you switch it off.", v);
+  // a timed run already going: AUTO adopts its timer and sends no runtime, so no duration is promised
+  if (th.status.heater === "RUNNING")
+    return tf("Take over the running air heater with the thermostat? It holds {target} °C (thermometer “{alias}”); the run time already set stays.", v);
+  return tf("Start the air heater with the thermostat? It holds {target} °C (thermometer “{alias}”) for at most {min} min, then it stops.", v);
+}
+
+/** The hint under a dimmed AUTO switch: why a start would be refused now, with a link where it can be fixed.
+ * @param {string} code status.blocked @returns {HTMLElement} */
+function thermoBlockedEl(code) {
+  const text = thermoReasonShown("AUTO_REFUSED_" + code);
+  const box = document.createElement("div");
+  box.className = "note thermo-hint";
+  if (code === "NO_REFERENCE") {   // the hint itself opens the thermometer sheet
+    const b = thermoEl("linkbtn", text, "button");
+    b.onclick = () => { thermoSheet = true; render(); };
+    box.appendChild(b);
+    return box;
+  }
+  box.appendChild(thermoEl("", text));
+  if (code === "NO_CAMPING") {
+    const b = thermoEl("linkbtn", /** @type {string} */ (t("Open camping mode ›")), "button");
+    b.onclick = () => goto("campingmode");   // the screen only: the card never switches camping mode on
+    box.appendChild(document.createTextNode(" "));
+    box.appendChild(b);
+  }
+  return box;
 }
 
 /**
@@ -3879,44 +4510,52 @@ function thermostatCard() {
   card.appendChild(thermoEl("thermo-h", /** @type {string} */ (t("Thermostat")), "h2"));
   const auto = document.createElement("div");
   auto.className = "row";
-  if (!st.enabled) {
-    auto.appendChild(thermoEl("lbl", /** @type {string} */ (t("Thermostat disabled"))));
-  } else {
-    auto.appendChild(thermoEl("lbl", /** @type {string} */ (t("AUTO"))));
-    auto.appendChild(thermoEl("sval", thermoStatusText(th)));
-    const sw = document.createElement("button");
-    sw.className = "switch";
-    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", /** @type {string} */ (t("AUTO")));
-    sw.setAttribute("aria-checked", st.mode === "OFF" ? "false" : "true");
-    sw.disabled = readOnly();
-    sw.onclick = () => {
-      if (st.mode === "OFF") {
-        if (!confirm(/** @type {string} */ (t("Start the fuel-burning auxiliary air heater (AUTO)? It is not live-verified. Continue?")))) return;
-        thermoPost({ mode: "AUTO", confirm: true });
-      } else thermoPost({ mode: "OFF" });
-    };
-    auto.appendChild(sw);
-  }
+  const blocked = st.mode === "OFF" ? st.blocked : null;
+  auto.appendChild(thermoEl("lbl", /** @type {string} */ (t("AUTO"))));
+  auto.appendChild(thermoEl("sval", thermoStatusText(th)));
+  const sw = document.createElement("button");
+  sw.className = "switch";
+  sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", /** @type {string} */ (t("AUTO")));
+  sw.setAttribute("aria-checked", st.mode === "OFF" ? "false" : "true");
+  sw.disabled = readOnly() || !!blocked || (st.mode === "OFF" && thermoBusy > 0);
+  sw.onclick = () => {
+    if (st.mode === "OFF") {
+      if (thermoBusy > 0) return;
+      if (!confirm(thermoConfirmText(th))) return;
+      // enable in the same POST only while the feature is off: a failed enable write turns it off again server-side
+      thermoPost(st.enabled ? { mode: "AUTO", confirm: true } : { enabled: true, mode: "AUTO", confirm: true });
+    } else thermoPost({ mode: "OFF" });
+  };
+  auto.appendChild(sw);
   card.appendChild(auto);
+  if (blocked) card.appendChild(thermoBlockedEl(blocked));
   // t_ref → target, −/+ 0.5 °C
   const tr = document.createElement("div");
   tr.className = "row";
+  tr.appendChild(thermoEl("sr-only", /** @type {string} */ (t("Now"))));
   tr.appendChild(thermoEl("big", st.t_ref != null ? (st.t_ref / 100).toFixed(1) + " °C" : "—"));
   tr.appendChild(thermoEl("lbl", "→"));
+  const want = thermoWant ?? th.target;
   /** @param {string} label @param {string} sym @param {number} d */
   const step = (label, sym, d) => {
     const b = document.createElement("button");
     b.className = "btn thermo-step"; b.textContent = sym;
     b.setAttribute("aria-label", /** @type {string} */ (t(label)));
-    const nt = th.target + d;
+    const nt = want + d;
     b.disabled = readOnly() || nt < THERMO_MIN || nt > THERMO_MAX;
-    b.onclick = () => { th.target = nt; thermoPost({ target: nt }); render(); };
+    b.onclick = () => {
+      thermoWant = nt; thermoPost({ target: nt }); render();
+      announce(t("Target") + " " + (nt / 100).toFixed(1) + " °C");   // the stepper's value is rebuilt: no live region of its own
+    };
     return b;
   };
   tr.appendChild(step("Colder", "−", -THERMO_STEP));
-  tr.appendChild(thermoEl("sval", (th.target / 100).toFixed(1) + " °C"));
+  tr.appendChild(thermoEl("sr-only", /** @type {string} */ (t("Target"))));
+  tr.appendChild(thermoEl("sval", (want / 100).toFixed(1) + " °C"));
   tr.appendChild(step("Warmer", "+", THERMO_STEP));
   card.appendChild(tr);
+  const eta = thermoEtaText(st);
+  if (eta) card.appendChild(thermoEl("note thermo-eta", eta));
   if (st.heater === "OFF" && st.mode === "OFF") {   // the AUTO start run time: only while the heater is off
     const rt = document.createElement("div");
     rt.className = "row";
@@ -3928,13 +4567,22 @@ function thermostatCard() {
       o.value = String(m); o.textContent = tf("{m} min", { m: m });
       sel.appendChild(o);
     }
-    sel.value = String(th.runtime_min);
+    const night = document.createElement("option");   // no time limit: Dauerbetrieb, switched on at the panel
+    night.value = "night"; night.textContent = /** @type {string} */ (t("Night"));
+    sel.appendChild(night);
+    sel.value = th.night ? "night" : String(th.runtime_min);
     sel.disabled = readOnly();
-    sel.onchange = () => thermoPost({ runtime_min: Number(sel.value) });
+    sel.onchange = () => {
+      thermoPost(sel.value === "night" ? { night: true } : { night: false, runtime_min: Number(sel.value) });
+      if (st.mode === "OFF") sw.disabled = true;   // AUTO stays dimmed until the POST returned (no re-render: it would reset the select)
+    };
     rt.appendChild(sel);
     card.appendChild(rt);
   }
-  if (st.reason) card.appendChild(thermoEl("note thermo-line", thermoReasonShown(st.reason)));
+  if (st.mode === "WAITING" && st.wait_left_s != null) card.appendChild(thermoEl("note thermo-line", thermoWaitText(st.wait_left_s)));
+  else if (st.reason && !THERMO_QUIET.has(st.reason) && !(blocked && st.reason === "AUTO_REFUSED_" + blocked)) {
+    card.appendChild(thermoEl("note thermo-line", thermoReasonShown(st.reason)));
+  }
   const open = document.createElement("button");
   open.className = "row thermo-open";
   open.setAttribute("aria-expanded", thermoSheet ? "true" : "false");
@@ -3999,6 +4647,10 @@ let roofHold = null;
  * server handles roof STOP lock-free (`_roof_stop`), so it goes straight to the API. */
 function roofRelease() {
   if (!roofHold) return;
+  roofStop();
+}
+/** Send roof STOP out of band (see roofRelease) and repaint — the release AND the Stop button. */
+function roofStop() {
   roofHold = null;
   api("/api/command", {
     method: "POST",
@@ -4007,9 +4659,15 @@ function roofRelease() {
   }).catch((e) => toast("Roof STOP failed: " + String(e), "error"));
   render();                        // the held button may now be repainted
 }
-// Any release anywhere ends the move — the vehicle's own hold-to-move contract.
+// Any release anywhere ends the move — the vehicle's own hold-to-move contract (keyup: the
+// keyboard hold on a focused Open/Close button).
 document.addEventListener("pointerup", roofRelease);
 document.addEventListener("pointercancel", roofRelease);
+document.addEventListener("keyup", roofRelease);
+// The safety acknowledgement (the app's "check before opening" list), given ONCE per visit of the
+// roof page and outside the gesture: a confirm() inside pointerdown made the user lift the finger,
+// and that pointercancel stopped the move at once. Cleared whenever the page is left or hidden.
+let roofArmed = false;
 
 // The roof VIEW (CAPTURE 2026-10-10): while the real app's roof screen is open it streams STOP frames
 // with its SafetyCounter, so a press moves on an already-validated counter (no ~3 s withhold). The
@@ -4028,6 +4686,7 @@ function roofViewPost(action) {
 }
 function roofViewSync() {
   const on = view === "roof" && isCalictl() && !readOnly() && document.visibilityState === "visible";
+  if (!on) roofArmed = false;
   if (on && Date.now() - roofViewAt >= ROOF_VIEW_REFRESH_MS) {
     roofViewAt = Date.now();
     roofViewPost("view");
@@ -4058,34 +4717,58 @@ function roofControls(s) {
   // app), so gate on an explicit set rather than "any alert". STOP stays available (release).
   // `s.alert` / `s.position_name` are the decoded InfoPopUp + Position (semantics.roof).
   const moveBlocked = ROOF_MOVE_BLOCK.has(/** @type {string} */ (s.alert)) || s.position_name === "error";
+  // The roof moves only with the ignition on (the app's "Switch on the ignition" dialog).
+  const noIgnition = !ignitionOn(s);
+  const arm = document.createElement("label");
+  arm.className = "note";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = roofArmed;
+  box.disabled = readOnly() || satellite();
+  box.id = "roof-arm";
+  box.onchange = () => {
+    roofArmed = box.checked;
+    render();                      // re-gate Open/Close; keep the keyboard focus on the box
+    /** @type {HTMLElement|null} */ (document.getElementById("roof-arm"))?.focus();
+  };
+  arm.append(box, " ", /** @type {string} */ (t(ROOF_ALERT_MSG.open_checklist)));
+  card.appendChild(arm);
+  const hint = document.createElement("div");
+  hint.className = "note";
+  hint.textContent = /** @type {string} */ (t("Press and hold Open or Close: the roof moves while you hold "
+    + "and stops when you release. Keep the vehicle in view and avoid distraction during operation."));
+  card.appendChild(hint);
   const btns = document.createElement("div");
   btns.className = "btnrow";
   for (const dir of ["open", "close", "stop"]) {
     const b = document.createElement("button");
     b.className = "btn";
     b.textContent = cap(/** @type {string} */ (t(dir)));   // sentence case: "Open", "Öffnen"
-    const blocked = dir !== "stop" && moveBlocked;
+    const blocked = dir !== "stop" && (moveBlocked || noIgnition || !roofArmed);
     b.disabled = readOnly() || blocked || satellite();
-    if (blocked) b.title = /** @type {string} */ (t(ROOF_ALERT_MSG[/** @type {string} */ (s.alert)] || "Roof move blocked"));
+    if (blocked && !moveBlocked) b.title = /** @type {string} */ (t(noIgnition ? ROOF_NO_IGNITION : ROOF_ALERT_MSG.open_checklist));
+    if (moveBlocked && dir !== "stop") b.title = /** @type {string} */ (t(ROOF_ALERT_MSG[/** @type {string} */ (s.alert)] || "Roof move blocked"));
     if (satellite()) b.title = /** @type {string} */ (t(ELSEWHERE));
     if (pending_is("roof", dir)) b.appendChild(spinner());
     if (dir === "stop") {
-      b.onclick = () => command("roof", "stop", null);
+      b.onclick = roofStop;          // out of band: a queued STOP would wait behind the move
     } else {
       // PRESS-AND-HOLD: the pop-top moves only while the button is held; releasing sends STOP
       // (interrupts the in-flight move server-side via _roof_stop). Mirrors the vehicle's own
       // hold-to-move control. Still UNVERIFIED end-to-end on this van.
-      /** @param {PointerEvent} ev */
+      // Never a confirm() here: it makes the user lift the finger, and that release stops the move.
+      /** @param {Event} ev */
       const start = (ev) => {
         ev.preventDefault();
         if (readOnly() || roofHold || blocked || satellite()) return;
         if (Date.now() - roofLastMoveStart < ROOF_REPRESS_MS) return;  // debounce a too-quick re-press
-        if (!confirm(tf("Roof {dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?", { dir: t(dir) }))) return;
         roofHold = dir;                 // set BEFORE command(): it gates render() and the release
         roofLastMoveStart = Date.now();
         command("roof", dir, null);
       };
       b.addEventListener("pointerdown", start);
+      // keyboard / Switch Control: hold Space or Enter (the document keyup releases)
+      b.addEventListener("keydown", (ev) => { if ((ev.key === " " || ev.key === "Enter") && !ev.repeat) start(ev); });
       // pointerup/pointercancel are handled ONCE at document level (roofRelease) so a release
       // always sends STOP even if this node was replaced meanwhile; sliding off the button
       // also ends the move, like letting go of the vehicle's own switch.
@@ -4094,8 +4777,14 @@ function roofControls(s) {
     btns.appendChild(b);
   }
   card.appendChild(btns);
+  if (noIgnition && !moveBlocked) {
+    const n = document.createElement("div"); n.className = "note";
+    n.textContent = /** @type {string} */ (t(ROOF_NO_IGNITION));
+    card.appendChild(n);
+  }
   return card;
 }
+const ROOF_NO_IGNITION = "Please switch on the ignition to operate the pop-up roof.";
 
 // Live values: poll the state every 2 s while the page is visible. A hidden tab stops polling, so
 // buspi's daemon sees the UI go idle and drops back from its watched cadence (5 s reads on a held
@@ -4120,6 +4809,9 @@ function restoreLastState() {
     m.restored = true;  // the offline banner explains it: no read-only banner on top
     m.last_seen = seen;
     m.age_s = Math.max(0, Math.round(Date.now() / 1000 - seen));
+    // the remote app's ages per function were taken at the snapshot: add the time since (ageNow counts from now on)
+    const r = m.remote, dt = Math.max(0, (Date.now() - saved.at) / 1000);
+    if (r && r.ages) for (const k of Object.keys(r.ages)) if (typeof r.ages[k] === "number") r.ages[k] += dt;
     STATE = saved.state;
     stateAt = Date.now();
     lastAnswerAt = saved.at;   // "not reachable since" the snapshot was saved
@@ -4153,6 +4845,10 @@ addEventListener("pointerdown", reportInput, true);
 addEventListener("keydown", reportInput, true);
 
 async function main() {
+  if (REMOTE) {
+    remoteBoot();   // a setup a reload interrupted goes on (spec 5.1: survives an app restart)
+    if (view !== "remotesetup") openFromHash();   // else a deep link (#energy, #remotescan): no TTS answer needed
+  }
   paintLink();                // "connecting…" at once, not "…" while a hung first poll waits 8 s
   await refreshState(true);   // also takes the one-off /api/pairing once a calictl `_meta` answers
   render();

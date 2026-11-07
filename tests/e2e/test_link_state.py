@@ -104,7 +104,7 @@ def _conn(pg):
 
 
 def test_asleep_van_shows_the_amber_banner(backend):
-    """Scenario 1: the backend answers ``online=false`` -> amber "van asleep", pill offline, no red.
+    """Scenario 1: the backend answers ``online=false`` -> amber "van asleep", pill "unit offline", no red.
 
     .. test:: An answering backend with a sleeping unit shows the amber asleep banner
        :id: T_UI_LINK_ASLEEP
@@ -113,7 +113,7 @@ def test_asleep_van_shows_the_amber_banner(backend):
     _asleep(backend)
     with _page(backend) as pg:
         expect(_conn(pg)).to_contain_text("Offline — van asleep. Last data")
-        expect(pg.locator("#status")).to_have_text("offline")
+        expect(pg.locator("#status")).to_have_text("unit offline")
         assert pg.locator("#conn.unreachable").count() == 0
         assert pg.locator(".offline").count() == 1
 

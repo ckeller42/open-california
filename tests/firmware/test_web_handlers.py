@@ -33,8 +33,11 @@ from .api_shape import (
     DEVICE_KEYS,
     DISPLAY_DIAG_KEYS,
     DISPLAY_KEYS,
+    ENERGY_KEYS,
+    EXPERIMENTAL_KEYS,
     EXT_ENTRY_KEYS,
     LINK_KEYS,
+    LORA_KEYS,
     OTA_KEYS,
     PAIRING_API_KEYS,
     PAIRING_KEYS,
@@ -46,14 +49,16 @@ from .api_shape import (
     SENSORS_KEYS,
     STATE_DIAG_KEYS,
     STATE_KEYS,
+    STATE_WIFI_KEYS,
     THERMOSTAT_API_KEYS,
     THERMOSTAT_STATE_KEYS,
     THERMOSTAT_STATUS_KEYS,
     TIME_DIAG_KEYS,
     TIME_KEYS,
     WIFI_GET_KEYS,
-    WIFI_KEYS,
 )
+from .test_lora_setup import key as lora_key
+from .test_lora_setup import plaintext as lora_plaintext
 from .test_sensors import KEY
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -100,6 +105,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "json.c"),
             str(CORE / "snapshot.c"),
             str(CORE / "status.c"),
+            str(CORE / "ap_identity.c"),
             str(CORE / "ota.c"),
             str(CORE / "time.c"),
             str(CORE / "sdlog.c"),
@@ -114,8 +120,13 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "display_cfg.c"),
             str(CORE / "battery.c"),
             str(CORE / "sensors.c"),
+            str(CORE / "energy.c"),
+            str(CORE / "lora.c"),
+            str(CORE / "lora_setup.c"),
+            str(CORE / "lora_port_none.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(CORE / "test" / "web_cli.c"),
+            "-lm",
             "-o",
             str(out),
         ],
@@ -224,7 +235,7 @@ def test_api_state_shape(web_cli):
     assert set(body) == STATE_KEYS and body["fn"]["cooler"]["Installed"] == 1
     assert set(body["device"]) == DEVICE_KEYS
     assert set(body["device"]["pairing"]) == PAIRING_KEYS and set(body["device"]["link"]) == LINK_KEYS
-    assert set(body["device"]["wifi"]) == WIFI_KEYS
+    assert set(body["device"]["wifi"]) == STATE_WIFI_KEYS
     assert body["device"]["ota"] == {
         "state": "idle",
         "available_sha": None,
@@ -235,6 +246,8 @@ def test_api_state_shape(web_cli):
     assert set(body["device"]["ota"]) == OTA_KEYS
     assert body["device"]["time"] == {"source": "none", "synced": False, "boot": 0}  # no cali_time_init
     assert set(body["device"]["time"]) == TIME_KEYS
+    assert set(body["device"]["experimental"]) == EXPERIMENTAL_KEYS
+    assert set(body["device"]["energy"]) == ENERGY_KEYS
     # no card on the host (cali_sdlog_init never called), no resource stats (web.c's weak stub)
     assert body["device"]["sd"] == {
         "state": "absent",
@@ -266,7 +279,13 @@ def test_api_state_shape(web_cli):
         "rest_next_s": None,
         "last_snap_age_ms": d["uptime_ms"] - 4000,
     }
-    assert d["wifi"] == {"mode": "station", "ssid": "minsel", "ip": "192.168.1.23", "rssi": -61}
+    assert d["wifi"] == {
+        "mode": "station",
+        "ssid": "minsel",
+        "ip": "192.168.1.23",
+        "rssi": -61,
+        "ap_ssid": None,
+    }
 
 
 def test_api_state_diag_adds_the_diagnostics_only_on_request(web_cli):
@@ -304,7 +323,7 @@ _PIN_SETUP = [
 ]
 EXPECTED_DEVICE_TAIL = (
     '"device":{"pairing":{"state":"idle","address":"C0:FF:EE:CA:11:F0"},"link":{"up":true,'
-    '"ready":false,"rest":false,"redial":false,"rest_next_s":null,"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
+    '"ready":false,"rest":false,"redial":false,"rest_next_s":null,"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"ap_ssid":null},"setup":{"pending":false},'
     '"control":{"writes":true},"uptime_ms":5010,"fw":"test",'
     '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null,"channel":"stable"},'
     '"time":{"source":"none","synced":false,"boot":0},'
@@ -317,7 +336,8 @@ EXPECTED_DEVICE_TAIL = (
     '"display":{"state":null,"brightness_pct":null,"sensor":null,'
     '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0},'
     '"ux":{"enabled":true},'
-    '"experimental":{"sensors":false},'
+    '"experimental":{"sensors":false,"lora":false},'
+    '"energy":{"boot":0,"solar_wh":0,"load_wh":0,"batt_net_wh":0,"load_a":null},'
     '"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","reverted":false,"scan":[]}'
@@ -364,7 +384,13 @@ def test_api_state_nulls(web_cli):
         "rest_next_s": None,
         "last_snap_age_ms": None,
     }
-    assert body["device"]["wifi"] == {"mode": "setup", "ssid": None, "ip": None, "rssi": None}
+    assert body["device"]["wifi"] == {
+        "mode": "setup",
+        "ssid": None,
+        "ip": None,
+        "rssi": None,
+        "ap_ssid": "calictl-esp-C0FE",
+    }
 
 
 def test_api_state_link_up_is_the_real_link_not_the_kept_bond(web_cli):
@@ -439,6 +465,110 @@ def test_api_state_overflow_is_500_and_logged(web_cli_tiny):
 
 
 # ---- /api/wifi -------------------------------------------------------------------------------
+
+_HOTSPOT = ["wifi setup_ap", "joined 0"]
+_CREDS = '{"ssid":"van","psk":"secret123"}'
+
+
+def script(cli, *steps):
+    """Run ``steps`` (driver lines, or (method, path, body) requests) in ONE process (its kv store
+    persists across them); returns the responses and the other output lines."""
+    lines = [req(*x) if isinstance(x, tuple) else x.encode() for x in steps]
+    return drive(cli, lines)
+
+
+def pending(resp):
+    return resp.json()["device"]["setup"]["pending"]
+
+
+def test_wifi_saved_from_the_hotspot_marks_setup_pending(web_cli):
+    (before, saved, after), _ = script(
+        web_cli, *_HOTSPOT, ("GET", "/api/state"), ("POST", "/api/wifi", _CREDS), ("GET", "/api/state")
+    )
+    assert (pending(before), saved.status, pending(after)) == (False, 200, True)
+
+
+def test_wifi_changed_in_station_mode_does_not(web_cli):
+    (saved, after), _ = script(
+        web_cli, "wifi online", "joined 1", ("POST", "/api/wifi", _CREDS), ("GET", "/api/state")
+    )
+    assert saved.status == 200 and pending(after) is False
+
+
+def test_a_failed_wifi_save_from_the_hotspot_does_not_mark_it(web_cli):
+    (bad, after), _ = script(
+        web_cli, *_HOTSPOT, ("POST", "/api/wifi", '{"ssid":"","psk":"secret123"}'), ("GET", "/api/state")
+    )
+    assert bad.status == 400 and pending(after) is False
+
+
+def test_a_field_unit_without_the_key_is_not_pending(web_cli):
+    (state,), _ = script(web_cli, "wifi online", "joined 1", ("GET", "/api/state"))
+    assert pending(state) is False
+
+
+@pytest.mark.parametrize("mode", ["wifi setup_ap", "wifi online"])
+def test_setup_done_clears_it_in_any_mode(web_cli, mode):
+    (_, done, after), _ = script(
+        web_cli,
+        *_HOTSPOT,
+        ("POST", "/api/wifi", _CREDS),
+        mode,
+        ("POST", "/api/setup", '{"done":true}'),
+        ("GET", "/api/state"),
+    )
+    assert done.status == 200 and done.json() == {"ok": True} and pending(after) is False
+
+
+def test_pending_stays_correct_across_many_state_reads(web_cli):
+    """The flag is kept in RAM (the display reads it every 200 ms): right after a set, after /api/setup."""
+    gets = [("GET", "/api/state")] * 6
+    rs, _ = script(
+        web_cli,
+        *_HOTSPOT,
+        ("POST", "/api/wifi", _CREDS),
+        *gets,
+        ("POST", "/api/setup", '{"done":true}'),
+        *gets,
+    )
+    flags = [pending(r) for r in rs[1:7] + rs[8:]]
+    assert flags == [True] * 6 + [False] * 6
+
+
+def test_an_unreadable_flag_is_not_cached_as_not_pending(web_cli):
+    """A corrupt record reads as not pending for that call only; once it is valid the next read sees it."""
+    rs, _ = script(
+        web_cli, "kvhex setup_qr 0101", ("GET", "/api/state"), "kvhex setup_qr 01", ("GET", "/api/state")
+    )
+    assert [pending(r) for r in rs] == [False, True]
+
+
+@pytest.mark.parametrize("body", ['{"done":false}', "{}", '{"done":true,"x":1}', "nope", '{"done":1}'])
+def test_setup_other_bodies_are_400_and_keep_the_flag(web_cli, body):
+    (_, bad, after), _ = script(
+        web_cli, *_HOTSPOT, ("POST", "/api/wifi", _CREDS), ("POST", "/api/setup", body), ("GET", "/api/state")
+    )
+    assert bad.status == 400 and pending(after) is True
+
+
+def test_setup_is_post_only(web_cli):
+    r, _ = one(web_cli, "GET", "/api/setup")
+    assert r.status == 405
+
+
+def test_state_names_the_hotspot_but_never_its_password(web_cli):
+    (state,), other = script(web_cli, *_HOTSPOT, ("GET", "/api/state"), "kv ap_psk")
+    psk = next(x[3:] for x in other if x.startswith("KV "))
+    assert state.json()["device"]["wifi"]["ap_ssid"] == "calictl-esp-C0FE"
+    assert psk != "<missing>" and psk not in state.body.decode()
+    (st,), _ = script(web_cli, "wifi online", "joined 1", ("GET", "/api/state"))
+    assert st.json()["device"]["wifi"]["ap_ssid"] is None
+
+
+def test_diag_state_never_carries_the_hotspot_password_either(web_cli):
+    (state,), other = script(web_cli, *_HOTSPOT, ("GET", "/api/state?diag=1"), "kv ap_psk")
+    psk = next(x[3:] for x in other if x.startswith("KV "))
+    assert psk != "<missing>" and psk not in state.body.decode()
 
 
 def test_post_wifi_validates_and_stores(web_cli):
@@ -2099,7 +2229,8 @@ def test_api_state_has_experimental_off_by_default(web_cli):
        :links: R_FW_EXPERIMENTAL
     """
     d = json.loads(get(web_cli, "/api/state", setup=STATION))["device"]
-    assert d["experimental"] == {"sensors": False}
+    assert d["experimental"] == {"sensors": False, "lora": False}
+    assert "lora" not in d  # device.lora only while the LoRa switch is on (R_FW_LORA)
 
 
 def test_experimental_switch_persists_and_shows_in_state(web_cli):
@@ -2113,14 +2244,87 @@ def test_experimental_switch_persists_and_shows_in_state(web_cli):
         ],
     )
     assert (rs[0].status, rs[0].json()) == (200, {"ok": True, "sensors": True})
-    assert json.loads(rs[1].body)["device"]["experimental"] == {"sensors": True}
+    assert json.loads(rs[1].body)["device"]["experimental"] == {"sensors": True, "lora": False}
     assert "KV \x01" in other
     assert any(l.startswith("LOG exp: sensors on") for l in other)
     # a fresh process with the byte stored reads it back
     rs, _ = drive(
         web_cli, [b"kvhex exp_sensors 01", *(s.encode() for s in STATION), req("GET", "/api/state")]
     )
-    assert json.loads(rs[0].body)["device"]["experimental"] == {"sensors": True}
+    assert json.loads(rs[0].body)["device"]["experimental"] == {"sensors": True, "lora": False}
+
+
+def test_lora_switch_persists_and_shows_the_link_in_state(web_cli):
+    """POST /api/experimental {"lora":…} stores exp_lora; device.lora appears only while it is on.
+
+    .. test:: The LoRa switch persists; device.lora (module, confirmed vs charged airtime) only while it is on
+       :id: T_FW_LORA_SWITCH
+       :links: R_FW_LORA
+    """
+    rs, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/experimental", '{"lora":true}'),
+            req("GET", "/api/state"),
+            b"kv exp_lora",
+            req("POST", "/api/experimental", '{"lora":false}'),
+            req("GET", "/api/state"),
+        ],
+    )
+    assert (rs[0].status, rs[0].json()) == (200, {"ok": True, "lora": True})
+    d = json.loads(rs[1].body)["device"]
+    assert d["experimental"] == {"sensors": False, "lora": True}
+    # the host build has no module driver (lora_port_none.c): absent, nothing confirmed on air
+    assert (
+        d["lora"]["module"] == "absent" and d["lora"]["airtime_ms_24h"] == 0 and d["lora"]["last_s"] is None
+    )
+    assert "KV \x01" in other and any(l.startswith("LOG exp: lora on") for l in other)
+    assert (rs[2].status, rs[2].json()) == (200, {"ok": True, "lora": False})
+    assert "lora" not in json.loads(rs[3].body)["device"]
+    # a fresh process with the byte stored reads it back
+    rs, _ = drive(web_cli, [b"kvhex exp_lora 01", *(s.encode() for s in STATION), req("GET", "/api/state")])
+    assert json.loads(rs[0].body)["device"]["experimental"] == {"sensors": False, "lora": True}
+
+
+def test_state_lora_setup_fields_no_secrets(web_cli):
+    """device.lora reports the setup state; no key, in any form, reaches /api/state or the console.
+
+    .. test:: device.lora has setup, has_ttn_keys, dev_eui; AppKey, transfer key and TTN keys never appear
+       :id: T_FW_LORA_NO_SECRETS
+       :links: R_FW_LORA_SETUP
+    """
+    dev, tk = (bytes((b + i * 0x11) % 256 for i in range(n)) for b, n in ((1, 24), (2, 16)))  # dummies
+    ttn = lora_plaintext()  # the documented v1 layout: ver, cluster, app, dev, read key, command key
+    texts = (lora_key(3), lora_key(7))  # the NNSXS. text of the two packed keys in it
+    packed = (ttn[-116:-58], ttn[-58:])
+    secrets = [x.hex() for x in (dev[:16], tk, ttn, *packed)]
+    secrets += [x.upper() for x in secrets] + list(texts)
+    secrets += [t[i : i + 16] for t in texts for i in range(len(t) - 15)]  # any 16-char slice of a key text
+    rs, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/experimental", '{"lora":true}'),
+            b"kvhex lora_dev " + dev.hex().encode(),
+            b"kvhex lora_tk " + tk.hex().encode(),
+            req("GET", "/api/state"),
+            b"loracon status",
+            b"kvbig lora_ttn " + ttn.hex().encode(),
+            req("GET", "/api/state?diag=1"),
+            b"loracon status",
+        ],
+    )
+    for r, want in ((rs[1], ("keys_made", False)), (rs[2], ("ttn_keys", True))):
+        lora = json.loads(r.body)["device"]["lora"]
+        assert set(lora) == LORA_KEYS
+        assert (lora["setup"], lora["has_ttn_keys"], lora["dev_eui"]) == (*want, None)
+    text = rs[1].body.decode() + rs[2].body.decode() + "\n".join(other)
+    assert "setup keys_made" in text and "setup ttn_keys (TTN keys stored)" in text
+    assert len(ttn) > 100 and len(secrets) > 100
+    for sec in secrets:
+        assert sec not in text
+    assert "NNSXS." not in text
 
 
 @pytest.mark.parametrize(
@@ -2131,6 +2335,8 @@ def test_experimental_switch_persists_and_shows_in_state(web_cli):
         (STATION, "POST", '{"sensors":true,"x":1}', 400, "bad_json"),
         (STATION, "POST", "{}", 400, "bad_json"),
         (STATION, "POST", '{"sensors":true,"sensors":true}', 400, "bad_json"),
+        (STATION, "POST", '{"sensors":true,"lora":true}', 400, "bad_json"),  # one switch per body
+        (STATION, "POST", '{"lora":1}', 400, "bad_json"),
         (STATION, "POST", '{"sensors":true', 400, "bad_json"),
         (STATION, "POST", '{"sensors":true}x', 400, "bad_json"),
         (STATION, "POST", '{"sensors":true,}', 400, "bad_json"),
@@ -2141,6 +2347,71 @@ def test_experimental_switch_persists_and_shows_in_state(web_cli):
 )
 def test_experimental_errors(web_cli, setup, method, body, status, error):
     r, _ = one(web_cli, method, "/api/experimental", body, setup=setup)
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+LORA_ON = [*STATION, "kvhex exp_lora 01"]
+
+
+def test_lora_forget_erases_keys_and_switches_off(web_cli):
+    """POST /api/lora {"forget":true,"confirm":true} erases every LoRa key and switches LoRa off.
+
+    .. test:: POST /api/lora forget: confirm gate, keys erased, switch off, device.lora gone
+       :id: T_FW_LORA_FORGET_API
+       :links: R_FW_LORA_SETUP
+    """
+    dev, tk = bytes(range(0, 0x100, 0x11))[:16] + bytes(8), bytes(range(1, 17))  # dummies
+    rs, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in LORA_ON),
+            b"kvhex lora_dev " + dev.hex().encode(),
+            b"kvhex lora_tk " + tk.hex().encode(),
+            req("POST", "/api/lora", '{"forget":true,"confirm":true}'),
+            req("GET", "/api/state"),
+            b"kv lora_dev",
+            b"kv lora_tk",
+            b"kv exp_lora",
+        ],
+    )
+    assert (rs[0].status, rs[0].json()) == (200, {"ok": True})
+    d = json.loads(rs[1].body)["device"]
+    assert d["experimental"]["lora"] is False and "lora" not in d
+    assert other[-3:-1] == ["KV <missing>", "KV <missing>"]  # lora_dev, lora_tk erased
+    assert "\x01" not in other[-1]  # exp_lora off (a stored 0 byte)
+
+
+def test_lora_console_forget(web_cli):
+    """The console `lora forget` does what POST /api/lora does, without a confirm and in any WiFi mode."""
+    rs, other = drive(
+        web_cli,
+        [b"kvhex exp_lora 01", b"kvhex lora_dev 00", b"kvhex lora_keys 00", b"loracon forget", b"kv lora_dev",
+         b"kv lora_keys", req("GET", "/api/state")],
+    )  # fmt: skip
+    assert "LOG lora: forgotten (keys erased, LoRa off)" in other
+    assert other[-2:] == ["KV <missing>", "KV <missing>"]
+    assert json.loads(rs[0].body)["device"]["experimental"]["lora"] is False
+
+
+@pytest.mark.parametrize(
+    "setup,method,body,status,error",
+    [
+        (LORA_ON, "GET", None, 405, "method"),
+        (LORA_ON, "POST", '{"forget":true}', 400, "confirm_required"),
+        (LORA_ON, "POST", '{"forget":true,"confirm":false}', 400, "confirm_required"),
+        (LORA_ON, "POST", '{"confirm":true,"forget":false}', 400, "bad_json"),
+        (LORA_ON, "POST", "{}", 400, "bad_json"),
+        (LORA_ON, "POST", '{"confirm":true}', 400, "bad_json"),
+        (LORA_ON, "POST", '{"forget":1,"confirm":true}', 400, "bad_json"),
+        (LORA_ON, "POST", '{"forget":true,"confirm":true,"keys":"00"}', 400, "bad_json"),
+        (LORA_ON, "POST", '{"forget":true,"confirm":true', 400, "bad_json"),
+        (STATION, "POST", '{"forget":true,"confirm":true}', 404, "disabled"),
+        (LORA_ON + ["kvfail 1"], "POST", '{"forget":true,"confirm":true}', 500, "store"),
+        (["wifi setup_ap", "kvhex exp_lora 01"], "POST", '{"forget":true,"confirm":true}', 403, "setup_mode"),
+    ],
+)
+def test_lora_errors(web_cli, setup, method, body, status, error):
+    r, _ = one(web_cli, method, "/api/lora", body, setup=setup)
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
 
 
@@ -2980,7 +3251,7 @@ TH_DEFAULT_CFG = {
     "period_ms": 60000, "kp": 1500, "ki": 50, "ka": 100, "u_out_max": 3000, "hyst": 500,
     "min_dwell_ms": 300000, "band_hi": 200, "hot_hold_ms": 900000, "overheat": 400, "min_level": 1,
     "stale_after_ms": 600000, "heater_stale_ms": 180000, "batt_min_dv": 119, "batt_hold_ms": 300000,
-    "verify_ms": 10000, "runtime_min": 120,
+    "verify_ms": 10000, "runtime_min": 120, "night_wait_ms": 300000, "night_confirm_ms": 30000,
 }  # fmt: skip
 
 
@@ -3027,6 +3298,71 @@ def test_thermostat_get_defaults(web_cli):
     assert b["cfg"] == TH_DEFAULT_CFG
     assert set(b["status"]) == THERMOSTAT_STATUS_KEYS
     assert b["status"]["enabled"] is False and b["status"]["mode"] == "OFF"
+    assert b["night"] is False
+    st = b["status"]
+    # blocked is computed at each GET; no frames here: neither camping mode nor shore power
+    assert (st["blocked"], st["wait_left_s"], st["night"]) == ("NO_CAMPING", None, False)
+    assert (st["eta_s"], st["eta_ends_first"]) == (None, False)
+
+
+def test_night_needs_no_confirm_and_persists(web_cli):
+    """``night`` is a run-time setting like the target: no ``confirm``, stored in ``th_cfg``, back after a reboot.
+
+    .. test:: POST /api/thermostat: the night setting persists
+       :id: T_FW_THERMOSTAT_API_NIGHT
+       :links: R_FW_THERMOSTAT_API
+    """
+    rs, _ = drive(
+        web_cli,
+        [*(s.encode() for s in STATION), req("POST", "/api/thermostat", '{"night":true}'),
+         b"thinit", req("GET", "/api/thermostat"), req("POST", "/api/thermostat", '{"night":false}')],
+    )  # fmt: skip
+    assert rs[0].status == 200 and rs[0].json()["night"] is True
+    assert rs[1].json()["night"] is True and rs[1].json()["status"]["night"] is False  # status: before a step
+    assert rs[2].json()["night"] is False
+    r, _ = one(web_cli, "POST", "/api/thermostat", '{"night":1}', setup=STATION)
+    assert (r.status, r.json()["error"]) == (400, "bad_json")
+
+
+def test_enable_and_auto_in_one_post(web_cli):
+    """``{"enabled":true,"mode":"AUTO","confirm":true}`` on a disabled thermostat switches it on first, so the
+    AUTO request reaches the step as an enabled one (the card's one tap).
+
+    .. test:: POST /api/thermostat: enabled applies before the AUTO request of the same body
+       :id: T_FW_THERMOSTAT_API_ENABLE_AUTO
+       :links: R_FW_THERMOSTAT_API
+    """
+    rs, _ = drive(
+        web_cli,
+        [*(s.encode() for s in STATION), b"ready 1",
+         req("POST", "/api/thermostat", '{"enabled":true,"mode":"AUTO","confirm":true}'), b"thtick",
+         req("GET", "/api/thermostat")],
+    )  # fmt: skip
+    st = rs[1].json()["status"]
+    assert st["enabled"] is True
+    # past the switch check (no AUTO_REFUSED_DISABLED): with no 1702 frame here it waits for a heater read
+    assert (st["mode"], st["reason"]) == ("OFF", None), st
+
+
+def test_v1_stored_config_survives_the_upgrade(web_cli):
+    """A version-1 ``th_cfg`` (17 settings, no night) loads with its target, aliases and run time kept and the
+    new members at their defaults: the van's settings survive the OTA.
+
+    .. test:: Thermostat config: a version-1 record survives the upgrade
+       :id: T_FW_THERMOSTAT_CFG_V1
+       :links: R_FW_THERMOSTAT_API
+    """
+    import struct
+
+    s17 = [TH_DEFAULT_CFG[k] for k in list(TH_DEFAULT_CFG)[:17]]
+    s17[1], s17[16] = 2000, 60  # kp, runtime_min
+    blob = struct.pack("<B3x17ii17s17s17sxi", 1, *s17, 2150, b"kitchen", b"", b"outside", 1)
+    assert len(blob) == 132
+    b, _ = th_get(web_cli, extra=["kvhex th_cfg " + blob.hex(), "thinit"])
+    assert (b["target"], b["runtime_min"], b["ref"], b["backup"], b["out"], b["outside_on"], b["night"]) == (
+        2150, 60, "kitchen", None, "outside", True, False,
+    )  # fmt: skip
+    assert b["cfg"] == {**TH_DEFAULT_CFG, "kp": 2000, "runtime_min": 60}
 
 
 def test_auto_refused_while_disabled(web_cli):
@@ -3149,7 +3485,18 @@ def test_cfg_needs_confirm_and_persists(web_cli):
     b = rs[2].json()
     assert (b["cfg"]["kp"], b["cfg"]["min_level"], b["target"], b["runtime_min"]) == (2000, 2, 2150, 60)
     assert b["cfg"]["runtime_min"] == 60
-    assert [ln for ln in other if ln.startswith("KV ")] == ["KV <missing>", "KV \x01"]
+    assert [ln for ln in other if ln.startswith("KV ")] == ["KV <missing>", "KV \x02"]  # the version byte
+
+
+def test_cfg_night_keys_are_accepted(web_cli):
+    """The longest cfg keys (``night_confirm_ms``, ``night_wait_ms``) fit the POST parser's key buffer."""
+    rs, _ = drive(
+        web_cli,
+        [*(s.encode() for s in STATION),
+         req("POST", "/api/thermostat", '{"cfg":{"night_confirm_ms":45000,"night_wait_ms":600000},"confirm":true}')],
+    )  # fmt: skip
+    assert rs[0].status == 200
+    assert (rs[0].json()["cfg"]["night_confirm_ms"], rs[0].json()["cfg"]["night_wait_ms"]) == (45000, 600000)
 
 
 @pytest.mark.parametrize(

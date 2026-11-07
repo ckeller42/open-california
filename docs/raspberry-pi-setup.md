@@ -29,7 +29,7 @@ sh install.sh
 ```
 
 Useful flags: `--dry-run` (preview every step, do nothing), `--no-service` (skip the daemon),
-`--with-sinks` (also install the MQTT/InfluxDB client libs), `--dir PATH`, `--config-dir DIR`,
+`--with-sinks` (also install the InfluxDB client lib), `--dir PATH`, `--config-dir DIR`,
 `--force`, `--yes`. See `sh install.sh --help`.
 
 ## What it does
@@ -157,7 +157,6 @@ change needs a daemon restart.
 | `CALICTL_OUTCOMES_CACHE` | `~/.cache/calictl/poll_outcomes.jsonl` | per-poll outcome log (classifies telemetry gaps: deep sleep vs BLE error vs daemon down) |
 | `CALICTL_FW_SNAPSHOT_DIR` | `~/.cache/calictl/fw-snapshots` | where a firmware change's raw-frame capture is written |
 | `CALICTL_STORE_GENERALPURPOSE` | off | `1`/`true`/`yes` = log the raw F000/F001 diagnostic register to InfluxDB (RE probe) |
-| `CALICTL_MQTT_EXPIRE_AFTER_S` | `300` | Home Assistant `expire_after`: sensors go `unavailable` after this long without a state message |
 | `CALICTL_HEARTBEAT_PERIOD_S` | `0.6` | `1003` liveness-heartbeat period |
 | `CALICTL_HEARTBEAT_WARMUP_S` | `2.0` | heartbeat warm-up before a read pass |
 | `CALICTL_ARM_DELAY_S` | `3.0` | heartbeat time before a control write (lets the unit register it) |
@@ -173,16 +172,13 @@ change needs a daemon restart.
 The {term}`heartbeat` / arm / settle / follow / roof timings are the proven on-device values; the mock and
 e2e harness shrink them for speed. **Do not lower them for real hardware.**
 
-Add Home Assistant / MQTT / InfluxDB / Grafana: `calictl/deploy/homeassistant/HOMEASSISTANT.md`
-and `calictl/deploy/GRAFANA.md`. `install.sh --with-sinks` installs the Python client libs
-**and prompts for the MQTT broker credentials**, writing them to `calictl.env` — so the
-calictl→broker side is done; you still stand up the broker + Home Assistant and pair HomeKit
-(the UI steps) per HOMEASSISTANT.md.
+Add InfluxDB / Grafana: `calictl/deploy/GRAFANA.md`. `install.sh --with-sinks` installs the
+InfluxDB client lib; put `INFLUXDB_TOKEN` (and the other `INFLUX_*` settings) in `calictl.env`.
 
 ## Web UI
 
 The daemon can also serve a browser replica of the app's Vehicle-tab controls (dashboard →
-per-feature screens) from the same BLE-owning process — no extra connection, no broker:
+per-feature screens) from the same BLE-owning process — no extra connection:
 
 ```sh
 # add --web to the service, or run it directly:
@@ -193,10 +189,10 @@ per-feature screens) from the same BLE-owning process — no extra connection, n
 - The daemon is **read-only by default** (controls disabled) — pass `--enable-writes` (or
   `CALICTL_ENABLE_WRITES=1`) to allow control writes.
 - The UI is **unauthenticated** — expose it only on a trusted LAN (same posture as the
-  Home Assistant / Grafana stack), never on the open internet. To reach it **remotely**, use
+  Grafana stack), never on the open internet. To reach it **remotely**, use
   Tailscale (see below) — a private, encrypted overlay — rather than port-forwarding.
 - Uninstalled features are hidden. Controls the unit refuses in the current state are **greyed
-  out with a reason** (hover/long-press the row): camping mode only when stationary (ignition
+  out with a reason** (shown under the row): camping mode only when stationary (ignition
   off); camping lights + rear USB only while camping mode is on; roof open/close while a roof
   alert blocks movement (roof moved too often, low battery, fault, roof open while the vehicle
   may move). The roof is **press-and-hold**: it moves while the button is held and stops the
@@ -218,7 +214,7 @@ To enable it under systemd, append `--web 8080` to the unit's `ExecStart` and re
 
 When only the ESP32 satellite talks to the camper unit, run the daemon without BLE. `serve
 --no-ble` never opens a BLE connection (no session, no poll, no pairing, no commands). The web UI
-serves the cached last state (read-only), MQTT publishes availability only, and InfluxDB is
+serves the cached last state (read-only), and InfluxDB is
 filled by `calictl-esp-ingest` from the ESP SD log. The web UI shows a "🛰 Satellite mode"
 pill ("🛰 Satellit-Modus" in German) instead of an offline banner. Set it with a drop-in
 (`sudo systemctl edit calictl`); the empty `ExecStart=` line clears the unit's own command:

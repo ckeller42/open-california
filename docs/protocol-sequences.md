@@ -1,9 +1,8 @@
 # Protocol sequence diagrams
 
-The flows `calictl` (and the ESP32 {term}`satellite`) speak to the VW California camper {term}`unit`, and from
-the daemon to Home Assistant, as sequence diagrams: the BLE wire flows, the daemon's poll cycle and
-MQTT sink, the control commands, and the satellite's pairing, WiFi setup and command path. This page
-is the **single canonical copy**: the lab-notes page `docs/business-logic/protocol-sequences.md`
+The flows `calictl` (and the ESP32 {term}`satellite`) speak to the VW California camper {term}`unit`, as
+sequence diagrams: the BLE wire flows, the daemon's poll cycle, the control commands, and the
+satellite's pairing, WiFi setup and command path. This page is the **single canonical copy**: the lab-notes page `docs/business-logic/protocol-sequences.md`
 only points here. The diagram index below lists all of them.
 
 Each flow is a `sphinx-needs` **specification** (`S_SEQ_*`) that **links to the requirement it
@@ -40,11 +39,6 @@ traceability table on the index page):
    kernel inside a VM, the `pairing-real-stack` job) talking to the Bumble fake unit, but
    `calictl` has not yet run this sequence end to end against the real unit.
 
-`unit-tested`
-: Covered by unit tests of the code on both sides of the interface (here the MQTT sink and its
-   Home Assistant entities, with no broker or Home Assistant in the loop). No end-to-end run is
-   recorded in these docs.
-
 ## Diagram index
 
 ```{list-table}
@@ -78,9 +72,6 @@ traceability table on the index page):
 * - {need}`S_SEQ_POWER_SAVE_HANGUP`
   - Power-save hang-up
   - Camping off, no shore power: the unit ends each link 30 s in, the 7 s reconnect cooldown.
-* - {need}`S_SEQ_MQTT`
-  - Home Assistant over MQTT
-  - Discovery, state publish and command-in via `serve.on_command`.
 * - {need}`S_SEQ_ACTUATE`
   - Heartbeat-armed control write
   - The `1003` heartbeat spanning one control write, cold and persistent paths.
@@ -588,8 +579,8 @@ and without the neutral follow-up. See [control-and-actuation.md §1](https://ck
 :links: R_COOLER_APP_FRAMES, R_ONOFF_STRICT, R_ACTUATE_ARM, R_POST_WRITE_CHECK, R_PERSISTENT_SESSION, R_APP_FIDELITY
 
 **Contract.** A cooler command (`power`, `level`, `mode`, `timer_set`, `timer_start`,
-`timer_cancel`, `night_on`, `night_off`) reaches the unit the same way from the web UI, the
-CLI and Home Assistant ({need}`S_SEQ_MQTT`). {py:meth}`calictl.serve.Server.on_command` does the
+`timer_cancel`, `night_on`, `night_off`) reaches the unit the same way from the web UI and the
+CLI. {py:meth}`calictl.serve.Server.on_command` does the
 following:
 
 * Refuse everything while the daemon is read-only.
@@ -621,7 +612,7 @@ following:
 
 ```mermaid
 sequenceDiagram
-    participant H as Web UI, CLI or Home Assistant
+    participant H as Web UI or CLI
     participant S as serve (on_command)
     participant U as Cooler (1101 / 1102)
     participant A as App (reference only)
@@ -769,7 +760,7 @@ Mode 12 reply (stored-favourite bits).
 
 ```mermaid
 sequenceDiagram
-    participant W as Web UI or Home Assistant
+    participant W as Web UI or CLI
     participant S as serve
     participant U as Lighting (1501 / 1502)
     participant A as App (reference only)
@@ -838,7 +829,7 @@ screen:
   `0x04`) at once, the first move frame **repeating the current counter** (the last STOP's),
   then +1 per tick. The unit has already validated that counter, so it does not withhold the
   motor (the real app's motor started ~1.2 s after the press). **Without a view** (API, CLI,
-  HA, or a press before the session is up) the move starts a stream of its own at the press —
+  or a press before the session is up) the move starts a stream of its own at the press —
   a fresh counter, so the unit withholds the motor ~3 s — and closes it after the final STOP.
 * **Connection**: a roof command does **not** warm the persistent session (no keep-warm
   nudge, no `CALICTL_SESSION_WAIT_S` wait); the view does. Under the `_ble` lock, a live
@@ -1095,9 +1086,7 @@ does the following, in this order:
   unlocked), stamp `_last_ok_ts`, run the camping
   observer (passive), run the auto-camper step (which may command through `on_command`), then
   persist the state file atomically (`R_SERVE_STATE_CACHE`).
-* **Fan out** the interpreted states: MQTT discovery once per newly installed function, then one
-  state message per installed function ({need}`S_SEQ_MQTT`), and InfluxDB points for the
-  installed functions.
+* **Fan out** the interpreted states: InfluxDB points for the installed functions.
 * The loop records the cycle's outcome in a small JSONL log: `ok`, `asleep` (the supervisor
   is at its backoff cap), `ble_error` or `error`. A missing stretch with no rows means the
   daemon itself was down.
@@ -1117,7 +1106,7 @@ sequenceDiagram
     participant L as serve poll loop
     participant U as Camper unit
     participant C as Cache (memory and state file)
-    participant K as Sinks (MQTT, InfluxDB)
+    participant K as InfluxDB
     participant W as Web UI (state API)
     loop every interval, 30 s by default
         Note over L: skip while the supervisor connects or a pairing flow owns the radio
@@ -1132,7 +1121,7 @@ sequenceDiagram
         L->>L: drift snapshot, plausibility anchors, water latch guard and settle
         L->>C: rebind last state, stamp as-of time, history sample, save the state file
         L->>L: camping observer and auto-camper step
-        L->>K: MQTT discovery once, state per installed function, Influx points
+        L->>K: Influx points per installed function
         L->>L: record outcome ok
     end
     W->>C: GET /api/state (no BLE read)
@@ -1164,8 +1153,7 @@ every 30 minutes over two weeks parked. Access is therefore intermittent:
 * The supervisor backs off 5 / 10 / 30 / 60 s. After 4 consecutive failures its state is
   `asleep`.
 * `serve` keeps serving the persisted last-known state with an "as of" time, and the web UI
-  shows an offline banner ({need}`S_SEQ_POLL`). Nothing is published to MQTT meanwhile, so the
-  Home Assistant sensors expire and go unavailable ({need}`S_SEQ_MQTT`).
+  shows an offline banner ({need}`S_SEQ_POLL`). Nothing is written to InfluxDB meanwhile.
 * Once a connect succeeds again, polling resumes.
 ```
 
@@ -1252,75 +1240,6 @@ BlueZ link held with camping on and was ended 30.7 s after encryption with campi
 satellite's links ended at the same time with heartbeat and reads. The app's reaction and the
 shore-power rule are verified against the app's code only. Ignition on with camping off is
 untested. See the [evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html).
-
-## Home Assistant over MQTT
-
-```{spec} MQTT sink: discovery, state publish and command-in
-:id: S_SEQ_MQTT
-:status: unit-tested
-:links: R_MQTT_DISCOVERY_STATE, R_MQTT_COMMAND_TOPICS, R_ONOFF_STRICT
-
-**Contract.** MQTT is an optional sink of the single daemon. Without `paho-mqtt`, or with an
-unreachable broker, `serve` logs a warning and carries on with polling and the web UI.
-Broker, user and password come from `MQTT_HOST`, `MQTT_PORT`, `MQTT_USER` and
-`MQTT_PASSWORD`.
-
-* **Connect.** The client sets a last-will `calivan/status` = `offline` (retained). On
-  connect it publishes `online` (retained) and subscribes to every command topic
-  `calivan/<function>/<what>/set` ({py:func}`calictl.mqtt.command_topics`).
-* **Discovery.** After a poll, for each function that newly reports `installed`, the daemon
-  publishes the retained configs from {py:func}`calictl.mqtt.render_discovery` under
-  `homeassistant/<component>/vwcamper_<function>_<key>/config`, once per daemon run.
-  Read-only sensors read one field of `calivan/<function>` through a `value_template`, use
-  `calivan/status` as availability and carry `expire_after` (300 s). Command entities are
-  a `switch` (payloads `on` and `off`) or a `number` (min and max) with a
-  `command_topic` and do not expire. Functions not installed on the van get nothing.
-* **State.** Every successful poll publishes one flattened JSON of the interpreted state per
-  installed function to `calivan/<function>` (not retained). Nothing is published while the
-  unit is unreachable, so the sensors expire and become unavailable instead of showing a
-  days-old value as live. A clean shutdown publishes `offline` itself, a crash leaves it to
-  the last-will.
-* **Command-in.** The paho network thread's `on_message` maps the topic to `(function, what)`
-  and takes the payload text. It schedules `Server.on_command` on the daemon loop with
-  `run_coroutine_threadsafe`. From there it is the same path as a web or CLI command: the
-  read-only gate, `command_precondition` (a payload that is not an on/off token is refused),
-  the `_ble` lock, `control.build`, the write ({need}`S_SEQ_COOLER` is the worked example).
-  The result is not reported back. A failure is only logged. The entity follows the unit when
-  the next poll publishes the new state.
-```
-
-```mermaid
-sequenceDiagram
-    participant S as serve (poll loop, command path)
-    participant M as Mosquitto broker
-    participant H as Home Assistant
-    S->>M: connect with last-will calivan/status offline (retained)
-    S->>M: publish calivan/status online (retained)
-    S->>M: subscribe to every calivan function what set topic
-    Note over S: a poll reports a function as installed
-    S->>M: publish retained discovery configs for that function (sensors, switches, numbers)
-    M-->>H: homeassistant config topics create the entities
-    loop every successful poll
-        S->>M: publish calivan/function with the flattened interpreted state
-        M-->>H: value_template picks one field per entity
-    end
-    Note over S,H: poll fails (unit asleep), nothing is published, sensors expire after 300 s and go unavailable
-    H->>M: publish calivan/cooler/power/set with payload on
-    M-->>S: on_message in the paho thread
-    S->>S: run_coroutine_threadsafe(on_command) on the daemon loop
-    Note over S: read-only gate, preconditions, _ble lock, build, write, applied-check
-    Note over S,M: nothing is published for the command, the next poll publishes the new state
-    Note over S,M: daemon dies, the broker publishes the last-will offline, a clean exit publishes it itself
-```
-
-**Evidence.** `tests/test_ha.py` covers the topic map, the discovery entities (switch and number
-with their ranges, installed gating, `expire_after` on read-only sensors only) and the round trip
-from a topic back to a `(function, what)`. `tests/test_web_serve.py` covers the broker-less
-start. The broker, the retained configs and Home Assistant itself are not part of any test, and this
-page records no end-to-end run, hence the status. The number entities take their ranges from the
-builders (`control.COOLER_LEVEL_RANGE`, `control.AIRHEATER_LEVEL_RANGE`, lighting 0 to
-`control.LIGHT_ON_BRIGHTNESS`); `lighting brightness` sets every real lamp, like `all`.
-`tests/test_ha.py` builds every advertised number at its min and max.
 
 ## ESP32 satellite
 
@@ -1432,13 +1351,14 @@ tested on the scripted transport and the host tier (`T_FW_VARIANT_GATE`). See {d
 state machine (`wifi_sm.c`, a C twin of `tools/wifi_sm_ref.py`) and the runner
 (`wifi_run.c`) are platform-free C.
 
-* **Hotspot.** WPA2 `calictl-esp-setup` (passphrase `calictl-setup`), address
+* **Hotspot.** WPA2 `calictl-esp-XXXX` (the last four hex digits of the MAC) with a random
+  14-character passphrase kept in NVS and shown only on the display as a WiFi QR code, address
   `192.168.4.1`. The captive DNS answers every A query with that address. The HTTP server
   answers the OS captive-portal probe paths (`/generate_204`, `/hotspot-detect.html`,
   `/connecttest.txt` and the other known ones) with `302` to `http://192.168.4.1/`, and any
   other path in setup mode with `302` to `/`. A phone that joins is led to the web UI.
 * **Page.** `GET /` serves the calictl web UI in every mode; in setup mode it opens on its
-  WiFi-setup screen (`#wifisetup`). It reads `GET /api/wifi` (mode, why the last join failed,
+  setup wizard (`#setup/<step>`). It reads `GET /api/wifi` (mode, why the last join failed,
   the last scan's networks) when the form opens, again a moment later for the fresh scan, and
   every 2 s while it watches a join. `GET /device` is a minimal recovery page with the same join
   form, the fallback if the UI fails. A scan is deferred while a BLE pairing flow is active (`R_FW_WIFI_BLE_COEX`) and starts on the
@@ -1448,8 +1368,10 @@ state machine (`wifi_sm.c`, a C twin of `tools/wifi_sm_ref.py`) and the runner
   store (`wifi_ssid`, `wifi_psk`) and the runner joins as a station (CONNECTING). The
   hotspot moves to the network's channel, so the phone may drop off for a moment.
 * **Joined.** The station gets an address: ONLINE, mDNS announces `calictl-esp.local`
-  (`_http._tcp`, port 80), the next `/api/wifi` read reports station mode (WiFi setup shows
-  *Connected as …* with the `calictl-esp.local` link), and the hotspot closes 30 s later so the
+  (`_http._tcp`, port 80), the next `/api/wifi` read reports station mode (the wizard shows
+  *Join {ssid} with this phone, then scan the new QR code on the satellite's display — or open:*
+  and the address), the display shows a second QR code with `http://<ip>/#setup` while the setup
+  is pending (`POST /api/setup` ends it), and the hotspot closes 30 s later so the
   phone can read the answer first. From now on `/api/state` reports `device.control.writes` true ({need}`S_SEQ_ESP_COMMAND`).
 * **Failed.** Credentials typed in *this* setup flow are cleared and the state returns to
   SETUP_AP with the hotspot still up. `last_error` is `auth`, `not_found` or `other` and
@@ -1471,11 +1393,11 @@ sequenceDiagram
     participant E as Satellite (hotspot, DNS, HTTP, wifi runner)
     participant R as Home router
     Note over E: boot with no saved credentials, state SETUP_AP
-    E-->>P: hotspot calictl-esp-setup (WPA2), DNS answers every name with 192.168.4.1
+    E-->>P: hotspot calictl-esp-XXXX (WPA2, password on the display), DNS answers every name with 192.168.4.1
     P->>E: join the hotspot
     P->>E: OS probe GET /generate_204 (or hotspot-detect.html and the others)
     E-->>P: 302 to http://192.168.4.1/ so the sign-in page opens
-    P->>E: GET / (the web UI, it opens on WiFi setup)
+    P->>E: GET / (the web UI, it opens on the setup wizard)
     loop when the form opens, and every 2 s while a join is watched
         P->>E: GET /api/wifi
         E-->>P: mode, last_error, scan list (a scan waits while a BLE pairing flow is active)

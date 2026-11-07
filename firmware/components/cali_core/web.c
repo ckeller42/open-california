@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cali_ap_identity.h"
 #include "cali_auto_camper.h"
 #include "cali_battery.h"
 #include "cali_ble_exp.h"
@@ -20,6 +21,8 @@
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_sdlog.h"
+#include "cali_energy.h"
+#include "cali_lora.h"
 #include "cali_sensors.h"
 #include "cali_session.h"
 #include "cali_time.h"
@@ -66,7 +69,7 @@ static const char ERR_BUSY[] = "{\"ok\":false,\"error\":\"busy\"}";
 static const char ERR_NOT_PAIRED[] = "{\"ok\":false,\"error\":\"not_paired\"}";   /* /api/ble connect */
 static const char ERR_NO_TIME[] = "{\"ok\":false,\"error\":\"no_time\"}";   /* /api/ble: no wall clock */
 static const char ERR_OTA_UNAVAILABLE[] = "{\"ok\":false,\"error\":\"ota_unavailable\"}";
-static const char ERR_DISABLED[] = "{\"ok\":false,\"error\":\"disabled\"}";   /* /api/sensors, flag off */
+static const char ERR_DISABLED[] = "{\"ok\":false,\"error\":\"disabled\"}";   /* /api/sensors, /api/lora, flag off */
 static const char OVERFLOW_BODY[] = "response too large";
 /* /api/pairing errors: calictl's own bodies (web.py), no "ok" member */
 static const char ERR_P_BAD_JSON[] = "{\"error\":\"bad_json\"}";
@@ -283,6 +286,14 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_json_key(&j, "wifi");
     cali_json_obj_begin(&j);
     wifi_members(&j, &st);
+    cali_json_key(&j, "ap_ssid");   /* the setup hotspot's name while it runs; never its password */
+    if (st.ap_ssid[0]) cali_json_str(&j, st.ap_ssid); else cali_json_null(&j);
+    cali_json_obj_end(&j);
+
+    cali_json_key(&j, "setup");   /* a first-time setup begun on the hotspot and not done (CALI_SETUP_QR_KEY) */
+    cali_json_obj_begin(&j);
+    cali_json_key(&j, "pending");
+    cali_json_bool(&j, st.setup_pending);
     cali_json_obj_end(&j);
 
     cali_json_key(&j, "control");   /* POST /api/command is accepted: station mode only (ruling B) */
@@ -324,11 +335,19 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_json_key(&j, "enabled");
     cali_json_bool(&j, ux_on());
     cali_json_obj_end(&j);
-    cali_json_key(&j, "experimental");   /* the sensor track switch (R_FW_EXPERIMENTAL) */
+    cali_json_key(&j, "experimental");   /* the sensor track and LoRa switches (R_FW_EXPERIMENTAL, R_FW_LORA) */
     cali_json_obj_begin(&j);
     cali_json_key(&j, "sensors");
     cali_json_bool(&j, cali_exp_sensors());
+    cali_json_key(&j, "lora");
+    cali_json_bool(&j, cali_exp_lora());
     cali_json_obj_end(&j);
+    cali_json_key(&j, "energy");   /* Wh since boot + the house load (R_FW_ENERGY_COUNTERS) */
+    cali_energy_json(&j);
+    if (cali_exp_lora()) {   /* the LoRa link (R_FW_LORA): absent while the switch is off */
+        cali_json_key(&j, "lora");
+        cali_lora_json(&j);
+    }
     cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
     cali_json_bool(&j, cali_session_water_held());
     uint64_t wg = cali_session_water_good_ms();   /* adopted on this boot; NVS restore has no time */
@@ -443,7 +462,7 @@ static int parse_obj(cursor_t *c, const char *const *keys, size_t n, field_fn fi
     if (expect(c, '{') != 0) return -1;
     if (expect(c, '}') == 0) return 0;
     for (;;) {
-        char key[16];   /* the longest key (halt_after_min) fits; a longer one is unknown */
+        char key[24];   /* the longest key (night_confirm_ms) fits; a longer one is unknown */
         size_t klen;
         int i;
         if (parse_str(c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(c, ':') != 0) return -1;
@@ -483,6 +502,7 @@ static int parse_creds(const char *body, size_t body_len, char *ssid, size_t *ss
 }
 
 static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    int from_hotspot = wifi_mode() == CALI_WIFI_MODE_SETUP;
     static char ssid[NET_SSID_MAX + 1], psk[NET_PSK_MAX + 1];
     size_t ssid_len = 0, psk_len = 0;
     if (parse_creds(req->body, req->body_len, ssid, &ssid_len, psk, &psk_len) != 0) {
@@ -496,6 +516,9 @@ static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
         cali_log("http: storing wifi credentials failed");
         SET_CONST(resp, 500, ERR_STORE);
     } else {
+        if (from_hotspot) {   /* the wizard follows only a setup begun on the hotspot (a failed mark is not fatal) */
+            if (cali_setup_pending_set(1) != 0) cali_log("http: marking setup pending failed");
+        }
         cali_wifi_run_set_creds(ssid, psk);
         SET_CONST(resp, 200, OK_BODY);
     }
@@ -821,7 +844,10 @@ static int bool_field(cursor_t *c, int i, void *ctx) {
     return parse_bool(c, ctx);
 }
 
-static const char *const K_CHANNEL[] = {"channel"}, *const K_ENABLED[] = {"enabled"}, *const K_SENSORS[] = {"sensors"};
+static const char *const K_CHANNEL[] = {"channel"}, *const K_ENABLED[] = {"enabled"};
+/* POST /api/experimental: exactly one of the switches per body (R_FW_EXPERIMENTAL, R_FW_LORA) */
+static const char *const K_EXPERIMENTAL[] = {"sensors", "lora"};
+static int exp_field(cursor_t *c, int i, void *ctx) { return parse_bool(c, &((int *)ctx)[i]); }
 
 /* ---- POST /api/ota {"action":"check"|"install"} | {"channel":"stable"|"latest"} (R_FW_OTA): station
  * mode only, like /api/command. The channel is stored at once (the next check uses it), even on a
@@ -873,7 +899,7 @@ static void api_auto_camper(const cali_http_req_t *req, cali_http_resp_t *resp) 
 /* ---- GET/POST /api/thermostat (R_FW_THERMOSTAT_API): the body keys are the bits of cali_thermo_patch_t.has,
  * in this order. POST: station mode only. ---- */
 static const char *const K_THERMO[] = {"enabled", "mode", "target", "runtime_min", "ref", "backup",
-                                       "out", "outside_on", "cfg", "rev", "confirm"};
+                                       "out", "outside_on", "cfg", "rev", "confirm", "night"};
 
 /* A signed integer -?(0|[1-9][0-9]*), clamped to +-2^62 (the value check refuses it); a fraction or
  * exponent leaves its '.'/'e' behind, which the object parser then rejects. 0 ok, -1 not an integer. */
@@ -935,7 +961,8 @@ static int thermo_field(cursor_t *c, int i, void *ctx) {
         p->cfg_has = (unsigned)seen;
         return seen < 0 ? -1 : 0;
     case 9: return parse_i64(c, &p->rev);
-    default: return parse_bool(c, &p->confirm);
+    case 10: return parse_bool(c, &p->confirm);
+    default: return parse_bool(c, &p->night);
     }
 }
 
@@ -1439,21 +1466,59 @@ static void api_ux_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
+/* ---- POST /api/setup {"done":true}: ends the first-time setup, in any WiFi mode ---- */
+static const char *const K_DONE[] = {"done"};
+static void api_setup_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    int done = 0;
+    if (parse_body(req->body, req->body_len, K_DONE, 1, bool_field, &done) != 1 || !done) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if (cali_setup_pending_set(0) != 0) {
+        SET_CONST(resp, 500, ERR_STORE);
+    } else {
+        SET_CONST(resp, 200, OK_BODY);
+    }
+}
+
 /* ---- POST /api/experimental {"sensors":<bool>}: the Satellite settings sensor-track switch, station only ---- */
 static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp) {
-    int on;
+    int v[2] = {0, 0}, seen = -1;
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
         SET_CONST(resp, 403, ERR_SETUP_MODE);
-    } else if (parse_body(req->body, req->body_len, K_SENSORS, 1, bool_field, &on) != 1) {
+    } else if ((seen = parse_body(req->body, req->body_len, K_EXPERIMENTAL, 2, exp_field, v)) != 1 && seen != 2) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
-    } else if (cali_exp_sensors_set(on) != 0) {
+    } else if ((seen == 1 ? cali_exp_sensors_set(v[0]) : cali_exp_lora_set(v[1])) != 0) {
         SET_CONST(resp, 500, ERR_STORE);
-    } else if (on) {
-        SET_CONST(resp, 200, "{\"ok\":true,\"sensors\":true}");
+    } else if (seen == 1) {
+        if (v[0]) SET_CONST(resp, 200, "{\"ok\":true,\"sensors\":true}");
+        else SET_CONST(resp, 200, "{\"ok\":true,\"sensors\":false}");
+    } else if (v[1]) {
+        SET_CONST(resp, 200, "{\"ok\":true,\"lora\":true}");
     } else {
-        SET_CONST(resp, 200, "{\"ok\":true,\"sensors\":false}");
+        SET_CONST(resp, 200, "{\"ok\":true,\"lora\":false}");
+    }
+}
+
+/* ---- POST /api/lora {"forget":true,"confirm":true}: the Satellite settings LoRa box's "Forget LoRa"
+ * (R_FW_LORA_SETUP): station only, 404 while exp_lora is off. No other body: keys arrive by QR/downlink. ---- */
+static const char *const K_LORA[] = {"forget", "confirm"};
+static void api_lora(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    int v[2] = {0, 0}, seen;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (!cali_exp_lora()) {
+        SET_CONST(resp, 404, ERR_DISABLED);
+    } else if ((seen = parse_body(req->body, req->body_len, K_LORA, 2, exp_field, v)) < 0 || !(seen & 1) || !v[0]) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);   /* "forget" is required and true */
+    } else if (!(seen & 2) || !v[1]) {
+        SET_CONST(resp, 400, ERR_CONFIRM);
+    } else if (cali_lora_forget() != 0) {
+        SET_CONST(resp, 500, ERR_STORE);
+    } else {
+        SET_CONST(resp, 200, OK_BODY);
     }
 }
 
@@ -1533,7 +1598,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     (void)ctx;
     if (strcmp(req->path, "/api/command") == 0) return api_command(req, resp);
     if (strcmp(req->path, "/api/log") == 0) return api_log(req, resp);
-    /* the calictl web UI (R_FW_SHARED_UI) in every mode: over the setup hotspot it opens on WiFi setup
+    /* the calictl web UI (R_FW_SHARED_UI) in every mode: over the setup hotspot it opens on the setup wizard
      * by itself; /app = the same (the manifest's start_url, old links) */
     if (get && (strcmp(req->path, "/") == 0 || strcmp(req->path, "/app") == 0)) {
         cali_ble_exp_activity(cali_uptime_ms());   /* a viewer opens the page: reconnect now (R_FW_BLE_IDLE) */
@@ -1604,12 +1669,21 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         api_sensors(req, resp);
         return 1;
     }
+    if (strcmp(req->path, "/api/lora") == 0) {
+        api_lora(req, resp);
+        return 1;
+    }
     if (get && strcmp(req->path, "/device") == 0) {    /* the WiFi recovery page, in every mode */
         set_static(resp, HTML_TYPE, WEB_INDEX_HTML, WEB_INDEX_HTML_LEN, NO_CACHE);
         return 1;
     }
     if (strcmp(req->path, "/api/state") == 0) {
         if (get) api_state(req, resp);
+        else SET_CONST(resp, 405, ERR_METHOD);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/setup") == 0) {
+        if (strcmp(req->method, "POST") == 0) api_setup_post(req, resp);
         else SET_CONST(resp, 405, ERR_METHOD);
         return 1;
     }
@@ -1628,7 +1702,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (wifi_mode() == CALI_WIFI_MODE_SETUP) {
         /* captive portal: an OS probe gets the absolute setup address (its Host is some probe domain),
-         * so the OS's captive sheet opens the UI (WiFi setup); anything else goes home */
+         * so the OS's captive sheet opens the UI (the setup wizard); anything else goes home */
         resp->status = 302;
         resp->location = cali_captive_is_probe(req->path) ? PROBE_TARGET : "/";
         return 1;

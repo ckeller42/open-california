@@ -203,6 +203,7 @@ def test_diagnostics_screen_polls_the_diag_state_only_while_open(sat, stub):
         ("display.motion", "3"),
         ("display.pm", "40-240"),
         ("ble.probing", "false"),
+        ("time.boot", "17"),  # the boot number: here, not on the Clock row
     ]:
         expect(_row(sat.locator("#app"), label)).to_contain_text(value)
     assert "/api/state?diag=1" in stub.queries
@@ -352,6 +353,68 @@ def test_device_is_the_recovery_page_with_a_link_to_the_ui(stub, error_gated_pag
             expect(pg.locator("#ssid option").first).to_be_attached()
 
 
+def test_recovery_page_names_the_join_error_in_words(stub, error_gated_page):
+    """The mode line maps the firmware's raw ``last_error`` code to words, EN + DE (#516)."""
+    stub.mode = "setup"
+    stub.fixtures["setup"]["/api/wifi"]["last_error"] = "auth"
+    for locale, words in (("en-US", "(wrong password)"), ("de-DE", "(falsches Passwort)")):
+        with error_gated_page(stub.base + "/device", locale=locale) as pg:
+            expect(pg.locator("#now")).to_contain_text(words)
+            expect(pg.locator("#now")).not_to_contain_text("auth")
+
+
+def test_recovery_page_says_it_searches_until_the_scan_answers(stub, error_gated_page):
+    """An empty network list shows "Searching for networks…" until /api/wifi answers (#516)."""
+    stub.mode = "setup"
+    with error_gated_page(stub.base + "/device") as pg:
+        expect(pg.locator("#ssid option", has_text="HomeNet")).to_be_attached()
+        held = []
+        pg.route("**/api/wifi", lambda r: held.append(r))
+        pg.evaluate("document.getElementById('ssid').replaceChildren(); scan()")
+        expect(pg.locator("#ssid option")).to_have_text(["Searching for networks…"])
+        expect(pg.locator("#name")).to_be_hidden()
+        for r in held:
+            r.continue_()
+        pg.unroute("**/api/wifi")
+        expect(pg.locator("#ssid option", has_text="HomeNet")).to_be_attached()
+        expect(pg.locator("#ssid option", has_text="Searching")).to_have_count(0)
+
+
+def test_recovery_page_disables_connect_while_it_watches_the_join(stub, error_gated_page):
+    """Connect is disabled from submit until the join watch ends: one POST per tap (#516)."""
+    stub.mode = "setup"
+    with error_gated_page(stub.base + "/device") as pg:
+        expect(pg.locator("#ssid option", has_text="HomeNet")).to_be_attached()
+        pg.locator("#ssid").select_option("HomeNet")
+        pg.locator("#psk").fill("correct horse")
+        pg.locator("#go").click()
+        expect(pg.locator("#go")).to_be_disabled()
+        assert stub.wifi_posts == [{"ssid": "HomeNet", "psk": "correct horse"}]
+        stub.fixtures["setup"]["/api/wifi"].update(mode="station", ssid="HomeNet", ip="192.168.1.5")
+        expect(pg.locator("#go")).to_be_enabled(timeout=8000)
+        assert len(stub.wifi_posts) == 1
+
+
+def test_recovery_page_meets_contrast_and_touch_target_sizes(stub, error_gated_page):
+    """Light theme: the text colours reach 4.5:1 and the password toggle + UI link are 44 px tall (#516)."""
+    stub.mode = "setup"
+    with error_gated_page(stub.base + "/device", color_scheme="light") as pg:
+        expect(pg.locator("#ssid option").first).to_be_attached()
+        got = pg.evaluate(
+            """() => {
+              const c = (sel) => getComputedStyle(document.querySelector(sel)).color;
+              const msg = document.getElementById("msg"); msg.className = "bad";
+              return {why: c("#why"), rescan: c("#rescan"), app: c("#app"), bad: c("#msg"),
+                      show: document.querySelector("label.chk").getBoundingClientRect().height,
+                      link: document.getElementById("app").getBoundingClientRect().height};
+            }"""
+        )
+    assert got["why"] == "rgb(95, 102, 115)"  # --muted #5f6673
+    assert got["rescan"] == got["app"] == "rgb(36, 89, 201)"  # --accent-text #2459c9
+    assert got["bad"] == "rgb(178, 59, 50)"  # --error-text #b23b32
+    assert got["show"] >= 44 and got["link"] >= 44, got
+
+
 def test_devicestatus_link_opens_device_status_and_stays_in_the_url(stub, error_gated_page):
     """``/#devicestatus`` opens Device status (its Camper-unit card with Unpair…); the hash stays, so a
     reload stays there too."""
@@ -423,7 +486,7 @@ def test_a_command_is_confirmed_from_the_units_own_state(stub, error_gated_page,
         pg.wait_for_function(LIVE)
         pg.on("dialog", lambda d: d.accept())
         _open(pg, tile)
-        pg.get_by_role("switch", name="Refrigerator box").click()
+        pg.get_by_role("switch", name=_de(locale, "Refrigerator box", "Kühlbox")).click()
         _wait_commands(pg, stub)
         expect(pg.locator(".toast")).to_have_text(
             "✓ Übernommen" if locale == "de-DE" else "✓ Applied", timeout=6000
@@ -504,6 +567,11 @@ LATCH = {
 }
 
 
+def _de(locale, en, de):
+    """A control's accessible name follows the page language, like its visible label."""
+    return de if locale == "de-DE" else en
+
+
 @pytest.mark.parametrize(
     "locale,tile,head", [("en-US", "Lighting", "Wake-up light"), ("de-DE", "Beleuchtung", "Wecklicht")]
 )
@@ -522,10 +590,12 @@ def test_wakeup_card_is_live_and_sends_the_browsers_wall_clock(stub, error_gated
         _lighting_settings(pg)
         # the card heading (a profile <option> carries the same words)
         expect(pg.locator("div.note", has_text=re.compile("^%s$" % head)).first).to_be_visible()
-        tm = pg.get_by_label("Wake-up time")
+        tm = pg.get_by_label(_de(locale, "Wake-up time", "Weckzeit"))
         expect(tm).to_be_enabled()
         expect(tm).to_have_value("06:00")
-        expect(pg.get_by_role("switch", name="Wake-up light")).to_have_attribute("aria-checked", "true")
+        expect(pg.get_by_role("switch", name=_de(locale, "Wake-up light", "Wecklicht"))).to_have_attribute(
+            "aria-checked", "true"
+        )
         expect(pg.locator(".arealist input[type=checkbox]")).to_have_count(4)
         expect(pg.get_by_role("switch", name="Sliding door lighting")).to_have_attribute(
             "aria-checked", "true"
@@ -588,11 +658,11 @@ def test_wakeup_time_is_editable_before_the_unit_reported(stub, error_gated_page
         pg.wait_for_function(LIVE)
         _open(pg, tile)
         _lighting_settings(pg)
-        tm = pg.get_by_label("Wake-up time")
+        tm = pg.get_by_label(_de(locale, "Wake-up time", "Weckzeit"))
         expect(tm).to_be_enabled()
         expect(tm).to_have_value("")
-        expect(pg.get_by_role("switch", name="Wake-up light")).to_be_disabled()
-        expect(pg.get_by_label("Wake-up brightness")).to_be_disabled()
+        expect(pg.get_by_role("switch", name=_de(locale, "Wake-up light", "Wecklicht"))).to_be_disabled()
+        expect(pg.get_by_label(_de(locale, "Wake-up brightness", "Weckhelligkeit"))).to_be_disabled()
         expect(pg.locator(".arealist input[type=checkbox]:enabled")).to_have_count(0)
         expect(pg.locator(".card select:disabled").first).to_be_visible()
         assert pg.locator(".note", has_text=re.compile("not known yet|noch nicht bekannt")).count() >= 1
@@ -755,7 +825,7 @@ def test_firmware_answers_show_a_clear_message(stub, status, reply, locale, text
         pg.goto(stub.base)
         pg.wait_for_function(LIVE)
         _open(pg, "Kühlbox" if locale == "de-DE" else "Cooler")
-        pg.get_by_role("switch", name="Refrigerator box").click()
+        pg.get_by_role("switch", name=_de(locale, "Refrigerator box", "Kühlbox")).click()
         _wait_commands(pg, stub)
         # not_connected: the page retries for CMD_LINK_WAIT_MS (45 s) before it gives up
         expect(pg.locator(".toast")).to_have_text(text, timeout=55000 if status == 503 else 5000)
@@ -1022,7 +1092,7 @@ def _contrast(a, b):
 
 
 def test_light_theme_pill_and_banner_contrast_and_pill_size(stub, error_gated_page):
-    """Light theme: the pill's texts (live, offline, power saving, busy) and the offline banner reach
+    """Light theme: the pill's texts (live, unit offline, power saving, busy) and the offline banner reach
     4.5:1 (WCAG 1.4.3), and the offline pill keeps the pill's size (the generic ``.warn`` rule
     must not grow it)."""
     link = stub.fixtures["satellite"]["/api/state"]["device"]["link"]
@@ -1033,7 +1103,7 @@ def test_light_theme_pill_and_banner_contrast_and_pill_size(stub, error_gated_pa
         h0 = status.bounding_box()["height"]
         seen = [status.evaluate("e => getComputedStyle(e).color")]
         link.update(up=False, ready=False, last_snap_age_ms=600000)
-        expect(status).to_have_text("offline")
+        expect(status).to_have_text("unit offline")
         assert status.bounding_box()["height"] == h0
         seen.append(status.evaluate("e => getComputedStyle(e).color"))
         banner = pg.locator("#conn.offline")
@@ -1155,7 +1225,7 @@ def _pair_in_wizard(pg, stub, words):
     pg.get_by_role("button", name=words["connect"]).click()
     pg.locator("#pairing-passkey").fill("123456")
     pg.get_by_role("button", name=words["send"]).click()
-    expect(pg.get_by_text(words["paired"])).to_be_visible()
+    expect(pg.locator("#pairing-card").get_by_text(words["paired"])).to_be_visible()
     expect(pg.get_by_text(words["saved"])).to_be_visible()
     shown = _card_text(pg)
     assert not [w for w in BUSPI_ONLY if w in shown], shown
@@ -1179,7 +1249,7 @@ def test_wizard_pairs_the_satellite(stub, error_gated_page, locale):
 
 
 def test_wizard_over_the_setup_hotspot_via_app(stub, error_gated_page):
-    """No home WiFi at the van: on the setup hotspot /app (like /) is the UI on WiFi setup — no
+    """No home WiFi at the van: on the setup hotspot /app#wifisetup is the UI on WiFi setup — no
     control over the hotspot (said once there, not as the read-only banner) but with the pairing wizard.
 
     .. test:: The wizard is reachable and pairs over the setup hotspot
@@ -1188,7 +1258,7 @@ def test_wizard_over_the_setup_hotspot_via_app(stub, error_gated_page):
     """
     stub.mode = "setup"
     _unpaired(stub, "setup")
-    with error_gated_page(stub.base + "/app") as pg:
+    with error_gated_page(stub.base + "/app#wifisetup") as pg:
         expect(
             pg.get_by_text("Controls work only on your home WiFi — not over the setup hotspot")
         ).to_be_visible()
@@ -1284,7 +1354,8 @@ def test_wizard_start_while_a_command_runs_says_busy(stub, locale, text):
         pg.locator("#unpaired-banner").get_by_role("button", name=words["go"]).click()
         pg.get_by_label(words["ready"]).check()
         pg.get_by_role("button", name=words["connect"]).click()
-        expect(pg.locator(".toast")).to_have_text(text)
+        expect(pg.locator("#pairing-req-error")).to_have_text(text)  # a row in the card (#511), not a toast
+        expect(pg.locator("#pairing-req-error")).to_be_visible()
         browser.close()
     assert not errors, errors
 
@@ -1849,6 +1920,38 @@ def test_old_missing_low_and_faulty_readings(stub, error_gated_page):
             ("Charge phase", "absorption"),
         ]
         assert dict(rows)["Issues"] == "Solar charger error 2 (Victron mppt)"
+
+
+@pytest.mark.parametrize(
+    "battery,age_s,badge",
+    [
+        (19, 6, "⚠ Sensor battery low: Govee 19 %"),
+        (15, 1380, "⚠ Sensor battery low: Govee 15 % 🕒 23 min ago"),  # gone quiet: still warns, with its age
+        (20, 6, None),
+        (None, 6, None),
+    ],
+)
+def test_a_low_sensor_battery_badges_the_vehicle_tile(stub, error_gated_page, battery, age_s, badge):
+    """A Govee's own battery below 20 % puts the ⚠ badge on the Vehicle tile and a banner on its page,
+    like the unit's own faults; an old reading still warns and names its age.
+
+    .. test:: A low external-sensor battery badges the Vehicle tile
+       :id: T_SAT_UI_SENSOR_BATTERY_BADGE
+       :links: R_FW_SHARED_UI, R_FW_SENSORS
+    """
+    _ext(stub, "govee")["govee"].update(battery=battery, age_s=age_s)
+    with error_gated_page(stub.base) as pg:
+        tile = pg.locator(".tile", has_text="Vehicle").first
+        expect(tile).to_be_visible()
+        if badge is None:
+            expect(tile.locator(".tbadge")).to_have_count(0)
+            return
+        expect(tile.locator(".tbadge")).to_have_count(1)
+        expect(tile).to_have_attribute("title", badge)
+        # the cause is in the accessible name too: a title never shows on a tap, VoiceOver skips it
+        expect(tile).to_have_accessible_name(re.compile(r"^Vehicle\. .+\. " + re.escape(badge) + "$"))
+        _open(pg, "Vehicle")
+        expect(pg.locator(".warn")).to_have_text(badge)
 
 
 @pytest.mark.parametrize("locale", ["en-US", "de-DE"])

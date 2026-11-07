@@ -53,6 +53,11 @@ WiFi state machine
 
 .. doxygenfile:: cali_wifi_sm.h
 
+Setup hotspot identity
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_ap_identity.h
+
 WiFi runtime
 ~~~~~~~~~~~~
 
@@ -128,6 +133,23 @@ External sensors
 ~~~~~~~~~~~~~~~~
 
 .. doxygenfile:: cali_sensors.h
+
+Energy counters
+~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_energy.h
+
+LoRaWAN telemetry (experimental)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_lora.h
+
+LoRa onboarding (experimental)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfile:: cali_lora_setup.h
+
+.. doxygenfile:: cali_lora_aead.h
 
 OTA, logging & time
 -------------------

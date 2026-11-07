@@ -44,7 +44,7 @@ Each alert is raised through a common pipeline, visible identically in every fea
   local-BLE-only ack channel** (matches the "VW [EXLAP](https://ckeller42.github.io/open-california/glossary.html#term-EXLAP) light-profile" local-connection mode noted
   in `lighting-energy-water-sat-roof.md`) — analytics-style events fired when the user
   acknowledges an alert while connected directly over Bluetooth (as opposed to the
-  backend/MQTT-style channel the `_ID`/`_NOTIFICATION_ID` pair above uses). Full trigger-site trace
+  backend push channel the `_ID`/`_NOTIFICATION_ID` pair above uses). Full trigger-site trace
   UNVERIFIED — not exercised in this pass; listed for completeness in §7.
 
 Some alert families have **two independent trigger sites** producing the same `_ID` — one in the
@@ -56,8 +56,8 @@ dashboard aggregates multiple features into one summary card. Documented as "pri
 
 Every alert is **edge-triggered off one decoded trigger field**: value 0 clears every `_ID` for
 that field; value ∈ 1..n raises the mapped `<ID>` (in-app record) **and** `<ID>_NOTIFICATION_ID`
-(banner) in parallel. A Home Assistant `binary_sensor` mirrors it directly — `on` at the alert
-value, `off` at 0 — no extra debounce (see §13).
+(banner) in parallel. A consumer can mirror it directly — raised at the alert value, cleared at
+0 — with no extra debounce (see §13).
 
 ```mermaid
 stateDiagram-v2
@@ -67,10 +67,8 @@ stateDiagram-v2
   state Alerting {
     [*] --> Raise
     Raise: raise ID (in-app record)\n+ ID_NOTIFICATION_ID (banner)
-    Raise --> HA
-    HA: HA binary_sensor ID = on\n(device_class problem)
   }
-  note right of Normal: value 0 = HA binary_sensor off\nmirrors app dVar.e(ID) clear
+  note right of Normal: value 0 clears the record\nmirrors app dVar.e(ID) clear
 ```
 
 ---
@@ -240,7 +238,7 @@ grey water error. Please visit a workshop."
 
 Exact enum-ordinal → dictionary-value mapping for the dashboard surfaces is UNVERIFIED (the enum
 class itself wasn't traced in this pass); treat the primary (`qg/b.java`) mapping above as
-authoritative for HA purposes, and the dashboard IDs as likely-duplicate aliases of the same
+authoritative, and the dashboard IDs as likely-duplicate aliases of the same
 underlying fault.
 
 ---
@@ -403,41 +401,14 @@ dialog, not a fault).
 
 ---
 
-## 13. How a Home Assistant integration should surface these
+## 13. How calictl surfaces these
 
-- **One `binary_sensor` per numbered alert `_ID`** above (device_class `problem`), `on` when the
-  triggering field/value is in its "alert" state, `off` at value 0/none — mirrors exactly how the
-  app itself clears the record (`dVar.e("<ID>")`), so there's no extra debounce/hysteresis logic
-  to reinvent.
-- Where a family shares **one mutually-exclusive integer field** (Cooler `Error`, AirHeater
-  `ErrorCode`, RoofAirCondition `Error`, LivingRoomHeater `Error`, Stairs `InfoPopUp`,
-  SatelliteAntenna `Error`), it's cleaner in HA to expose **both**: (a) a single
-  `sensor.<feature>_fault_code` (enum/text state = the alert name, `"none"` when clear) for a
-  single source of truth, **and** (b) derived `binary_sensor`s per alert for automations/dashboards
-  that want a simple on/off — computed client-side from (a), not by tracking each `_ID` name
-  independently, since they can never be simultaneously true within one feature.
-- Energy is different: its alerts are **independent boolean flags**, not a mutually-exclusive
-  code — model each as its own `binary_sensor` directly off the corresponding `state_fields` bit
-  (`TwoBattNotCharged`, `DcdcDefect`, `PvDefect`, `LandDefect`, `LandNotAvailable`,
-  `CurrentDeratingTemperature`, `WarningLevelActive`, `SleepWarning`) — several can be true at
-  once (e.g. shore power defect + PV defect simultaneously).
-- Use `ym.g` severity (§1) to set HA's `entity_category`/icon priority, not `ue.a` — the in-app
-  severity is the one that reflects the app's own hierarchy (CRITICAL > URGENT > HIGH > MEDIUM >
-  LOW); several "HIGH" alerts (all of AirHeater, all of LivingRoomHeater) are functionally
-  equivalent to "ERROR" for automation purposes (e.g. auto-notify), while "MEDIUM" ones (water,
-  roof AC, stairs, satellite) are closer to informational/needs-attention.
-- Treat the **dashboard-surface duplicates** (`fh/`, `hh/`, `mh/` packages, §2 and §5) as aliases,
-  not new sensors — don't double-expose `COOLER_ERROR_ID` from both `vf/c.java` and `fh/a.java` as
-  two entities; pick the primary-surface trigger field as the single source of truth, since it's
-  the one with a fully-traced numeric mapping.
-- `ROOF_TERMINAL15_ID` / `ROOF_SPEEDLOCK_ID` / `ROOF_SAFETY_COUNTER_HAS_ERROR_ID` (§11) are
-  **interlock states, not faults** in the usual sense (Terminal15/Speedlock are expected-behavior
-  guards, not malfunctions) — better modeled as plain `binary_sensor`s without `device_class:
-  problem`, or folded into the roof-lift's `sensor` state text, so they don't trip
-  "something's broken" dashboards when the camper is simply being driven.
-- `CAMPING_MODE_BLOCKED_ID` (§10) and `LEVELING_OVER_SPEED_ID` (§12) are UI-gating conditions with
-  unconfirmed upstream trigger fields — expose them only if/when the underlying boolean is found
-  and confirmed against a live vehicle; don't guess a binding today.
+Where a family shares **one mutually-exclusive integer field**, calictl surfaces one enum value per
+function (cooler `fault`, roof `alert`, water `fresh_alert` / `waste_alert`): a string in the web
+UI's state, and a numeric `<key>_code` in InfluxDB (`calictl/influx.py` `_ENUM_CODES`, 0 = none),
+so the series stays continuous and Grafana can map the code to a label. Treat the
+dashboard-surface duplicates (`fh/`, `hh/`, `mh/` packages, §2 and §5) as aliases of the
+primary-surface trigger field, not as separate alerts.
 
 ---
 

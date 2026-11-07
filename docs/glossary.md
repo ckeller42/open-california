@@ -15,6 +15,17 @@ Camper unit
 buspi
   The Raspberry Pi that runs calictl and the other readers in the van.
 
+LoRaWAN
+  A long-range, low-power radio network protocol. The satellite's experimental LoRa module sends the
+  van's energy picture through The Things Network's gateways to The Things Stack (`R_FW_LORA`); a
+  few dozen bytes every 11 minutes (SF7) to every 4.8 hours (SF12), within a daily airtime budget. See {doc}`firmware`
+  ("LoRaWAN telemetry").
+
+Storage Integration
+  The Things Stack's built-in store of a device's uplink messages, with the decoded payload; an app
+  reads them back over its HTTP API. The phone reads the satellite's LoRa telemetry from it. See {doc}`firmware`
+  ("LoRaWAN telemetry").
+
 GPIO
   A general-purpose input/output pin. On the Raspberry Pi header, GPIO3 (pin 5) wakes a halted Pi
   and GPIO17 (pin 11) is the satellite's shutdown line.
@@ -22,6 +33,11 @@ GPIO
 EEPROM
   The Raspberry Pi 4 bootloader's settings store (`rpi-eeprom-config`); `WAKE_ON_GPIO=1` with
   `POWER_OFF_ON_HALT=0` keeps a halted Pi wakeable through GPIO3.
+
+DMA bounce buffer
+  A temporary copy in internal RAM that a hardware block such as the ESP32-S3's AES unit reads
+  from or writes to, because its DMA cannot use the data where it lies (in PSRAM). The driver
+  allocates it per operation, so it fails when the internal heap has no free block of that size.
 
 gpio-shutdown
   The Raspberry Pi device-tree overlay that turns a GPIO pulled low into a power-key press, so

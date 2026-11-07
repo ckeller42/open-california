@@ -111,6 +111,7 @@ static const uint8_t CALI_LIGHT_REQUEST_CONFIG[16] = {0x0d, 0x0c, 0x00, 0x00, 0x
 #define CALI_REASON_FAVOURITE_EMPTY "this favourite is empty on the unit \342\200\224 save it first"
 #define CALI_REASON_NOT_ONOFF "the value must be on or off (or true/false, 1/0) \342\200\224 anything else is refused, never read as off"
 #define CALI_REASON_QUIET_NEEDS_FRIDGE_ON "quiet mode can only be set while the fridge is on (switch the cooler on first)"
+#define CALI_REASON_ROOF_NEEDS_IGNITION "the pop-up roof moves only with the ignition on (switch on the ignition first)"
 #define CALI_REASON_ROOF_READING "the pop-top roof reading light needs the roof raised (roof is closed)"
 #define CALI_REASON_WAKEUP_NO_AREA "the wake-up light needs at least one vehicle area"
 #define CALI_REASON_ELSEWHERE "Only via buspi or the app"

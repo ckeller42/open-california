@@ -315,7 +315,8 @@ def esp_fixtures():
                 "rest_next_s": None,
                 "last_snap_age_ms": 1200,
             },
-            "wifi": station_wifi,
+            "wifi": dict(station_wifi, ap_ssid=None),
+            "setup": {"pending": False},
             "control": {"writes": True},
             "uptime_ms": 3912400,
             "fw": "bef07f1",
@@ -336,7 +337,8 @@ def esp_fixtures():
                 "unit_adv_seen_ms_ago": None,
             },
             "ux": {"enabled": True},
-            "experimental": {"sensors": False},
+            "experimental": {"sensors": False, "lora": False},
+            "energy": {"boot": 17, "solar_wh": 812.4, "load_wh": 655.0, "batt_net_wh": 157.4, "load_a": 2.1},
             "water_held": False,
         },
     }
@@ -355,7 +357,8 @@ def esp_fixtures():
                         "rest_next_s": None,
                         "last_snap_age_ms": None,
                     },
-                    "wifi": setup_wifi,
+                    "wifi": dict(setup_wifi, ap_ssid="calictl-esp-C0FE"),
+                    "setup": {"pending": False},
                     "control": {"writes": False},
                     "uptime_ms": 41250,
                     "fw": "bef07f1",
@@ -382,7 +385,8 @@ def esp_fixtures():
                         "unit_adv_seen_ms_ago": None,
                     },
                     "ux": {"enabled": True},
-                    "experimental": {"sensors": False},
+                    "experimental": {"sensors": False, "lora": False},
+                    "energy": {"boot": 1, "solar_wh": 0, "load_wh": 0, "batt_net_wh": 0, "load_a": None},
                     "water_held": False,
                 },
             },
@@ -405,7 +409,10 @@ def esp_fixtures():
             "/api/state": dict(
                 station_state,
                 fn=_esp_fn(DEFAULT_SEED),
-                device=dict(station_state["device"], experimental={"sensors": True}),
+                device=dict(
+                    station_state["device"],
+                    experimental=dict(station_state["device"]["experimental"], sensors=True),
+                ),
                 ext=EXT_SENSORS,
             ),
             "/api/wifi": dict(station_wifi, last_error=None, reverted=False, scan=[]),
@@ -470,6 +477,50 @@ def _set(member, key):
     return apply
 
 
+def lora_device(**over):
+    """``device.lora`` as the firmware reports it while ``exp_lora`` is on (R_FW_LORA, R_FW_LORA_SETUP):
+    a joined van, last uplink confirmed 7 min ago, set up. No key is ever in it."""
+    lora = {
+        "module": "present",
+        "joined": True,
+        "at_unanswered": 0,
+        "sf": 9,
+        "last_s": 420,
+        "airtime_ms_24h": 3300,
+        "airtime_charged_ms_24h": 3900,
+        "unconfirmed_sends": 1,
+        "downlinks_24h": 2,
+        "uplinks": [20, 3, 1],
+        "note": None,
+        "setup": "ttn_keys",
+        "has_ttn_keys": True,
+        "dev_eui": "70B3D57ED0012345",
+    }
+    lora.update(over)
+    return lora
+
+
+def _lora_forget(dev, body):
+    """POST /api/lora {"forget":true,"confirm":true}: the keys go, the switch goes off, device.lora is absent."""
+    if body.get("forget") and body.get("confirm"):
+        dev.setdefault("experimental", {})["lora"] = False
+        dev.pop("lora", None)
+
+
+def _experimental(dev, body):
+    """POST /api/experimental {"sensors"} or {"lora"}: LoRa on brings device.lora (a van not yet set
+    up, no uplink yet), LoRa off takes it away."""
+    _set("experimental", "sensors")(dev, body)
+    if "lora" in body:
+        dev.setdefault("experimental", {})["lora"] = body["lora"]
+        if not body["lora"]:
+            dev.pop("lora", None)
+        elif "lora" not in dev:
+            dev["lora"] = lora_device(joined=False, last_s=None, airtime_ms_24h=0, airtime_charged_ms_24h=0,
+                                      unconfirmed_sends=0, downlinks_24h=0, uplinks=[0, 0, 0], setup="none",
+                                      has_ttn_keys=False, dev_eui=None)  # fmt: skip
+
+
 # The satellite's settings endpoints (web.c) as the Satellite-settings screen posts them: what each
 # POST changes in device (/api/ota only starts work, the state moves on by itself).
 _SETTINGS = {
@@ -478,10 +529,11 @@ _SETTINGS = {
     "/api/pi_halt": _pi_halt,
     "/api/pi_wake": lambda dev, body: dev["pi_wake"].update(last_s=0, reason="manual"),
     "/api/ux_setting": _set("ux", "enabled"),
-    "/api/experimental": _set("experimental", "sensors"),
+    "/api/experimental": _experimental,
     "/api/display": lambda dev, body: dev["display"].update(body),
     "/api/ota": lambda dev, body: dev["ota"].update({k: v for k, v in body.items() if k == "channel"}),
     "/api/ble": _ble,
+    "/api/lora": _lora_forget,
 }
 
 
@@ -499,6 +551,11 @@ def thermostat_fixture(**over):
         "active": None,
         "outside_active": False,
         "end": "none",
+        "blocked": None,
+        "wait_left_s": None,
+        "eta_s": None,
+        "eta_ends_first": False,
+        "night": False,
     }
     status.update(over.pop("status", {}))
     body = {
@@ -510,6 +567,7 @@ def thermostat_fixture(**over):
         "backup": None,
         "out": None,
         "outside_on": False,
+        "night": False,
         "cfg": {},
         "status": status,
     }
@@ -536,8 +594,9 @@ class EspStub:
         a firmware without the endpoint). ``POST /api/sensors`` applies the firmware's add/remove/rename
     rules (``_sensors``; bodies in ``sensor_posts``), a removed sensor is seen again on the next
     ``GET /api/sensors``. ``POST /api/wifi`` appends the body to ``wifi_posts`` and answers
-    ``{"ok": true}``; a POST to a settings endpoint (``_SETTINGS``: auto camper, usage data,
-    experimental, display, OTA, BLE) is recorded in ``posts`` as ``(path, body)``, applied to the fixture's
+    ``{"ok": true}`` (with ``joins = True`` a ``setup`` stub then turns ``station`` with ``device.setup.pending``;
+    ``POST /api/setup {"done": true}`` clears it, recorded in ``posts`` too); a POST to a settings endpoint (``_SETTINGS``: auto camper, usage data,
+    experimental, display, OTA, BLE, LoRa forget) is recorded in ``posts`` as ``(path, body)``, applied to the fixture's
     ``device`` and answered ``{"ok": true}`` (``post_reply[path] = (status, body)`` answers that
     instead, changing nothing); ``down = True`` makes the stub answer nothing at all (the satellite left the
     network to join another one) until it is set back. ``GET /app`` is the UI bundle in every mode, and the
@@ -565,7 +624,11 @@ class EspStub:
         self.sensor_posts = []  # POST /api/sensors bodies, in order
         self.thermostat_posts = []  # POST /api/thermostat bodies, in order
         self.thermostat_error = None  # (status, body) answered to the next POST /api/thermostat instead
+        self.thermostat_delay_s = (
+            0  # each POST /api/thermostat answers this late (the satellite takes a few 100 ms)
+        )
         self.wifi_posts = []  # POST /api/wifi bodies, in order
+        self.joins = False  # True: a POST /api/wifi in "setup" joins (turns "station", setup pending)
         self.down = False  # True: every request gets no answer (the connection just closes)
         self.posts = []  # (path, body) of every POST to a _SETTINGS endpoint, in order
         self.post_reply = {}  # path -> (status, body) instead of applying the POST and {"ok": true}
@@ -607,7 +670,21 @@ class EspStub:
                     return  # no answer: the server closes the connection
                 if path == "/api/wifi":
                     stub.wifi_posts.append(body)
+                    if (
+                        stub.mode == "setup" and stub.joins
+                    ):  # saved from the hotspot: joins, and the setup is pending
+                        stub.mode = "station"
+                        stub.fixtures["station"]["/api/state"]["device"]["setup"] = {"pending": True}
                     self._json(200, {"ok": True})
+                    return
+                if path == "/api/setup":  # {"done": true} ends the first-time setup, any mode
+                    stub.posts.append((path, body))
+                    ok = body == {"done": True}
+                    if ok:
+                        for fx in stub.fixtures.values():
+                            if "setup" in fx.get("/api/state", {}).get("device", {}):
+                                fx["/api/state"]["device"]["setup"] = {"pending": False}
+                    self._json(200 if ok else 400, {"ok": ok} if ok else {"ok": False, "error": "bad_json"})
                     return
                 if path in _SETTINGS:
                     stub.posts.append((path, body))
@@ -739,15 +816,17 @@ class EspStub:
     def _thermostat(self, body):
         """``POST /api/thermostat``: the accepted keys land in the fixture and count ``rev``; an
         ``AUTO`` request answers like the firmware once enabled (mode AUTO)."""
+        time.sleep(self.thermostat_delay_s)
         if self.thermostat_error:
             err, self.thermostat_error = self.thermostat_error, None
             return err
         th = self.fixtures[self.mode]["/api/thermostat"]
-        for k in ("target", "runtime_min", "ref", "backup", "out", "outside_on", "mode"):
+        for k in ("target", "runtime_min", "ref", "backup", "out", "outside_on", "mode", "night"):
             if k in body:
                 th[k] = body[k]
-        if "mode" in body:
-            th["status"]["mode"] = body["mode"]
+        for k in ("mode", "enabled"):
+            if k in body:
+                th["status"][k] = body[k]
         th["rev"] += 1
         return 200, th
 
@@ -860,7 +939,7 @@ def capture_esp(out_dir):
             viewport={"width": 420, "height": 900},
             device_scale_factor=2,
         )
-        for path, name in (("/", "esp-setup-page.png"), ("/device", "esp-recovery-page.png")):
+        for path, name in (("/#wifisetup", "esp-setup-page.png"), ("/device", "esp-recovery-page.png")):
             pg = ctx.new_page()
             pg.goto(stub.base + path)
             pg.wait_for_selector("#ssid option", state="attached")
