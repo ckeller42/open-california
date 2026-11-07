@@ -436,39 +436,46 @@ def test_time_control_keeps_the_sent_value_while_in_flight(page, base_url):
         _poll(page, base_url, lambda st: not st["airheater"]["timer_armed"], "heater timer unarmed")
     st = _state(base_url, page)["airheater"]
     new = "07:30" if (st.get("timer_hour"), st.get("timer_min")) != (7, 30) else "08:45"
+    old = (st.get("timer_hour") or 0, st.get("timer_min") or 0)
     held = []
     page.route("**/api/command", lambda route: held.append(route))  # hold the command in flight
-    page.get_by_text("Air heater", exact=True).first.click()
-    start_at = page.locator('input[type="time"]')
-    expect(start_at).to_be_enabled(timeout=15000)
-    start_at.fill(new)
-    expect(page.locator("#status")).to_have_text("Sending…")
-    with page.expect_response("**/api/state"):  # one poll (and its re-render) while the command is held
-        pass
-    page.wait_for_timeout(100)
-    assert start_at.input_value() == new  # not the stale unit value
-    assert len(held) == 1
-    held[0].continue_()
-    page.unroute("**/api/command")
-    hh, mm = (int(x) for x in new.split(":"))
-    _poll(
-        page,
-        base_url,
-        lambda st: (st["airheater"]["timer_hour"], st["airheater"]["timer_min"]) == (hh, mm),
-        "unit-reported heater start time " + new,
-    )
-    expect(start_at).to_have_value(new)
-    old = (st.get("timer_hour") or 0, st.get("timer_min") or 0)  # leave the shared mock as we found it
-    assert page.request.post(
-        base_url + "/api/command",
-        data={"function": "airheater", "what": "timer", "value": "%02d:%02d" % old, "confirm": True},
-    ).ok
-    _poll(
-        page,
-        base_url,
-        lambda st: (st["airheater"]["timer_hour"], st["airheater"]["timer_min"]) == old,
-        "restored",
-    )
+    try:
+        page.get_by_text("Air heater", exact=True).first.click()
+        start_at = page.locator('input[type="time"]')
+        expect(start_at).to_be_enabled(timeout=15000)
+        start_at.fill(new)
+        expect(page.locator("#status")).to_have_text("Sending…")
+        with page.expect_response("**/api/state"):  # one poll (and its re-render) while the command is held
+            pass
+        page.wait_for_timeout(100)
+        assert start_at.input_value() == new  # not the stale unit value
+        assert len(held) == 1
+        held[0].continue_()
+        held.clear()
+        page.unroute("**/api/command")
+        hh, mm = (int(x) for x in new.split(":"))
+        _poll(
+            page,
+            base_url,
+            lambda st: (st["airheater"]["timer_hour"], st["airheater"]["timer_min"]) == (hh, mm),
+            "unit-reported heater start time " + new,
+        )
+        expect(start_at).to_have_value(new)
+    finally:  # leave the shared mock as we found it, also after a failed assertion
+        for r in held:
+            r.continue_()
+        page.unroute("**/api/command")
+        expect(page.locator("#status")).not_to_have_text("Sending…", timeout=15000)  # released command done
+        assert page.request.post(
+            base_url + "/api/command",
+            data={"function": "airheater", "what": "timer", "value": "%02d:%02d" % old, "confirm": True},
+        ).ok
+        _poll(
+            page,
+            base_url,
+            lambda st: (st["airheater"]["timer_hour"], st["airheater"]["timer_min"]) == old,
+            "restored",
+        )
 
 
 def test_heater_continuous_switch_off_only(page):

@@ -3176,7 +3176,8 @@ function renderDashboard() {
       const msg = /** @type {string} */ (t(alertMsg));
       tile.title = msg;   // pointer hover; touch and VoiceOver get the cause from the accessible name
       const val = tile.querySelector(".tv")?.textContent || "";   // keep the value in the name too
-      tile.setAttribute("aria-label", [t(f.title), val, msg].filter(Boolean).join(". "));
+      // a fault the value already names (cooler, heater, roof) is not spoken twice
+      tile.setAttribute("aria-label", [t(f.title), val, val.includes(msg) ? "" : msg].filter(Boolean).join(". "));
     }
     tile.onclick = () => goto(fn);
     grid.appendChild(tile);
