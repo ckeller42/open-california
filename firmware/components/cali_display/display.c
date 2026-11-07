@@ -27,6 +27,7 @@
 #include "cali_status.h"
 #include "cali_wifi_run.h"
 #include "driver/i2c_master.h"
+#include "esp_heap_caps.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_touch.h"
 #include "esp_private/esp_clk.h"
@@ -183,7 +184,7 @@ static uint32_t s_press_seen;           /* LVGL task -> owner task, __atomic: up
 static int s_lora_shown;                /* owner task -> shot.c, __atomic: the LoRa screen is up */
 /* the LoRa screen, owner task only (under the LVGL lock) */
 static lv_obj_t *s_lora, *s_lqr, *s_lora_hint, *s_lora_line;
-static lv_draw_buf_t *s_qr_buf;         /* LQR_BOX x LQR_BOX, I1: palette 0 white, 1 black */
+static lv_draw_buf_t s_qr_dbuf, *s_qr_buf; /* LQR_BOX x LQR_BOX, I1: palette 0 white, 1 black; data in PSRAM */
 static int s_lora_show;                 /* the painted show_lora */
 static uint64_t s_qr_poll;
 static uint32_t s_qr_sig;               /* FNV-1a of the painted QR text (the text itself is wiped), 0 = none */
@@ -273,7 +274,15 @@ static void build(void) {
     s_lora = box(scr, 0, 0, W, 240, 0x101418);
     lv_obj_set_scrollable(s_lora, false);
     lv_obj_set_hidden(s_lora, true);
-    s_qr_buf = lv_draw_buf_create(LQR_BOX, LQR_BOX, LV_COLOR_FORMAT_I1, LV_STRIDE_AUTO);
+    /* the ~7.2 KB bitmap goes to PSRAM: lv_draw_buf_create would malloc it, and below
+     * SPIRAM_MALLOC_ALWAYSINTERNAL (16 KB) that is internal RAM, held on every van, LoRa on or not */
+    uint32_t qr_stride = lv_draw_buf_width_to_stride(LQR_BOX, LV_COLOR_FORMAT_I1);
+    uint32_t qr_size = qr_stride * LQR_BOX + 8;   /* +8: the I1 palette before the pixels */
+    void *qr_data = heap_caps_calloc(1, qr_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (qr_data && lv_draw_buf_init(&s_qr_dbuf, LQR_BOX, LQR_BOX, LV_COLOR_FORMAT_I1, qr_stride, qr_data, qr_size) == LV_RESULT_OK)
+        s_qr_buf = &s_qr_dbuf;
+    else
+        cali_log("display: no PSRAM for the LoRa QR (%u B): no LoRa screen", (unsigned)qr_size);
     if (s_qr_buf) {
         lv_draw_buf_set_palette(s_qr_buf, 0, lv_color_to_32(lv_color_white(), LV_OPA_COVER));
         lv_draw_buf_set_palette(s_qr_buf, 1, lv_color_to_32(lv_color_black(), LV_OPA_COVER));
