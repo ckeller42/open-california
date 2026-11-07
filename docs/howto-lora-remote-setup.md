@@ -23,7 +23,8 @@ You do this part once, on a computer or on the phone.
 1. Sign up at The Things Network with a The Things ID, or log in.
 2. Open the console of the `eu1` cluster (`https://eu1.cloud.thethings.network/console`). The
    satellite uses the European frequency band, so use `eu1`.
-3. Create an **application**. Give it any name, for example `my-van`.
+3. Create an **application**. Give it any name, for example `my-van`. Use one application for each
+   van: the phone's keys are keys of the application (see [Limits](#limits)).
 4. Open **API keys** of that application and create an API key. Choose **Grant all current and
    future rights**. Copy the key.
 
@@ -95,8 +96,9 @@ full-rights API key and a visit to the van.
 
 1. In the TTN console, open your application, open **API keys** and delete the keys that the app
    made for this van (`oc-remote-read-<device ID>` and `oc-remote-cmd-<device ID>`, for example
-   `oc-remote-read-van-0abcde`). From then on, no phone can read the van. The keys of your other
-   vans in the same application stay.
+   `oc-remote-read-van-0abcde`), and also keys named `oc-remote-read` or `oc-remote-cmd` if
+   you still have them. From then on, no phone can read the van. The keys of your other vans in
+   the same application stay.
 2. In the same place, create a new API key with **Grant all current and future rights** (as in
    section 1).
 3. In the app on your phone, choose **Set up LoRa**, paste the new key and tap **Check the key**.
@@ -118,6 +120,11 @@ To remove everything, do both and then delete the device and the application in 
 
 ## Limits
 
+- The read key and the command key that the app makes are keys of the application, not of one
+  device: The Things Network has no API key for a single device. A phone with the keys of one van
+  can read every van in the same application, and its command key can send to each of them. Keep
+  each van in an application of its own, or give such a phone only to people who may see all of
+  these vans.
 - The data is read only. The remote app sends no commands to the van. Its only messages to the van
   are the one-time key transfer of the setup.
 - The Things Network has a fair use policy: a device may use about 30 seconds of uplink airtime

@@ -106,20 +106,23 @@ async function enableStorage(base, key, appId) {
 
 /**
  * Makes the phone's read and command keys of the van `devId` (`oc-remote-read-<devId>`, `oc-remote-cmd-<devId>`),
- * then deletes that van's older ones: another van in the same application keeps its keys, and a failed create
- * leaves the old keys working. A lost phone's keys go by a new setup of the van (or in the console).
+ * then deletes that van's older ones and any key of the earlier unsuffixed names (`oc-remote-read`,
+ * `oc-remote-cmd`): another van in the same application keeps its keys, and a failed create leaves the old keys
+ * working. A lost phone's keys go by a new setup of the van (or in the console). The keys are application keys:
+ * their rights cover every device of the application, not only `devId` (TTS has no per-device API key).
  * @param {string} base @param {string} key @param {string} appId @param {string} devId
  * @returns {Promise<{readKey: string, cmdKey: string}>}
  */
 async function makePhoneKeys(base, key, appId, devId) {
   const names = [TTN_READ_NAME + "-" + devId, TTN_CMD_NAME + "-" + devId];
+  const gone = [...names, TTN_READ_NAME, TTN_CMD_NAME];   // the unsuffixed names: phone keys of the first versions
   const old = (await (await ttnCall(base, key, "GET", `/applications/${appId}/api-keys`)).json()).api_keys || [];
   /** @param {string} name @param {string[]} rights */
   const make = async (name, rights) =>
     (await (await ttnCall(base, key, "POST", `/applications/${appId}/api-keys`, { name, rights })).json()).key;
   const readKey = await make(names[0], TTN_READ_RIGHTS), cmdKey = await make(names[1], TTN_CMD_RIGHTS);
   for (const k of old)
-    if (names.includes(k.name)) await ttnCall(base, key, "DELETE", `/applications/${appId}/api-keys/${k.id}`, undefined, [404]);
+    if (gone.includes(k.name)) await ttnCall(base, key, "DELETE", `/applications/${appId}/api-keys/${k.id}`, undefined, [404]);
   return { readKey, cmdKey };
 }
 

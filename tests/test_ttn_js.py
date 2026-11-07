@@ -145,6 +145,18 @@ def test_phone_keys_are_per_van_and_made_before_the_old_ones_go(fake):
     assert [v["name"] for v in fake.keys.values()].count("oc-remote-read-van-000001") == 1
 
 
+def test_phone_keys_of_the_unsuffixed_names_are_revoked(fake):
+    """Phone keys made under the first versions' names (oc-remote-read / oc-remote-cmd) do not outlive a setup."""
+    old = [fake._add_key("created", n, [])[1] for n in ("oc-remote-read", "oc-remote-cmd")]
+    _, secret = fake.make_key("all")
+    full_setup(fake, secret)
+    assert not [s for s in old if s in fake.keys]
+    assert {v["name"] for v in fake.keys.values()} == {
+        "oc-remote-read-van-000001",
+        "oc-remote-cmd-van-000001",
+    }
+
+
 def test_read_key_cannot_push(fake):
     _, secret = fake.make_key("all")
     keys = full_setup(fake, secret)["p"]
