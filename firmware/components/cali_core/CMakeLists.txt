@@ -12,5 +12,6 @@ idf_component_register(SRCS "energy.c" "lora.c" "lora_setup.c" ${lora_port} "pai
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "../../web"
                        REQUIRES csrc
-                       PRIV_REQUIRES platform)
+                       PRIV_REQUIRES platform
+                       LDFRAGMENTS "linker.lf")
 include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/cali_strict.cmake)

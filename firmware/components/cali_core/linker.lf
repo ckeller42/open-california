@@ -1,0 +1,10 @@
+# cali_core's static data (.bss) in PSRAM (CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY): the
+# platform-free core runs in tasks only, never in an ISR or with the flash cache off, and hands no
+# buffer to a DMA engine directly; the internal heap keeps the room the network stack needs.
+[mapping:cali_core_extram]
+archive: libcali_core.a
+entries:
+    if SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY = y:
+        * (extram_bss)
+    else:
+        * (default)
