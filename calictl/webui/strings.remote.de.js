@@ -48,4 +48,5 @@ Object.assign(window.STRINGS_DE, {
   "The van has the keys.": "Das Fahrzeug hat die Schlüssel.",
   "The van's daily downlink limit is reached. The setup continues tomorrow.": "Das Fahrzeug hat sein Tageslimit für Downlinks erreicht. Die Einrichtung geht morgen weiter.",
   "The van did not confirm. Hold its screen for 3 seconds and scan the setup code again.": "Das Fahrzeug hat nicht bestätigt. Halten Sie seinen Bildschirm 3 Sekunden lang gedrückt und scannen Sie den Einrichtungscode noch einmal.",
+  "This phone cannot store the van's keys. Free some storage, leave private browsing and scan again.": "Dieses Telefon kann die Schlüssel des Fahrzeugs nicht speichern. Geben Sie Speicher frei, verlassen Sie den privaten Modus und scannen Sie noch einmal.",
 });

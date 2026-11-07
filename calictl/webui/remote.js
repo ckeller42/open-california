@@ -143,13 +143,16 @@ function remoteBody(last, now) {
 // a log. It is dropped right after deleteOwnKey, which runs as soon as the phone's two keys exist and the
 // configuration is stored, before the join wait and the transfer. What a reload must survive is in
 // oc.remote.setup: {step: "join"|"sent"|"rescan", cluster, appId, devId, devEui, tk, nonce, queued, total,
-// startedAt, sentAt, resends, cursor, pushes, held}; tk (the van's transfer key, hex) is wiped by deleting the entry
-// on status 0. pushes: the times (ms) of the downlinks pushed in the last 24 h; held: fragments that wait for room.
+// startedAt, sentAt, resends, cursor, held}; tk (the van's transfer key, hex) is wiped by deleting the entry
+// on status 0; held: fragments that wait for room. oc.remote.pushes: {devEui: the times (ms) of the setup downlinks
+// pushed in the last 24 h}, kept across setups and "Remove this van", so a new setup never starts a fresh day.
 // oc.remote.keyleft lists the full-rights keys (id and application only, never the secret) from a passed check
 // until their delete answered: a closed page, an abandoned flow or a failed delete leaves the owner a warning.
 
 const REMOTE_SETUP_KEY = "oc.remote.setup";
 const REMOTE_KEYLEFT_KEY = "oc.remote.keyleft";   // [{keyId, appId}]
+const REMOTE_PUSH_KEY = "oc.remote.pushes";       // {devEui: [ms]}
+const REMOTE_LOCK = "oc.remote.setup";            // navigator.locks: one tab at a time reads and pushes the setup
 const REMOTE_SETUP_POLL_MS = 15000;   // setup only; the cockpit reads every REMOTE_POLL_MS
 const REMOTE_JOIN_HINT_MS = 600000;
 // no confirmation this long after a push: push the last fragment again as a probe (fair use: never sooner), at most 3
@@ -160,6 +163,7 @@ const REMOTE_RESENDS = 3;
 const REMOTE_DOWNLINKS = 8;
 const REMOTE_DAY_MS = 86400000;
 const REMOTE_LIMIT_MSG = "The van's daily downlink limit is reached. The setup continues tomorrow.";
+const REMOTE_STORE_MSG = "This phone cannot store the van's keys. Free some storage, leave private browsing and scan again.";
 const REMOTE_JOIN_SKEW_MS = 120000;   // an uplink counts as the join from 2 min before the wait (phone vs TTS clock)
 const REMOTE_CLUSTERS = ["eu1.cloud.thethings.network"];   // EU868 only (registerDevice); "other": a TTS Cloud host
 const REMOTE_OTHER = "other";
@@ -174,12 +178,13 @@ let rsTimer = null;
 let rsDom = null;
 /** @type {any} the running camera scanner */
 let rsCam = null;
+let rsGen = 0;   // +1 by "Remove this van": a step still waiting on TTS then stores nothing
 
 /** @param {Uint8Array} b */
 const rsHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 /** The test seam of the stored configuration (see remoteBase), carried into the new one. */
 const rsSeam = () => (remoteLoad(REMOTE_CFG_KEY) || {}).base;
-/** @param {any} st */
+/** @param {any} st @returns {boolean} false: not stored */
 const rsSave = (st) => remoteSave(REMOTE_SETUP_KEY, st);
 /** @returns {Array<{keyId: string, appId: string}>} */
 const rsKeysLeft = () => remoteLoad(REMOTE_KEYLEFT_KEY) || [];
@@ -301,25 +306,35 @@ async function rsSetupQr(text) {
   if (!rsKey) { rsPhase = "key"; rsRefresh(); return; }
   rsMsg = ""; rsPhase = "work"; rsRefresh();
   const devId = "van-" + q.devEui.slice(-6).toLowerCase();
-  const seam = rsSeam(), base = remoteBase({ cluster: rsCluster, base: seam });
+  const seam = rsSeam(), base = remoteBase({ cluster: rsCluster, base: seam }), gen = rsGen, key = rsKey;
+  // "Remove this van" meanwhile: the next step is not taken and neither record comes back (the key warning stays)
+  const gone = () => gen !== rsGen;
   try {
-    await registerDevice(base, rsKey, { appId: rsAppId, devId, devEui: q.devEui, appKey: q.appKey });
-    await enableStorage(base, rsKey, rsAppId);
-    const keys = await makePhoneKeys(base, rsKey, rsAppId);
+    await registerDevice(base, key, { appId: rsAppId, devId, devEui: q.devEui, appKey: q.appKey });
+    if (gone()) return;
+    await enableStorage(base, key, rsAppId);
+    if (gone()) return;
+    const keys = await makePhoneKeys(base, key, rsAppId);
+    if (gone()) return;
     /** @type {Record<string, string>} */
     const cfg = { cluster: rsCluster, appId: rsAppId, devId, readKey: keys.readKey, cmdKey: keys.cmdKey };
     if (seam) cfg.base = seam;
-    remoteSave(REMOTE_CFG_KEY, cfg);
     const next = { step: "join", cluster: rsCluster, appId: rsAppId, devId, devEui: q.devEui, tk: rsHex(q.tk),
       nonce: rsHex(crypto.getRandomValues(new Uint8Array(12))), queued: [], total: 0, startedAt: Date.now(),
       cursor: null };
-    rsSave(next);
+    if (!remoteSave(REMOTE_CFG_KEY, cfg) || !rsSave(next)) {
+      // storage blocked or full: the full-rights key stays (a new scan makes the phone's keys again)
+      try { localStorage.removeItem(REMOTE_CFG_KEY); } catch (e) { /* storage blocked */ }
+      rsPhase = "scan"; rsMsg = REMOTE_STORE_MSG; rsRefresh();
+      return;
+    }
     try {
       await deleteOwnKey(base, rsKey, rsAppId, rsKeyId);
       rsMarkKey(rsKeyId, rsAppId, false);
     } catch (e) { /* the mark stays: every remote screen tells the owner to delete it in the console */ }
     rsKey = rsKeyId = "";   // the phone's keys exist: the full-rights key is done, whatever the delete answered
   } catch (e) {
+    if (gone()) return;
     rsPhase = "scan"; rsMsg = rsErrText(e); rsRefresh();   // before the phone's keys: the owner may scan again
     return;
   }
@@ -333,8 +348,20 @@ function rsDone() {
   rsRefresh();
 }
 
-/** The setup downlinks pushed in the last 24 h. @param {any} st @param {number} now @returns {number[]} */
-const rsPushes = (st, now) => (st.pushes || []).filter((/** @type {number} */ t) => now - t < REMOTE_DAY_MS);
+/** The setup downlinks pushed to `st`'s van in the last 24 h. @param {any} st @param {number} now @returns {number[]} */
+const rsPushes = (st, now) => ((remoteLoad(REMOTE_PUSH_KEY) || {})[st.devEui] || []).filter((/** @type {number} */ t) => now - t < REMOTE_DAY_MS);
+
+/** Store the push times of a van (older than a day: dropped, for every van). @param {string} devEui @param {number[]} list */
+function rsPushSave(devEui, list) {
+  const now = Date.now(), all = { ...(remoteLoad(REMOTE_PUSH_KEY) || {}), [devEui]: list };
+  /** @type {Record<string, number[]>} */
+  const keep = {};
+  for (const [k, v] of Object.entries(all)) {
+    const t = (Array.isArray(v) ? v : []).filter((x) => now - x < REMOTE_DAY_MS);
+    if (t.length) keep[k] = t;
+  }
+  remoteSave(REMOTE_PUSH_KEY, keep);
+}
 
 /** Step 7: seal the transfer (the stored nonce: a resend is byte-identical) and queue `which` fragments (null =
  * all). `st` (with the cursor past the uplink that asked for it) is stored only when the push went through, so a
@@ -343,24 +370,35 @@ const rsPushes = (st, now) => (st.pushes || []).filter((/** @type {number} */ t)
 async function rsSend(st, which) {
   const cfg = remoteCfg();
   if (!cfg) return;
-  const prev = remoteLoad(REMOTE_SETUP_KEY);
+  const prev = remoteLoad(REMOTE_SETUP_KEY), gen = rsGen;
   try {
     const frags = await sealTransfer(/** @type {Uint8Array<ArrayBuffer>} */ (packPlain(cfg)), loraUnhex(st.tk), st.devEui, loraUnhex(st.nonce));
+    if (gen !== rsGen) return;
     const idx = (which || frags.map((_, i) => i)).filter((i) => i < frags.length);
     const now = Date.now(), pushes = rsPushes(st, now);
     if (pushes.length + idx.length > REMOTE_DOWNLINKS) {
-      rsSave({ ...st, step: "sent", held: idx, total: frags.length, pushes });
+      rsSave({ ...st, step: "sent", held: idx, total: frags.length });
       rsMsg = REMOTE_LIMIT_MSG;
       rsPoll();
       return;
     }
     // stored BEFORE the push: a reload between push and save never queues the fragments twice (10 downlinks a day)
-    rsSave({ ...st, step: "sent", queued: idx, held: null, total: frags.length, sentAt: now,
-      pushes: [...pushes, ...idx.map(() => now)] });
-    await pushDownlinks(remoteBase(cfg), cfg.cmdKey, cfg.appId, cfg.devId, idx.map((i) => frags[i]), 12);
+    rsSave({ ...st, step: "sent", queued: idx, held: null, total: frags.length, sentAt: now });
+    rsPushSave(st.devEui, [...pushes, ...idx.map(() => now)]);
+    try {
+      await pushDownlinks(remoteBase(cfg), cfg.cmdKey, cfg.appId, cfg.devId, idx.map((i) => frags[i]), 12);
+    } catch (e) {
+      // TTS answered with an error: nothing was queued, the next read asks again. No answer (a timeout, the network
+      // gone): the batch may be queued at TTS, so it stays sent and counted; the probe after REMOTE_RESEND_MS asks
+      // the van what it has
+      if (e instanceof TtnError && e.status > 0 && gen === rsGen) {
+        if (prev) rsSave(prev);
+        rsPushSave(st.devEui, pushes);
+      }
+      throw e;
+    }
     rsMsg = "";
   } catch (e) {
-    if (prev) rsSave(prev);   // not queued: the next read asks again
     rsMsg = rsErrText(e);
   }
   rsPoll();
@@ -376,9 +414,16 @@ async function rsPoll() {
   rsTimer = setTimeout(rsStep, REMOTE_SETUP_POLL_MS);
 }
 
-async function rsStep() {
+/** One setup read. Under a Web Lock where the browser has one: a second tab of the app waits, then reads the state
+ * the first one stored, so two tabs never push the same fragments or both count them. */
+function rsStep() {
   rsTimer = null;
-  const st = remoteLoad(REMOTE_SETUP_KEY), cfg = remoteCfg();
+  const locks = /** @type {any} */ (navigator).locks;
+  return locks ? locks.request(REMOTE_LOCK, rsStepLocked) : rsStepLocked();
+}
+
+async function rsStepLocked() {
+  const st = remoteLoad(REMOTE_SETUP_KEY), cfg = remoteCfg(), gen = rsGen;
   if (!st || !cfg) return;
   /** @type {Awaited<ReturnType<typeof readUplinks>>} */
   let ups;
@@ -387,6 +432,7 @@ async function rsStep() {
       .filter((u) => u.receivedAt !== st.cursor);   // `after` may be inclusive: never act on the same uplink twice
     rsMsg = "";
   } catch (e) { rsMsg = rsErrText(e); rsPoll(); return; }
+  if (gen !== rsGen) return;
   if (st.step === "join") {   // newest first
     const j = ups.find((u) => [2, 3, 4].includes(u.port) && u.at >= st.startedAt - REMOTE_JOIN_SKEW_MS);
     if (j) { await rsSend({ ...st, cursor: j.receivedAt, resends: 0 }, null); return; }
@@ -399,12 +445,19 @@ async function rsStep() {
       st.cursor = u.receivedAt;
       const ok = c && c.status === 0 && c.hash4
         && rsHex(c.hash4) === rsHex(await plainHash4(/** @type {Uint8Array<ArrayBuffer>} */ (packPlain(cfg))));
+      if (gen !== rsGen) return;
       if (ok) { rsDone(); return; }
-      // 1 bad tag, 3 no transfer key, another plaintext: the van needs a new transfer key (a new screen open)
-      delete st.tk;
-      st.step = "rescan";
-      rsSave(st);
-      rsMsg = "";
+      if (c && c.status === 0) {
+        // 00 with another plaintext's hash: a confirmation of earlier keys (a pending one from a setup before) --
+        // not a failure of this transfer; wait on (the probe after REMOTE_RESEND_MS asks the van again)
+        rsSave(st);
+      } else {
+        // 1 bad tag, 3 no transfer key: the van needs a new transfer key (a new screen open)
+        delete st.tk;
+        st.step = "rescan";
+        rsSave(st);
+        rsMsg = "";
+      }
     } else if (st.held && st.held.length) {
       // over the day's downlinks: push once there is room again
       if (rsPushes(st, Date.now()).length + st.held.length <= REMOTE_DOWNLINKS) { await rsSend(st, st.held); return; }
@@ -444,9 +497,10 @@ function rsRemove() {
   rsCamStop();
   if (rsTimer) clearTimeout(rsTimer);
   rsTimer = null;
+  rsGen++;
   rsKey = rsKeyId = "";
   rsPhase = "key";
-  // and app.js's offline snapshot: a reload never shows the removed van again
+  // and app.js's offline snapshot: a reload never shows the removed van again (oc.remote.pushes stays: TTN counts on)
   for (const k of [REMOTE_CFG_KEY, REMOTE_SETUP_KEY, REMOTE_ENERGY_KEY, REMOTE_LAST_KEY, LAST_STATE_KEY])
     try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ }
   STATE = {};

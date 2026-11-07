@@ -547,3 +547,121 @@ def test_inclusive_after_does_not_repeat_a_resend(site, ttn, error_gated_page): 
             _poll(pg)
             pg.wait_for_timeout(300)
         assert len(ttn.downlinks) == n + 1
+
+
+def test_remove_during_registration_stores_nothing(site, ttn, error_gated_page):  # noqa: F811
+    """The van is removed while the scan's TTS calls are out: no further step is taken and neither the configuration
+    nor the setup is stored (the full-rights key's warning stays: it may still be live)."""
+    tx = TEXT["en-US"]
+    kid, secret = ttn.make_key("all")
+    ttn.create_gate = threading.Event()
+    try:
+        with _page(error_gated_page, site, ttn) as pg:
+            _menu(pg, tx["setup"])
+            pg.locator("#rs-key").fill(secret)
+            pg.get_by_role("button", name=tx["check"]).click()
+            pg.get_by_text(tx["scanhint"]).first.wait_for()
+            _photo(pg, setup_qr())
+            pg.wait_for_function("() => document.body.textContent.includes('Talking to TTN')")
+            pg.evaluate("rsRemove()")
+            ttn.create_gate.set()
+            for _ in range(100):  # the device create answers
+                if any(m == "POST" and p.endswith("/devices") for m, p, _ in ttn.calls):
+                    break
+                pg.wait_for_timeout(50)
+            pg.wait_for_timeout(500)
+            assert not [v for v in ttn.keys.values() if v["name"].startswith("oc-remote-")], "no further step"
+            assert pg.evaluate("localStorage.getItem('oc.remote.cfg')") is None
+            assert pg.evaluate("localStorage.getItem('oc.remote.setup')") is None
+            pg.get_by_text("Delete the API key %s" % kid).wait_for()
+    finally:
+        ttn.create_gate.set()
+
+
+def test_storage_failure_keeps_the_full_rights_key(site, ttn, error_gated_page):  # noqa: F811
+    """The setup cannot be stored (storage full or blocked): the owner is told, and the full-rights key is not
+    deleted, so a new scan can make the phone's keys again."""
+    tx = TEXT["en-US"]
+    full = (
+        "const _set = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) {"
+        " if (k === 'oc.remote.setup') throw new DOMException('full', 'QuotaExceededError'); return _set.call(this, k, v); };"
+    )
+    kid, secret = ttn.make_key("all")
+    with _page(error_gated_page, site, ttn) as pg:
+        pg.add_init_script(full)
+        pg.reload()
+        _menu(pg, tx["setup"])
+        pg.locator("#rs-key").fill(secret)
+        pg.get_by_role("button", name=tx["check"]).click()
+        pg.get_by_text(tx["scanhint"]).first.wait_for()
+        _photo(pg, setup_qr())
+        pg.get_by_text("This phone cannot store the van's keys.").wait_for()
+        assert [k for k in ttn.keys.values() if k["kind"] == "all"], "the full-rights key is still live"
+        assert pg.evaluate("localStorage.getItem('oc.remote.cfg')") is None
+        _no_key_anywhere(pg, secret)
+
+
+def test_push_history_survives_a_new_setup(site, ttn, error_gated_page):  # noqa: F811
+    """The day's setup downlinks are counted per van across setups: 5 pushed by an earlier setup + 4 fragments
+    would be 9, so the new setup holds them."""
+    tx = TEXT["en-US"]
+    with _page(error_gated_page, site, ttn) as pg:
+        pg.evaluate(
+            "(eui) => localStorage.setItem('oc.remote.pushes', JSON.stringify({[eui]: Array(5).fill(Date.now())}))",
+            DEV_EUI,
+        )
+        _setup(pg, ttn, tx)
+        ttn.add_uplink(DEV, 4, port4())
+        _poll(pg)
+        pg.get_by_text("daily downlink limit is reached").wait_for()
+        assert ttn.downlinks == []
+        assert json.loads(pg.evaluate("localStorage.getItem('oc.remote.setup')"))["held"] == [0, 1, 2, 3]
+
+
+def test_unanswered_push_stays_counted(site, ttn, error_gated_page):  # noqa: F811
+    """A push without an answer (the network gone) may still be queued at TTS: it stays sent and counted, and the
+    next reads push nothing until the probe; a push TTS refuses is tried again."""
+    tx = TEXT["en-US"]
+    with _page(error_gated_page, site, ttn, allow_errors=("ERR_", "status of 500")) as pg:
+        _setup(pg, ttn, tx)
+        tries = []
+        pg.route("**/down/push", lambda r: (tries.append(1), r.abort()))
+        ttn.add_uplink(DEV, 4, port4())
+        _poll(pg)
+        pg.wait_for_function(
+            "() => (JSON.parse(localStorage.getItem('oc.remote.setup')) || {}).step === 'sent'"
+        )
+        pg.wait_for_timeout(300)
+        assert len(tries) == 1
+        pushes = json.loads(pg.evaluate("localStorage.getItem('oc.remote.pushes')"))
+        assert len(pushes[DEV_EUI]) == 4
+        for _ in range(2):
+            _poll(pg)
+            pg.wait_for_timeout(300)
+        assert len(tries) == 1, "no second push before the probe"
+        # TTS answers 500: nothing queued, the state goes back and the next read pushes again
+        pg.unroute("**/down/push")
+        pg.route("**/down/push", lambda r: (tries.append(1), r.fulfill(status=500, body="{}")))
+        pg.clock.fast_forward("10:30")  # the probe
+        for _ in range(100):
+            if len(tries) >= 2:
+                break
+            pg.wait_for_timeout(50)
+        pg.wait_for_timeout(300)
+        assert len(json.loads(pg.evaluate("localStorage.getItem('oc.remote.pushes')"))[DEV_EUI]) == 4
+
+
+def test_a_status_0_of_other_keys_is_not_a_failure(site, ttn, error_gated_page):  # noqa: F811
+    """00 with another plaintext's hash (a pending confirmation of earlier keys): the app keeps the transfer key and
+    waits for this transfer's confirmation instead of asking for a new scan."""
+    tx = TEXT["en-US"]
+    with _page(error_gated_page, site, ttn) as pg:
+        _setup(pg, ttn, tx)
+        frags = [f for _, _, f, _ in _join(pg, ttn)]
+        _confirm(pg, ttn, b"\x00" + bytes(4))
+        pg.wait_for_timeout(500)
+        st = json.loads(pg.evaluate("localStorage.getItem('oc.remote.setup')"))
+        assert st["step"] == "sent" and st["tk"] == TK.hex()
+        assert pg.get_by_text(tx["rescan"]).count() == 0
+        _confirm(pg, ttn, b"\x00" + hashlib.sha256(_plain(frags)).digest()[:4])
+        pg.get_by_text(tx["done"]).wait_for()
