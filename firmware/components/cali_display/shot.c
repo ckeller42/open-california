@@ -81,6 +81,7 @@ static void shot(void) {
         cali_log("display: screenshot failed (no screen)");
         return;
     }
+
 #if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
     /* The frame is printed on the NimBLE host task through the driver's small tx ring: with no host
      * draining the CDC endpoint a puts could block indefinitely and stall BLE. */
@@ -101,6 +102,11 @@ static void shot(void) {
     lv_draw_buf_init(&d, SHOT_W, SHOT_H, LV_COLOR_FORMAT_RGB565, 0, snap, SHOT_BYTES);
     if (!bsp_display_lock(DISPLAY_LOCK_TIMEOUT_MS)) {
         cali_log("display: screenshot failed (busy)");
+        goto out;
+    }
+    if (cali_display_lora_shown()) {   /* under the lock the painter shows it with: the QR holds keys (R_FW_LORA_SCREEN) */
+        bsp_display_unlock();
+        cali_log("display: screenshot failed (lora screen)");
         goto out;
     }
     res = lv_snapshot_take_to_draw_buf(lv_screen_active(), LV_COLOR_FORMAT_RGB565, &d);

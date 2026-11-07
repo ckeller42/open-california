@@ -39,15 +39,15 @@
  *
  *    With the experimental switch ``exp_lora`` on (default off; ``POST /api/experimental {"lora":…}``,
  *    console ``lora on|off``), the firmware shall drive a RAK3172 on UART1 (TX GPIO43, RX GPIO18, RST
- *    GPIO5): reset it, detect it by ``AT``, join by OTAA (EU868, class A, ADR) with the
- *    DevEUI/JoinEUI/AppKey stored by ``lora keys`` (NVS, never printed; written to the module before
- *    each join attempt), and send port 2 at the interval the airtime budget allows (at least 600 s),
- *    port 3 when a function changed, and port 4 daily. Uplink airtime and downlinks stay within 25 s and
- *    8 per rolling 24 h: no uplink goes out once either is used up. A send counts as airtime in
- *    ``/api/state`` only after ``+EVT:TX_DONE``. After 3 AT commands in a row without any answer the
- *    firmware shall reset the module, report it not joined, and try again every 10 min while it stays
- *    silent. With the switch off, no LoRa pin is touched. ``/api/state`` reports ``device.lora`` only
- *    while the switch is on.
+ *    GPIO5): reset it, detect it by ``AT``, join by OTAA (EU868, class C, ADR) with the module's own DevEUI
+ *    and the JoinEUI/AppKey of the setup (``lora_dev``; R_FW_LORA_SETUP), or else the DevEUI/JoinEUI/AppKey
+ *    stored by ``lora keys`` (NVS, never printed; written to the module before each join attempt), not join without either, and send port 2 at the interval the airtime
+ *    budget allows (at least 600 s), port 3 when a function changed, and port 4 daily. Uplink airtime and
+ *    downlinks (every downlink counts) stay within 25 s and 8 per rolling 24 h, join requests included: no uplink goes out once either is used up. A send counts as airtime in ``/api/state`` only
+ *    after ``+EVT:TX_DONE``. After 3 AT commands in a row without any answer the firmware shall reset the
+ *    module, report it not joined, and try again every 10 min while it stays silent. With the switch off,
+ *    no LoRa pin is touched. ``/api/state`` reports ``device.lora`` only while the switch is on, with the setup state
+ *    (``setup``, ``has_ttn_keys``, ``dev_eui``; R_FW_LORA_SETUP).
  * @endverbatim
  *
  * C99, no malloc, no ESP-IDF headers. Proven by `tests/firmware/test_lora.py` (`test/lora_cli.c`).
@@ -72,6 +72,25 @@ extern "C" {
 #define CALI_EXP_LORA_KEY "exp_lora"
 /** @brief The NVS key of the 8+8+16 key bytes (DevEUI, JoinEUI, AppKey). */
 #define CALI_LORA_KEYS_KEY "lora_keys"
+/** @brief The NVS key of the setup keys: AppKey 16 B + JoinEUI 8 B (never printed). */
+#define CALI_LORA_DEV_KEY "lora_dev"
+/** @brief The NVS key of the 16-byte transfer key (never printed). */
+#define CALI_LORA_TK_KEY "lora_tk"
+/** @brief The NVS key of the TTN keys the transfer delivered (plaintext, at most 256 B; never printed). */
+#define CALI_LORA_TTN_KEY "lora_ttn"
+/** @brief The most bytes of the `lora_ttn` value. */
+#define CALI_LORA_TTN_MAX 256
+
+/** @brief Setup state: the store could not be read (corrupt or wrong-sized value); reported as `"error"`. */
+#define CALI_LORA_SETUP_ERROR (-1)
+/** @brief Setup state: no setup keys yet. */
+#define CALI_LORA_SETUP_NONE 0
+/** @brief Setup state: the AppKey and the transfer key exist, no TTN keys yet. */
+#define CALI_LORA_SETUP_KEYS_MADE 1
+/** @brief Setup state: the module joined (the status view of KEYS_MADE; the store cannot know it). */
+#define CALI_LORA_SETUP_JOINED 2
+/** @brief Setup state: the TTN keys are stored. */
+#define CALI_LORA_SETUP_TTN_KEYS 3
 
 /** @brief energy + water + chargers + counters */
 #define CALI_LORA_PORT_ENERGY 2
@@ -137,8 +156,9 @@ typedef struct {
 
 /**
  * @brief A line to or from the module as it may be logged: the value of a `...KEY=` or `...EUI=` line
- *        (AppKey, DevEUI, JoinEUI, in a command or in the module's reply) becomes `<redacted>`; a `=?`
- *        query and every other line stay as they are.
+ *        (AppKey, DevEUI, JoinEUI, in a command or in the module's reply) becomes `<redacted>`, and so does
+ *        the payload of an FPort-12 downlink (`+EVT:RX_…:UNICAST:12:<redacted>`, a key-transfer fragment);
+ *        a `=?` query and every other line stay as they are.
  * @param line  The line without CR/LF.
  * @param out   Out: the loggable line (truncated to n; 48 bytes always hold a redacted one).
  * @param n     Size of out.
@@ -358,6 +378,9 @@ typedef struct {
     unsigned downlinks;      /**< downlinks in the last 24 h */
     unsigned uplinks[3];     /**< confirmed uplinks since boot: ports 2, 3, 4 */
     const char *note;        /**< "joining", "join failed", "module silent", ... or NULL */
+    int setup;               /**< CALI_LORA_SETUP_NONE .. CALI_LORA_SETUP_TTN_KEYS; JOINED when joined and the state is KEYS_MADE */
+    int has_ttn_keys;        /**< 1 when the TTN keys are stored (the keys themselves are never reported) */
+    char dev_eui[17];        /**< the DevEUI as 16 hex digits, "" while unknown (the board task fills it) */
 } cali_lora_status_t;
 
 /**
@@ -367,6 +390,79 @@ typedef struct {
  * @param now_s Uptime s.
  */
 void cali_lora_status_json(cali_json_t *j, const cali_lora_status_t *st, uint32_t now_s);
+
+/** @brief The random-bytes source of the setup (the platform's on the device, a counting fake in tests). */
+typedef void (*cali_lora_rand_fn)(void *buf, size_t n);
+
+/**
+ * @brief Open the setup: make the AppKey and a zero JoinEUI into `lora_dev` only when it is missing, and
+ *        ALWAYS a new transfer key into `lora_tk`. Local key buffers are wiped before return.
+ * @param rnd The random source.
+ *        Only a MISSING `lora_dev` is made; any other read error (corrupt, wrong size) returns -1 and
+ *        leaves the stored AppKey alone.
+ * @return 0, or -1 when the store failed.
+ */
+int cali_lora_setup_open(cali_lora_rand_fn rnd);
+/**
+ * @brief The setup state from the store.
+ * @return CALI_LORA_SETUP_NONE (no `lora_dev`), CALI_LORA_SETUP_KEYS_MADE, CALI_LORA_SETUP_TTN_KEYS
+ *         (`lora_ttn` exists), or CALI_LORA_SETUP_ERROR when `lora_dev` or `lora_ttn` cannot be read or has
+ *         the wrong shape (`lora_dev` not 24 bytes, `lora_ttn` not a plaintext cali_lora_ttn_ok() accepts).
+ */
+int cali_lora_setup_state(void);
+/**
+ * @brief Erase `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys` (every one is tried).
+ * @return 0, or -1 when an erase failed.
+ */
+int cali_lora_erase_keys(void);
+/**
+ * @brief Switch `exp_lora` off, then erase `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys`, and tell the
+ *        LoRa task (cali_lora_port_forgotten()).
+ * @return 0, or -1 when a store call failed.
+ */
+int cali_lora_forget(void);
+
+/**
+ * @brief The QR text for the LoRa screen: the setup QR (`OCS1*…`, from the module's DevEUI, `lora_dev`'s
+ *        AppKey and `lora_tk`) while the setup state is below CALI_LORA_SETUP_TTN_KEYS, then the repair QR
+ *        (`OCR1*…`, from `lora_ttn`). Reads the store itself; local key buffers are wiped before return.
+ * @param out Receives the NUL-terminated text; it holds secrets: the caller wipes it after use.
+ * @param max The size of `out` (the repair QR needs about 300 bytes).
+ * @param st The task's status: `present` and `dev_eui` are used.
+ * @param exp_on The switch `exp_lora`.
+ * @return The text length; 0 when the switch is off, the module is not present, the DevEUI is unknown,
+ *         a key is missing, a store read fails or `out` is too small (then `out` is zeroed).
+ */
+size_t cali_lora_qr_text(char *out, size_t max, const cali_lora_status_t *st, int exp_on);
+/**
+ * @brief The setup QR text (`OCS1*…`) whatever the setup state: the LoRa screen's rotation (spec 5.3) shows
+ *        it after the TTN keys arrived, when cali_lora_qr_text() shows the repair QR. Reads the store
+ *        itself; local key buffers are wiped before return.
+ * @param out Receives the NUL-terminated text; it holds secrets: the caller wipes it after use.
+ * @param max The size of `out` (88 bytes are enough).
+ * @param st The task's status: `present` and `dev_eui` are used.
+ * @param exp_on The switch `exp_lora`.
+ * @return The text length; 0 when the switch is off, the module is not present, the DevEUI is unknown,
+ *         `lora_dev` or `lora_tk` is missing or unreadable, or `out` is too small (then `out` is zeroed).
+ */
+size_t cali_lora_setup_qr_text(char *out, size_t max, const cali_lora_status_t *st, int exp_on);
+/**
+ * @brief Whether a key-transfer plaintext may be stored as `lora_ttn`: at most CALI_LORA_TTN_MAX bytes and
+ *        encodable as the repair QR (the scratch text is wiped before return).
+ * @param plain The plaintext.
+ * @param len The length of `plain`.
+ * @return 1 when it may be stored, else 0.
+ */
+int cali_lora_ttn_ok(const uint8_t *plain, size_t len);
+
+/**
+ * @brief The confirmation for a key-transfer fragment that arrives without a transfer key: `00 |
+ *        sha256(lora_ttn)[0..3]` when usable TTN keys are stored (the transfer is done and its status-0
+ *        confirmation was lost), else `03`.
+ * @param confirm Receives the confirmation; 5 bytes.
+ * @return Its length: 5 or 1.
+ */
+size_t cali_lora_confirm_no_tk(uint8_t *confirm);
 
 /**
  * @brief The switch (lazy NVS read).
@@ -391,7 +487,7 @@ void cali_lora_tick(uint64_t now_ms);
  */
 void cali_lora_json(cali_json_t *j);
 /**
- * @brief Console `lora on|off|status|keys <deveui> <joineui> <appkey>` (hex).
+ * @brief Console `lora on|off|status|forget|keys <deveui> <joineui> <appkey>` (hex).
  * @param args  The text after "lora".
  * @return 0.
  */
@@ -410,6 +506,41 @@ void cali_lora_port_post(const cali_lora_snap_t *s);
  * @return 1 when there is one.
  */
 int cali_lora_port_status(cali_lora_status_t *out);
+/**
+ * @brief The current QR text for the display (cali_lora_qr_text() over the task's published status); any task.
+ * @param out Receives the NUL-terminated text; the caller wipes it after painting.
+ * @param max The size of `out`.
+ * @return The text length, 0 when there is none (module absent, switch off, no keys).
+ */
+int cali_lora_port_qr(char *out, size_t max);
+/**
+ * @brief The current setup QR text for the display (cali_lora_setup_qr_text() over the task's published
+ *        status); any task.
+ * @param out Receives the NUL-terminated text; the caller wipes it after painting.
+ * @param max The size of `out`.
+ * @return The text length, 0 when there is none (module absent, switch off, no transfer key).
+ */
+int cali_lora_port_setup_qr(char *out, size_t max);
+/**
+ * @brief Whether a setup request (cali_lora_port_setup_request()) is not done yet; any task. Until it is,
+ *        the stored transfer key may be the old one, so the display shows no QR.
+ * @return 1 while a request waits or runs, else 0.
+ */
+int cali_lora_port_setup_pending(void);
+
+/**
+ * @brief cali_lora_forget() has erased the keys; any task. The LoRa task is the only writer of `lora_dev`,
+ *        `lora_tk` and `lora_ttn`: on its next pass with the switch off it erases them once more, after any
+ *        write it had under way, so a key write that raced the forget never survives it. A no-op without a
+ *        module driver.
+ */
+void cali_lora_port_forgotten(void);
+/**
+ * @brief Ask the LoRa task to open the setup (cali_lora_setup_open(): a new transfer key, the AppKey once);
+ *        any task. The LoRa task does it at its next pass with the module present and the switch on, and
+ *        configures the module and joins again when the AppKey is new. A no-op without a module driver.
+ */
+void cali_lora_port_setup_request(void);
 
 #ifdef __cplusplus
 }

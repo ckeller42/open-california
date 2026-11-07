@@ -474,7 +474,7 @@ Never commit a capture of the setup screen: it shows the hotspot password.
 On a CoreS3 build the console command `screenshot` streams the live screen as `[SHOT 320 240 RLE16 <n>]`,
 base64 lines of 76 characters, `[/SHOT]` (kws-de's format). Capture the serial log, then
 `python -m tools.esp_shot decode <log> <out_dir>` writes one PNG per frame. Refusals are
-`LOG display: screenshot failed (no screen|no host|no memory|busy|snapshot)`; `no host` means no reader is
+`LOG display: screenshot failed (no screen|lora screen|no host|no memory|busy|snapshot)` (`lora screen`: the LoRa screen with its QR is up); `no host` means no reader is
 attached to the USB-Serial/JTAG port (the command needs one, else printing could block BLE). It runs on the NimBLE host task and
 blocks it while printing (manual debug command). The host check only sees the USB bus, not an open
 port: on the bench (2026-10-01) three `screenshot`s whose sender closed the port at once left BLE

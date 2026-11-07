@@ -216,10 +216,12 @@ typedef struct { uint64_t idle, at; int pct; } cpu_win_t;   /* cpu_pct's window 
 static int cpu_pct(cpu_win_t *w);
 
 /* Owner task, every tick: the boot event (retried until the card takes it), the diag record. */
+/* nimble_host and cali_core are the same "owner" (one of them exists: the core task only without the BT
+ * controller), so at most CALI_DIAG_STACKS (8) of these run at once and the record stays within its body. */
 static void diag_tick(uint64_t now) {
     static const char *const TASKS[][2] = {{"nimble_host", "owner"}, {"cali_core", "owner"}, {"cali_sd", "sd"},
                                            {"taskLVGL", "display"}, {"cali_ota", "ota"}, {"cali_console", "console"},
-                                           {"tiT", "lwip"}};
+                                           {"tiT", "lwip"}, {"cali_lora", "lora"}, {"cali_lora_rx", "lora_rx"}};
     static cpu_win_t win = {0, 0, -1};
     cali_diag_health_t h = {0};
     if (!s_boot_logged)

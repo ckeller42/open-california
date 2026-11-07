@@ -1,0 +1,13 @@
+{
+  "tk": "00112233445566778899aabbccddeeff",
+  "nonce": "000102030405060708090a0b",
+  "deveui": "70B3D57ED0000001",
+  "plain": "011b6575312e636c6f75642e7468657468696e67732e6e6574776f726b0a6d792d76616e2d6170700a76616e2d303030303031190a63a12a5b1ae7c2329d2b6be33adf3bef8022190a63a1014a96c6b9f08ca74adaf8ceb7cefbe008864298e84a96c6b9f08ca74adaf8ceb70c3a12a5b1ae7c2329d2b6be33adf3bef8022190a63a12a5b105adaf8ceb7cefbe008864298e84a96c6b9f08ca74adaf8ceb7cefbe008864298e08",
+  "fragments": [
+    "00000102030405060708090a0b2ace52b19fb9ec0cf04d4db164e524996576e32d079f80e8fb29b53c8a01eb511bffb33a3c69",
+    "01398078dbea9bff21e5d0cf00b5a0a3af2c98ab02c0280966637731cd13e2eba341d4ca0f0a6611b39b12871fd6b9e6855495",
+    "02cfa885e73db8f75ee6921485476613045ec7c94d2295debd7aa774597538cd004e09e401cbe057b70f44f9c16f063bf61d23",
+    "8352221cf9ad451d3c169ee2e64a79b4b38c766d165346d26a5f9ceb564554094998ba484789b452b15769ae9b0f"
+  ],
+  "note": "Written once by sealTransfer() in calictl/webui/lora_setup.js (WebCrypto AES-128-GCM, AD = the 8 DevEUI bytes, tagLength 128) for dummy keys built from repeating base32 patterns (not secrets): ciphertext = nonce(12)|body|tag(16) cut into fragments seq|<=50 bytes (bit 7 = last). plain, tk, nonce, deveui and fragments are hex. Task 3 decrypts the fragments on the C side and must get plain back."
+}
