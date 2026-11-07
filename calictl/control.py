@@ -469,6 +469,7 @@ REASON_NOT_ONOFF = (
 REASON_COOLER_STATE_UNKNOWN = (
     "the cooler's current schedule is not known yet (no cooler state read) — refusing to overwrite it"
 )
+REASON_ROOF_NEEDS_IGNITION = "the pop-up roof moves only with the ignition on (switch on the ignition first)"
 REASON_ROOF_READING = "the pop-top roof reading light needs the roof raised (roof is closed)"
 REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF = (
     "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
@@ -618,6 +619,9 @@ def command_precondition(function, what, value, states):
             return "the unit reports the roof as %s — move refused" % roof["alert"].replace("_", " ")
         if roof["position_name"] == "error":
             return "the unit reports a roof position error — move refused"
+        # The app asks to "Switch on the ignition" first; refuse only a positively-off terminal 15.
+        if (states.get("vehicle") or {}).get("TerminalOneFive") == 0:
+            return REASON_ROOF_NEEDS_IGNITION
     # Favourites: refuse only a slot the unit positively reported empty (the REQUEST_CONFIG reply's
     # FavoriteProfileModifiedState bits, latched by serve). Unknown bits allow (serve only sends
     # REQUEST_CONFIG before a wake-up edit, R5, so they are often unknown). The mock ACKs and ignores

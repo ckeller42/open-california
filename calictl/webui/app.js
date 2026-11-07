@@ -4466,6 +4466,10 @@ let roofHold = null;
  * server handles roof STOP lock-free (`_roof_stop`), so it goes straight to the API. */
 function roofRelease() {
   if (!roofHold) return;
+  roofStop();
+}
+/** Send roof STOP out of band (see roofRelease) and repaint — the release AND the Stop button. */
+function roofStop() {
   roofHold = null;
   api("/api/command", {
     method: "POST",
@@ -4474,9 +4478,15 @@ function roofRelease() {
   }).catch((e) => toast("Roof STOP failed: " + String(e), "error"));
   render();                        // the held button may now be repainted
 }
-// Any release anywhere ends the move — the vehicle's own hold-to-move contract.
+// Any release anywhere ends the move — the vehicle's own hold-to-move contract (keyup: the
+// keyboard hold on a focused Open/Close button).
 document.addEventListener("pointerup", roofRelease);
 document.addEventListener("pointercancel", roofRelease);
+document.addEventListener("keyup", roofRelease);
+// The safety acknowledgement (the app's "check before opening" list), given ONCE per visit of the
+// roof page and outside the gesture: a confirm() inside pointerdown made the user lift the finger,
+// and that pointercancel stopped the move at once. Cleared whenever the page is left or hidden.
+let roofArmed = false;
 
 // The roof VIEW (CAPTURE 2026-10-10): while the real app's roof screen is open it streams STOP frames
 // with its SafetyCounter, so a press moves on an already-validated counter (no ~3 s withhold). The
@@ -4495,6 +4505,7 @@ function roofViewPost(action) {
 }
 function roofViewSync() {
   const on = view === "roof" && isCalictl() && !readOnly() && document.visibilityState === "visible";
+  if (!on) roofArmed = false;
   if (on && Date.now() - roofViewAt >= ROOF_VIEW_REFRESH_MS) {
     roofViewAt = Date.now();
     roofViewPost("view");
@@ -4525,34 +4536,58 @@ function roofControls(s) {
   // app), so gate on an explicit set rather than "any alert". STOP stays available (release).
   // `s.alert` / `s.position_name` are the decoded InfoPopUp + Position (semantics.roof).
   const moveBlocked = ROOF_MOVE_BLOCK.has(/** @type {string} */ (s.alert)) || s.position_name === "error";
+  // The roof moves only with the ignition on (the app's "Switch on the ignition" dialog).
+  const noIgnition = !ignitionOn(s);
+  const arm = document.createElement("label");
+  arm.className = "note";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = roofArmed;
+  box.disabled = readOnly() || satellite();
+  box.id = "roof-arm";
+  box.onchange = () => {
+    roofArmed = box.checked;
+    render();                      // re-gate Open/Close; keep the keyboard focus on the box
+    /** @type {HTMLElement|null} */ (document.getElementById("roof-arm"))?.focus();
+  };
+  arm.append(box, " ", /** @type {string} */ (t(ROOF_ALERT_MSG.open_checklist)));
+  card.appendChild(arm);
+  const hint = document.createElement("div");
+  hint.className = "note";
+  hint.textContent = /** @type {string} */ (t("Press and hold Open or Close: the roof moves while you hold "
+    + "and stops when you release. Keep the vehicle in view and avoid distraction during operation."));
+  card.appendChild(hint);
   const btns = document.createElement("div");
   btns.className = "btnrow";
   for (const dir of ["open", "close", "stop"]) {
     const b = document.createElement("button");
     b.className = "btn";
     b.textContent = cap(/** @type {string} */ (t(dir)));   // sentence case: "Open", "Öffnen"
-    const blocked = dir !== "stop" && moveBlocked;
+    const blocked = dir !== "stop" && (moveBlocked || noIgnition || !roofArmed);
     b.disabled = readOnly() || blocked || satellite();
-    if (blocked) b.title = /** @type {string} */ (t(ROOF_ALERT_MSG[/** @type {string} */ (s.alert)] || "Roof move blocked"));
+    if (blocked && !moveBlocked) b.title = /** @type {string} */ (t(noIgnition ? ROOF_NO_IGNITION : ROOF_ALERT_MSG.open_checklist));
+    if (moveBlocked && dir !== "stop") b.title = /** @type {string} */ (t(ROOF_ALERT_MSG[/** @type {string} */ (s.alert)] || "Roof move blocked"));
     if (satellite()) b.title = /** @type {string} */ (t(ELSEWHERE));
     if (pending_is("roof", dir)) b.appendChild(spinner());
     if (dir === "stop") {
-      b.onclick = () => command("roof", "stop", null);
+      b.onclick = roofStop;          // out of band: a queued STOP would wait behind the move
     } else {
       // PRESS-AND-HOLD: the pop-top moves only while the button is held; releasing sends STOP
       // (interrupts the in-flight move server-side via _roof_stop). Mirrors the vehicle's own
       // hold-to-move control. Still UNVERIFIED end-to-end on this van.
-      /** @param {PointerEvent} ev */
+      // Never a confirm() here: it makes the user lift the finger, and that release stops the move.
+      /** @param {Event} ev */
       const start = (ev) => {
         ev.preventDefault();
         if (readOnly() || roofHold || blocked || satellite()) return;
         if (Date.now() - roofLastMoveStart < ROOF_REPRESS_MS) return;  // debounce a too-quick re-press
-        if (!confirm(tf("Roof {dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?", { dir: t(dir) }))) return;
         roofHold = dir;                 // set BEFORE command(): it gates render() and the release
         roofLastMoveStart = Date.now();
         command("roof", dir, null);
       };
       b.addEventListener("pointerdown", start);
+      // keyboard / Switch Control: hold Space or Enter (the document keyup releases)
+      b.addEventListener("keydown", (ev) => { if ((ev.key === " " || ev.key === "Enter") && !ev.repeat) start(ev); });
       // pointerup/pointercancel are handled ONCE at document level (roofRelease) so a release
       // always sends STOP even if this node was replaced meanwhile; sliding off the button
       // also ends the move, like letting go of the vehicle's own switch.
@@ -4561,8 +4596,14 @@ function roofControls(s) {
     btns.appendChild(b);
   }
   card.appendChild(btns);
+  if (noIgnition && !moveBlocked) {
+    const n = document.createElement("div"); n.className = "note";
+    n.textContent = /** @type {string} */ (t(ROOF_NO_IGNITION));
+    card.appendChild(n);
+  }
   return card;
 }
+const ROOF_NO_IGNITION = "Please switch on the ignition to operate the pop-up roof.";
 
 // Live values: poll the state every 2 s while the page is visible. A hidden tab stops polling, so
 // buspi's daemon sees the UI go idle and drops back from its watched cadence (5 s reads on a held

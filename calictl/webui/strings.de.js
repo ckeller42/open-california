@@ -321,9 +321,11 @@ window.STRINGS_DE = {
   "open": "öffnen",
   "close": "schließen",
   "stop": "stopp",
-  "Roof {dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?":
-    "Dach {dir}: halten, um das Aufstelldach zu bewegen (an diesem Fahrzeug UNVERIFIZIERT). "
-    + "Loslassen zum Stoppen. Weg frei?",
+  "Press and hold Open or Close: the roof moves while you hold and stops when you release. Keep the vehicle in view and avoid distraction during operation.":
+    "Öffnen oder Schließen gedrückt halten: Das Dach bewegt sich, solange Sie halten, und stoppt beim "
+    + "Loslassen. Behalten Sie das Fahrzeug im Blick und lassen Sie sich während der Bedienung nicht ablenken.",
+  "Please switch on the ignition to operate the pop-up roof.":
+    "Bitte schalten Sie die Zündung ein, um das Aufstelldach zu bedienen.",
 
   // --- vehicle -------------------------------------------------------------------------------
   "Ignition": "Zündung",
