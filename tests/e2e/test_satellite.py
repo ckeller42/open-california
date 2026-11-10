@@ -962,7 +962,12 @@ def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale):
         btn = conn.get_by_role("button", name=w["reconnect"]).element_handle()
         # 20 s later: the state is unchanged (each poll a 304, R_FW_STATE_ETAG) and the page counts the
         # rest down itself; the count moves, the card is not rebuilt
-        pg.clock.run_for(20000)
+        # In 2 s steps (the poll interval) with a short real pause: Playwright 1.65 fires all the timers of
+        # one run_for without waiting for the network, so in one 20 s run each poll's 8 s abort
+        # (POLL_TIMEOUT_MS) fires before the stub answers and the page shows "not reachable".
+        for _ in range(10):
+            pg.clock.run_for(2000)
+            pg.wait_for_timeout(250)  # real time: the poll's answer lands before the next step
         expect(conn.locator(".rest-next")).to_have_text(w["next"].replace("25", "24"))
         assert btn.evaluate("b => b.isConnected")
         link["rest_next_s"] = None  # the rest poll switched off: a real change (rest_poll_min)
