@@ -348,7 +348,9 @@ struct ControlPage<Content: View>: View {
     var body: some View {
         StatusPage(store: store) {
             ControlSection(store: store, function: function, content: content)
-                .padding(.bottom, 44)  // the last row clears the tab bar's blur band at the end of the scroll
+                // At the end of the scroll the last row ends above the tab bar and its 44 pt blur band:
+                // the page scrolls under the floating tab bar (safe-area bottom − tab bar top ≈ 49 pt, + 44).
+                .padding(.bottom, 96)
         }
         .tint(tint)
         .navigationTitle(Text(title))

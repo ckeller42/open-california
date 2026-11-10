@@ -136,11 +136,12 @@ struct ScreenSnapshotTests {
                 // Lighting is the long page (the wake-up and sliding-door cards under the lamps).
                 let long = screen == .lighting
                 let german = Locale(identifier: "de_DE")
-                snap(view, "\(name)-de", locale: german)
+                // The long lighting page in German at its whole height (the wake-up and sliding-door cards).
+                let tall: SwiftUISnapshotLayout = .fixed(width: 390, height: 2000)
+                snap(view, "\(name)-de", locale: german, layout: long ? tall : .device(config: .iPhone13))
                 let ax5: CGFloat = long ? 5600 : 3600
                 snap(view, "\(name)-ax5", size: .accessibilityExtraExtraExtraLarge, layout: .fixed(width: 390, height: ax5))
                 snap(view, "\(name)-se", layout: .fixed(width: 375, height: long ? 2000 : 1400))
-                if long { snap(view, "\(name)-de-full", locale: german, layout: .fixed(width: 390, height: 2000)) }
             }
         }
     }

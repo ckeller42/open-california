@@ -68,11 +68,17 @@ struct LightingFunctions: View {
                 .disabled(wk == nil)
                 ControlRow {
                     StackedRow(label: Text("Wake-up time")) {
-                        Button(wk?.time ?? "—") { picking = Self.date(wk?.time ?? "07:00") }
-                            .monospacedDigit()
-                            .accessibilityLabel(Text("Wake-up time"))
-                            .accessibilityValue(Text(verbatim: wk?.time ?? "—"))
-                            .accessibilityIdentifier("lighting.wakeup.time")
+                        Button {
+                            picking = Self.date(wk?.time ?? "07:00")
+                        } label: {
+                            // At least 44 × 44 pt to tap, also when it reads only "—" (HIG hit area).
+                            Text(verbatim: wk?.time ?? "—").monospacedDigit()
+                                .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel(Text("Wake-up time"))
+                        .accessibilityValue(Text(verbatim: wk?.time ?? "—"))
+                        .accessibilityIdentifier("lighting.wakeup.time")
                     }
                 }
                 Group {
