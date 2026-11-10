@@ -953,9 +953,11 @@ def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale):
         for name in (w["camping"], w["reconnect"]):
             assert conn.get_by_role("button", name=name).bounding_box()["height"] >= 44
         # the stub's fixed age makes "Last data HH:MM" move at each minute: stay clear of that rebuild.
-        # The shown minute is the last poll's (up to a few s old on a loaded runner), so not just after :00
+        # The shown minute is the last poll's (up to a few s old on a loaded runner), so not just after :00,
+        # and the 20 s run_for below must end before the next :00 (start < 40; 35 keeps a margin).
+        # The longest wait is from :35 to the next :10 (35 s).
         pg.wait_for_function(
-            "() => { const s = new Date().getSeconds(); return s >= 10 && s < 45; }", timeout=35000
+            "() => { const s = new Date().getSeconds(); return s >= 10 && s < 35; }", timeout=45000
         )
         btn = conn.get_by_role("button", name=w["reconnect"]).element_handle()
         # 20 s later: the state is unchanged (each poll a 304, R_FW_STATE_ETAG) and the page counts the
