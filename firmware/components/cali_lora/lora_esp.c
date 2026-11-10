@@ -363,6 +363,21 @@ static bool module_setup(void) {
     return true;
 }
 
+/* A module still silent after the RST pulse: release TX and RST for 5 s, then reset and set it up again. No
+ * power is switched. ponytail: the cause of the hang after a host power event is not known (not reproduced on
+ * the bench); a driven pin that keeps a browned-out STM32 latched is the guess this tests. */
+static bool pins_release_retry(void) {
+    gpio_reset_pin(RAK_TX);
+    gpio_set_direction(RAK_TX, GPIO_MODE_INPUT);
+    gpio_reset_pin(RAK_RST);
+    gpio_set_direction(RAK_RST, GPIO_MODE_INPUT);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    uart_set_pin(RAK_UART, RAK_TX, RAK_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    gpio_set_direction(RAK_RST, GPIO_MODE_OUTPUT);
+    rak_reset();
+    return module_setup();
+}
+
 /* The display's long press: a new transfer key (and the AppKey the first time). The module needs a new
  * AppKey and a new join only when the AppKey changed. -1 = the store failed, 0 = opened, 1 = opened with
  * a new AppKey. */
@@ -557,6 +572,11 @@ static void lora_task(void *arg) {
             if (ready) cali_log("lora: module silent: reset");
             rak_reset();
             ready = module_setup();
+            if (!ready && s_snap.enabled) {
+                cali_log("lora: module silent after reset: pins released 5 s");
+                ready = pins_release_retry();
+                if (ready) cali_log("lora: module answers after the pin release");
+            }
             if (!ready) {
                 s_silent = CALI_LORA_SILENT_MAX;   /* the next pass resets and checks again */
                 s_st.note = "module silent";

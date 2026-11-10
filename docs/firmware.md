@@ -1893,8 +1893,9 @@ within seconds; a downlink that switches camping mode on (and with it the router
   at SF12; with no room the join waits, `note` "join waits: airtime budget"; without stored keys no
   join is sent, `note` "no keys: console lora keys"), and its port 3 functions
   and port 4 stay pending. With 8 downlinks in the last 24 h no uplink goes out until one ages out. Three AT commands in a
-  row without an answer reset the module and drop `joined`; while it stays silent the task retries every
-  10 min. A spike bench run showed why: a hung module that the old firmware counted as "sending"
+  row without an answer reset the module and drop `joined`; if it is still silent after the RST pulse, the
+  task releases TX and RST for 5 s and sets it up again (no power is switched); while it stays silent the
+  task retries both every 10 min. A spike bench run showed why: a hung module that the old firmware counted as "sending"
   looked joined for three days while nothing reached the network.
 - **Forget LoRa:** Satellite settings shows a LoRa box while the switch is on (the module, joined, the last
   uplink the module confirmed, airtime confirmed and charged, the setup state in words, the DevEUI, the
