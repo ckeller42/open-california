@@ -84,11 +84,10 @@ struct LightingFunctions: View {
                         ) { ForEach(Self.leadTimes, id: \.self) { Text("\($0) min").tag($0) } }
                     }
                     ControlRow {
-                        MenuPicker(
+                        SliderRow(
                             id: "lighting.wakeup.brightness", label: Text("Brightness"), spoken: Text("Wake-up brightness"),
-                            value: Text(verbatim: wk.map { String($0.brightness) } ?? "—"),
-                            selection: Binding(get: { wk?.brightness ?? 0 }, set: { b in edit(wk) { $0.brightness = b } })
-                        ) { ForEach(0...10, id: \.self) { Text(verbatim: "\($0)").tag($0) } }
+                            range: 0...10, value: wk?.brightness, text: { (0...10).contains($0) ? Text(verbatim: "\($0)") : nil },
+                            send: { b in edit(wk) { $0.brightness = b } })
                     }
                     Text("Vehicle area").font(.subheadline.weight(.semibold)).padding([.horizontal, .top])
                     ForEach(1...4, id: \.self) { a in

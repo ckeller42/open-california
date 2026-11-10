@@ -316,6 +316,20 @@ bundle-ID prefix) stays in a gitignored local configuration file. Certificates a
 profiles are never committed.
 ```
 
+```{decision} The web UI's control types
+:id: AD_IOS_CONTROL_KINDS
+:status: accepted
+:tags: ios
+:links: R_IOS_FUNCTIONS, R_IOS_LOOK
+
+Each control uses the type that the web UI gives it (`kind` in `FEATURES`, and its lamp and
+wake-up rows), and so the type that the VW app uses. A value on a scale is a slider: lamp
+brightness, wake-up brightness, cooling level, heating temperature and run time. An on/off is a
+switch. A drag sends one command when the finger lifts, as the web UI's `change` event does. A
+VoiceOver step sends at once. Until the command ends, the thumb stays where the user left it, and
+then it shows the value that the unit reports.
+```
+
 ```{decision} Same HTTP API for the satellite path
 :id: AD_IOS_HTTP_API
 :status: accepted

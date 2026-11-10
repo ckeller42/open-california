@@ -289,6 +289,8 @@ struct Run {
 extension EnvironmentValues {
     /// Why the whole section is locked (the rows give it as their VoiceOver hint); nil = unlocked.
     @Entry var sectionLock: LocalizedStringResource?
+    /// A command of the section waits for its confirmation or is on its way.
+    @Entry var commandBusy = false
 }
 
 /// The controls of one function: the lock card when they cannot be used (the controls are then
@@ -317,6 +319,7 @@ struct ControlSection<Content: View>: View {
             )
             .disabled(reason != nil || store.isSending)
             .environment(\.sectionLock, reason)
+            .environment(\.commandBusy, pending != nil || store.isSending)
         }
         .alert(
             Text(verbatim: pending?.prompts.map { $0.string(locale) }.joined(separator: "\n\n") ?? ""),
@@ -415,6 +418,65 @@ struct MenuPicker<Value: Hashable, Options: View>: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier(id)
         }
+    }
+}
+
+/// A label with its value as text and a slider under it: the web UI's range row (`kind: "slider"`).
+/// A drag sends once, when the finger lifts (the web `change` event); a VoiceOver or keyboard step
+/// sends at once. Until the command ends, the thumb stays where the user left it, then it shows the
+/// unit's value. An unknown or off-scale value reads "—" (`text` gives nil); the thumb then sits
+/// at the nearest end of the scale.
+struct SliderRow: View {
+    /// The accessibility identifier, `<screen>.<control>`, for tests and bug reports.
+    let id: String
+    let label: Text
+    /// What VoiceOver calls the slider, when the visible label is not unique.
+    var spoken: Text?
+    let range: ClosedRange<Int>
+    var step = 1
+    /// The unit's value; nil = not known.
+    let value: Int?
+    let text: (Int) -> Text?
+    let send: (Int) -> Void
+    @State private var editing = false
+    @State private var draft: Int?
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.commandBusy) private var busy
+
+    var body: some View {
+        let shown = draft ?? value
+        let valueText = shown.flatMap(text) ?? Text(verbatim: "—")
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline) {
+                label
+                Spacer(minLength: 12)
+                valueText.monospacedDigit().foregroundStyle(enabled ? Color.primary : Color.staleText)
+            }
+            .accessibilityHidden(true)
+            Slider(
+                value: Binding(
+                    get: { Double(min(range.upperBound, max(range.lowerBound, shown ?? range.lowerBound))) },
+                    set: { v in
+                        draft = Int(v.rounded())
+                        if !editing { commit() }  // a VoiceOver or keyboard step: no drag around it
+                    }),
+                in: Double(range.lowerBound)...Double(range.upperBound), step: Double(step)
+            ) { e in
+                editing = e
+                if !e { commit() }
+            }
+            .accessibilityLabel(spoken ?? label)
+            .accessibilityValue(valueText)
+            .accessibilityIdentifier(id)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: busy) { _, b in if !b && !editing { draft = nil } }
+        .onChange(of: value) { if !editing { draft = nil } }
+    }
+
+    private func commit() {
+        guard let n = draft else { return }
+        if n == value { draft = nil } else { send(n) }
     }
 }
 

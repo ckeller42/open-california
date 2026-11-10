@@ -50,9 +50,6 @@ struct AirHeaterView: View {
 
     private func flag(_ key: String) -> Bool { store.value("airheater", key)?.bool == true }
     private func num(_ key: String) -> Int? { store.value("airheater", key)?.number.map(Int.init) }
-    private var runTimeText: String {
-        num("running_time").flatMap { Self.runtimes.contains($0) ? "\($0)\(nbsp)min" : nil } ?? "—"
-    }
 
     /// The heater's own status line (app.js `summary`, without the timer).
     private var status: LocalizedStringResource {
@@ -108,39 +105,24 @@ struct AirHeaterView: View {
                             }))
                 }
                 ControlRow {
-                    MenuPicker(
-                        id: "heater.temperature", label: Text("Heating temperature"),
-                        value: Self.levelText(num("level")).map { Text($0) } ?? Text(verbatim: "—"),
-                        selection: Binding(get: { num("level") ?? 0 }, set: { run(Self.level($0)) })
-                    ) {
-                        if num("level").map({ !(1...10).contains($0) }) ?? true { Text(verbatim: "—").tag(num("level") ?? 0) }
-                        ForEach(1...10, id: \.self) { n in
-                            if n == 10 { Text(verbatim: "HI").tag(n) } else { Text("Level \(n)").tag(n) }
-                        }
-                    }
+                    SliderRow(
+                        id: "heater.temperature", label: Text("Heating temperature"), range: 1...10, value: num("level"),
+                        text: { Self.levelText($0).map { Text($0) } }, send: { run(Self.level($0)) })
                 }
                 ControlRow(disabledBecause: permanent ? "Not available during continuous heating" : nil) {
-                    MenuPicker(
-                        id: "heater.runTime", label: Text("Run time"),
-                        value: Text(verbatim: runTimeText),
-                        selection: Binding(
-                            get: { num("running_time") ?? 0 },
-                            set: { n in
-                                run(
-                                    Self.runtime(n),
-                                    confirm: [
-                                        flag("running")
-                                            // swiftlint:disable:next line_length - a localization key stays one literal
-                                            ? "Apply new settings now? Resetting the duration. The heating will stay on for \(n) minutes."
-                                            : nil
-                                    ])
-                            })
-                    ) {
-                        if !Self.runtimes.contains(num("running_time") ?? -1) {
-                            Text(verbatim: "—").tag(num("running_time") ?? 0)
-                        }
-                        ForEach(Array(Self.runtimes), id: \.self) { Text(verbatim: "\($0)\(nbsp)min").tag($0) }
-                    }
+                    SliderRow(
+                        id: "heater.runTime", label: Text("Run time"), range: 10...120, step: 10, value: num("running_time"),
+                        text: { Self.runtimes.contains($0) ? Text(verbatim: "\($0)\(nbsp)min") : nil },
+                        send: { n in
+                            run(
+                                Self.runtime(n),
+                                confirm: [
+                                    flag("running")
+                                        // swiftlint:disable:next line_length - a localization key stays one literal
+                                        ? "Apply new settings now? Resetting the duration. The heating will stay on for \(n) minutes."
+                                        : nil
+                                ])
+                        })
                 }
             }
         }

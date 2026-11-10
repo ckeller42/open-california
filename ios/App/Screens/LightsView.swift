@@ -123,21 +123,23 @@ struct LightsView: View {
         }
     }
 
-    /// A lamp's brightness picker: Off, 1–10; the unit's 11 (its default level) shows as "Default".
-    /// The no-reading markers (13, 14) select nothing.
+    /// A lamp's brightness, the web UI's lamp slider: Off, 1–10; the unit's 11 (its default level)
+    /// reads "Default" with the thumb at 10. The no-reading markers (13, 14) read "—".
+    static func brightnessText(_ n: Int) -> Text? {
+        switch n {
+        case 0: Text("Off")
+        case 1...10: Text(verbatim: "\(n)")
+        case 11: Text("Default")
+        default: nil
+        }
+    }
+
     private func brightness(_ lamp: Lamp, group: LocalizedStringResource, _ run: Run) -> some View {
         let real = store.value("lighting", "brightness_zone_\(lamp.zone)")?.number.map(Int.init)
-        let current = real.flatMap { $0 <= 11 ? $0 : nil }
         // Two lamps share a name ("Background lighting"): VoiceOver hears the group too.
-        return MenuPicker(
+        return SliderRow(
             id: "lighting.\(lamp.what)", label: Text(lamp.label), spoken: Text(group) + Text(verbatim: ", ") + Text(lamp.label),
-            value: current == 0 ? Text("Off") : current == 11 ? Text("Default") : Text(verbatim: current.map(String.init) ?? "—"),
-            selection: Binding(get: { current ?? -1 }, set: { if (0...10).contains($0) { run(Self.lamp(lamp.what, $0)) } })
-        ) {
-            if current == nil { Text(verbatim: "—").tag(-1) }
-            Text("Off").tag(0)
-            ForEach(1...10, id: \.self) { Text(verbatim: "\($0)").tag($0) }
-            if current == 11 { Text("Default").tag(11) }
-        }
+            range: 0...10, value: real.flatMap { $0 <= 11 ? $0 : nil }, text: Self.brightnessText,
+            send: { run(Self.lamp(lamp.what, $0)) })
     }
 }

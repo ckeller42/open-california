@@ -39,14 +39,9 @@ struct CoolerView: View {
                         isOn: Binding(get: { on }, set: { run(Self.power($0)) }))
                 }
                 ControlRow {
-                    MenuPicker(
-                        id: "cooler.level", label: Text("Cooling level"),
-                        value: Text(verbatim: num("level").map(String.init) ?? "—"),
-                        selection: Binding(get: { num("level") ?? 0 }, set: { run(Self.level($0)) })
-                    ) {
-                        if num("level").map({ !(1...5).contains($0) }) ?? true { Text(verbatim: "—").tag(num("level") ?? 0) }
-                        ForEach(1...5, id: \.self) { Text(verbatim: "\($0)").tag($0) }
-                    }
+                    SliderRow(
+                        id: "cooler.level", label: Text("Cooling level"), range: 1...5, value: num("level"),
+                        text: { (1...5).contains($0) ? Text(verbatim: "\($0)") : nil }, send: { run(Self.level($0)) })
                 }
                 ControlRow(disabledBecause: on ? nil : "Switch the refrigerator box on first") {
                     MenuPicker(

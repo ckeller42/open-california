@@ -9,9 +9,9 @@ import XCTest
 /// Actions:
 /// - `<function>.<what>.<on|off>` for a switch (camping mode, its lights and USB, the refrigerator
 ///   box, all lights, immediate heating; `airheater.permanent.off`),
-/// - `<function>.<what>.<value>` for a menu: `cooler.level.<1-5>`, `cooler.mode.<normal|quiet|timer_quiet>`,
-///   `airheater.level.<1-10>`, `airheater.runtime.<10-120>`, `energy.mode.<normal|max_charge|eco>`, and
-///   `lighting.<lamp>.<0-10>` for each lamp (`reading-1`, `kitchen`, `entrance`, …),
+/// - `<function>.<what>.<value>` for a slider (one drag): `cooler.level.<1-5>`, `airheater.level.<1-10>`,
+///   `airheater.runtime.<10-120>` and `lighting.<lamp>.<0-10>` for each lamp (`reading-1`, `kitchen`, `entrance`, …),
+/// - `<function>.<what>.<value>` for a menu: `cooler.mode.<normal|quiet|timer_quiet>`, `energy.mode.<normal|max_charge|eco>`,
 /// - `lighting.profile.<1|5|6|7>` for a favourite,
 /// - `link.live` (wait for a live link, tapping "Tap to connect" when it shows) and `link.lost` (the
 ///   link must leave "live" once the fake unit is gone),
@@ -47,21 +47,43 @@ final class LabControlUITests: XCTestCase {
         "outside-rear": "Exterior light, Rear surroundings", "entrance": "Exterior light, Entrance",
     ]
 
+    /// A slider action: the screen, the slider's identifier, its scale, the target and the text it must show.
+    struct SliderAction {
+        let screen: Screen
+        let id: String
+        let scale: ClosedRange<Int>
+        let target: Int
+        let text: String
+
+        init(_ screen: Screen, _ id: String, _ scale: ClosedRange<Int>, _ target: Int, _ text: String) {
+            (self.screen, self.id, self.scale, self.target, self.text) = (screen, id, scale, target, text)
+        }
+    }
+
+    private static func slider(_ fn: String, _ what: String, _ value: String) -> SliderAction? {
+        guard let n = Int(value) else { return nil }
+        switch (fn, what) {
+        case ("cooler", "level"): return SliderAction(.tile("Cooler"), "cooler.level", 1...5, n, value)
+        case ("airheater", "level"):
+            let text = n == 10 ? "HI" : "Level \(n)"
+            return SliderAction(.tile("Air heater"), "heater.temperature", 1...10, n, text)
+        case ("airheater", "runtime"):
+            return SliderAction(.tile("Air heater"), "heater.runTime", 10...120, n, "\(n)\u{00A0}min")
+        case ("lighting", _) where lamps[what] != nil:
+            return SliderAction(.tile("Lighting"), "lighting.\(what)", 0...10, n, n == 0 ? "Off" : value)
+        default: return nil
+        }
+    }
+
     /// The screen, the menu's name and the option's text of a menu action; nil for any other action.
     private static func menu(_ fn: String, _ what: String, _ value: String) -> (Screen, String, String)? {
-        let nbsp = "\u{00A0}"
         switch (fn, what) {
-        case ("cooler", "level"): return (.tile("Cooler"), "Cooling level", value)
         case ("cooler", "mode"):
             let labels = ["normal": "Off", "quiet": "Manual", "timer_quiet": "Automatic"]
             return labels[value].map { (.tile("Cooler"), "Quiet mode", $0) }
-        case ("airheater", "level"): return (.tile("Air heater"), "Heating temperature", value == "10" ? "HI" : "Level \(value)")
-        case ("airheater", "runtime"): return (.tile("Air heater"), "Run time", "\(value)\(nbsp)min")
         case ("energy", "mode"):
             let labels = ["normal": "Normal", "max_charge": "Max", "eco": "ECO"]
             return labels[value].map { (.tab("Energy"), "Energy mode", $0) }
-        case ("lighting", _):
-            return lamps[what].map { (.tile("Lighting"), $0, value == "0" ? "Off" : value) }
         default: return nil
         }
     }
@@ -194,6 +216,23 @@ final class LabControlUITests: XCTestCase {
         XCTAssertTrue(applied.waitForExistence(timeout: 20), "menu shows \(option)")
     }
 
+    /// Drags the slider to its target in one move (one command, sent when the drag ends), then waits
+    /// until it shows the target's text (the unit's feedback).
+    @MainActor
+    private func runSlider(_ app: XCUIApplication, _ a: SliderAction) throws {
+        open(app, a.screen)
+        let slider = app.sliders[a.id]
+        XCTAssertTrue(slider.waitForExistence(timeout: 10), "slider \(a.id)")
+        XCTAssertTrue(reveal(app, slider), "slider \(a.id) on screen")
+        shot(app, "before")
+        if slider.value as? String == a.text { throw XCTSkip("\(a.id) is already \(a.text)") }
+        let span = CGFloat(a.scale.upperBound - a.scale.lowerBound)
+        slider.adjust(toNormalizedSliderPosition: CGFloat(a.target - a.scale.lowerBound) / span)
+        confirmIfAsked(app)
+        let shown = expectation(for: NSPredicate(format: "value == %@", a.text), evaluatedWith: slider)
+        XCTAssertEqual(XCTWaiter().wait(for: [shown], timeout: 20), .completed, "slider shows \(a.text)")
+    }
+
     /// Turns the switch `label` on or off, then waits until it shows the new state.
     @MainActor
     private func runSwitch(_ app: XCUIApplication, _ screen: Screen, _ label: String, on: Bool) throws {
@@ -284,9 +323,7 @@ final class LabControlUITests: XCTestCase {
                 return
             }
             if parts[1] == "lost" {
-                let live = app.staticTexts["live"]
-                let gone = NSPredicate(format: "exists == false")
-                expectation(for: gone, evaluatedWith: live)
+                expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["live"])
                 waitForExpectations(timeout: 60)
                 shot(app, "link-lost")
             } else {
@@ -305,6 +342,8 @@ final class LabControlUITests: XCTestCase {
             XCTAssertTrue(button.waitForExistence(timeout: 10), "favourite \(fav)")
             shot(app, "before")
             button.tap()
+        } else if let a = Self.slider(fn, what, value) {
+            try runSlider(app, a)
         } else if let (screen, name, option) = Self.menu(fn, what, value) {
             try runMenu(app, screen, name, option)
         } else {
