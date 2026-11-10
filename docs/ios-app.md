@@ -92,9 +92,15 @@ itself when it comes back.
 :tags: ios
 
 The app shows the unit's status (batteries, energy, water, temperatures, vehicle) and controls
-camping mode (master, lights, rear USB), lighting (on/off, zones, favourites), the cooler, the air
-heater and the energy mode, plus a device-status screen. It shows the same verified fields, with
-the same labels and units, as the web UI.
+camping mode (master, lights, rear USB), lighting (on/off, zones, favourites, the wake-up light and
+the sliding-door light), the cooler, the air heater and the energy mode, plus a device-status
+screen. It shows the same verified fields, with the same labels and units, as the web UI.
+
+The wake-up light card sends the whole config with each change, as the VW app does. The time goes
+out only when the user taps OK in the time sheet, so turning the wheel sends nothing. While the
+unit has not reported its wake-up config, only the time is live: it goes out alone, and the app
+pulls the unit's config before it plans the frame. A wake-up change counts as applied only when
+the unit's Mode-20 report shows the sent values.
 ```
 
 ```{req} No pop-top roof in phase 1

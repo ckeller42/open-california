@@ -2,8 +2,9 @@ import CaliBLE
 import SwiftUI
 
 /// Lighting like the web UI's `renderLighting`: "All lights", the favourite tiles A–D and the lamps
-/// grouped like the app, each a brightness 0–10. A favourite the unit reports empty cannot be
-/// recalled. Only the `1502` notification confirms a lighting command; else "Sent — check the lamp".
+/// grouped like the app, each a brightness 0–10, then the wake-up light and the sliding-door light
+/// (`LightingFunctions`). A favourite the unit reports empty cannot be recalled. Only the `1502`
+/// notification confirms a lighting command; else "Sent — check the lamp".
 ///
 /// - Requirement: R_IOS_FUNCTIONS, R_IOS_HONEST, R_IOS_I18N
 struct LightsView: View {
@@ -118,6 +119,7 @@ struct LightsView: View {
                     }
                 }
             }
+            LightingFunctions(store: store, run: run)
         }
     }
 

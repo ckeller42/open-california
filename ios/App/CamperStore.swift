@@ -454,10 +454,16 @@ enum Fixture: String, CaseIterable {
     /// 5 h earlier for `staleRestore`).
     func state(now: Date) -> CamperState {
         var st = CamperState()
+        // Camping on: the unit has reported its wake-up light (06:45, areas 1 + 3, brightness 7, 20 min
+        // lead, on; colour 1) and the sliding-door light (on), as the session's latch holds them.
+        if self == .campingOn {
+            st.lightConfig = ["WakeupTimestamp": 6 * 3600 + 45 * 60, "WakeupLightValue": 0x1575, "DoorContact": 1]
+        }
         for (fn, bytes) in frames {
             guard let fields = try? CaliCodec.decode(function: fn, bytes: bytes) else { continue }
             st.fields[fn] = fields
-            st.interpreted[fn] = try? Semantics.shared.interpret(function: fn, fields: fields)
+            let shown = fn == "lighting" ? fields.merging(st.lightConfig) { _, latch in latch } : fields
+            st.interpreted[fn] = try? Semantics.shared.interpret(function: fn, fields: shown)
         }
         st.interpreted = (try? applySwCorrections(st.interpreted)) ?? st.interpreted
         st.gate = ProtocolGate(general: st.fields["general"])

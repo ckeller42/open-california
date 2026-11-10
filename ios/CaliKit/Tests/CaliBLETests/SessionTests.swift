@@ -730,7 +730,8 @@ struct StoreGuardTests {
         try await Task.sleep(for: .milliseconds(50))
         let after = await r.s.state
         #expect(after.fields["lighting"] == before.fields["lighting"])
-        #expect(after.interpreted["lighting"] == before.interpreted["lighting"])
+        let zones = { (s: CamperState) in s.interpreted["lighting"]?.filter { $0.key.hasPrefix("brightness") } }
+        #expect(zones(after) == zones(before) && after.interpreted["lighting"]?["wakeup"] != .null)  // + the latch
         #expect(after.lightConfig["WakeupLightValue"] == 0x0101)
 
         // A later lamp-state frame replaces them.

@@ -559,19 +559,21 @@ public actor CamperSession {
             }
         }
         state.liveFunctions.insert(fn)
+        var stored = fields
         if fn == "lighting" {
             // A read or a push of the unit's own frame: never one of our writes (R4). A config or ack frame
             // only feeds the latch and keeps the stored lamps (#284, session.c `keep`).
             state.lightConfig = CaliControl.lightConfig(previous: state.lightConfig, frame: fields)
             if !CaliControl.lightReportsState(fields), let kept = state.fields[fn], CaliControl.lightReportsState(kept) {
-                state.asOf = Date()
-                publish()
-                return
+                stored = kept
             }
         }
-        state.fields[fn] = fields
+        state.fields[fn] = stored
+        // The screen reads the lighting latch like the lamps: wake-up, door contact and the stored
+        // favourites (serve carries the keys over; the satellite adds them to its state, session.c).
+        let interpreted = fn == "lighting" ? stored.merging(state.lightConfig) { _, latch in latch } : stored
         do {
-            uncorrected[fn] = try semantics.interpret(function: fn, fields: fields)
+            uncorrected[fn] = try semantics.interpret(function: fn, fields: interpreted)
             state.semanticsErrors[fn] = nil
         } catch {
             uncorrected[fn] = nil

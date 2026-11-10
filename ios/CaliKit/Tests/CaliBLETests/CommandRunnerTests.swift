@@ -165,6 +165,50 @@ struct CommandRunnerTests {
         #expect(await t.value == .applied)
     }
 
+    /// A config frame (wake-up Mode 20, door contact Mode 16 / PN 8) keeps the stored lamps, and the
+    /// screen state reads the latch: the wake-up config and the door contact show, and the unit's
+    /// door-contact report confirms a `door_contact` command.
+    /// - Test: T_IOS_LIGHT_CONFIG_SHOWN
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST, R_IOS_FUNCTIONS
+    @Test func configFramesReachTheScreenStateAndConfirm() async throws {
+        let r = Rig()
+        try await r.warm()
+        await r.fake.pushForeign(char: Fx.lighting, bytes: Fx.lightsAt5(pn: 9, mode: 4))
+        await r.fake.pushForeign(char: Fx.lighting, bytes: Fx.wakeup)
+        try await until("wake-up shown") { await r.s.state.interpreted["lighting"]?["wakeup"] != nil }
+        guard case .object(let w)? = await r.s.state.interpreted["lighting"]?["wakeup"] else { return }
+        #expect(w["enabled"] == .bool(true) && w["areas"] == .array([.number(1)]))
+        #expect(await r.s.state.fields["lighting"]?["BrightnessLOne"] == 5)  // the lamps stay
+
+        let t = r.start(Command(function: "lighting", what: "door_contact", value: "on"))
+        try await until("door frame") { await r.commandWrites().count >= 1 }
+        let door: [UInt8] = [8, 16, 0, 0, 0, 0, 0, 1, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee]
+        await r.fake.pushForeign(char: Fx.lighting, bytes: door)
+        #expect(try await r.finish(t) == .applied)
+        #expect(await r.s.state.interpreted["lighting"]?["door_contact"] == .bool(true))
+        #expect(await r.s.state.fields["lighting"]?["BrightnessLOne"] == 5)
+    }
+
+    /// A wake-up change counts only when the unit's reported config shows each sent value (the web
+    /// UI's `expectedState`); an edit without on/off does not check the switch.
+    /// - Test: T_IOS_CMD_WAKEUP_CONFIRM
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
+    @Test func wakeUpConfirmsOnlyTheReportedValues() {
+        let w: JSONValue = .object([
+            "time": .string("06:45"), "enabled": .bool(true), "ramp": .number(20), "brightness": .number(7),
+            "areas": .array([.number(1), .number(3)]),
+        ])
+        #expect(CamperSession.wakeupConfirms("06:45 3,1 7 20 on", w))
+        #expect(CamperSession.wakeupConfirms("06:45 1,3 7 20", w))
+        #expect(CamperSession.wakeupConfirms("06:45", w))
+        #expect(!CamperSession.wakeupConfirms("06:45 1,3 7 20 off", w))
+        #expect(!CamperSession.wakeupConfirms("07:00 1,3 7 20", w))
+        #expect(!CamperSession.wakeupConfirms("06:45 1 7 20", w))
+        #expect(!CamperSession.wakeupConfirms("06:45 1,3 6 20", w))
+        #expect(!CamperSession.wakeupConfirms("06:45 1,3 7 10", w))
+        #expect(!CamperSession.wakeupConfirms("06:45", nil))
+    }
+
     /// The write-through echo on the state char, read back, is not proof.
     /// - Test: T_IOS_CMD_READBACK_NOT_APPLIED
     /// - Verifies: R_IOS_TESTED, R_IOS_HONEST

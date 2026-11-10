@@ -221,8 +221,9 @@ extension CamperSession {
 
     /// Does this pushed state show the command's target? A port of calictl `postcheck.set_check` for
     /// the functions this app writes. Lighting counts only on a lamp-state frame (Mode 4 outside
-    /// favourite 1-7, Mode 16 outside door contact: `cali_light_reports_state`). A command without
-    /// a check here (a single zone, wake-up, favourite save, energy) is never `applied`, only `sent`.
+    /// favourite 1-7, Mode 16 outside door contact: `cali_light_reports_state`); the wake-up light
+    /// on the unit's Mode-20 report. A command without a check here (a single zone, favourite save,
+    /// energy) is never `applied`, only `sent`.
     static func confirms(_ cmd: Command, _ st: CamperState) -> Bool {
         let f = st.fields[cmd.function] ?? [:]
         let i = st.interpreted[cmd.function] ?? [:]
@@ -240,6 +241,7 @@ extension CamperSession {
         case ("airheater", "timer_start"): return i["timer_armed"] == .bool(true)
         case ("airheater", "timer_cancel"): return i["timer_armed"] == .bool(false)
         case ("lighting", "door_contact"): return i["door_contact"] == .bool(on)
+        case ("lighting", "wakeup"): return wakeupConfirms(cmd.value ?? "", i["wakeup"])
         case ("lighting", let what):
             guard CaliControl.lightReportsState(f) else { return false }
             switch what {
@@ -254,5 +256,25 @@ extension CamperSession {
             }
         default: return false
         }
+    }
+
+    /// Does the unit's reported wake-up config show what `lighting wakeup <value>` asked for? The web
+    /// UI's `expectedState`: the time, the switch (when sent) and each sent positional
+    /// (`areas brightness ramp`) must match.
+    static func wakeupConfirms(_ value: String, _ w: JSONValue?) -> Bool {
+        guard case .object(let o)? = w else { return false }
+        let tk = value.split(separator: " ").map(String.init)
+        let pos = tk.filter { $0 != "on" && $0 != "off" && !$0.contains(":") }
+        if let t = tk.first(where: { $0.contains(":") }), o["time"] != .string(t) { return false }
+        if tk.contains("on") && o["enabled"] != .bool(true) || tk.contains("off") && o["enabled"] != .bool(false) {
+            return false
+        }
+        if pos.count > 0 {
+            let want = pos[0].split(separator: ",").compactMap { Double($0) }.sorted().map(JSONValue.number)
+            guard o["areas"] == .array(want) else { return false }
+        }
+        if pos.count > 1, o["brightness"] != Double(pos[1]).map(JSONValue.number) { return false }
+        if pos.count > 2, o["ramp"] != Double(pos[2]).map(JSONValue.number) { return false }
+        return true
     }
 }

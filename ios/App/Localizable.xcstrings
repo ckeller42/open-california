@@ -120,6 +120,23 @@
         }
       }
     },
+    "%lld min": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Min."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld min"
+          }
+        }
+      }
+    },
     "%lld min ago": {
       "extractionState": "manual",
       "localizations": {
@@ -694,6 +711,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bluetooth trace"
+          }
+        }
+      }
+    },
+    "Brightness": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helligkeit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brightness"
           }
         }
       }
@@ -1922,6 +1956,23 @@
         }
       }
     },
+    "Kitchen background lighting": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambientelicht Küche"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kitchen background lighting"
+          }
+        }
+      }
+    },
     "Last update": {
       "extractionState": "manual",
       "localizations": {
@@ -1952,6 +2003,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last value"
+          }
+        }
+      }
+    },
+    "Lead time": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorlaufzeit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lead time"
           }
         }
       }
@@ -2024,6 +2092,23 @@
         }
       }
     },
+    "Lighting & sliding door": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licht & Schiebetür"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lighting & sliding door"
+          }
+        }
+      }
+    },
     "Lighting: sent, check the lamp": {
       "extractionState": "manual",
       "localizations": {
@@ -2054,6 +2139,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lights off when front doors open"
+          }
+        }
+      }
+    },
+    "Living area reading lights": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leselichter Wohnraum"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Living area reading lights"
           }
         }
       }
@@ -2296,6 +2398,23 @@
         }
       }
     },
+    "OK": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
     "Off": {
       "extractionState": "manual",
       "localizations": {
@@ -2432,6 +2551,23 @@
         }
       }
     },
+    "Opening sliding door activates the rear interior lights.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beim Öffnen der Schiebetür wird die hintere Innenbeleuchtung eingeschaltet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening sliding door activates the rear interior lights."
+          }
+        }
+      }
+    },
     "Pair again…": {
       "extractionState": "manual",
       "localizations": {
@@ -2564,6 +2700,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pop-up roof"
+          }
+        }
+      }
+    },
+    "Pop-up roof background lighting": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambientelicht Aufstelldach"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pop-up roof background lighting"
+          }
+        }
+      }
+    },
+    "Pop-up roof reading lights": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leselichter Aufstelldach"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pop-up roof reading lights"
           }
         }
       }
@@ -4166,6 +4336,23 @@
         }
       }
     },
+    "Vehicle area": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fahrzeugbereich"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vehicle area"
+          }
+        }
+      }
+    },
     "Vehicle power": {
       "extractionState": "manual",
       "localizations": {
@@ -4196,6 +4383,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting for the camper unit's data"
+          }
+        }
+      }
+    },
+    "Wake-up brightness": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weckhelligkeit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wake-up brightness"
+          }
+        }
+      }
+    },
+    "Wake-up light": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wecklicht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wake-up light"
+          }
+        }
+      }
+    },
+    "Wake-up settings not known yet — the unit has not reported them": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wecklicht-Einstellungen noch nicht bekannt — die Einheit hat sie nicht gemeldet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wake-up settings not known yet — the unit has not reported them"
+          }
+        }
+      }
+    },
+    "Wake-up time": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weckzeit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wake-up time"
           }
         }
       }

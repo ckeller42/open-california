@@ -61,6 +61,29 @@ struct CommandMappingTests {
             ])
     }
 
+    /// The wake-up light sends the web UI's `wakeCmd` value: `HH:MM areas brightness ramp`, plus
+    /// `on`/`off` only from the switch; with no config reported, the time alone. The sliding-door
+    /// row sends `lighting door_contact on|off`. The unit's config object parses; a missing one is nil.
+    ///
+    /// - Test: T_IOS_CMD_WAKEUP_DOOR
+    /// - Verifies: R_IOS_FUNCTIONS, R_IOS_HONEST
+    @Test func wakeUpAndDoorSendTheWebValues() {
+        let w = WakeUp(time: "06:45", enabled: true, ramp: 20, brightness: 7, areas: [1, 3])
+        #expect(LightingFunctions.wakeup(w) == Command(function: "lighting", what: "wakeup", value: "06:45 1,3 7 20"))
+        #expect(
+            LightingFunctions.wakeup(w, on: false) == Command(function: "lighting", what: "wakeup", value: "06:45 1,3 7 20 off"))
+        #expect(LightingFunctions.wakeupTime("07:00") == Command(function: "lighting", what: "wakeup", value: "07:00"))
+        #expect(LightingFunctions.doorContact(true) == Command(function: "lighting", what: "door_contact", value: "on"))
+        #expect(LightingFunctions.areas.count == 4 && LightingFunctions.leadTimes == [0, 10, 20, 30])
+        let reported: JSONValue = .object([
+            "time": .string("06:45"), "enabled": .bool(true), "ramp": .number(20), "brightness": .number(7),
+            "areas": .array([.number(1), .number(3)]), "colour": .number(1), "hour": .number(6), "minute": .number(45),
+        ])
+        #expect(WakeUp(reported) == w)
+        #expect(WakeUp(nil) == nil && WakeUp(.null) == nil)
+        #expect(LightingFunctions.hhmm(LightingFunctions.date("06:05")) == "06:05")
+    }
+
     /// The cooler and the energy mode (app.js FEATURES.cooler / FEATURES.energy).
     ///
     /// - Test: T_IOS_CMD_COOLER_ENERGY
