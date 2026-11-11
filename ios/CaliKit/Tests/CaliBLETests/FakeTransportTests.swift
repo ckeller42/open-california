@@ -39,6 +39,28 @@ struct FakeTransportTests {
         #expect(acks == [true, true, false, true])
     }
 
+    /// Only the exact frame gets the reply: a subscribed state char is pushed and read back.
+    ///
+    /// - Test: T_IOS_FAKE_REPLY
+    /// - Verifies: R_IOS_TESTED
+    @Test func exactWriteGetsTheUnitsReply() async throws {
+        let t = FakeCamperTransport(
+            frames: [Self.general: [0xC0, 0x01]], replies: [(0x1202, [1], Self.general, [0xC0, 0x02])])
+        await t.connect()
+        try await t.subscribe([Self.general])
+        try await t.write(0x1202, [2])
+        #expect(try await t.read(Self.general) == [0xC0, 0x01])
+        try await t.write(0x1202, [1])
+        #expect(try await t.read(Self.general) == [0xC0, 0x02])
+        var it = t.events.makeAsyncIterator()
+        while let e = await it.next() {
+            if case .notified(let c, let b) = e {
+                #expect(c == Self.general && b == [0xC0, 0x02])
+                break
+            }
+        }
+    }
+
     /// - Test: T_IOS_FAKE_HANGUP
     /// - Verifies: R_IOS_TESTED, R_IOS_POWER_SAVE
     @Test func hangUpEmitsRemoteHangUp() async throws {

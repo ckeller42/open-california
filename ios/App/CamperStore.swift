@@ -442,8 +442,22 @@ enum Fixture: String, CaseIterable {
         // One unit in range for the pairing guide's scan (the UI tests pick it).
         let unit = PairingCandidate(
             id: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!, name: CamperGATT.deviceName, rssi: -60)
-        return FakeCamperTransport(frames: byChar, candidates: [unit])
+        return FakeCamperTransport(frames: byChar, candidates: [unit], replies: Self.coolerReplies)
     }
+
+    /// The cooler as `tools/mock_unit.py` reacts to the app's exact frames, one step after the other:
+    /// on (`0843…` → `0943…`), level 5 (→ `0945…`), quiet mode Manual (→ `0925…`). The UI test
+    /// `testCoolerRoundTripOnTheFake` drives these; a frame that is not byte for byte the same gets
+    /// no reply, and the screen never shows the change.
+    private static let coolerReplies: [FakeCamperTransport.Reply] = {
+        guard let control = CamperGATT.controlChars["cooler"], let state = CamperGATT.stateChars["cooler"] else { return [] }
+        let steps: [([UInt8], [UInt8])] = [
+            ([0xfd, 0x77, 0x1e, 0x3e, 0x1f, 0x1f], [0x09, 0x43, 0, 0, 0, 0, 0, 0]),
+            ([0xff, 0x75, 0x1e, 0x3e, 0x1f, 0x1f], [0x09, 0x45, 0, 0, 0, 0, 0, 0]),
+            ([0xff, 0x27, 0x1e, 0x3e, 0x1f, 0x1f], [0x09, 0x25, 0, 0, 0, 0, 0, 0]),
+        ]
+        return steps.map { (control, $0.0, state, $0.1) }
+    }()
 
     /// A session over `makeTransport()`.
     func makeSession() -> CamperSession {

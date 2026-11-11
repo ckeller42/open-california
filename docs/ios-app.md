@@ -247,6 +247,24 @@ job. The two manual tiers have their own checklists: {doc}`ios-app-radio-checkli
 iPhone against the fake unit peripheral and the van) and {doc}`ios-app-siri-checklist` (Siri in
 English and German).
 
+The simulator has no Bluetooth, so the UI tests in CI run over the fake transport. The fake answers
+a few exact control frames of the cooler with the state frame that `tools/mock_unit.py` sends for
+them. One UI test turns the cooler on, sets level 5 and picks the quiet mode "Manual", and waits
+each time until the control shows the unit's answer. A wrong frame gets no answer, so the test
+also checks the bytes the app sends.
+
+```{decision} A reply table, not a second unit model
+:id: AD_IOS_FAKE_REPLIES
+:status: accepted
+:tags: ios
+:links: R_IOS_TESTED
+
+The fake transport answers a short table of exact frames instead of modelling the unit in Swift.
+A Swift unit model would be a third copy of the behaviour in `tools/mock_unit.py` and the C core,
+and it could drift from them. The web UI's end-to-end tests run against `tools/mock_unit.py`
+itself.
+```
+
 The app can record its Bluetooth traffic in the format of `calictl`'s BLE trace, so
 `python3 -m tools.trace_compare` replays an iPhone session like a trace from buspi.
 

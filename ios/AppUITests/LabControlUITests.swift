@@ -5,6 +5,7 @@ import XCTest
 /// (`TEST_RUNNER_LAB_ACTION=cooler.power.off xcodebuild test-without-building …`), so a driver can
 /// mark each action in the fake unit's record and `tools/capture_diff.py --recording` can check the
 /// app's frame byte for byte. Without `LAB_ACTION` the test skips: CI and the simulator never run it.
+/// `testCoolerRoundTripOnTheFake` uses the same helpers in CI, over the fixture's fake unit.
 ///
 /// Actions:
 /// - `<function>.<what>.<on|off>` for a switch (camping mode, its lights and USB, the refrigerator
@@ -285,6 +286,25 @@ final class LabControlUITests: XCTestCase {
         shot(app, "repaired")
         close.tap()
         XCTAssertTrue(waitLive(app, 30), "a live link after pairing again")
+    }
+
+    /// CI's round trip over the fake unit (`-UITestFixture campingOn`): a switch, a slider and a menu
+    /// of the cooler. The fake answers only the exact frames in `Fixture.coolerReplies`, so each control
+    /// shows its new state only if the app sent the right bytes and read the unit's answer.
+    ///
+    /// - Test: T_IOS_UI_ROUNDTRIP
+    /// - Verifies: R_IOS_TESTED, R_IOS_HONEST
+    @MainActor
+    func testCoolerRoundTripOnTheFake() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestFixture", "campingOn", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let back = { app.navigationBars.buttons.element(boundBy: 0).tap() }
+        try runSwitch(app, .tile("Cooler"), "Refrigerator box", on: true)
+        back()
+        try runSlider(app, SliderAction(.tile("Cooler"), "cooler.level", 1...5, 5, "5"))
+        back()
+        try runMenu(app, .tile("Cooler"), "Quiet mode", "Manual")
     }
 
     @MainActor

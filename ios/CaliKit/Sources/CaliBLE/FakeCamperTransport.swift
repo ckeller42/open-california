@@ -9,10 +9,15 @@ import Foundation
 ///
 /// - Requirement: R_IOS_BLE_DIRECT, R_IOS_POWER_SAVE
 public actor FakeCamperTransport: CamperTransport {
-    public struct Write: Sendable, Equatable {
+    public struct Write: Sendable, Hashable {
         public let char: UInt16
         public let bytes: [UInt8]
     }
+
+    /// The unit's reaction to one exact control frame: after an ACKed write of `frame` to `control`,
+    /// it changes `state` to `bytes` and pushes them like `seed`. Any other write changes nothing.
+    public typealias Reply = (control: UInt16, frame: [UInt8], state: UInt16, bytes: [UInt8])
+    private let replies: [Write: Reply]
 
     public nonisolated let events: AsyncStream<TransportEvent>
     private let sink: AsyncStream<TransportEvent>.Continuation
@@ -41,8 +46,9 @@ public actor FakeCamperTransport: CamperTransport {
 
     public init(
         clock: any Clock<Duration> = ContinuousClock(), frames: [UInt16: [UInt8]] = [:],
-        candidates: [PairingCandidate] = []
+        candidates: [PairingCandidate] = [], replies: [Reply] = []
     ) {
+        self.replies = Dictionary(replies.map { (Write(char: $0.control, bytes: $0.frame), $0) }) { $1 }
         (events, sink) = AsyncStream.makeStream()
         self.clock = clock
         self.frames = frames
@@ -227,6 +233,7 @@ public actor FakeCamperTransport: CamperTransport {
             throw TransportError.writeRejected
         }
         sink.yield(.written(char: char, ok: true))
+        if let r = replies[Write(char: char, bytes: bytes)] { seed(r.state, r.bytes) }
     }
 
     /// Like the real transport: Bluetooth off throws, an empty scan throws `.noUnitFound`; strongest first.
