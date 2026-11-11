@@ -942,6 +942,7 @@ def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale):
     with error_gated_page(stub.base, locale=locale) as pg:
         pg.clock.install()  # the 20 s below pass on the page clock
         pg.reload()
+        loaded = pg.evaluate("Date.now()")
         conn = pg.locator("#conn")
         expect(conn.locator("strong.rest-head")).to_have_text(w["head"])
         expect(conn).to_contain_text(w["body"])
@@ -952,15 +953,18 @@ def test_rest_card_says_why_and_reconnects(stub, error_gated_page, locale):
         expect(pg.locator("#status")).to_have_text(w["pill"])
         for name in (w["camping"], w["reconnect"]):
             assert conn.get_by_role("button", name=name).bounding_box()["height"] >= 44
-        # the stub's fixed age makes "Last data HH:MM" move at each minute: stay clear of that rebuild.
-        # The shown minute is the last poll's (up to a few s old on a loaded runner), so not just after :00
-        pg.wait_for_function(
-            "() => { const s = new Date().getSeconds(); return s >= 10 && s < 45; }", timeout=35000
-        )
+        # The run must end before the full-state refresh 60 s after the load (STATE_REFRESH_MS): its 200
+        # reloads the stub's fixed state (countdown and last_seen) and rebuilds the card.
+        assert pg.evaluate("Date.now()") - loaded < 35000, "the checks took too long for the 20 s run"
         btn = conn.get_by_role("button", name=w["reconnect"]).element_handle()
         # 20 s later: the state is unchanged (each poll a 304, R_FW_STATE_ETAG) and the page counts the
         # rest down itself; the count moves, the card is not rebuilt
-        pg.clock.run_for(20000)
+        # In 2 s steps (STATE_POLL_MS: one poll each), each waiting until its poll has finished: Playwright
+        # 1.65 fires all the timers of one run_for without waiting for the network, so in one 20 s run
+        # each poll's 8 s abort (POLL_TIMEOUT_MS) fires before the stub answers ("not reachable").
+        for _ in range(10):
+            with pg.expect_event("requestfinished", lambda r: "/api/state" in r.url):
+                pg.clock.run_for(2000)
         expect(conn.locator(".rest-next")).to_have_text(w["next"].replace("25", "24"))
         assert btn.evaluate("b => b.isConnected")
         link["rest_next_s"] = None  # the rest poll switched off: a real change (rest_poll_min)
