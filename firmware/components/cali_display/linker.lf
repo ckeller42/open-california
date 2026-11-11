@@ -1,0 +1,10 @@
+# cali_display's static data (.bss) in PSRAM (CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY), as cali_core's:
+# the owner and LVGL tasks alone use it (models, QR modules); the LCD DMA reads only
+# esp_lvgl_port's own draw buffer, never this data.
+[mapping:cali_display_extram]
+archive: libcali_display.a
+entries:
+    if SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY = y:
+        * (extram_bss)
+    else:
+        * (default)

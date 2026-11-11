@@ -1,0 +1,10 @@
+# cali_lora's static data (.bss) in PSRAM (CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY), as cali_core's:
+# the LoRa task and its UART reader run in tasks only; the UART driver copies every buffer,
+# no ISR and no DMA engine reads this data.
+[mapping:cali_lora_extram]
+archive: libcali_lora.a
+entries:
+    if SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY = y:
+        * (extram_bss)
+    else:
+        * (default)
