@@ -93,7 +93,7 @@ typedef struct cali_http_req {
  * baked into the image: a reflash must show on the next load). Without it the headers are
  * unchanged. A cache_control (e.g. "max-age=86400" for a static icon) is sent as
  * `Cache-Control: <it>`, replacing that no-cache. An etag (a quoted strong validator, e.g.
- * `"\"0123456789abcdef\""`) adds `ETag: <it>`. When the answer is 200 and the request's
+ * `"0123456789abcdef"`, quotes included) adds `ETag: <it>`. When the answer is 200 and the request's
  * If-None-Match is "*" or lists the etag, the core sends 304 Not Modified instead: no body, no
  * Content-Type or Content-Length, the ETag and Cache-Control kept.
  */
