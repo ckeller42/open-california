@@ -965,8 +965,9 @@ driver's code runs from flash (`CONFIG_ESP_WIFI_IRAM_OPT=n`, `CONFIG_ESP_WIFI_RX
 and an OTA download take as long as with it in IRAM, because the 100 ms HTTP pump and the WiFi modem
 sleep that BT coexistence requires set the pace. The BT controller's code stays in IRAM. The build has
 no IPv6, no WPA2-Enterprise and no WPA3 OWE (WPA3-SAE stays): no network the satellite joins needs
-them. This keeps about 135 KB of internal heap free at idle and about 85 KB at the low point of an
-OTA download.
+them. On the bench (a CoreS3 with LoRa and the sensors on, but no camper link and no SD card) this
+leaves about 135 KB of internal heap free at idle and about 85 KB at the low point of an OTA download;
+the van's own figures are in `res` of `/api/state?diag=1`.
 
 ## Time (`R_FW_TIME`)
 
