@@ -80,6 +80,7 @@
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "nvs.h"
@@ -592,7 +593,11 @@ void app_main(void) {
     cali_sensors_init();      /* the configured sensor list (NVS sens_list, R_FW_SENSORS) */
     cali_thermo_run_init();   /* the thermostat switch (NVS th_on, missing = off); mode OFF (R_FW_THERMOSTAT_RUN) */
 
-    s_lines = xQueueCreate(NLINES, LINE_MAX_LEN);
+#if CONFIG_SPIRAM
+    s_lines = xQueueCreateWithCaps(NLINES, LINE_MAX_LEN, MALLOC_CAP_SPIRAM);   /* 2 KB: tasks only */
+#else
+    s_lines = xQueueCreate(NLINES, LINE_MAX_LEN);   /* the QEMU image: no PSRAM */
+#endif
     configASSERT(s_lines != NULL);
 
 #if CONFIG_CALI_QEMU_PROBE

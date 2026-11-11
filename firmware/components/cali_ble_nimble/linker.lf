@@ -1,0 +1,10 @@
+# cali_ble_nimble's static data (.bss) in PSRAM (CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY), as cali_core's:
+# the NimBLE host task alone uses it (GATT tables, the bond store); NVS copies a blob before
+# the cache goes off, and the BT controller never reads host memory directly.
+[mapping:cali_ble_nimble_extram]
+archive: libcali_ble_nimble.a
+entries:
+    if SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY = y:
+        * (extram_bss)
+    else:
+        * (default)

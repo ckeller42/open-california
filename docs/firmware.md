@@ -953,8 +953,20 @@ Static data lives in PSRAM too (`CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY`): 
 of lwIP, the WiFi driver and Bluetooth by itself, and `firmware/components/cali_core/linker.lf` moves
 `cali_core`'s (the web, console and SD-log buffers and the per-function `static` buffers). The
 platform-free core runs only in tasks, never in an interrupt or with the flash cache off, and hands no
-buffer to a DMA engine directly, so PSRAM is safe for it. This keeps about 85 KB of internal heap free
-at idle and about 40 KB at the low point of an OTA download.
+buffer to a DMA engine directly, so PSRAM is safe for it. The same `linker.lf` rule in `cali_lora`,
+`cali_ble_nimble` and `cali_display` moves theirs: they too run only in tasks, the UART driver and NVS
+copy their buffers, and the LCD DMA reads only the LVGL port's own draw buffer.
+
+Heap objects follow the same rule. IDF serves every `malloc` below 16 KB from internal RAM, so LVGL's
+objects go through `cali_display/lv_mem_psram.c` (`CONFIG_LV_USE_CUSTOM_MALLOC`, PSRAM first), the
+LoRa and console queues are created in PSRAM (`xQueueCreateWithCaps`), and mDNS keeps its task stack
+and records there (`CONFIG_MDNS_TASK_CREATE_FROM_SPIRAM`, `CONFIG_MDNS_MEMORY_ALLOC_SPIRAM`). The WiFi
+driver's code runs from flash (`CONFIG_ESP_WIFI_IRAM_OPT=n`, `CONFIG_ESP_WIFI_RX_IRAM_OPT=n`): the page
+and an OTA download take as long as with it in IRAM, because the 100 ms HTTP pump and the WiFi modem
+sleep that BT coexistence requires set the pace. The BT controller's code stays in IRAM. The build has
+no IPv6, no WPA2-Enterprise and no WPA3 OWE (WPA3-SAE stays): no network the satellite joins needs
+them. This keeps about 135 KB of internal heap free at idle and about 85 KB at the low point of an
+OTA download.
 
 ## Time (`R_FW_TIME`)
 
@@ -2103,7 +2115,9 @@ record's `stack_min`. Its high-water mark on the van is 5180 B free of 8192.
 in PSRAM (`CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`, `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP`, 8 static WiFi
 TX buffers) so the internal heap is not exhausted, and software AES (`CONFIG_MBEDTLS_HARDWARE_AES=n`,
 no internal DMA buffers), and the static `.bss` of the network stack and `cali_core` in PSRAM
-(`CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY`, `cali_core/linker.lf`) ([Firmware update from GitHub](#firmware-update-from-github-r_fw_ota)); `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040`
+(`CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY`, the `linker.lf` of `cali_core`, `cali_lora`,
+`cali_ble_nimble` and `cali_display`), LVGL's heap, the LoRa and console queues and mDNS in PSRAM, the
+WiFi driver's code in flash, no IPv6, WPA2-Enterprise or WPA3 OWE ([Firmware update from GitHub](#firmware-update-from-github-r_fw_ota)); `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040`
 (the UI transfer speed, [Endpoints](#network-wifi-setup-and-the-web-ui)); `CONFIG_LWIP_MAX_SOCKETS=6`;
 `CONFIG_ESP_WIFI_NVS_ENABLED=n` (the credentials are in the firmware's kv store);
 `CONFIG_LWIP_DHCP_GET_NTP_SRV=y` with two SNTP servers ([Time](#time-r_fw_time)).
