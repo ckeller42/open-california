@@ -1,4 +1,4 @@
-playwright
+playwright==1.64.1   # pinned: 1.65.0 breaks tests/e2e (clock.run_for fires the timers without waiting for the network, see #536)
 pytest
 pyyaml
 segno            # tests/e2e/test_remote_setup.py: the van's QR codes as images
