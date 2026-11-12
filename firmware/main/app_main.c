@@ -646,6 +646,9 @@ void app_main(void) {
     const cali_transport_t *ble = err == ESP_OK ? cali_ble_nimble_transport() : &s_no_ble;
     s_ble = ble;              /* before the tick timer starts */
     cali_ota_esp_verify_begin();   /* a fresh image's verdict, read on every tick (R_FW_OTA) */
+    /* not pending at boot (or its state unreadable): this run never marks the slot, so a state read
+     * that succeeds later cannot confirm an image past the verdict's checks */
+    s_ota_confirmed = cali_ota_verify() != CALI_OTA_VERIFY_PENDING;
     wifi_init(ble);
 #if CONFIG_CALI_DISPLAY
     if (cali_display_init(ble) == 0) cali_sdcard_esp_start();   /* -1: no screen (and no SD); BLE/WiFi carry on */

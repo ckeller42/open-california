@@ -174,8 +174,12 @@ static int running_pending(const esp_partition_t **run) {
 
 void cali_ota_esp_verify_begin(void) {
     const esp_partition_t *run;
-    int pending = running_pending(&run) == 1;   /* unreadable: a factory or untracked image, nothing to verify */
+    int p = running_pending(&run);
+    int pending = p == 1;
     if (pending) cali_log("ota: %s awaits its verdict (the previous slot stays the fallback)", run->label);
+    /* unreadable (e.g. no otadata entry after a USB flash): no verdict and no mark in this run; were the slot
+     * really pending, it stays unconfirmed and the next reset boots the previous slot (the safe side) */
+    if (p < 0) cali_log("ota: %s state unreadable, no verdict this run", run->label);
     cali_ota_verify_begin(pending, cali_uptime_ms(), CALI_OTA_VERIFY_MIN_MS, CALI_OTA_VERIFY_T_MS,
                           CALI_OTA_VERIFY_W_MS, CALI_OTA_VERIFY_GONE_MS);
 }
