@@ -328,9 +328,12 @@ def test_verify_a_link_once_is_valid_after_the_minimum(ota_cli):
         step(MIN + 1000),
         step(MIN + 2000, ago=0),  # a verdict stays
         "json",
+        "vconfirm",
+        "json",
     )
     assert verdicts(out) == ["pending"] * 4 + ["valid", "valid"]
-    assert ota(out)["verify"] == "valid"
+    # device.ota.verify reads valid only once the platform marked the slot valid
+    assert [o["verify"] for o in otas(out)] == ["pending", "valid"]
     assert any('"verdict":"valid","why":"link","t_ms":60000' in ln for ln in out if ln.startswith("DIAG "))
 
 

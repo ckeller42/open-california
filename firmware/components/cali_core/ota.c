@@ -199,11 +199,13 @@ static int s_v = CALI_OTA_VERIFY_VALID;   /* no begin (host, QEMU): nothing to v
 static uint64_t s_v0;                     /* now_ms of the begin */
 static uint32_t s_vmin, s_vt, s_vw, s_vgone;
 static int s_vlink, s_vsynced;            /* latched since the begin */
+static int s_vunconfirmed;                /* a pending image's valid verdict, slot not yet marked valid */
 static uint64_t s_vadv;                   /* run time + 1 of the first counted advert; 0 none */
 
 void cali_ota_verify_begin(int pending, uint64_t now_ms, uint32_t min_ms, uint32_t t_ms, uint32_t w_ms,
                            uint32_t gone_ms) {
     s_v = pending ? CALI_OTA_VERIFY_PENDING : CALI_OTA_VERIFY_VALID;
+    s_vunconfirmed = pending;
     s_v0 = now_ms;
     s_vmin = min_ms;
     s_vt = t_ms;
@@ -239,6 +241,7 @@ int cali_ota_verify_step(uint64_t now_ms, const cali_ota_verify_in_t *in) {
 }
 
 int cali_ota_verify(void) { return s_v; }
+void cali_ota_verify_confirmed(void) { s_vunconfirmed = 0; }
 
 void cali_ota_json(cali_json_t *j) {
     int st = cali_ota_state();
@@ -255,6 +258,6 @@ void cali_ota_json(cali_json_t *j) {
     cali_json_key(j, "channel");
     cali_json_str(j, cali_ota_channel_name(cali_ota_channel()));
     cali_json_key(j, "verify");
-    cali_json_str(j, VERIFY_NAMES[s_v]);
+    cali_json_str(j, VERIFY_NAMES[s_v == CALI_OTA_VERIFY_VALID && s_vunconfirmed ? CALI_OTA_VERIFY_PENDING : s_v]);
     cali_json_obj_end(j);
 }

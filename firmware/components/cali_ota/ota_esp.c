@@ -164,15 +164,17 @@ void cali_ota_esp_start(void) {
     cali_ota_init(&s_ops);
 }
 
+/* 1 pending verify, 0 any other state, -1 the state could not be read */
 static int running_pending(const esp_partition_t **run) {
     esp_ota_img_states_t st;
     *run = esp_ota_get_running_partition();
-    return esp_ota_get_state_partition(*run, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY;
+    if (esp_ota_get_state_partition(*run, &st) != ESP_OK) return -1;
+    return st == ESP_OTA_IMG_PENDING_VERIFY;
 }
 
 void cali_ota_esp_verify_begin(void) {
     const esp_partition_t *run;
-    int pending = running_pending(&run);
+    int pending = running_pending(&run) == 1;   /* unreadable: a factory or untracked image, nothing to verify */
     if (pending) cali_log("ota: %s awaits its verdict (the previous slot stays the fallback)", run->label);
     cali_ota_verify_begin(pending, cali_uptime_ms(), CALI_OTA_VERIFY_MIN_MS, CALI_OTA_VERIFY_T_MS,
                           CALI_OTA_VERIFY_W_MS, CALI_OTA_VERIFY_GONE_MS);
@@ -180,7 +182,9 @@ void cali_ota_esp_verify_begin(void) {
 
 int cali_ota_esp_mark_valid(void) {
     const esp_partition_t *run;
-    if (!running_pending(&run)) return 0;
+    int p = running_pending(&run);
+    if (p < 0) return -1;   /* unreadable now: retry */
+    if (p == 0) return 0;
     esp_err_t e = esp_ota_mark_app_valid_cancel_rollback();
     cali_log("ota: %s marked valid: %s", run->label, esp_err_to_name(e));
     return e == ESP_OK ? 0 : -1;

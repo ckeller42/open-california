@@ -14,7 +14,8 @@ void cali_ota_esp_verify_begin(void);
 /* Owner task, when cali_ota_verify_step is valid: the app pending verification is marked valid,
  * which cancels the rollback. Until then (and for good on a failed verdict) a crash or reset boots the
  * previous slot, and the bootloader refuses another OTA. Any other app: nothing.
- * Returns 0 when the running app is valid now (or was never pending), -1 when the mark failed (retry). */
+ * Returns 0 when the running app is valid now (or was never pending), -1 when the mark or the state
+ * read failed (retry). */
 int cali_ota_esp_mark_valid(void);
 /* Console hook (owner task): "ota check|install|status|invalid" -> 1, any other line -> 0.
  * check/install = POST /api/ota's actions in any WiFi mode (physical access); status logs the

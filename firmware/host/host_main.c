@@ -182,7 +182,7 @@ static void tick_cb(struct ble_npl_event *ev) {
             .ble_off = cali_session_mode() == CALI_BLE_OFF,
             .ble_synced = s_synced,
         };
-        (void)cali_ota_verify_step(now, &vin);
+        if (cali_ota_verify_step(now, &vin) == CALI_OTA_VERIFY_VALID) cali_ota_verify_confirmed();   /* no slot */
     }
     if (s_http) {
         cali_net_host_poll(now);        /* WiFi events -> the runner's sink */

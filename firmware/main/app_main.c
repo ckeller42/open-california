@@ -374,8 +374,12 @@ static void do_work(void) {
             };
             int v = cali_ota_verify_step(now, &vin);   /* a settled verdict just returns itself */
             /* valid: retry the mark on the next tick until the slot really is valid */
-            if (v == CALI_OTA_VERIFY_FAILED || (v == CALI_OTA_VERIFY_VALID && cali_ota_esp_mark_valid() == 0))
+            if (v == CALI_OTA_VERIFY_VALID && cali_ota_esp_mark_valid() == 0) {
+                cali_ota_verify_confirmed();   /* only now device.ota.verify reads "valid" */
                 s_ota_confirmed = 1;
+            } else if (v == CALI_OTA_VERIFY_FAILED) {
+                s_ota_confirmed = 1;
+            }
         }
     }
     if (!atomic_load(&s_ready)) return;

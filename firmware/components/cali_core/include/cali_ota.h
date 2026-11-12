@@ -43,8 +43,8 @@
  * or parse), `download`, `checksum` and `commit`.
  *
  * `verify` is the verdict on a freshly installed image (cali_ota_verify_step()): `pending` while the
- * bootloader still holds the previous slot as the fallback, `valid` once the image is confirmed (and
- * on every image that needs no verdict), `failed` when the image showed a dead camper link. A failed
+ * bootloader still holds the previous slot as the fallback, `valid` once the image is confirmed
+ * (cali_ota_verify_confirmed(); and on every image that needs no verdict), `failed` when the image showed a dead camper link. A failed
  * image is never confirmed: the next reset boots the previous slot. Until then no other OTA can start
  * (the bootloader refuses one while the running image is unconfirmed).
  *
@@ -223,6 +223,12 @@ void cali_ota_verify_begin(int pending, uint64_t now_ms, uint32_t min_ms, uint32
 int cali_ota_verify_step(uint64_t now_ms, const cali_ota_verify_in_t *in);
 /** @brief The current verdict. @return One of #cali_ota_verify_e. */
 int cali_ota_verify(void);
+/**
+ * @brief The platform confirmed the image (the slot is marked valid). Owner task. Until then a `valid`
+ * verdict of a pending image still reads `pending` in `device.ota.verify`, so nobody takes an
+ * unconfirmed slot for a confirmed one.
+ */
+void cali_ota_verify_confirmed(void);
 
 /**
  * @brief Write the `device.ota` object. It is a value: call cali_json_key() first.

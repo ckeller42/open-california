@@ -928,8 +928,9 @@ the tag's build, `latest` for `main` or a sha) and runs check → install → ve
 (USB recovery: `flash_ci.sh`, below).
 
 **Rollback** (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`): the new slot boots *pending verify*, and
-the app confirms itself only on a valid verdict (`device.ota.verify`, logged as `ota: image valid
-(<why>)` and an `ota_verify` diagnostics event). The owner tick decides it, never before 60 s and
+the app confirms itself only on a valid verdict (logged as `ota: image valid (<why>)` and an
+`ota_verify` diagnostics event). `device.ota.verify` reads `valid` only once the slot is marked valid
+(a failed mark is retried on the next tick). The owner tick decides it, never before 60 s and
 never while the web server is down:
 
 | Verdict | When |

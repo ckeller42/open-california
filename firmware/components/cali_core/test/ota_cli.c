@@ -14,6 +14,7 @@
  *   json                "JSON <the device.ota object>"
  *   diaghook            from now on print "DIAG {<body>}" per diagnostics record (R_FW_DIAG_LOG)
  *   vbegin <pending> <now> <min> <t> <w> <gone>   cali_ota_verify_begin
+ *   vconfirm            cali_ota_verify_confirmed
  *   vstep <now> <web> <link> <adv_ago|-1> <bonded> <off> <synced>   cali_ota_verify_step -> "VERDICT <name>"
  * ops calls print "CALL get <url>", "CALL download <url> <size> (<state meanwhile>)", "CALL slot_sha256 <size>",
  * "CALL commit", "CALL abort", "CALL restart", "CALL wake"; cali_log prints "LOG <text>".
@@ -126,7 +127,8 @@ int main(void) {
             unsigned p = 0, mn = 0, t = 0, w = 0, gone = 0;
             (void)sscanf(arg, "%u %llu %u %u %u %u", &p, &now, &mn, &t, &w, &gone);
             cali_ota_verify_begin((int)p, now, mn, t, w, gone);
-        } else if (strncmp(line, "vstep ", 6) == 0) {
+        } else if (strcmp(line, "vconfirm") == 0) cali_ota_verify_confirmed();
+        else if (strncmp(line, "vstep ", 6) == 0) {
             static const char *const V[] = {"pending", "valid", "failed"};
             unsigned long long now = 0;
             long long ago = -1;
