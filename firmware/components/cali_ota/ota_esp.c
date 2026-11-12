@@ -148,9 +148,14 @@ static void e_rollback(void) {
     cali_log("ota: mark invalid + reboot: %s", esp_err_to_name(esp_ota_mark_app_invalid_rollback_and_reboot()));
 }
 
+/* reads the otadata and verifies the other slot's image (esp_image_verify: reads and hashes it), so
+ * it holds the owner tick a moment: acceptable for a rare action a person starts by hand */
+static int e_can_rollback(void) { return esp_ota_check_rollback_is_possible() ? 1 : 0; }
+
 static const cali_ota_ops_t s_ops = {
     .get = e_get, .download = e_download, .slot_sha256 = e_slot_sha256, .commit = e_commit,
     .abort = e_abort, .restart = e_restart, .wake = e_wake, .rollback = e_rollback,
+    .can_rollback = e_can_rollback,
 };
 
 static void ota_task(void *arg) {

@@ -70,6 +70,7 @@
  *                    wake prints "CALL ota_wake", the rest are never reached (ota.c runs on the OTA
  *                    task, tests/firmware/test_ota.py)
  *   otapending       cali_ota_verify_begin(1, …): the running image awaits its verdict (rollback allowed)
+ *   otanoprev        the fake's can_rollback answers 0 (no previous slot)
  * The Pi wake line prints "CALL gpio9 low" / "CALL gpio9 released"; the halt line "CALL gpio8 …".
  * The runner's actions print "CALL pair_start", "CALL pair_passkey <6 digits>", "CALL pair_cancel",
  * "CALL pair_forget". Calls into the fake WiFi runtime print "CALL set_creds [<ssid>] [<psk>]", "CALL forget",
@@ -371,7 +372,9 @@ static int rc_named(const char *s) {
 /* ---- OTA (ota.c is real; only the OTA task's I/O is faked) ---- */
 static void ota_wake(void) { printf("CALL ota_wake\n"); }
 static void ota_rollback(void) { printf("CALL ota_rollback\n"); }
-static const cali_ota_ops_t fake_ota = {.wake = ota_wake, .rollback = ota_rollback};
+static int s_ota_noprev;
+static int ota_can_rollback(void) { return !s_ota_noprev; }
+static const cali_ota_ops_t fake_ota = {.wake = ota_wake, .rollback = ota_rollback, .can_rollback = ota_can_rollback};
 
 static const char *const WIFI_NAMES[] = {"unprovisioned", "setup_ap", "connecting", "online", "retrying",
                                          "setup_ap_retrying"};
@@ -444,6 +447,7 @@ int main(void) {
         else if (strcmp(w, "flipping") == 0) s_flipping = (int)v;
         else if (strcmp(w, "nofn") == 0) s_nofn = 1;
         else if (strcmp(w, "otainit") == 0) cali_ota_init(&fake_ota);
+        else if (strcmp(w, "otanoprev") == 0) s_ota_noprev = 1;
         else if (strcmp(w, "otapending") == 0) cali_ota_verify_begin(1, 0, 60000, 900000, 2400000, 300000);
         else if (strcmp(w, "sensadv") == 0) {
             char hex[128] = "";

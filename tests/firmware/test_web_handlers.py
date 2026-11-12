@@ -1604,6 +1604,16 @@ def test_ota_rollback_answers_are_tellable(web_cli):
         )
         assert (r.status, r.json()) == (200, {"ok": True, "rollback": "rebooting"}), state
         assert ota_wakes(other)
+    # no previous slot to go back to (the bench's otadata without the old slot's entry): said at once
+    r, other = one(
+        web_cli,
+        "POST",
+        "/api/ota",
+        '{"action":"rollback"}',
+        setup=[*STATION, "otainit", "otapending", "otanoprev"],
+    )
+    assert (r.status, r.json()) == (409, {"ok": False, "error": "no_previous"})
+    assert not ota_wakes(other)
     r, _ = one(web_cli, "POST", "/api/ota", '{"action":"rollback"}', setup=STATION)  # host/QEMU: no OTA ops
     assert (r.status, r.json()) == (503, {"ok": False, "error": "ota_unavailable"})
 

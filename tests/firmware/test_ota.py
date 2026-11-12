@@ -449,5 +449,7 @@ def test_rollback_only_from_an_unconfirmed_image(ota_cli):
     assert "RB 0" in out
     out = run(ota_cli, begin, step(MIN, link=1), "vconfirm", "rollback")  # confirmed
     assert "RB -3" in out
+    out = run(ota_cli, "noprev", begin, "rollback")  # nothing in the other slot to go back to
+    assert "RB -4" in out and "rollback" not in calls(out)
     out = run(ota_cli, "noinit", begin, "rollback")  # host / QEMU: no OTA I/O
     assert "RB -1" in out

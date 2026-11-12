@@ -253,6 +253,7 @@ int cali_ota_rollback(void) {
     int st = cali_ota_state();
     if (!s_ops || !s_ops->rollback) return -1;
     if (s_v == CALI_OTA_VERIFY_VALID && !s_vunconfirmed) return -3;
+    if (s_ops->can_rollback && !s_ops->can_rollback()) return -4;
     if (st == CALI_OTA_CHECKING || st == CALI_OTA_DOWNLOADING || st == CALI_OTA_VERIFYING ||
         st == CALI_OTA_REBOOTING)
         return -2;

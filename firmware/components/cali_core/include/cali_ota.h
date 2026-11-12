@@ -121,6 +121,8 @@ typedef struct {
      * after a short delay so the HTTP answer still goes out. Returns only on failure.
      */
     void (*rollback)(void);
+    /** Owner task: 1 when a previous slot holds an image to go back to, else 0 (NULL: assume 1). */
+    int (*can_rollback)(void);
 } cali_ota_ops_t;
 
 /**
@@ -140,7 +142,8 @@ int cali_ota_request(int install);
  * task then calls ops->rollback(). Only an image that is not confirmed can go back, so this never
  * resets a healthy system (the bootloader refuses it too).
  * @return 0 started (`device.ota.state` `rebooting`), -1 no OTA on this build, -2 busy (a check runs),
- *         -3 the image is confirmed (`device.ota.verify` `valid`): nothing to go back from.
+ *         -3 the image is confirmed (`device.ota.verify` `valid`): nothing to go back from,
+ *         -4 no previous slot holds an image to go back to.
  */
 int cali_ota_rollback(void);
 /** @brief Run the started request to its end (blocking I/O). OTA task. With no request it returns at once. */

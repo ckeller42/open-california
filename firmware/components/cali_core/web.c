@@ -70,6 +70,7 @@ static const char ERR_NOT_PAIRED[] = "{\"ok\":false,\"error\":\"not_paired\"}"; 
 static const char ERR_NO_TIME[] = "{\"ok\":false,\"error\":\"no_time\"}";   /* /api/ble: no wall clock */
 static const char ERR_OTA_UNAVAILABLE[] = "{\"ok\":false,\"error\":\"ota_unavailable\"}";
 static const char ERR_OTA_CONFIRMED[] = "{\"ok\":false,\"error\":\"confirmed\"}";
+static const char ERR_OTA_NO_PREVIOUS[] = "{\"ok\":false,\"error\":\"no_previous\"}";
 static const char OK_ROLLBACK[] = "{\"ok\":true,\"rollback\":\"rebooting\"}";
 static const char ERR_DISABLED[] = "{\"ok\":false,\"error\":\"disabled\"}";   /* /api/sensors, /api/lora, flag off */
 static const char OVERFLOW_BODY[] = "response too large";
@@ -853,7 +854,8 @@ static int exp_field(cursor_t *c, int i, void *ctx) { return parse_bool(c, &((in
 
 /* ---- POST /api/ota {"action":"check"|"install"|"rollback"} | {"channel":"stable"|"latest"} (R_FW_OTA):
  * station mode only, like /api/command — except rollback: 200 {"ok":true,"rollback":"rebooting"} and
- * the previous slot about 1 s later; 409 "confirmed" on a confirmed image (nothing to go back from).
+ * the previous slot about 1 s later; 409 "confirmed" on a confirmed image (nothing to go back from),
+ * 409 "no_previous" when no other slot holds an image to go back to.
  * rollback works over the setup hotspot too: a new image that breaks the station WiFi falls back to
  * the hotspot (WIFI_SETUP_AP_RETRYING after NET_SETUP_AFTER_MS), and going back to the previous,
  * known-good image is less than POST /api/wifi already allows there. The channel is stored at once (the next check uses it), even on a
@@ -868,6 +870,7 @@ static void api_ota(const cali_http_req_t *req, cali_http_resp_t *resp) {
         rc = cali_ota_rollback();
         if (rc == -1) SET_CONST(resp, 503, ERR_OTA_UNAVAILABLE);
         else if (rc == -3) SET_CONST(resp, 409, ERR_OTA_CONFIRMED);
+        else if (rc == -4) SET_CONST(resp, 409, ERR_OTA_NO_PREVIOUS);
         else if (rc == -2) SET_CONST(resp, 409, ERR_BUSY);
         else SET_CONST(resp, 200, OK_ROLLBACK);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {   /* never over the setup hotspot */
