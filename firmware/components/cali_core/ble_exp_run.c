@@ -207,6 +207,10 @@ void cali_ble_exp_fields(cali_json_t *j, int diag) {
     else cali_json_int(j, (long long)(s_tick_at > s_adv_at ? s_tick_at - s_adv_at : 0));
 }
 
+int64_t cali_ble_exp_unit_adv_ago_ms(uint64_t now_ms) {
+    return !s_adv_any ? -1 : now_ms > s_adv_at ? (int64_t)(now_ms - s_adv_at) : 0;
+}
+
 void cali_ble_exp_json(cali_json_t *j, int diag) {
     cali_json_obj_begin(j);
     cali_ble_exp_fields(j, diag);

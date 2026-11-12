@@ -242,6 +242,7 @@ def test_api_state_shape(web_cli):
         "progress_pct": 0,
         "error": None,
         "channel": "stable",
+        "verify": "valid",
     }
     assert set(body["device"]["ota"]) == OTA_KEYS
     assert body["device"]["time"] == {"source": "none", "synced": False, "boot": 0}  # no cali_time_init
@@ -325,7 +326,7 @@ EXPECTED_DEVICE_TAIL = (
     '"device":{"pairing":{"state":"idle","address":"C0:FF:EE:CA:11:F0"},"link":{"up":true,'
     '"ready":false,"rest":false,"redial":false,"rest_next_s":null,"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"ap_ssid":null},"setup":{"pending":false},'
     '"control":{"writes":true},"uptime_ms":5010,"fw":"test",'
-    '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null,"channel":"stable"},'
+    '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null,"channel":"stable","verify":"valid"},'
     '"time":{"source":"none","synced":false,"boot":0},'
     '"sd":{"state":"absent","total_mb":null,"free_mb":null,"dropped":0},'
     '"battery":{"pct":null,"mv":null,"usb":null,"charging":null,"runtime_min":null},'

@@ -193,6 +193,53 @@ void cali_ota_work(void) {
     s_ops->restart();
 }
 
+/* ---- the verdict on a freshly installed image (owner task only) ---- */
+static const char *const VERIFY_NAMES[] = {"pending", "valid", "failed"};
+static int s_v = CALI_OTA_VERIFY_VALID;   /* no begin (host, QEMU): nothing to verify */
+static uint64_t s_v0;                     /* now_ms of the begin */
+static uint32_t s_vmin, s_vt, s_vw, s_vgone;
+static int s_vlink, s_vsynced;            /* latched since the begin */
+static uint64_t s_vadv;                   /* run time + 1 of the first counted advert; 0 none */
+
+void cali_ota_verify_begin(int pending, uint64_t now_ms, uint32_t min_ms, uint32_t t_ms, uint32_t w_ms,
+                           uint32_t gone_ms) {
+    s_v = pending ? CALI_OTA_VERIFY_PENDING : CALI_OTA_VERIFY_VALID;
+    s_v0 = now_ms;
+    s_vmin = min_ms;
+    s_vt = t_ms;
+    s_vw = w_ms;
+    s_vgone = gone_ms;
+    s_vlink = s_vsynced = 0;
+    s_vadv = 0;
+}
+
+static int verdict(int v, const char *why, uint64_t t) {
+    s_v = v;
+    cali_log("ota: image %s (%s) after %llu s", VERIFY_NAMES[v], why, (unsigned long long)(t / 1000));
+    cali_diag_evt("ota_verify", "\"verdict\":\"%s\",\"why\":\"%s\",\"t_ms\":%llu", VERIFY_NAMES[v], why,
+                  (unsigned long long)t);
+    return v;
+}
+
+int cali_ota_verify_step(uint64_t now_ms, const cali_ota_verify_in_t *in) {
+    if (s_v != CALI_OTA_VERIFY_PENDING) return s_v;
+    uint64_t t = now_ms - s_v0;
+    s_vlink |= in->link_up;
+    s_vsynced |= in->ble_synced;
+    int adv = in->adv_ago_ms >= 0 && (uint64_t)in->adv_ago_ms < s_vgone;   /* advertising now */
+    if (in->ble_off || !in->bonded || !adv) s_vadv = 0;   /* no window: off on purpose, or the unit asleep */
+    else if (!s_vadv) s_vadv = t + 1;
+    if (!in->web_up || t < s_vmin) return s_v;
+    if (s_vlink) return verdict(CALI_OTA_VERIFY_VALID, "link", t);
+    if (s_vadv && t + 1 - s_vadv >= s_vw) return verdict(CALI_OTA_VERIFY_FAILED, "no_link", t);
+    if (t < s_vt) return s_v;
+    if (!s_vsynced) return verdict(CALI_OTA_VERIFY_FAILED, "ble_dead", t);
+    if (!s_vadv) return verdict(CALI_OTA_VERIFY_VALID, "no_unit", t);
+    return s_v;   /* the unit advertised: its window decides */
+}
+
+int cali_ota_verify(void) { return s_v; }
+
 void cali_ota_json(cali_json_t *j) {
     int st = cali_ota_state();
     const char *err = __atomic_load_n(&s_error, __ATOMIC_RELAXED);
@@ -207,5 +254,7 @@ void cali_ota_json(cali_json_t *j) {
     if (st == CALI_OTA_ERROR && err) cali_json_str(j, err); else cali_json_null(j);
     cali_json_key(j, "channel");
     cali_json_str(j, cali_ota_channel_name(cali_ota_channel()));
+    cali_json_key(j, "verify");
+    cali_json_str(j, VERIFY_NAMES[s_v]);
     cali_json_obj_end(j);
 }

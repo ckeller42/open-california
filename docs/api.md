@@ -321,6 +321,7 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.firmware.test_control_e2e
 .. automodule:: tests.firmware.test_qemu_boot
 .. automodule:: tests.firmware.test_ota
+.. automodule:: tests.firmware.test_ota_verify_e2e
 .. automodule:: tests.firmware.test_time
 .. automodule:: tests.firmware.test_sdlog
 .. automodule:: tests.firmware.test_diag

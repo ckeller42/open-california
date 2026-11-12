@@ -42,6 +42,7 @@
 #include "cali_console.h"
 #include "cali_diag.h"
 #include "cali_net_host.h"
+#include "cali_ota.h"
 #include "cali_pi_wake.h"
 #include "cali_ble_exp.h"
 #include "cali_platform.h"
@@ -118,6 +119,19 @@ static void thermo(const char *args) {
     }
 }
 
+/* Test-only "otaverify <min_ms> <t_ms> <w_ms> <gone_ms>" (cali-host): act as a freshly installed image from now on
+ * (cali_ota_verify_begin with these times); the tick then steps the verdict as app_main.c does and logs
+ * it ("LOG ota: image valid|failed (<why>) ..."). tests/firmware/test_ota_verify_e2e.py. */
+static void otaverify(const char *args) {
+    unsigned long mn = 0, t = 0, w = 0, gone = 0;
+    if (sscanf(args, "%lu %lu %lu %lu", &mn, &t, &w, &gone) != 4) {
+        cali_log("otaverify: usage: otaverify <min_ms> <t_ms> <w_ms> <gone_ms>");
+        return;
+    }
+    cali_ota_verify_begin(1, cali_uptime_ms(), (uint32_t)mn, (uint32_t)t, (uint32_t)w, (uint32_t)gone);
+    cali_log("otaverify: pending");
+}
+
 /* Host task: feed every queued line to the console (only once the stack is synced). */
 static void drain(void) {
     for (;;) {
@@ -133,6 +147,7 @@ static void drain(void) {
         s_len--;
         pthread_mutex_unlock(&s_mu);
         if (strncmp(line, "twrite ", 7) == 0) twrite(line + 7);
+        else if (strncmp(line, "otaverify ", 10) == 0) otaverify(line + 10);
         else if (strncmp(line, "acstep ", 7) == 0) cali_ac_set_step_ms((uint32_t)strtoul(line + 7, NULL, 10));
         else if (strncmp(line, "thermo", 6) == 0 && (line[6] == ' ' || line[6] == 0)) thermo(line + 6);
         else cali_console_line(line);
@@ -157,6 +172,17 @@ static void tick_cb(struct ble_npl_event *ev) {
     cali_thermo_run_tick(now);
     cali_pw_tick(now);
     cali_ble_exp_tick(now);
+    if (cali_ota_verify() == CALI_OTA_VERIFY_PENDING) {   /* only after "otaverify" (app_main.c's step) */
+        const cali_ota_verify_in_t vin = {
+            .web_up = 1,   /* the host's web server is optional; the ESP's is checked on the ESP */
+            .link_up = cali_session_link_up(),
+            .adv_ago_ms = cali_ble_exp_unit_adv_ago_ms(now),
+            .bonded = cali_ble_nimble_transport()->has_bond(),
+            .ble_off = cali_session_mode() == CALI_BLE_OFF,
+            .ble_synced = s_synced,
+        };
+        (void)cali_ota_verify_step(now, &vin);
+    }
     if (s_http) {
         cali_net_host_poll(now);        /* WiFi events -> the runner's sink */
         cali_wifi_run_tick(now);

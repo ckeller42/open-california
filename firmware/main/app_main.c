@@ -26,9 +26,11 @@
  *
  * Firmware update (R_FW_OTA, components/cali_ota): with WiFi up, an OTA task fetches the GitHub
  * release on request (POST /api/ota, console "ota …"); the owner task only starts it and reads its
- * state. A freshly installed app is marked valid once the tick has run CALI_OTA_VALID_AFTER_MS with
- * the web server listening (no BLE link needed: the van may sleep); a reset before that boots the
- * previous slot (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE).
+ * state. A freshly installed app is marked valid only on cali_ota_verify_step's verdict (cali_ota.h):
+ * the camper link up once, or no advertising unit within 15 min (absence is no fault) with the BLE
+ * host synced. The unit advertising without a link for 40 min, or a BLE host that never synced, fails
+ * it: it is never marked valid, and the next reset boots the previous slot
+ * (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE). No self-restart: a person decides (console `ota invalid`).
  *
  * Time (R_FW_TIME, components/cali_sntp): every boot bumps the NVS boot counter (cali_time_init); with
  * WiFi up, SNTP (pool.ntp.org + the DHCP-offered server) sets the clock the SD log's ts reads; without
@@ -108,6 +110,7 @@
 #include "cali_energy.h"
 #include "cali_lora.h"
 #include "cali_net_esp.h"
+#include "cali_ota.h"
 #include "cali_ota_esp.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
@@ -131,7 +134,7 @@ static TaskHandle_t s_core_task;       /* no BLE: the owner is this task */
 static int s_wifi;                     /* cali_net_esp_init succeeded: the network runs on the tick */
 static int s_web;                      /* the web server listens (the OTA "healthy run" needs it) */
 static const cali_transport_t *s_ble;  /* NimBLE's transport, or s_no_ble: the sensor windows' radio */
-static int s_valid_checked;            /* cali_ota_esp_mark_valid ran (once, R_FW_OTA rollback) */
+static atomic_int s_ble_synced;        /* NimBLE synced with its controller (the OTA verdict reads it) */
 
 /* ---- diagnostics (R_FW_DIAG_LOG) ---- */
 #define RTC_MAGIC 0xd1a6b007u
@@ -356,9 +359,16 @@ static void do_work(void) {
 #if CONFIG_CALI_DISPLAY
         cali_display_tick(now);   /* repaints at most every DISPLAY_REFRESH_MS; never blocks on BLE */
 #endif
-        if (!s_valid_checked && now >= CALI_OTA_VALID_AFTER_MS && s_web) {   /* tick alive + web up */
-            s_valid_checked = 1;
-            cali_ota_esp_mark_valid();
+        if (cali_ota_verify() == CALI_OTA_VERIFY_PENDING) {   /* a fresh image's verdict (R_FW_OTA) */
+            const cali_ota_verify_in_t vin = {
+                .web_up = s_web != 0,
+                .link_up = cali_session_link_up(),
+                .adv_ago_ms = cali_ble_exp_unit_adv_ago_ms(now),
+                .bonded = s_ble->has_bond(),
+                .ble_off = cali_session_mode() == CALI_BLE_OFF,
+                .ble_synced = atomic_load(&s_ble_synced),
+            };
+            if (cali_ota_verify_step(now, &vin) == CALI_OTA_VERIFY_VALID) cali_ota_esp_mark_valid();
         }
     }
     if (!atomic_load(&s_ready)) return;
@@ -393,6 +403,7 @@ static void tick_cb(void *arg) {
 }
 
 static void on_sync(void) {
+    atomic_store(&s_ble_synced, 1);
     cali_session_boot();          /* stored bond -> reconnect; none -> stay idle, never scan */
     cali_console_line("status");  /* the boot STATE line */
     atomic_store(&s_ready, 1);
@@ -623,6 +634,7 @@ void app_main(void) {
     }
     const cali_transport_t *ble = err == ESP_OK ? cali_ble_nimble_transport() : &s_no_ble;
     s_ble = ble;              /* before the tick timer starts */
+    cali_ota_esp_verify_begin();   /* a fresh image's verdict, read on every tick (R_FW_OTA) */
     wifi_init(ble);
 #if CONFIG_CALI_DISPLAY
     if (cali_display_init(ble) == 0) cali_sdcard_esp_start();   /* -1: no screen (and no SD); BLE/WiFi carry on */

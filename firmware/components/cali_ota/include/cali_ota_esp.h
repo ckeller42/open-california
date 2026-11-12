@@ -8,10 +8,12 @@
 
 /* Owner task, once WiFi runs: creates the OTA task and hands cali_ota_init the HTTPS/flash ops. */
 void cali_ota_esp_start(void);
-/* Owner task, once after CALI_OTA_VALID_AFTER_MS of a healthy run (the tick alive, the web server
- * listening): a freshly installed app pending verification is marked valid, which cancels the
- * rollback. Before that a crash or reset boots the previous slot. Any other app: nothing. */
-#define CALI_OTA_VALID_AFTER_MS 60000
+/* Owner task, once at boot: start the verdict on the running app (cali_ota_verify_begin with the
+ * shipped CALI_OTA_VERIFY_* times). Pending only for a freshly installed app that awaits it. */
+void cali_ota_esp_verify_begin(void);
+/* Owner task, when cali_ota_verify_step turns valid: the app pending verification is marked valid,
+ * which cancels the rollback. Until then (and for good on a failed verdict) a crash or reset boots the
+ * previous slot, and the bootloader refuses another OTA. Any other app: nothing. */
 void cali_ota_esp_mark_valid(void);
 /* Console hook (owner task): "ota check|install|status|invalid" -> 1, any other line -> 0.
  * check/install = POST /api/ota's actions in any WiFi mode (physical access); status logs the

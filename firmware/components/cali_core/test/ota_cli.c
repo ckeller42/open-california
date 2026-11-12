@@ -13,6 +13,8 @@
  *   channel stable|latest  cali_ota_set_channel (the kv store: one fake byte, "ota_channel" only)
  *   json                "JSON <the device.ota object>"
  *   diaghook            from now on print "DIAG {<body>}" per diagnostics record (R_FW_DIAG_LOG)
+ *   vbegin <pending> <now> <min> <t> <w> <gone>   cali_ota_verify_begin
+ *   vstep <now> <web> <link> <adv_ago|-1> <bonded> <off> <synced>   cali_ota_verify_step -> "VERDICT <name>"
  * ops calls print "CALL get <url>", "CALL download <url> <size> (<state meanwhile>)", "CALL slot_sha256 <size>",
  * "CALL commit", "CALL abort", "CALL restart", "CALL wake"; cali_log prints "LOG <text>".
  */
@@ -119,6 +121,21 @@ int main(void) {
         else if (strcmp(line, "work") == 0) cali_ota_work();
         else if (strncmp(line, "channel ", 8) == 0) printf("SET %d\n", cali_ota_set_channel(strcmp(arg, "latest") == 0));
         else if (strcmp(line, "diaghook") == 0) cali_diag_sink = print_diag;
+        else if (strncmp(line, "vbegin ", 7) == 0) {
+            unsigned long long now = 0;
+            unsigned p = 0, mn = 0, t = 0, w = 0, gone = 0;
+            (void)sscanf(arg, "%u %llu %u %u %u %u", &p, &now, &mn, &t, &w, &gone);
+            cali_ota_verify_begin((int)p, now, mn, t, w, gone);
+        } else if (strncmp(line, "vstep ", 6) == 0) {
+            static const char *const V[] = {"pending", "valid", "failed"};
+            unsigned long long now = 0;
+            long long ago = -1;
+            cali_ota_verify_in_t in = {0};
+            (void)sscanf(arg, "%llu %d %d %lld %d %d %d", &now, &in.web_up, &in.link_up, &ago, &in.bonded,
+                         &in.ble_off, &in.ble_synced);
+            in.adv_ago_ms = ago;
+            printf("VERDICT %s\n", V[cali_ota_verify_step(now, &in)]);
+        }
         else if (strcmp(line, "json") == 0) {
             char buf[256];
             cali_json_t j;

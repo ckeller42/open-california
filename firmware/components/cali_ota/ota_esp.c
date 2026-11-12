@@ -164,12 +164,24 @@ void cali_ota_esp_start(void) {
     cali_ota_init(&s_ops);
 }
 
-void cali_ota_esp_mark_valid(void) {
-    const esp_partition_t *run = esp_ota_get_running_partition();
+static int running_pending(const esp_partition_t **run) {
     esp_ota_img_states_t st;
-    if (esp_ota_get_state_partition(run, &st) != ESP_OK || st != ESP_OTA_IMG_PENDING_VERIFY) return;
-    cali_log("ota: %s healthy for %d s, marked valid: %s", run->label, CALI_OTA_VALID_AFTER_MS / 1000,
-             esp_err_to_name(esp_ota_mark_app_valid_cancel_rollback()));
+    *run = esp_ota_get_running_partition();
+    return esp_ota_get_state_partition(*run, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY;
+}
+
+void cali_ota_esp_verify_begin(void) {
+    const esp_partition_t *run;
+    int pending = running_pending(&run);
+    if (pending) cali_log("ota: %s awaits its verdict (the previous slot stays the fallback)", run->label);
+    cali_ota_verify_begin(pending, cali_uptime_ms(), CALI_OTA_VERIFY_MIN_MS, CALI_OTA_VERIFY_T_MS,
+                          CALI_OTA_VERIFY_W_MS, CALI_OTA_VERIFY_GONE_MS);
+}
+
+void cali_ota_esp_mark_valid(void) {
+    const esp_partition_t *run;
+    if (!running_pending(&run)) return;
+    cali_log("ota: %s marked valid: %s", run->label, esp_err_to_name(esp_ota_mark_app_valid_cancel_rollback()));
 }
 
 int cali_ota_esp_console_line(const char *line) {

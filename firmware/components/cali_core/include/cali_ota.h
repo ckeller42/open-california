@@ -15,8 +15,10 @@
  *    ``available`` otherwise, and on install write ``cali_fw.bin`` into the inactive OTA slot, check
  *    the SHA-256 of what landed against the manifest, and only on a match switch the boot partition
  *    and restart; any failure leaves the boot partition untouched. A new image stays revocable until
- *    it has run 60 s healthy (tick alive, web server listening); a reset before that boots the
- *    previous slot. Progress is ``device.ota`` in ``/api/state``. The channel (``stable``: the build the
+ *    its verdict is valid: the camper link up once, or no advertising unit by 15 min with the BLE
+ *    host synced (never before 60 s, never while the web server is down). The unit advertising
+ *    without a link for 40 min, or a BLE host that never synced by 15 min, fails it: it is never
+ *    confirmed, and a reset boots the previous slot. The verdict is ``device.ota.verify``. Progress is ``device.ota`` in ``/api/state``. The channel (``stable``: the build the
  *    ``esp-stable`` tag points at; ``latest``: every main merge) is persisted and set with
  *    ``POST /api/ota {"channel"}``.
  * @endverbatim
@@ -37,8 +39,14 @@
  * The `device.ota` object (cali_ota_json()) reads
  * `{"state":"idle|checking|up_to_date|available|downloading|verifying|rebooting|error",
  * "available_sha":"40 hex digits"|null,"progress_pct":0..100,"error":"code"|null,
- * "channel":"stable|latest"}`. The error codes are `manifest` (fetch or parse), `download`,
- * `checksum` and `commit`.
+ * "channel":"stable|latest","verify":"pending|valid|failed"}`. The error codes are `manifest` (fetch
+ * or parse), `download`, `checksum` and `commit`.
+ *
+ * `verify` is the verdict on a freshly installed image (cali_ota_verify_step()): `pending` while the
+ * bootloader still holds the previous slot as the fallback, `valid` once the image is confirmed (and
+ * on every image that needs no verdict), `failed` when the image showed a dead camper link. A failed
+ * image is never confirmed: the next reset boots the previous slot. Until then no other OTA can start
+ * (the bootloader refuses one while the running image is unconfirmed).
  *
  * C99, no malloc, no ESP-IDF headers. Proven by `tests/firmware/test_ota.py` (`test/ota_cli.c`).
  */
@@ -151,6 +159,71 @@ int cali_ota_set_channel(int latest);
  * @return `stable` or `latest`.
  */
 const char *cali_ota_channel_name(int ch);
+/** @brief The verdicts on a freshly installed image (`device.ota.verify`). */
+enum cali_ota_verify_e {
+    CALI_OTA_VERIFY_PENDING,   /**< Not decided yet: a reset boots the previous slot. */
+    CALI_OTA_VERIFY_VALID,     /**< Confirm the image (or there is nothing to confirm). */
+    CALI_OTA_VERIFY_FAILED,    /**< Never confirm it: the next reset boots the previous slot. */
+};
+/** @brief Never a verdict before this run time (the tick and the web server live this long). */
+#define CALI_OTA_VERIFY_MIN_MS 60000u
+/**
+ * @brief No counted unit advert by this run time: valid. The unit's absence (camper unit off, the van
+ * parked alone) is no fault, so a healthy image is not held back by it.
+ */
+#define CALI_OTA_VERIFY_T_MS (15u * 60000u)
+/**
+ * @brief The unit advertised (with a bond, the BLE mode not off) and no link came up this long after the
+ * first advert: failed. Longer than the power-save rest poll (#CALI_SESSION_REST_POLL_DEFAULT_MIN,
+ * 30 min), the only time the session leaves an advertising unit alone on purpose.
+ */
+#define CALI_OTA_VERIFY_W_MS (40u * 60000u)
+/**
+ * @brief An advert older than this ends the window (the unit fell asleep again: a door opened, then
+ * shut); the next advert starts a new one, so only a unit that keeps advertising without a link fails.
+ * Five sensor scan windows (one a minute) long.
+ */
+#define CALI_OTA_VERIFY_GONE_MS (5u * 60000u)
+
+/** @brief What cali_ota_verify_step() reads each tick; the int members are 0 or 1. */
+typedef struct {
+    int web_up;           /**< The web server listens. */
+    int link_up;          /**< The camper link is up (`device.link.up`). */
+    int64_t adv_ago_ms;   /**< ms since the bonded unit's own advert (`unit_adv_seen_ms_ago`), -1 never. */
+    int bonded;           /**< A bond is stored. */
+    int ble_off;          /**< The BLE mode is off: the session does not connect on purpose. */
+    int ble_synced;       /**< The BLE host has synced with its controller. */
+} cali_ota_verify_in_t;
+
+/**
+ * @brief Start (or skip) the verdict. Owner task, once at boot; times count from now_ms.
+ * @param pending Not 0: the running image awaits its verdict (the bootloader's pending-verify state).
+ *                0: nothing to verify, the verdict is `valid` at once.
+ * @param now_ms The current run time.
+ * @param min_ms #CALI_OTA_VERIFY_MIN_MS (a test passes shorter times, here and below).
+ * @param t_ms #CALI_OTA_VERIFY_T_MS.
+ * @param w_ms #CALI_OTA_VERIFY_W_MS.
+ * @param gone_ms #CALI_OTA_VERIFY_GONE_MS.
+ */
+void cali_ota_verify_begin(int pending, uint64_t now_ms, uint32_t min_ms, uint32_t t_ms, uint32_t w_ms,
+                           uint32_t gone_ms);
+/**
+ * @brief Advance the verdict. Owner task, every tick. Once `valid` or `failed`, it stays.
+ *
+ * Valid: the link was up once (from the begin on, latched: a rest probe's link is brief). Failed: with
+ * a bond and the BLE mode not off, the unit kept advertising (no gap of gone_ms) and no link came up
+ * within w_ms of the window's first advert. Failed: the BLE host never synced by t_ms (a dead BLE
+ * stack sees no advert at all, so it would otherwise read as "no unit"). Valid: at t_ms or later, no
+ * window open (the unit is not advertising). Nothing before min_ms, nothing while the web server is
+ * down. Every verdict logs and emits an `ota_verify` diagnostics event.
+ * @param now_ms The current run time.
+ * @param in This tick's inputs.
+ * @return One of #cali_ota_verify_e.
+ */
+int cali_ota_verify_step(uint64_t now_ms, const cali_ota_verify_in_t *in);
+/** @brief The current verdict. @return One of #cali_ota_verify_e. */
+int cali_ota_verify(void);
+
 /**
  * @brief Write the `device.ota` object. It is a value: call cali_json_key() first.
  * @param j The JSON writer.
