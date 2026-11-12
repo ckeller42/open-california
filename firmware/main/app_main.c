@@ -135,6 +135,7 @@ static int s_wifi;                     /* cali_net_esp_init succeeded: the netwo
 static int s_web;                      /* the web server listens (the OTA "healthy run" needs it) */
 static const cali_transport_t *s_ble;  /* NimBLE's transport, or s_no_ble: the sensor windows' radio */
 static atomic_int s_ble_synced;        /* NimBLE synced with its controller (the OTA verdict reads it) */
+static int s_ota_confirmed;            /* the verdict is settled and, if valid, the slot marked valid */
 
 /* ---- diagnostics (R_FW_DIAG_LOG) ---- */
 #define RTC_MAGIC 0xd1a6b007u
@@ -341,7 +342,10 @@ static void do_work(void) {
         uint64_t now = cali_uptime_ms();
         cali_runner_tick(now);        /* BLE first: WiFi/web work (NVS writes, mode switches) never */
         cali_session_tick(now);       /* delays this tick's heartbeat decision */
-        cali_sensors_tick(now, s_ble, cali_exp_sensors(), cali_runner_in_flow());   /* R_FW_SENSORS */
+        /* R_FW_SENSORS; the windows also run while an OTA verdict is pending: the unit's own advert,
+         * its evidence, comes only from them (with exp_sensors off, a dead link would read "no unit") */
+        cali_sensors_tick(now, s_ble, cali_exp_sensors() || cali_ota_verify() == CALI_OTA_VERIFY_PENDING,
+                          cali_runner_in_flow());
         cali_energy_tick(now);        /* Wh since boot + the house load (R_FW_ENERGY_COUNTERS) */
         cali_lora_tick(now);          /* R_FW_LORA: a snapshot to the LoRa task, its status back */
         cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
@@ -359,7 +363,7 @@ static void do_work(void) {
 #if CONFIG_CALI_DISPLAY
         cali_display_tick(now);   /* repaints at most every DISPLAY_REFRESH_MS; never blocks on BLE */
 #endif
-        if (cali_ota_verify() == CALI_OTA_VERIFY_PENDING) {   /* a fresh image's verdict (R_FW_OTA) */
+        if (!s_ota_confirmed) {   /* a fresh image's verdict (R_FW_OTA) */
             const cali_ota_verify_in_t vin = {
                 .web_up = s_web != 0,
                 .link_up = cali_session_link_up(),
@@ -368,7 +372,10 @@ static void do_work(void) {
                 .ble_off = cali_session_mode() == CALI_BLE_OFF,
                 .ble_synced = atomic_load(&s_ble_synced),
             };
-            if (cali_ota_verify_step(now, &vin) == CALI_OTA_VERIFY_VALID) cali_ota_esp_mark_valid();
+            int v = cali_ota_verify_step(now, &vin);   /* a settled verdict just returns itself */
+            /* valid: retry the mark on the next tick until the slot really is valid */
+            if (v == CALI_OTA_VERIFY_FAILED || (v == CALI_OTA_VERIFY_VALID && cali_ota_esp_mark_valid() == 0))
+                s_ota_confirmed = 1;
         }
     }
     if (!atomic_load(&s_ready)) return;

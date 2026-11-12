@@ -942,8 +942,8 @@ never while the web server is down:
 The 40 min outlast the power-save rest poll (30 min): with camping off the session leaves an
 advertising unit alone on purpose and connects only on that poll. The `ble_dead` leg exists because
 the unit's advert itself comes from the NimBLE scan: a broken BLE stack sees no advert and would
-otherwise pass as "no unit". The adverts come from the sensor scan windows (one a minute); with
-`exp_sensors` off there are none, and only the link and the `ble_dead` leg decide.
+otherwise pass as "no unit". The adverts come from the sensor scan windows (one a minute), so these
+windows run while the verdict is pending even with `exp_sensors` off.
 
 A failed image is never confirmed, and the firmware does not restart by itself: the next reset (a
 crash, a power cycle, console `ota invalid`) boots the previous slot. Until then the bootloader refuses

@@ -165,7 +165,8 @@ static void tick_cb(struct ble_npl_event *ev) {
     uint64_t now = cali_uptime_ms();
     cali_runner_tick(now);              /* BLE first: WiFi/web work never delays this tick's */
     cali_session_tick(now);             /* heartbeat decision (same order as app_main.c) */
-    cali_sensors_tick(now, cali_ble_nimble_transport(), cali_exp_sensors(), cali_runner_in_flow());
+    cali_sensors_tick(now, cali_ble_nimble_transport(),   /* also while a verdict is pending (app_main.c) */
+                      cali_exp_sensors() || cali_ota_verify() == CALI_OTA_VERIFY_PENDING, cali_runner_in_flow());
     cali_energy_tick(now);   /* R_FW_ENERGY_COUNTERS */
     cali_lora_tick(now);     /* R_FW_LORA: lora_port_none.c, the module reads absent */
     cali_ac_tick(now);

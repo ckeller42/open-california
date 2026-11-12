@@ -121,7 +121,7 @@ The ESP picks its channel (NVS `ota_channel`, default stable; Satellite settings
 
 | Want | Do |
 |---|---|
-| Install a merge | `tools/esplab/ota_deploy.sh main` (or `<sha>`) — sets channel `latest`, waits for `esp-latest` to name the sha, installs, waits for `device.fw` + the verdict (`device.ota.verify`, up to ~45 min), fails on `ota.state` `error`, a rollback or `verify` `failed`. |
+| Install a merge | `tools/esplab/ota_deploy.sh main` (or `<sha>`) — sets channel `latest`, waits for `esp-latest` to name the sha, installs, waits for `device.fw` + the verdict (`device.ota.verify`; gives up after 90 min), fails on `ota.state` `error`, a rollback or `verify` `failed`. |
 | Promote the soaked build | `tools/esplab/promote_stable.sh <sha>` after a green 72 h soak report (`tools/esplab/soak_report.py`, daily `calictl-esp-soak.timer` on buspi → `~/esp-soak/<date>.txt`, `VERDICT PASS`): moves the tag, dispatches the workflow (needs that sha's `main` CI artifact, ≤ 90 days old). |
 | Fall back | `tools/esplab/ota_deploy.sh stable` — switches the channel, installs the `esp-stable` image. On pre-channel firmware (no `device.ota.channel`) only `main` works; the script re-sets the channel after that first install. |
 | The gate | No install on the van ESP before the running build's 72 h report is green; a new build runs 72 h with `exp_sensors` off, then 72 h on, before promotion. |

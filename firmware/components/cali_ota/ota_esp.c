@@ -178,10 +178,12 @@ void cali_ota_esp_verify_begin(void) {
                           CALI_OTA_VERIFY_W_MS, CALI_OTA_VERIFY_GONE_MS);
 }
 
-void cali_ota_esp_mark_valid(void) {
+int cali_ota_esp_mark_valid(void) {
     const esp_partition_t *run;
-    if (!running_pending(&run)) return;
-    cali_log("ota: %s marked valid: %s", run->label, esp_err_to_name(esp_ota_mark_app_valid_cancel_rollback()));
+    if (!running_pending(&run)) return 0;
+    esp_err_t e = esp_ota_mark_app_valid_cancel_rollback();
+    cali_log("ota: %s marked valid: %s", run->label, esp_err_to_name(e));
+    return e == ESP_OK ? 0 : -1;
 }
 
 int cali_ota_esp_console_line(const char *line) {

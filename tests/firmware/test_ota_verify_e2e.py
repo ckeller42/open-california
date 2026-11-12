@@ -3,7 +3,8 @@
 The firmware pairs, stops (the OTA's restart) and starts again on the same bond store, then acts as a
 freshly installed image (the test-only ``otaverify`` line: cali_ota_verify_begin with short times). The
 unit advertises; whether it lets the link come up decides the verdict. The sighting comes from the
-sensor scan windows (one a minute), so ``sensors on``.
+sensor scan windows (one a minute), which run while a verdict is pending even with ``exp_sensors``
+off — the firmware here never turns the sensors on.
 
 The decision table itself (every input, the shipped 1 / 15 / 40 / 5 min): ``test_ota.py``. The
 bootloader side (an unconfirmed image rolls back on the next reset) is ESP-only: the bench run.
@@ -31,7 +32,9 @@ def _fresh_image(host_fw, hu, tmp_path, refuse):
     fw.stop()
     hu.call(_set_refuse, hu.unit, refuse)
     fw2 = host_fw(hu, store_dir=store)  # the restart into the new image: the bond is kept
-    fw2.send("sensors on")
+    fw2.expect(
+        "LOG exp: sensors", lambda v: v == "off"
+    )  # the sightings below come from the verdict's windows
     fw2.send(VERIFY)
     fw2.expect("LOG otaverify: pending")
     return fw2
