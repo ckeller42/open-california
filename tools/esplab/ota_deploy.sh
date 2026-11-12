@@ -44,7 +44,8 @@ while :; do
     [ "$v" = none ] && [ "$up" -gt 70000 ] && break
     if [ "$v" = failed ]; then
       echo "verdict failed: $sha7 is never confirmed; the next reset boots the previous slot. No other OTA" >&2
-      echo "runs until then. Roll back now: console 'ota invalid' (esp_cmd.py on the USB host) or a power cycle." >&2
+      echo "runs until then. Roll back now: curl -X POST $ESP/api/ota -d '{\"action\":\"rollback\"}'" >&2
+      echo "(200 = rebooting into the previous build; 409 confirmed = nothing to go back from)." >&2
       exit 1
     fi
   fi

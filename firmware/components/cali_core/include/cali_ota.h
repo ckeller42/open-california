@@ -40,7 +40,7 @@
  * `{"state":"idle|checking|up_to_date|available|downloading|verifying|rebooting|error",
  * "available_sha":"40 hex digits"|null,"progress_pct":0..100,"error":"code"|null,
  * "channel":"stable|latest","verify":"pending|valid|failed"}`. The error codes are `manifest` (fetch
- * or parse), `download`, `checksum` and `commit`.
+ * or parse), `download`, `checksum`, `commit` and `rollback` (the previous slot was refused).
  *
  * `verify` is the verdict on a freshly installed image (cali_ota_verify_step()): `pending` while the
  * bootloader still holds the previous slot as the fallback, `valid` once the image is confirmed
@@ -116,6 +116,11 @@ typedef struct {
     void (*abort)(void);    /**< Drop the slot; the boot partition is untouched. */
     void (*restart)(void);  /**< Restart the chip. */
     void (*wake)(void);     /**< Any task: have the OTA task call cali_ota_work(). */
+    /**
+     * Mark the running (unconfirmed) image invalid and restart into the previous slot; OTA task,
+     * after a short delay so the HTTP answer still goes out. Returns only on failure.
+     */
+    void (*rollback)(void);
 } cali_ota_ops_t;
 
 /**
@@ -129,6 +134,15 @@ void cali_ota_init(const cali_ota_ops_t *ops);
  * @return 0 started, -1 no OTA on this build, -2 busy (one already runs).
  */
 int cali_ota_request(int install);
+/**
+ * @brief Go back to the previous slot: the way back from a `failed` (or still `pending`) verdict that
+ * needs neither the console nor buspi (`POST /api/ota {"action":"rollback"}`). Owner task. The OTA
+ * task then calls ops->rollback(). Only an image that is not confirmed can go back, so this never
+ * resets a healthy system (the bootloader refuses it too).
+ * @return 0 started (`device.ota.state` `rebooting`), -1 no OTA on this build, -2 busy (a check runs),
+ *         -3 the image is confirmed (`device.ota.verify` `valid`): nothing to go back from.
+ */
+int cali_ota_rollback(void);
 /** @brief Run the started request to its end (blocking I/O). OTA task. With no request it returns at once. */
 void cali_ota_work(void);
 /**

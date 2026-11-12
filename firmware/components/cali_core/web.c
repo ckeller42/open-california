@@ -69,6 +69,8 @@ static const char ERR_BUSY[] = "{\"ok\":false,\"error\":\"busy\"}";
 static const char ERR_NOT_PAIRED[] = "{\"ok\":false,\"error\":\"not_paired\"}";   /* /api/ble connect */
 static const char ERR_NO_TIME[] = "{\"ok\":false,\"error\":\"no_time\"}";   /* /api/ble: no wall clock */
 static const char ERR_OTA_UNAVAILABLE[] = "{\"ok\":false,\"error\":\"ota_unavailable\"}";
+static const char ERR_OTA_CONFIRMED[] = "{\"ok\":false,\"error\":\"confirmed\"}";
+static const char OK_ROLLBACK[] = "{\"ok\":true,\"rollback\":\"rebooting\"}";
 static const char ERR_DISABLED[] = "{\"ok\":false,\"error\":\"disabled\"}";   /* /api/sensors, /api/lora, flag off */
 static const char OVERFLOW_BODY[] = "response too large";
 /* /api/pairing errors: calictl's own bodies (web.py), no "ok" member */
@@ -849,8 +851,12 @@ static const char *const K_CHANNEL[] = {"channel"}, *const K_ENABLED[] = {"enabl
 static const char *const K_EXPERIMENTAL[] = {"sensors", "lora"};
 static int exp_field(cursor_t *c, int i, void *ctx) { return parse_bool(c, &((int *)ctx)[i]); }
 
-/* ---- POST /api/ota {"action":"check"|"install"} | {"channel":"stable"|"latest"} (R_FW_OTA): station
- * mode only, like /api/command. The channel is stored at once (the next check uses it), even on a
+/* ---- POST /api/ota {"action":"check"|"install"|"rollback"} | {"channel":"stable"|"latest"} (R_FW_OTA):
+ * station mode only, like /api/command — except rollback: 200 {"ok":true,"rollback":"rebooting"} and
+ * the previous slot about 1 s later; 409 "confirmed" on a confirmed image (nothing to go back from).
+ * rollback works over the setup hotspot too: a new image that breaks the station WiFi falls back to
+ * the hotspot (WIFI_SETUP_AP_RETRYING after NET_SETUP_AFTER_MS), and going back to the previous,
+ * known-good image is less than POST /api/wifi already allows there. The channel is stored at once (the next check uses it), even on a
  * build without OTA I/O; it never starts the OTA task. ---- */
 static void api_ota(const cali_http_req_t *req, cali_http_resp_t *resp) {
     static pair_req_t r;   /* the same {"action":…} shape as /api/pairing */
@@ -858,6 +864,12 @@ static void api_ota(const cali_http_req_t *req, cali_http_resp_t *resp) {
     int rc;
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
+    } else if (parse_pairing(req->body, req->body_len, &r) == 0 && is_action(&r, "rollback")) {   /* any mode */
+        rc = cali_ota_rollback();
+        if (rc == -1) SET_CONST(resp, 503, ERR_OTA_UNAVAILABLE);
+        else if (rc == -3) SET_CONST(resp, 409, ERR_OTA_CONFIRMED);
+        else if (rc == -2) SET_CONST(resp, 409, ERR_BUSY);
+        else SET_CONST(resp, 200, OK_ROLLBACK);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {   /* never over the setup hotspot */
         SET_CONST(resp, 403, ERR_SETUP_MODE);
     } else if (parse_body(req->body, req->body_len, K_CHANNEL, 1, channel_field, &ch) == 1) {   /* {"channel":"<s>"} */

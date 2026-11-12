@@ -425,3 +425,29 @@ def test_verify_a_sleeping_unit_restarts_the_window(ota_cli):
     lines += [step(60 * 60000, ago=1000)]
     v = verdicts(run(ota_cli, *lines))
     assert set(v[:-1]) == {"pending"} and v[-1] == "failed"
+
+
+def test_rollback_only_from_an_unconfirmed_image(ota_cli):
+    """``cali_ota_rollback``: pending, failed, or valid-but-not-yet-confirmed images go back (the OTA
+    task calls ops->rollback); a confirmed one (every image that needed no verdict) is refused with
+    -3, so the route can never reset a healthy system.
+
+    .. test:: OTA rollback: only an unconfirmed image goes back to the previous slot
+       :id: T_FW_OTA_ROLLBACK
+       :links: R_FW_OTA
+    """
+    begin = "vbegin 1 0 %d %d %d %d" % (MIN, T, W, GONE)
+    out = run(ota_cli, "rollback", "json")  # no begin: a confirmed image
+    assert "RB -3" in out and "rollback" not in calls(out)
+    out = run(ota_cli, begin, step(T, synced=0), "rollback", "json", "work", "json")  # failed (ble_dead)
+    assert "RB 0" in out and calls(out) == ["wake", "rollback"]
+    assert [o["state"] for o in otas(out)] == ["rebooting", "error"]  # rollback returned: it failed
+    assert otas(out)[-1]["error"] == "rollback"
+    out = run(ota_cli, begin, "rollback")  # still pending
+    assert "RB 0" in out
+    out = run(ota_cli, begin, step(MIN, link=1), "rollback")  # valid, the slot not yet marked
+    assert "RB 0" in out
+    out = run(ota_cli, begin, step(MIN, link=1), "vconfirm", "rollback")  # confirmed
+    assert "RB -3" in out
+    out = run(ota_cli, "noinit", begin, "rollback")  # host / QEMU: no OTA I/O
+    assert "RB -1" in out

@@ -141,8 +141,8 @@ the release mid-download (install again). Station mode only (`403` over the setu
 build confirms itself only on a valid verdict (`device.ota.verify`: the camper link up once, or 15 min
 without an advertising unit); a crash before that boots the previous slot. `failed` (the unit
 advertises, no link for 40 min; or a dead BLE host) is never confirmed and blocks every further OTA
-until a reset: console `ota invalid` via `esp_cmd.py` on the USB host, or a power cycle
-(`docs/firmware.md` "Rollback").
+until a reset: `POST /api/ota {"action":"rollback"}` (any WiFi mode; 409 `confirmed` = nothing to go
+back from), else a USB reset or power cycle from buspi (`docs/firmware.md` "Rollback").
 
 **The ESP lost its WiFi** (a failed network change on old firmware, a wrong password typed on
 the hotspot) and sits on its setup hotspot, out of reach: buspi holds the same network in its

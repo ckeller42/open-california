@@ -143,6 +143,12 @@ void cali_ota_work(void) {
     size_t size;
     int req = __atomic_exchange_n(&s_pending, 0, __ATOMIC_ACQUIRE);
     if (!req || !s_ops) return;
+    if (req == 3) {   /* cali_ota_rollback */
+        cali_log("ota: rollback: marking this image invalid, restarting into the previous slot");
+        s_ops->rollback();   /* returns only on failure */
+        fail("rollback");
+        return;
+    }
     ch = cali_ota_channel_name(cali_ota_channel());   /* once: a change mid-request never mixes releases */
     /* a fresh query per check: GitHub's edge served one client the old manifest's redirect for ~2 min
      * after CI replaced it (2026-10-11). The image itself is SHA-256 checked, so it needs none. */
@@ -242,6 +248,21 @@ int cali_ota_verify_step(uint64_t now_ms, const cali_ota_verify_in_t *in) {
 
 int cali_ota_verify(void) { return s_v; }
 void cali_ota_verify_confirmed(void) { s_vunconfirmed = 0; }
+
+int cali_ota_rollback(void) {
+    int st = cali_ota_state();
+    if (!s_ops || !s_ops->rollback) return -1;
+    if (s_v == CALI_OTA_VERIFY_VALID && !s_vunconfirmed) return -3;
+    if (st == CALI_OTA_CHECKING || st == CALI_OTA_DOWNLOADING || st == CALI_OTA_VERIFYING ||
+        st == CALI_OTA_REBOOTING)
+        return -2;
+    __atomic_store_n(&s_error, NULL, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_pending, 3, __ATOMIC_RELAXED);
+    s_started = cali_uptime_ms();
+    set_state(CALI_OTA_REBOOTING);
+    s_ops->wake();
+    return 0;
+}
 
 void cali_ota_json(cali_json_t *j) {
     int st = cali_ota_state();

@@ -1566,6 +1566,48 @@ def test_ota_channel_store_failure(web_cli):
     assert (r.status, r.json()) == (500, {"ok": False, "error": "store"})
 
 
+def test_ota_rollback_answers_are_tellable(web_cli):
+    """The way back from a failed verdict that needs neither the console nor buspi. A person with a
+    phone in the van's WiFi must tell the answers apart without logs: 200 ``rollback: rebooting``
+    (the previous slot follows), 409 ``confirmed`` (the image is valid: nothing to go back from),
+    503 ``ota_unavailable``; "not reachable" is no HTTP answer at all.
+
+    .. test:: POST /api/ota rollback: accepted only on an unconfirmed image, refused readably on a confirmed one
+       :id: T_FW_OTA_ROLLBACK_API
+       :links: R_FW_OTA
+    """
+    rs, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"otainit",
+            b"otapending",
+            req("POST", "/api/ota", '{"action":"rollback"}'),
+            req("GET", "/api/state"),
+        ],
+    )
+    assert (rs[0].status, rs[0].json()) == (200, {"ok": True, "rollback": "rebooting"})
+    assert rs[1].json()["device"]["ota"]["state"] == "rebooting"
+    assert ota_wakes(other)  # the OTA task does it (after the answer went out)
+    # a confirmed image (every image that needed no verdict, or a verdict confirmed): refused, readably
+    r, other = one(web_cli, "POST", "/api/ota", '{"action":"rollback"}', setup=[*STATION, "otainit"])
+    assert (r.status, r.json()) == (409, {"ok": False, "error": "confirmed"})
+    assert not ota_wakes(other)
+    # over the setup hotspot too (the new image may have broken the station WiFi), unlike check/install
+    for state, joined in NOT_STATION:
+        r, other = one(
+            web_cli,
+            "POST",
+            "/api/ota",
+            '{"action":"rollback"}',
+            setup=["wifi " + state, "joined %d" % joined, "otainit", "otapending"],
+        )
+        assert (r.status, r.json()) == (200, {"ok": True, "rollback": "rebooting"}), state
+        assert ota_wakes(other)
+    r, _ = one(web_cli, "POST", "/api/ota", '{"action":"rollback"}', setup=STATION)  # host/QEMU: no OTA ops
+    assert (r.status, r.json()) == (503, {"ok": False, "error": "ota_unavailable"})
+
+
 def test_ota_unavailable_without_an_ota_task(web_cli):
     """The host build and the QEMU image have no OTA I/O: 503, never a hang."""
     r, _ = one(web_cli, "POST", "/api/ota", '{"action":"check"}', setup=STATION)

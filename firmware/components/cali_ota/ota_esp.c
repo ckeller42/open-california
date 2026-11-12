@@ -143,9 +143,14 @@ static void e_restart(void) {
 
 static void e_wake(void) { xTaskNotifyGive(s_task); }
 
+static void e_rollback(void) {
+    vTaskDelay(pdMS_TO_TICKS(1000));   /* the HTTP answer goes out first */
+    cali_log("ota: mark invalid + reboot: %s", esp_err_to_name(esp_ota_mark_app_invalid_rollback_and_reboot()));
+}
+
 static const cali_ota_ops_t s_ops = {
     .get = e_get, .download = e_download, .slot_sha256 = e_slot_sha256, .commit = e_commit,
-    .abort = e_abort, .restart = e_restart, .wake = e_wake,
+    .abort = e_abort, .restart = e_restart, .wake = e_wake, .rollback = e_rollback,
 };
 
 static void ota_task(void *arg) {
