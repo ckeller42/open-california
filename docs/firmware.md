@@ -953,8 +953,15 @@ reset would just boot the same unconfirmed image again). Until a confirmed image
 refuses every other OTA (`esp_ota_begin` answers `ESP_ERR_OTA_ROLLBACK_INVALID_STATE` while the
 running image is unconfirmed), so a failed verdict needs a person. The ways back, best first:
 
-1. `POST /api/ota {"action":"rollback"}` from any device in the van's WiFi, or over the setup
-   hotspot (a new image that breaks the station WiFi falls back to the hotspot after 5 min without a
+1. `POST /api/ota {"action":"rollback"}`. The van router `busnet` advertises `192.168.8.0/24` into
+   the tailnet, so this reaches the satellite from anywhere on the tailnet — no buspi, nobody in the
+   camper (measured 2026-11-14: `GET http://192.168.8.183/api/state` over the tailnet, HTTP 200 in
+   0.33 s). The satellite reaches the tailnet only through `busnet`, so whenever it answers at all,
+   this route is open. `busnet` is the router, on the same van battery as the ESP and not on buspi's
+   halt timer; the only recorded `busnet` outage was the battery going flat, which took the ESP
+   offline too, so there is no state where the ESP answers but `busnet` does not. `busnet` offline
+   (or on the van's own LAN without the tailnet) falls back to a device in the van's WiFi, or the
+   setup hotspot (a new image that breaks the station WiFi reopens the hotspot after 5 min without a
    join). 200 `rollback: rebooting` = accepted; 409 `confirmed` = the image is valid, nothing to go
    back from; no HTTP answer at all = the satellite is not reachable.
 2. A reset over USB from buspi: a plain serial open of `/dev/ttyACM0` (without `-hupcl`) resets the
@@ -969,7 +976,8 @@ The route's limit: with BLE, the owner tick — and with it `cali_web_poll` and 
 the NimBLE host task. The route answers when the host task runs but never syncs (the controller does
 not answer) and when `nimble_port_init` fails (a plain task then runs the tick). When the host task
 itself hangs, the web server is gone with it and no way over the LAN helps: a crash resets the chip
-and so goes back by itself; a hang needs power, which with buspi halted means physical access.
+and so goes back by itself; a hang needs power — `busnet` carries no power switch for the ESP, so that
+case means `uhubctl` from buspi (woken first) or physical access.
 A crash or reset while the verdict is pending boots the previous slot too, as long as that slot still
 holds an image. `ota status` logs `device.ota` and the
 running slot.
