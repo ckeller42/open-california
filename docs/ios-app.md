@@ -1,4 +1,4 @@
-# iOS app (planned)
+# iOS app
 
 A native iPhone app talks **directly to the {term}`camper unit` over Bluetooth**, looks like a
 real iOS app, and takes voice commands through Siri and Shortcuts ({term}`App Intents`). Voice
@@ -6,8 +6,10 @@ control is what it adds over the vendor app. A user installs it and pairs it wit
 extra hardware. A user who later wants remote access (internet, later LoRa) and data while nobody
 is at the van adds the {term}`satellite`. The app then finds the satellite and sets it up.
 
-This page collects the owner's requirements and the architecture decisions for the app. The app
-is not built yet: every requirement is `open` until its implementation and test exist.
+This page collects the owner's requirements and the architecture decisions for the app. Phase 1
+is built: its requirements are `implemented`, each with its code and tests (the trace at the end of
+the page). The phase-2 requirements are `open`, and so is `R_IOS_LOOK`: the unit reports no outside
+temperature, so the cockpit shows fresh water and solar only.
 
 ## Phases
 
@@ -25,16 +27,19 @@ is not built yet: every requirement is `open` until its implementation and test 
 
 ```{req} Direct Bluetooth link to the unit
 :id: R_IOS_BLE_DIRECT
-:status: open
+:status: implemented
 :tags: ios
 
 The app connects to the camper unit directly over Bluetooth Low Energy ({term}`CoreBluetooth`). It needs
-no satellite, no Pi and no network for any phase-1 function.
+no satellite, no Pi and no network for any phase-1 function. On each link it reads `1004` first, then
+subscribes to and reads only the functions of the unit's vehicle variant (`CarVariant`), in one fixed
+order (`general` first, then by name), as the vendor app and the satellite do; without a `1004` frame
+it takes every function. The gate is the satellite's own C function (`cali_variant_has`).
 ```
 
 ```{req} Guided first pairing
 :id: R_IOS_PAIRING
-:status: open
+:status: implemented
 :tags: ios
 
 The app guides the first pairing: it tells the user to start pairing on the camper panel and to
@@ -44,11 +49,12 @@ paired with the camper (for example through the vendor app) needs no new pairing
 the bond. The real camper always asks for a passkey when it pairs; a pairing prompt without a code
 is not the camper and is cancelled.
 (iOS runs the pairing and owns the bond; an app cannot delete a bond itself.)
+*Forget this camper unit…* on the Setup tab clears only the app's own data (the unit, its last values and the link) and shows the same Settings steps, because iOS removes the bond only in *Settings → Bluetooth*; pairing again with the same unit then ends as already paired.
 ```
 
 ```{req} Protocol version 2 only
 :id: R_IOS_V2_ONLY
-:status: open
+:status: implemented
 :tags: ios
 
 The app reads the unit's CommunicationVersion. It supports version 2. On any other version it
@@ -58,7 +64,7 @@ version-3 characteristics `1603` or `F002`.
 
 ```{req} Respect the power-save hang-up
 :id: R_IOS_POWER_SAVE
-:status: open
+:status: implemented
 :tags: ios
 
 When the unit ends the link itself while camping mode is off and no shore power feeds it (the
@@ -69,7 +75,7 @@ starts a new connect.
 
 ```{req} Link held in the background while camping
 :id: R_IOS_BACKGROUND_LINK
-:status: open
+:status: implemented
 :tags: ios
 
 While camping mode is on, the app keeps the Bluetooth link open in the background (iOS
@@ -82,18 +88,24 @@ itself when it comes back.
 
 ```{req} Phase-1 functions
 :id: R_IOS_FUNCTIONS
-:status: open
+:status: implemented
 :tags: ios
 
 The app shows the unit's status (batteries, energy, water, temperatures, vehicle) and controls
-camping mode (master, lights, rear USB), lighting (on/off, zones, favourites), the cooler, the air
-heater and the energy mode, plus a device-status screen. It shows the same verified fields, with
-the same labels and units, as the web UI.
+camping mode (master, lights, rear USB), lighting (on/off, zones, favourites, the wake-up light and
+the sliding-door light), the cooler, the air heater and the energy mode, plus a device-status
+screen. It shows the same verified fields, with the same labels and units, as the web UI.
+
+The wake-up light card sends the whole config with each change, as the VW app does. The time goes
+out only when the user taps OK in the time sheet, so turning the wheel sends nothing. While the
+unit has not reported its wake-up config, only the time is live: it goes out alone, and the app
+pulls the unit's config before it plans the frame. A wake-up change counts as applied only when
+the unit's Mode-20 report shows the sent values.
 ```
 
 ```{req} No pop-top roof in phase 1
 :id: R_IOS_NO_ROOF
-:status: open
+:status: implemented
 :tags: ios
 
 Phase 1 has no roof control. Roof control comes after the roof is live-verified at the van.
@@ -101,7 +113,7 @@ Phase 1 has no roof control. Roof control comes after the roof is live-verified 
 
 ```{req} Show only fitted equipment
 :id: R_IOS_INSTALLED
-:status: open
+:status: implemented
 :tags: ios
 
 The app shows a function only when the unit reports it as installed. It shows no "not installed"
@@ -110,7 +122,7 @@ rows or tiles.
 
 ```{req} Honest feedback
 :id: R_IOS_HONEST
-:status: open
+:status: implemented
 :tags: ios
 
 The app reports a change as applied only from the unit's truthful feedback. A write-through echo
@@ -119,7 +131,7 @@ of the state characteristic is never proof. When the unit cannot be reached, the
 
 ```{req} No VIN
 :id: R_IOS_NO_VIN
-:status: open
+:status: implemented
 :tags: ios
 
 The app never reads, shows, stores or sends the vehicle identification number.
@@ -129,7 +141,7 @@ The app never reads, shows, stores or sends the vehicle identification number.
 
 ```{req} Voice and Shortcuts actions
 :id: R_IOS_SIRI
-:status: open
+:status: implemented
 :tags: ios
 
 Siri and the Shortcuts app offer: camping mode on/off, lights on/off, light favourite A–D, and the
@@ -138,7 +150,7 @@ cooler on/off. The phrases exist in German and English.
 
 ```{req} No air heater by voice
 :id: R_IOS_SIRI_NO_HEATER
-:status: open
+:status: implemented
 :tags: ios
 
 Siri and Shortcuts offer no air-heater action. The fuel burner is switched only by a tap in the
@@ -147,7 +159,7 @@ app, under the app's heater gates, so a voice flow cannot cause short cycles.
 
 ```{req} Siri answers what really happened
 :id: R_IOS_SIRI_HONEST
-:status: open
+:status: implemented
 :tags: ios
 
 Siri confirms a command only when the unit confirmed it. Without an open link a command connects
@@ -165,12 +177,13 @@ power-save, Siri says so ("try again in a few seconds") instead of failing silen
 The start screen is a "cockpit": the second-battery level as a large ring, three small values
 (fresh water, outside temperature, solar) and large buttons for camping mode, lights, cooler and
 air heater, with tabs Cockpit / Energy / Water / Setup. Icons are {term}`SF Symbols`, never emoji.
-Amber marks light, green marks "on". The app follows the iPhone's light and dark mode.
+Amber marks light, green marks "on". The app follows the iPhone's light and dark mode. The app icon
+is the web app's icon (`calictl/webui/icon-master.png`), built for iOS by `tools/make_pwa_icons.py`.
 ```
 
 ```{req} German and English
 :id: R_IOS_I18N
-:status: open
+:status: implemented
 :tags: ios
 
 Every text exists in English and German and uses the unit's own vocabulary (for example
@@ -219,7 +232,7 @@ them once; wrong codes and the timeout close the window. The app keeps the secre
 
 ```{req} Tested in tiers
 :id: R_IOS_TESTED
-:status: open
+:status: implemented
 :tags: ios
 
 The app is tested in tiers: the shared C core's existing tests; Swift unit tests for the bridge,
@@ -228,6 +241,32 @@ power-save rules against a fake transport and the Siri action resolution; UI and
 the simulator over a fake transport in light and dark; a real iPhone against the fake unit
 peripheral; the van with an owner checklist; and a manual Siri checklist in both languages.
 ```
+
+{doc}`ios-development-setup` has the commands for the automated tiers; CI runs them in the `ios`
+job. The two manual tiers have their own checklists: {doc}`ios-app-radio-checklist` (a real
+iPhone against the fake unit peripheral and the van) and {doc}`ios-app-siri-checklist` (Siri in
+English and German).
+
+The simulator has no Bluetooth, so the UI tests in CI run over the fake transport. The fake answers
+a few exact control frames of the cooler with the state frame that `tools/mock_unit.py` sends for
+them. One UI test turns the cooler on, sets level 5 and picks the quiet mode "Manual", and waits
+each time until the control shows the unit's answer. A wrong frame gets no answer, so the test
+also checks the bytes the app sends.
+
+```{decision} A reply table, not a second unit model
+:id: AD_IOS_FAKE_REPLIES
+:status: accepted
+:tags: ios
+:links: R_IOS_TESTED
+
+The fake transport answers a short table of exact frames instead of modelling the unit in Swift.
+A Swift unit model would be a third copy of the behaviour in `tools/mock_unit.py` and the C core,
+and it could drift from them. The web UI's end-to-end tests run against `tools/mock_unit.py`
+itself.
+```
+
+The app can record its Bluetooth traffic in the format of `calictl`'s BLE trace, so
+`python3 -m tools.trace_compare` replays an iPhone session like a trace from buspi.
 
 ## Architecture decisions
 
@@ -295,6 +334,20 @@ bundle-ID prefix) stays in a gitignored local configuration file. Certificates a
 profiles are never committed.
 ```
 
+```{decision} The web UI's control types
+:id: AD_IOS_CONTROL_KINDS
+:status: accepted
+:tags: ios
+:links: R_IOS_FUNCTIONS, R_IOS_LOOK
+
+Each control uses the type that the web UI gives it (`kind` in `FEATURES`, and its lamp and
+wake-up rows), and so the type that the VW app uses. A value on a scale is a slider: lamp
+brightness, wake-up brightness, cooling level, heating temperature and run time. An on/off is a
+switch. A drag sends one command when the finger lifts, as the web UI's `change` event does. A
+VoiceOver step sends at once. Until the command ends, the thumb stays where the user left it, and
+then it shows the value that the unit reports.
+```
+
 ```{decision} Same HTTP API for the satellite path
 :id: AD_IOS_HTTP_API
 :status: accepted
@@ -350,6 +403,43 @@ for sphinx-needs does not parse Swift.)
     /// - Test: T_IOS_SIRI_CAMPING
     /// - Verifies: R_IOS_SIRI
     @Test func campingPhraseResolvesToMasterOn() { … }
+```
+
+```{decision} Siri works on a locked iPhone
+:id: AD_IOS_SIRI_LOCKED
+:status: accepted
+:tags: ios
+:links: R_IOS_SIRI
+
+The four voice commands (camping mode, lighting, light favourite, cooler) run on a locked iPhone
+without Face ID. Voice control at the van is the purpose of the app, and each of these actions is
+harmless and easy to undo. The accepted risk: anyone who can speak to the locked iPhone can
+trigger them. Siri's voice recognition is not a security barrier. The air heater has no voice
+command ({need}`R_IOS_SIRI_NO_HEATER`).
+```
+
+## Code and tests
+
+The tables list the Swift code and the Swift tests that trace to the requirements above. The
+docs build generates them from the `- Requirement:` and `- Test:` tags (see
+{need}`AD_IOS_TRACE`); each row links to its source line.
+
+```{needimport} _build/ios-needs.json
+:tags: ios
+```
+
+```{needtable}
+:types: impl
+:tags: ios
+:columns: id, title, links
+:style: table
+```
+
+```{needtable}
+:types: test
+:tags: ios
+:columns: id, links, source
+:style: table
 ```
 
 ## Verified early

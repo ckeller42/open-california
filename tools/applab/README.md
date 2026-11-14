@@ -108,6 +108,12 @@ drop with `reason=19` right after the passkey — leaving the session wedged. Ne
 not be driven to a clean reconnect on this netsim. A boot-from-snapshot (pair once → snapshot → boot
 the snapshot per scenario: bond intact *and* fresh netsim) is the untried candidate fix.
 
+What the app shows then (thinky, app 5.4.0.3036, 2026-11-02): "Connection failure — Error accessing
+data" 11–13 s after each connect, with no write. Bumble's DEBUG log (`BUMBLE_LOGLEVEL=DEBUG`, 16:01:13)
+shows why: Android answers the `1004` read's ATT error INSUFFICIENT_AUTHENTICATION with a **new**
+`SMP_PAIRING_REQUEST` on every connect — the stored bond is never reused — and the passkey dialog then
+times out unanswered. Not a VIN mismatch (that one says "Wrong vehicle found" ~20 ms after the MTU).
+
 `$LAB_DIR/vin` (mode 600) holds the test VIN the app was set up with — never print it, never
 commit it. **If buspi is offline when you run setup**, the APK copy is skipped with a note; copy it
 by hand once buspi is back (`scp pi@buspi:~/apks/*.apk ~/android-lab/apks/`), then `adb install -r`.

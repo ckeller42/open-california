@@ -1,0 +1,3 @@
+# Tests cast decoded JSON vectors with `as!`: a vector of the wrong shape crashes the test, which fails it.
+disabled_rules:
+  - force_cast

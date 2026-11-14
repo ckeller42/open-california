@@ -11,6 +11,8 @@ Outputs (in calictl/webui/):
   icon-192.png, icon-512.png, apple-touch-icon.png        purpose "any"
   maskable-icon-192.png, maskable-icon-512.png            purpose "maskable" (content in safe zone)
   favicon-16x16.png, favicon-32x32.png, favicon.ico       browser tab
+
+And the iPhone app's icon: ios/App/Assets.xcassets/AppIcon.appiconset/AppIcon.png (1024, opaque).
 """
 
 from __future__ import annotations
@@ -24,6 +26,13 @@ MASTER = os.path.join(WEBUI, "icon-master.png")
 ANY_SIZES = {"icon-192.png": 192, "icon-512.png": 512, "apple-touch-icon.png": 180}
 MASKABLE_SIZES = {"maskable-icon-192.png": 192, "maskable-icon-512.png": 512}
 FAVICON_PNG = {"favicon-16x16.png": 16, "favicon-32x32.png": 32}
+IOS_ICONSET = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "ios",
+    "App",
+    "Assets.xcassets",
+    "AppIcon.appiconset",
+)
 
 
 def master_from_source(source_path: str, crop=None, out_path: str = MASTER) -> None:
@@ -79,6 +88,29 @@ def _maskable(master: Image.Image, size: int, scale: float = 0.82) -> Image.Imag
     return bg
 
 
+def ios_corner_margin(master: Image.Image) -> int:
+    """How far to crop each edge so that no transparent pixel of the master's rounded corners is left.
+
+    :param master: the RGBA master tile.
+    :returns: the margin in pixels (the smallest one whose cropped square is fully opaque).
+    """
+    alpha = master.convert("RGBA").getchannel("A")
+    w, h = alpha.size
+    for m in range(w // 2):
+        if alpha.crop((m, m, w - m, h - m)).getextrema()[0] == 255:
+            return m
+    raise ValueError("the master has no opaque core")
+
+
+def ios_icon(master: Image.Image) -> Image.Image:
+    """The iPhone app icon: the master cropped past its rounded corners, 1024 x 1024, no alpha (iOS
+    rounds the corners itself and refuses an icon with transparency)."""
+    rgba = master.convert("RGBA")
+    m = ios_corner_margin(rgba)
+    square = rgba.crop((m, m, rgba.width - m, rgba.height - m)).resize((1024, 1024), Image.LANCZOS)
+    return square.convert("RGB")
+
+
 def main(argv=None):
     import argparse
 
@@ -102,6 +134,9 @@ def main(argv=None):
         print("wrote", name)
     master.save(os.path.join(WEBUI, "favicon.ico"), sizes=[(16, 16), (32, 32), (48, 48)])
     print("wrote favicon.ico")
+    os.makedirs(IOS_ICONSET, exist_ok=True)
+    ios_icon(Image.open(MASTER)).save(os.path.join(IOS_ICONSET, "AppIcon.png"))
+    print("wrote", os.path.relpath(os.path.join(IOS_ICONSET, "AppIcon.png")))
 
 
 if __name__ == "__main__":
