@@ -26,6 +26,7 @@
 #include "esp_app_desc.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -617,9 +618,10 @@ static void lora_task(void *arg) {
 
 void cali_lora_esp_start(void) {
     s_mu = xSemaphoreCreateMutex();
-    s_snap_q = xQueueCreate(1, sizeof(cali_lora_snap_t));
-    s_status_q = xQueueCreate(8, sizeof(cali_rak_event_t));
-    s_event_q = xQueueCreate(16, sizeof(cali_rak_event_t));
+    /* PSRAM (4.7 KB): tasks only, never an ISR, never with the cache off */
+    s_snap_q = xQueueCreateWithCaps(1, sizeof(cali_lora_snap_t), MALLOC_CAP_SPIRAM);
+    s_status_q = xQueueCreateWithCaps(8, sizeof(cali_rak_event_t), MALLOC_CAP_SPIRAM);
+    s_event_q = xQueueCreateWithCaps(16, sizeof(cali_rak_event_t), MALLOC_CAP_SPIRAM);
     if (!s_mu || !s_snap_q || !s_status_q || !s_event_q ||
         xTaskCreate(lora_task, "cali_lora", TASK_STACK, NULL, 3, NULL) != pdPASS) {
         cali_log("lora: no LoRa task (out of memory)");

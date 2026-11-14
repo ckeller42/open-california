@@ -7,5 +7,6 @@ if(CONFIG_CALI_DISPLAY)
 endif()
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS "include"
-                       PRIV_REQUIRES cali_core platform esp_driver_uart esp_driver_gpio esp_app_format freertos mbedtls)
+                       PRIV_REQUIRES cali_core platform esp_driver_uart esp_driver_gpio esp_app_format freertos mbedtls
+                       LDFRAGMENTS "linker.lf")
 include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/cali_strict.cmake)

@@ -110,7 +110,8 @@ CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_QUAD=y
 CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_LV_COLOR_DEPTH_16=y
-CONFIG_LV_USE_CLIB_MALLOC=y
+# LVGL's heap in PSRAM: cali_display's lv_mem_psram.c (13.5 KB of objects left the internal heap).
+CONFIG_LV_USE_CUSTOM_MALLOC=y
 CONFIG_LV_USE_SNAPSHOT=y
 # Compiles the lv_qrcode widget (the hotspot QR, #499) and LVGL's bundled qrcodegen, which display.c
 # also calls directly for the LoRa screen (R_FW_LORA_SCREEN: alphanumeric mode, ECC L).
@@ -160,3 +161,29 @@ CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
 # POST /api/display {"dfs":true} can switch DFS on at runtime for experiments (#346; the knob is
 # documented in docs/firmware.md "Touch NACK diagnostics").
 CONFIG_PM_ENABLE=y
+
+# Internal RAM (bench 2026-11-11, odelly CoreS3 with LoRa, heap tracing): after #534 the internal heap
+# had 82 KB free, 49 KB minimum and a 31 KB largest block. The options below free internal RAM without
+# a function the satellite uses; each was measured on the board.
+# - WiFi driver code in flash instead of IRAM (-17 KB DIRAM). Measured A/B on the same board: the page
+#   ("/", 93 KB gzip) and /api/state take as long as before (the HTTP pump runs on the 100 ms tick and
+#   BT/WiFi coexistence keeps modem sleep on), a 2.1 MB OTA download ~28-30 s on both, the same CPU
+#   load. The BT controller's code stays in IRAM: its link timing must not wait for the cache.
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+# - No IPv6 (owner 2026-11-11): every network the satellite joins (van router, phone hotspot,
+#   campsite) has IPv4, mDNS answers over IPv4, and no firmware code opens an IPv6 socket.
+CONFIG_LWIP_IPV6=n
+# - No WPA2-Enterprise (EAP) and no WPA3 "Enhanced Open" (OWE): neither a van router, a phone hotspot
+#   nor a campsite uses them. WPA3-SAE stays for home networks.
+CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n
+CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA=n
+CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_SOFTAP=n
+# - mDNS (calictl-esp.local): its task stack and its records in PSRAM (the task never touches flash),
+#   without the console commands, service browsing and multi-instance services nobody uses.
+CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
+CONFIG_MDNS_TASK_CREATE_FROM_SPIRAM=y
+CONFIG_MDNS_MEMORY_ALLOC_SPIRAM=y
+CONFIG_MDNS_ENABLE_CONSOLE_CLI=n
+CONFIG_MDNS_ENABLE_BROWSE=n
+CONFIG_MDNS_MULTIPLE_INSTANCE=n

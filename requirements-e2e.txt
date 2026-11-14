@@ -1,4 +1,4 @@
-playwright
+playwright==1.65.0   # pinned, so CI cannot move under the repo: the drift 1.64.1 -> 1.65.0 broke tests/e2e (#536 fixed the test)
 pytest
 pyyaml
 segno            # tests/e2e/test_remote_setup.py: the van's QR codes as images
