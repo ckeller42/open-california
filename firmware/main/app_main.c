@@ -26,9 +26,11 @@
  *
  * Firmware update (R_FW_OTA, components/cali_ota): with WiFi up, an OTA task fetches the GitHub
  * release on request (POST /api/ota, console "ota …"); the owner task only starts it and reads its
- * state. A freshly installed app is marked valid once the tick has run CALI_OTA_VALID_AFTER_MS with
- * the web server listening (no BLE link needed: the van may sleep); a reset before that boots the
- * previous slot (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE).
+ * state. A freshly installed app is marked valid only on cali_ota_verify_step's verdict (cali_ota.h):
+ * the camper link up once, or no advertising unit within 15 min (absence is no fault) with the BLE
+ * host synced. The unit advertising without a link for 40 min, or a BLE host that never synced, fails
+ * it: it is never marked valid, and the next reset boots the previous slot
+ * (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE). No self-restart: a person decides (console `ota invalid`).
  *
  * Time (R_FW_TIME, components/cali_sntp): every boot bumps the NVS boot counter (cali_time_init); with
  * WiFi up, SNTP (pool.ntp.org + the DHCP-offered server) sets the clock the SD log's ts reads; without
@@ -108,6 +110,7 @@
 #include "cali_energy.h"
 #include "cali_lora.h"
 #include "cali_net_esp.h"
+#include "cali_ota.h"
 #include "cali_ota_esp.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
@@ -131,7 +134,8 @@ static TaskHandle_t s_core_task;       /* no BLE: the owner is this task */
 static int s_wifi;                     /* cali_net_esp_init succeeded: the network runs on the tick */
 static int s_web;                      /* the web server listens (the OTA "healthy run" needs it) */
 static const cali_transport_t *s_ble;  /* NimBLE's transport, or s_no_ble: the sensor windows' radio */
-static int s_valid_checked;            /* cali_ota_esp_mark_valid ran (once, R_FW_OTA rollback) */
+static atomic_int s_ble_synced;        /* NimBLE synced with its controller (the OTA verdict reads it) */
+static int s_ota_confirmed;            /* the verdict is settled and, if valid, the slot marked valid */
 
 /* ---- diagnostics (R_FW_DIAG_LOG) ---- */
 #define RTC_MAGIC 0xd1a6b007u
@@ -338,7 +342,10 @@ static void do_work(void) {
         uint64_t now = cali_uptime_ms();
         cali_runner_tick(now);        /* BLE first: WiFi/web work (NVS writes, mode switches) never */
         cali_session_tick(now);       /* delays this tick's heartbeat decision */
-        cali_sensors_tick(now, s_ble, cali_exp_sensors(), cali_runner_in_flow());   /* R_FW_SENSORS */
+        /* R_FW_SENSORS; the windows also run while an OTA verdict is pending: the unit's own advert,
+         * its evidence, comes only from them (with exp_sensors off, a dead link would read "no unit") */
+        cali_sensors_tick(now, s_ble, cali_exp_sensors() || cali_ota_verify() == CALI_OTA_VERIFY_PENDING,
+                          cali_runner_in_flow());
         cali_energy_tick(now);        /* Wh since boot + the house load (R_FW_ENERGY_COUNTERS) */
         cali_lora_tick(now);          /* R_FW_LORA: a snapshot to the LoRa task, its status back */
         cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
@@ -356,9 +363,23 @@ static void do_work(void) {
 #if CONFIG_CALI_DISPLAY
         cali_display_tick(now);   /* repaints at most every DISPLAY_REFRESH_MS; never blocks on BLE */
 #endif
-        if (!s_valid_checked && now >= CALI_OTA_VALID_AFTER_MS && s_web) {   /* tick alive + web up */
-            s_valid_checked = 1;
-            cali_ota_esp_mark_valid();
+        if (!s_ota_confirmed) {   /* a fresh image's verdict (R_FW_OTA) */
+            const cali_ota_verify_in_t vin = {
+                .web_up = s_web != 0,
+                .link_up = cali_session_link_up(),
+                .adv_ago_ms = cali_ble_exp_unit_adv_ago_ms(now),
+                .bonded = s_ble->has_bond(),
+                .ble_off = cali_session_mode() == CALI_BLE_OFF,
+                .ble_synced = atomic_load(&s_ble_synced),
+            };
+            int v = cali_ota_verify_step(now, &vin);   /* a settled verdict just returns itself */
+            /* valid: retry the mark on the next tick until the slot really is valid */
+            if (v == CALI_OTA_VERIFY_VALID && cali_ota_esp_mark_valid() == 0) {
+                cali_ota_verify_confirmed();   /* only now device.ota.verify reads "valid" */
+                s_ota_confirmed = 1;
+            } else if (v == CALI_OTA_VERIFY_FAILED) {
+                s_ota_confirmed = 1;
+            }
         }
     }
     if (!atomic_load(&s_ready)) return;
@@ -393,6 +414,7 @@ static void tick_cb(void *arg) {
 }
 
 static void on_sync(void) {
+    atomic_store(&s_ble_synced, 1);
     cali_session_boot();          /* stored bond -> reconnect; none -> stay idle, never scan */
     cali_console_line("status");  /* the boot STATE line */
     atomic_store(&s_ready, 1);
@@ -623,6 +645,10 @@ void app_main(void) {
     }
     const cali_transport_t *ble = err == ESP_OK ? cali_ble_nimble_transport() : &s_no_ble;
     s_ble = ble;              /* before the tick timer starts */
+    /* a fresh image's verdict, read on every tick (R_FW_OTA). Only a slot read as pending verify (==1)
+     * may be marked here; a state that was not pending — or could not be read — is never marked, so a
+     * later successful read cannot confirm an image past the 60 s/web/BLE checks. */
+    s_ota_confirmed = cali_ota_esp_verify_begin() != 1;
     wifi_init(ble);
 #if CONFIG_CALI_DISPLAY
     if (cali_display_init(ble) == 0) cali_sdcard_esp_start();   /* -1: no screen (and no SD); BLE/WiFi carry on */

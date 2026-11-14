@@ -289,6 +289,13 @@ void cali_ble_exp_json(cali_json_t *j, int diag);
  */
 void cali_ble_exp_fields(cali_json_t *j, int diag);
 
+/**
+ * @brief How long ago the bonded unit's own advert was seen (`device.ble.unit_adv_seen_ms_ago`).
+ * @param now_ms The current run time.
+ * @return ms since the last sighting, or -1 when none since boot.
+ */
+int64_t cali_ble_exp_unit_adv_ago_ms(uint64_t now_ms);
+
 #ifdef __cplusplus
 }
 #endif

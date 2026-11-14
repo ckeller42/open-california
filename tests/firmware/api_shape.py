@@ -87,7 +87,7 @@ THERMOSTAT_STATUS_KEYS = frozenset(
     }
 )
 OTA_KEYS = frozenset(
-    {"state", "available_sha", "progress_pct", "error", "channel"}
+    {"state", "available_sha", "progress_pct", "error", "channel", "verify"}
 )  # /api/state device.ota (R_FW_OTA)
 TIME_KEYS = frozenset({"source", "synced", "boot"})  # /api/state device.time (R_FW_TIME)
 EXPERIMENTAL_KEYS = frozenset({"sensors", "lora"})  # device.experimental (R_FW_EXPERIMENTAL, R_FW_LORA)

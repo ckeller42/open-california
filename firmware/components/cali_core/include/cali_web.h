@@ -128,7 +128,7 @@
  *            "setup":{"pending":<bool>},   (a first-time setup begun on the hotspot and not done: kv setup_qr)
  *            "control":{"writes":<bool>},
  *            "uptime_ms":<int>,"fw":"<cali_fw_version()>",
- *            "ota":{"state","available_sha","progress_pct","error","channel"},
+ *            "ota":{"state","available_sha","progress_pct","error","channel","verify"},
  *            "time":{"source","synced","boot","up" [diag]},
  *            "sd":{"state","total_mb","free_mb","last_seq" [diag],"dropped"},
  *            "res":{"heap_free_kb","heap_min_kb","psram_free_kb","cpu_pct"} [diag],

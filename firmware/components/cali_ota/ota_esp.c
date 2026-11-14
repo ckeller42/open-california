@@ -143,9 +143,19 @@ static void e_restart(void) {
 
 static void e_wake(void) { xTaskNotifyGive(s_task); }
 
+static void e_rollback(void) {
+    vTaskDelay(pdMS_TO_TICKS(1000));   /* the HTTP answer goes out first */
+    cali_log("ota: mark invalid + reboot: %s", esp_err_to_name(esp_ota_mark_app_invalid_rollback_and_reboot()));
+}
+
+/* reads the otadata and verifies the other slot's image (esp_image_verify: reads and hashes it), so
+ * it holds the owner tick a moment: acceptable for a rare action a person starts by hand */
+static int e_can_rollback(void) { return esp_ota_check_rollback_is_possible() ? 1 : 0; }
+
 static const cali_ota_ops_t s_ops = {
     .get = e_get, .download = e_download, .slot_sha256 = e_slot_sha256, .commit = e_commit,
-    .abort = e_abort, .restart = e_restart, .wake = e_wake,
+    .abort = e_abort, .restart = e_restart, .wake = e_wake, .rollback = e_rollback,
+    .can_rollback = e_can_rollback,
 };
 
 static void ota_task(void *arg) {
@@ -164,12 +174,34 @@ void cali_ota_esp_start(void) {
     cali_ota_init(&s_ops);
 }
 
-void cali_ota_esp_mark_valid(void) {
-    const esp_partition_t *run = esp_ota_get_running_partition();
+/* 1 pending verify, 0 any other state, -1 the state could not be read */
+static int running_pending(const esp_partition_t **run) {
     esp_ota_img_states_t st;
-    if (esp_ota_get_state_partition(run, &st) != ESP_OK || st != ESP_OTA_IMG_PENDING_VERIFY) return;
-    cali_log("ota: %s healthy for %d s, marked valid: %s", run->label, CALI_OTA_VALID_AFTER_MS / 1000,
-             esp_err_to_name(esp_ota_mark_app_valid_cancel_rollback()));
+    *run = esp_ota_get_running_partition();
+    if (esp_ota_get_state_partition(*run, &st) != ESP_OK) return -1;
+    return st == ESP_OTA_IMG_PENDING_VERIFY;
+}
+
+int cali_ota_esp_verify_begin(void) {
+    const esp_partition_t *run;
+    int p = running_pending(&run);   /* 1 pending verify, 0 another state, -1 unreadable */
+    if (p == 1) cali_log("ota: %s awaits its verdict (the previous slot stays the fallback)", run->label);
+    /* p < 0: the running state is unreadable (a corrupt otadata). Pass it on as unknown, not as "nothing
+     * to verify": the verdict then reads pending and this run never confirms the slot. */
+    if (p < 0) cali_log("ota: %s state unreadable, no verdict this run", run->label);
+    cali_ota_verify_begin(p, cali_uptime_ms(), CALI_OTA_VERIFY_MIN_MS, CALI_OTA_VERIFY_T_MS,
+                          CALI_OTA_VERIFY_W_MS, CALI_OTA_VERIFY_GONE_MS);
+    return p;
+}
+
+int cali_ota_esp_mark_valid(void) {
+    const esp_partition_t *run;
+    int p = running_pending(&run);
+    if (p < 0) return -1;   /* unreadable now: retry */
+    if (p == 0) return 0;
+    esp_err_t e = esp_ota_mark_app_valid_cancel_rollback();
+    cali_log("ota: %s marked valid: %s", run->label, esp_err_to_name(e));
+    return e == ESP_OK ? 0 : -1;
 }
 
 int cali_ota_esp_console_line(const char *line) {

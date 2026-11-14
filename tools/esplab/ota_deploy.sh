@@ -3,8 +3,9 @@
 #   tools/esplab/ota_deploy.sh [stable|main|sha] [esp-url]     e.g. ota_deploy.sh main http://192.168.8.183
 # stable = the esp-stable tag's build (channel stable); main / a sha = a merge commit (channel latest).
 # Sets the ESP's OTA channel, waits for esp-<channel>'s manifest.json to name the sha, checks until
-# the ESP sees it (GitHub's CDN can lag ~1-2 min), installs, then waits for the new fw and the 60 s
-# rollback window. Firmware from before the channels boots with no channel byte (= stable): the channel
+# the ESP sees it (GitHub's CDN can lag ~1-2 min), installs, then waits for the new fw and its
+# verdict (device.ota.verify: valid once the camper link was up, or 15 min without an advertising
+# unit; failed after 40 min of an advertising unit without a link). It gives up after 90 min. Firmware from before the channels boots with no channel byte (= stable): the channel
 # is then set again after the install. USB: flash_ci.sh.
 set -euo pipefail
 REF="${1:-main}"; ESP="${2:-http://192.168.8.183}"; REPO=ckeller42/open-california
@@ -31,9 +32,26 @@ until [[ "$(dev fw)" == "$sha7"* ]]; do   # check every 15 s until the ESP offer
   ota check; sleep 15; fail_on_error
   [ "$(dev ota.state)" = available ] && [[ "$(dev ota.available_sha)" == "$sha7"* ]] || continue
   ota install; until [[ "$(dev fw)" == "$sha7"* ]]; do sleep 5; fail_on_error; done; done
-until [ "$(dev uptime_ms)" -gt 70000 ] 2>/dev/null; do sleep 5; done   # 60 s rollback window passed
-# a crash inside that window makes the bootloader roll back to the old slot: that is a failed deploy
-[[ "$(dev fw)" == "$sha7"* ]] || { echo "rolled back: device.fw = $(dev fw)" >&2; exit 1; }
+# the verdict, read from ONE state reply per round (a failed read is retried, never taken for "no
+# verify"): valid -> done; failed -> exit 1; a build without device.ota.verify confirms itself after
+# 60 s of a healthy run. A crash before the verdict makes the bootloader boot the old slot.
+deadline=$((SECONDS + 5400))
+while :; do
+  if st=$(curl -sf --max-time 10 "$ESP/api/state") && read -r f up v < <(printf '%s' "$st" | python3 -c \
+      'import json,sys; d=json.load(sys.stdin)["device"]; print(d["fw"], d["uptime_ms"], d["ota"].get("verify", "none"))'); then
+    [[ "$f" == "$sha7"* ]] || { echo "rolled back: device.fw = $f" >&2; exit 1; }
+    [ "$v" = valid ] && break
+    [ "$v" = none ] && [ "$up" -gt 70000 ] && break
+    if [ "$v" = failed ]; then
+      echo "verdict failed: $sha7 is never confirmed; the next reset boots the previous slot. No other OTA" >&2
+      echo "runs until then. Roll back now: curl -X POST $ESP/api/ota -d '{\"action\":\"rollback\"}'" >&2
+      echo "(200 = rebooting into the previous build; 409 confirmed = nothing to go back from)." >&2
+      exit 1
+    fi
+  fi
+  [ "$SECONDS" -lt "$deadline" ] || { echo "no verdict after 90 min (device.ota.verify = ${v:-unreadable})" >&2; exit 1; }
+  sleep 15
+done
 if [ -z "$ch" ]; then   # pre-channel firmware: the new build booted on the default (stable), so set it again
   curl -sf --max-time 10 -X POST "$ESP/api/ota" -d "{\"channel\":\"$chan\"}" >/dev/null || true
   [ "$(dev ota.channel)" = "$chan" ] || { echo "channel not set after install: ota.channel = $(dev ota.channel)" >&2; exit 1; }

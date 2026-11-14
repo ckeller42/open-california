@@ -8,11 +8,17 @@
 
 /* Owner task, once WiFi runs: creates the OTA task and hands cali_ota_init the HTTPS/flash ops. */
 void cali_ota_esp_start(void);
-/* Owner task, once after CALI_OTA_VALID_AFTER_MS of a healthy run (the tick alive, the web server
- * listening): a freshly installed app pending verification is marked valid, which cancels the
- * rollback. Before that a crash or reset boots the previous slot. Any other app: nothing. */
-#define CALI_OTA_VALID_AFTER_MS 60000
-void cali_ota_esp_mark_valid(void);
+/* Owner task, once at boot: start the verdict on the running app (cali_ota_verify_begin with the
+ * shipped CALI_OTA_VERIFY_* times). Returns the running partition's pending-verify state: 1 it awaits
+ * its verdict, 0 another state (nothing to verify), -1 the state could not be read. Only a 1 lets this
+ * run mark the slot valid. */
+int cali_ota_esp_verify_begin(void);
+/* Owner task, when cali_ota_verify_step is valid: the app pending verification is marked valid,
+ * which cancels the rollback. Until then (and for good on a failed verdict) a crash or reset boots the
+ * previous slot, and the bootloader refuses another OTA. Any other app: nothing.
+ * Returns 0 when the running app is valid now (or was never pending), -1 when the mark or the state
+ * read failed (retry). */
+int cali_ota_esp_mark_valid(void);
 /* Console hook (owner task): "ota check|install|status|invalid" -> 1, any other line -> 0.
  * check/install = POST /api/ota's actions in any WiFi mode (physical access); status logs the
  * device.ota object and the running slot; invalid = esp_ota_mark_app_invalid_rollback_and_reboot

@@ -212,6 +212,7 @@ OTA_IDLE = {
     "progress_pct": 0,
     "error": None,
     "channel": "stable",
+    "verify": "valid",
 }  # device.ota
 # device.display (R_FW_DISPLAY_WAKE): a lit screen in an evening van, default settings
 DISPLAY_ON = {

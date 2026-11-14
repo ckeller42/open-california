@@ -24,7 +24,7 @@ merge commit on buspi and the ESP. Buspi mechanics (live reads, address, tailsca
 | Deploy | `ssh pi@buspi 'cd ~/open-california && git checkout main && git pull --ff-only && sudo systemctl restart calictl'` (never a detached sha); verify `systemctl is-active calictl`, `git log -1`, `/api/state` on :8088. |
 | Dashboard | After signal/enum changes: `push_dashboard.py` to Pi :3000 (`GRAFANA_PASSWORD`) and Cloud (`sudo -n bash -c 'set -a; . /etc/buspi/secrets.env; GRAFANA_TOKEN=$GRAFANA_CLOUD_TOKEN …'`; 503 → retry). Never echo secrets. |
 | Update ESP | If `firmware/`, `calictl/webui/**` or semantics changed (UI is bundled): OTA from the merge's `firmware-release`, below. |
-| Live check | After the OTA (valid after 60 s, `device.link.up`): exercise the merged feature on the real ESP + real unit through the UI/API (and Influx for ingest). Report **verified** vs **still owed** (e.g. needs a drive). Host/QEMU/mock tiers alone are not enough; USB flash is recovery only. |
+| Live check | After the OTA (`device.ota.verify` = `valid`, `device.link.up`): exercise the merged feature on the real ESP + real unit through the UI/API (and Influx for ingest). Report **verified** vs **still owed** (e.g. needs a drive). Host/QEMU/mock tiers alone are not enough; USB flash is recovery only. |
 | Offline | `until ssh -o ConnectTimeout=8 -o BatchMode=yes pi@buspi true; do sleep 60; done` in background; then deploy/flash, tell the owner. |
 
 ## CI-only gates (green on the Mac, red in CI)
@@ -121,7 +121,7 @@ The ESP picks its channel (NVS `ota_channel`, default stable; Satellite settings
 
 | Want | Do |
 |---|---|
-| Install a merge | `tools/esplab/ota_deploy.sh main` (or `<sha>`) — sets channel `latest`, waits for `esp-latest` to name the sha, installs, waits for `device.fw` + the 60 s rollback window, fails on `ota.state` `error` or a rollback. |
+| Install a merge | `tools/esplab/ota_deploy.sh main` (or `<sha>`) — sets channel `latest`, waits for `esp-latest` to name the sha, installs, waits for `device.fw` + the verdict (`device.ota.verify`; gives up after 90 min), fails on `ota.state` `error`, a rollback or `verify` `failed`. |
 | Promote the soaked build | `tools/esplab/promote_stable.sh <sha>` after a green 72 h soak report (`tools/esplab/soak_report.py`, daily `calictl-esp-soak.timer` on buspi → `~/esp-soak/<date>.txt`, `VERDICT PASS`): moves the tag, dispatches the workflow (needs that sha's `main` CI artifact, ≤ 90 days old). |
 | Fall back | `tools/esplab/ota_deploy.sh stable` — switches the channel, installs the `esp-stable` image. On pre-channel firmware (no `device.ota.channel`) only `main` works; the script re-sets the channel after that first install. |
 | The gate | No install on the van ESP before the running build's 72 h report is green; a new build runs 72 h with `exp_sensors` off, then 72 h on, before promotion. |
@@ -138,7 +138,12 @@ curl -s http://<esp-ip>/api/state          # device.ota: downloading → rebooti
 
 `device.ota.state` `up_to_date` = already running it; `error` + `checksum` = a newer merge replaced
 the release mid-download (install again). Station mode only (`403` over the setup hotspot). The new
-build marks itself valid after 60 s healthy; a crash before that boots the previous slot.
+build confirms itself only on a valid verdict (`device.ota.verify`: the camper link up once, or 15 min
+without an advertising unit); a crash before that boots the previous slot. `failed` (the unit
+advertises, no link for 40 min; or a dead BLE host) is never confirmed and blocks every further OTA
+until a reset: `POST /api/ota {"action":"rollback"}` — reachable over the tailnet while the van router
+`busnet` is online (no buspi, no camper presence; any WiFi mode; 409 `confirmed` = nothing to go back
+from), else a USB reset or power cycle from buspi (`docs/firmware.md` "Rollback").
 
 **The ESP lost its WiFi** (a failed network change on old firmware, a wrong password typed on
 the hotspot) and sits on its setup hotspot, out of reach: buspi holds the same network in its

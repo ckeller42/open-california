@@ -13,6 +13,11 @@
  *   channel stable|latest  cali_ota_set_channel (the kv store: one fake byte, "ota_channel" only)
  *   json                "JSON <the device.ota object>"
  *   diaghook            from now on print "DIAG {<body>}" per diagnostics record (R_FW_DIAG_LOG)
+ *   vbegin <pending> <now> <min> <t> <w> <gone>   cali_ota_verify_begin
+ *   vconfirm            cali_ota_verify_confirmed
+ *   rollback            cali_ota_rollback -> "RB <rc>"
+ *   noprev              ops->can_rollback answers 0 (no previous slot to go back to)
+ *   vstep <now> <web> <link> <adv_ago|-1> <bonded> <off> <synced>   cali_ota_verify_step -> "VERDICT <name>"
  * ops calls print "CALL get <url>", "CALL download <url> <size> (<state meanwhile>)", "CALL slot_sha256 <size>",
  * "CALL commit", "CALL abort", "CALL restart", "CALL wake"; cali_log prints "LOG <text>".
  */
@@ -86,10 +91,14 @@ static int f_commit(void) { printf("CALL commit\n"); return s_commit_fail ? -1 :
 static void f_abort(void) { printf("CALL abort\n"); }
 static void f_restart(void) { printf("CALL restart\n"); }
 static void f_wake(void) { printf("CALL wake\n"); }
+static void f_rollback(void) { printf("CALL rollback\n"); }   /* the real one never returns */
+static int s_noprev;
+static int f_can_rollback(void) { return !s_noprev; }
 
 static const cali_ota_ops_t fake_ops = {
     .get = f_get, .download = f_download, .slot_sha256 = f_slot, .commit = f_commit,
-    .abort = f_abort, .restart = f_restart, .wake = f_wake,
+    .abort = f_abort, .restart = f_restart, .wake = f_wake, .rollback = f_rollback,
+    .can_rollback = f_can_rollback,
 };
 
 int main(void) {
@@ -119,6 +128,25 @@ int main(void) {
         else if (strcmp(line, "work") == 0) cali_ota_work();
         else if (strncmp(line, "channel ", 8) == 0) printf("SET %d\n", cali_ota_set_channel(strcmp(arg, "latest") == 0));
         else if (strcmp(line, "diaghook") == 0) cali_diag_sink = print_diag;
+        else if (strncmp(line, "vbegin ", 7) == 0) {
+            unsigned long long now = 0;
+            int p = 0;
+            unsigned mn = 0, t = 0, w = 0, gone = 0;
+            (void)sscanf(arg, "%d %llu %u %u %u %u", &p, &now, &mn, &t, &w, &gone);
+            cali_ota_verify_begin(p, now, mn, t, w, gone);
+        } else if (strcmp(line, "vconfirm") == 0) cali_ota_verify_confirmed();
+        else if (strcmp(line, "rollback") == 0) printf("RB %d\n", cali_ota_rollback());
+        else if (strcmp(line, "noprev") == 0) s_noprev = 1;
+        else if (strncmp(line, "vstep ", 6) == 0) {
+            static const char *const V[] = {"pending", "valid", "failed"};
+            unsigned long long now = 0;
+            long long ago = -1;
+            cali_ota_verify_in_t in = {0};
+            (void)sscanf(arg, "%llu %d %d %lld %d %d %d", &now, &in.web_up, &in.link_up, &ago, &in.bonded,
+                         &in.ble_off, &in.ble_synced);
+            in.adv_ago_ms = ago;
+            printf("VERDICT %s\n", V[cali_ota_verify_step(now, &in)]);
+        }
         else if (strcmp(line, "json") == 0) {
             char buf[256];
             cali_json_t j;

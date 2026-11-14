@@ -92,6 +92,7 @@ def test_idle_before_any_request(ota_cli):
         "progress_pct": 0,
         "error": None,
         "channel": "stable",
+        "verify": "valid",
     }
 
 
@@ -115,6 +116,7 @@ def test_other_build_sees_available_and_check_downloads_nothing(ota_cli, fw):
         "progress_pct": 0,
         "error": None,
         "channel": "stable",
+        "verify": "valid",
     }
     assert ota(out) == {
         "state": "available",
@@ -122,6 +124,7 @@ def test_other_build_sees_available_and_check_downloads_nothing(ota_cli, fw):
         "progress_pct": 0,
         "error": None,
         "channel": "stable",
+        "verify": "valid",
     }
     assert calls(out) == ["wake", "get " + BASE + "manifest.json?t=4000"]  # fake clock: +1 s per read
 
@@ -151,6 +154,7 @@ def test_install_downloads_verifies_then_switches_and_restarts(ota_cli):
         "progress_pct": 100,
         "error": None,
         "channel": "stable",
+        "verify": "valid",
     }
 
 
@@ -165,6 +169,7 @@ def test_checksum_mismatch_is_an_error_and_never_switches_the_slot(ota_cli, slot
         "progress_pct": 100,
         "error": "checksum",
         "channel": "stable",
+        "verify": "valid",
     }
 
 
@@ -201,6 +206,7 @@ def test_bad_manifest_is_an_error(ota_cli, body):
         "progress_pct": 0,
         "error": "manifest",
         "channel": "stable",
+        "verify": "valid",
     }
     assert not any(c.startswith(("download", "commit")) for c in calls(out))
 
@@ -283,3 +289,187 @@ def test_every_transition_is_an_ota_event(ota_cli):
         "dur_ms": 0,
         "error": "checksum",
     }
+
+
+# ---- the verdict on a freshly installed image (cali_ota_verify_*) ----
+MIN, T, W, GONE = 60000, 15 * 60000, 40 * 60000, 5 * 60000  # the shipped CALI_OTA_VERIFY_* values
+NO = -1  # adv_ago: never seen
+
+
+def step(now, web=1, link=0, ago=NO, bonded=1, off=0, synced=1):
+    return "vstep %d %d %d %d %d %d %d" % (now, web, link, ago, bonded, off, synced)
+
+
+def verdicts(out):
+    return [ln.split()[1] for ln in out if ln.startswith("VERDICT ")]
+
+
+def test_verify_a_confirmed_image_needs_no_verdict(ota_cli):
+    out = run(ota_cli, "vbegin 0 0 %d %d %d %d" % (MIN, T, W, GONE), step(0, web=0), "json")
+    assert verdicts(out) == ["valid"] and ota(out)["verify"] == "valid"
+
+
+def test_verify_a_link_once_is_valid_after_the_minimum(ota_cli):
+    """The link counts from boot on and is latched (a rest probe's link lasts seconds); the verdict
+    still waits for MIN and the web server.
+
+    .. test:: OTA verdict: a camper link once confirms the image; nothing before 60 s or without the web server
+       :id: T_FW_OTA_VERIFY_LINK
+       :links: R_FW_OTA
+    """
+    out = run(
+        ota_cli,
+        "diaghook",
+        "vbegin 1 1000 %d %d %d %d" % (MIN, T, W, GONE),
+        step(21000, link=1),  # up at 20 s of the run ...
+        step(31000),  # ... and down again
+        step(MIN + 999),  # 59.999 s since the begin
+        step(MIN + 1000, web=0),
+        step(MIN + 1000),
+        step(MIN + 2000, ago=0),  # a verdict stays
+        "json",
+        "vconfirm",
+        "json",
+    )
+    assert verdicts(out) == ["pending"] * 4 + ["valid", "valid"]
+    # device.ota.verify reads valid only once the platform marked the slot valid
+    assert [o["verify"] for o in otas(out)] == ["pending", "valid"]
+    assert any('"verdict":"valid","why":"link","t_ms":60000' in ln for ln in out if ln.startswith("DIAG "))
+
+
+def test_verify_no_unit_is_valid_at_t(ota_cli):
+    """The camper unit off or the van parked alone: no advert, so the image is valid at T — the
+    absence of the unit is no fault.
+
+    .. test:: OTA verdict: no unit advert by 15 min confirms a healthy image (absence is no fault)
+       :id: T_FW_OTA_VERIFY_NO_UNIT
+       :links: R_FW_OTA
+    """
+    out = run(ota_cli, "vbegin 1 0 %d %d %d %d" % (MIN, T, W, GONE), step(MIN), step(T - 1), step(T), "json")
+    assert verdicts(out) == ["pending", "pending", "valid"]
+    assert "LOG ota: image valid (no_unit) after 900 s" in out
+
+
+def test_verify_a_ble_host_that_never_synced_fails_at_t(ota_cli):
+    """A dead BLE stack sees no advert either: without this leg it would read as "no unit" and pass.
+    Bond or not — the host syncs with its controller without one.
+
+    .. test:: OTA verdict: a BLE host that never synced fails the image at 15 min
+       :id: T_FW_OTA_VERIFY_BLE_DEAD
+       :links: R_FW_OTA
+    """
+    for bonded in (1, 0):
+        out = run(
+            ota_cli,
+            "vbegin 1 0 %d %d %d %d" % (MIN, T, W, GONE),
+            step(T - 1, bonded=bonded, synced=0),
+            step(T, bonded=bonded, synced=0),
+            step(T + 1, link=1),
+            "json",
+        )
+        assert verdicts(out) == ["pending", "failed", "failed"], bonded
+        assert ota(out)["verify"] == "failed"
+        assert "LOG ota: image failed (ble_dead) after 900 s" in out
+    out = run(ota_cli, "vbegin 1 0 %d %d %d %d" % (MIN, T, W, GONE), step(1000, synced=1), step(T, synced=0))
+    assert verdicts(out) == ["pending", "valid"]  # synced once is enough (latched)
+
+
+def test_verify_an_advertising_unit_without_a_link_fails_after_w(ota_cli):
+    """The failure signature: the bonded unit keeps advertising, the BLE mode is not off, and no link
+    comes up for W after the first advert. T passing in between decides nothing.
+
+    .. test:: OTA verdict: the unit advertises but no link for 40 min fails the image
+       :id: T_FW_OTA_VERIFY_NO_LINK
+       :links: R_FW_OTA
+    """
+    first = 5 * 60000
+    lines = ["vbegin 1 0 %d %d %d %d" % (MIN, T, W, GONE)]
+    lines += [step(m * 60000, ago=20000) for m in range(5, 45)]  # adverts from minute 5, past T
+    lines += [step(first + W - 1, ago=20000), step(first + W, ago=20000), step(first + W + 1, link=1), "json"]
+    out = run(ota_cli, *lines)
+    assert verdicts(out) == ["pending"] * 41 + ["failed", "failed"]  # a later link changes nothing
+    assert "LOG ota: image failed (no_link) after 2700 s" in out
+    assert ota(out)["verify"] == "failed"
+
+
+def test_verify_the_rest_poll_link_inside_w_is_valid(ota_cli):
+    """Camping off: the session leaves an advertising unit alone and connects only on its 30 min rest
+    poll. That brief link inside W confirms the image."""
+    lines = ["vbegin 1 0 %d %d %d %d" % (MIN, T, W, GONE)]
+    lines += [step(m * 60000, ago=15000) for m in range(1, 31)]
+    lines += [step(31 * 60000, ago=15000, link=1)]
+    assert verdicts(run(ota_cli, *lines)) == ["pending"] * 30 + ["valid"]
+
+
+@pytest.mark.parametrize(
+    "case, kw",
+    [
+        ("asleep", {"ago": GONE}),  # the last advert 5 min old: the unit went back to sleep
+        ("ble_off", {"ago": 1000, "off": 1}),  # off: no link on purpose
+        ("no_bond", {"ago": 1000, "bonded": 0}),  # nothing to connect to
+    ],
+)
+def test_verify_no_window_is_valid_at_t(ota_cli, case, kw):
+    """An advert that stopped, the BLE mode off or no bond opens no window: valid at T."""
+    out = run(ota_cli, "vbegin 1 0 %d %d %d %d" % (MIN, T, W, GONE), step(T - 1, **kw), step(T, **kw))
+    assert verdicts(out) == ["pending", "valid"], case
+
+
+def test_verify_a_sleeping_unit_restarts_the_window(ota_cli):
+    """A door opened (adverts), then shut (no advert for 5 min): the window ends; a later advert starts
+    a new one, so 40 min counts from there, not from the first advert."""
+    lines = ["vbegin 1 0 %d %d %d %d" % (MIN, T, W, GONE)]
+    lines += [step(m * 60000, ago=1000) for m in range(1, 4)]  # minutes 1-3 advertising
+    lines += [step(9 * 60000, ago=6 * 60000)]  # asleep: window ends
+    lines += [step(m * 60000, ago=1000) for m in range(20, 60)]  # a new window from minute 20
+    lines += [step(60 * 60000, ago=1000)]
+    v = verdicts(run(ota_cli, *lines))
+    assert set(v[:-1]) == {"pending"} and v[-1] == "failed"
+
+
+def test_verify_an_unreadable_running_state_stays_pending(ota_cli):
+    """A negative ``pending`` (the running partition's state could not be read) is unknown, not empty:
+    the verdict reads ``pending``, never settles to ``valid``, and the slot is never confirmed — even
+    when a link comes up. A later boot with a readable state decides.
+
+    .. test:: OTA verdict: an unreadable running state reads pending and never confirms the slot
+       :id: T_FW_OTA_VERIFY_UNREADABLE
+       :links: R_FW_OTA
+    """
+    out = run(
+        ota_cli,
+        "vbegin -1 0 %d %d %d %d" % (MIN, T, W, GONE),
+        step(MIN + 1000, link=1),  # a link would confirm a real pending image ...
+        step(T + 1000, link=1),  # ... and T passing would decide a real one
+        "json",
+    )
+    assert verdicts(out) == ["pending", "pending"]  # frozen: never valid
+    assert ota(out)["verify"] == "pending"
+
+
+def test_rollback_only_from_an_unconfirmed_image(ota_cli):
+    """``cali_ota_rollback``: pending, failed, or valid-but-not-yet-confirmed images go back (the OTA
+    task calls ops->rollback); a confirmed one (every image that needed no verdict) is refused with
+    -3, so the route can never reset a healthy system.
+
+    .. test:: OTA rollback: only an unconfirmed image goes back to the previous slot
+       :id: T_FW_OTA_ROLLBACK
+       :links: R_FW_OTA
+    """
+    begin = "vbegin 1 0 %d %d %d %d" % (MIN, T, W, GONE)
+    out = run(ota_cli, "rollback", "json")  # no begin: a confirmed image
+    assert "RB -3" in out and "rollback" not in calls(out)
+    out = run(ota_cli, begin, step(T, synced=0), "rollback", "json", "work", "json")  # failed (ble_dead)
+    assert "RB 0" in out and calls(out) == ["wake", "rollback"]
+    assert [o["state"] for o in otas(out)] == ["rebooting", "error"]  # rollback returned: it failed
+    assert otas(out)[-1]["error"] == "rollback"
+    out = run(ota_cli, begin, "rollback")  # still pending
+    assert "RB 0" in out
+    out = run(ota_cli, begin, step(MIN, link=1), "rollback")  # valid, the slot not yet marked
+    assert "RB 0" in out
+    out = run(ota_cli, begin, step(MIN, link=1), "vconfirm", "rollback")  # confirmed
+    assert "RB -3" in out
+    out = run(ota_cli, "noprev", begin, "rollback")  # nothing in the other slot to go back to
+    assert "RB -4" in out and "rollback" not in calls(out)
+    out = run(ota_cli, "noinit", begin, "rollback")  # host / QEMU: no OTA I/O
+    assert "RB -1" in out
