@@ -214,8 +214,11 @@ typedef struct {
 
 /**
  * @brief Start (or skip) the verdict. Owner task, once at boot; times count from now_ms.
- * @param pending Not 0: the running image awaits its verdict (the bootloader's pending-verify state).
- *                0: nothing to verify, the verdict is `valid` at once.
+ * @param pending > 0: the running image awaits its verdict (the bootloader's pending-verify state).
+ *                0: nothing to verify, the verdict is `valid` at once (a confirmed or factory image).
+ *                < 0: the running state could not be read — unknown, not empty: the verdict reads
+ *                `pending`, never settles and never confirms the slot (a later run with a readable
+ *                state decides).
  * @param now_ms The current run time.
  * @param min_ms #CALI_OTA_VERIFY_MIN_MS (a test passes shorter times, here and below).
  * @param t_ms #CALI_OTA_VERIFY_T_MS.

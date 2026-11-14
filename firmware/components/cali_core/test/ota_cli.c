@@ -130,9 +130,10 @@ int main(void) {
         else if (strcmp(line, "diaghook") == 0) cali_diag_sink = print_diag;
         else if (strncmp(line, "vbegin ", 7) == 0) {
             unsigned long long now = 0;
-            unsigned p = 0, mn = 0, t = 0, w = 0, gone = 0;
-            (void)sscanf(arg, "%u %llu %u %u %u %u", &p, &now, &mn, &t, &w, &gone);
-            cali_ota_verify_begin((int)p, now, mn, t, w, gone);
+            int p = 0;
+            unsigned mn = 0, t = 0, w = 0, gone = 0;
+            (void)sscanf(arg, "%d %llu %u %u %u %u", &p, &now, &mn, &t, &w, &gone);
+            cali_ota_verify_begin(p, now, mn, t, w, gone);
         } else if (strcmp(line, "vconfirm") == 0) cali_ota_verify_confirmed();
         else if (strcmp(line, "rollback") == 0) printf("RB %d\n", cali_ota_rollback());
         else if (strcmp(line, "noprev") == 0) s_noprev = 1;

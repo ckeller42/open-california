@@ -9,8 +9,10 @@
 /* Owner task, once WiFi runs: creates the OTA task and hands cali_ota_init the HTTPS/flash ops. */
 void cali_ota_esp_start(void);
 /* Owner task, once at boot: start the verdict on the running app (cali_ota_verify_begin with the
- * shipped CALI_OTA_VERIFY_* times). Pending only for a freshly installed app that awaits it. */
-void cali_ota_esp_verify_begin(void);
+ * shipped CALI_OTA_VERIFY_* times). Returns the running partition's pending-verify state: 1 it awaits
+ * its verdict, 0 another state (nothing to verify), -1 the state could not be read. Only a 1 lets this
+ * run mark the slot valid. */
+int cali_ota_esp_verify_begin(void);
 /* Owner task, when cali_ota_verify_step is valid: the app pending verification is marked valid,
  * which cancels the rollback. Until then (and for good on a failed verdict) a crash or reset boots the
  * previous slot, and the bootloader refuses another OTA. Any other app: nothing.

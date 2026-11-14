@@ -182,16 +182,16 @@ static int running_pending(const esp_partition_t **run) {
     return st == ESP_OTA_IMG_PENDING_VERIFY;
 }
 
-void cali_ota_esp_verify_begin(void) {
+int cali_ota_esp_verify_begin(void) {
     const esp_partition_t *run;
-    int p = running_pending(&run);
-    int pending = p == 1;
-    if (pending) cali_log("ota: %s awaits its verdict (the previous slot stays the fallback)", run->label);
-    /* unreadable (e.g. no otadata entry after a USB flash): no verdict and no mark in this run; were the slot
-     * really pending, it stays unconfirmed and the next reset boots the previous slot (the safe side) */
+    int p = running_pending(&run);   /* 1 pending verify, 0 another state, -1 unreadable */
+    if (p == 1) cali_log("ota: %s awaits its verdict (the previous slot stays the fallback)", run->label);
+    /* p < 0: the running state is unreadable (a corrupt otadata). Pass it on as unknown, not as "nothing
+     * to verify": the verdict then reads pending and this run never confirms the slot. */
     if (p < 0) cali_log("ota: %s state unreadable, no verdict this run", run->label);
-    cali_ota_verify_begin(pending, cali_uptime_ms(), CALI_OTA_VERIFY_MIN_MS, CALI_OTA_VERIFY_T_MS,
+    cali_ota_verify_begin(p, cali_uptime_ms(), CALI_OTA_VERIFY_MIN_MS, CALI_OTA_VERIFY_T_MS,
                           CALI_OTA_VERIFY_W_MS, CALI_OTA_VERIFY_GONE_MS);
+    return p;
 }
 
 int cali_ota_esp_mark_valid(void) {

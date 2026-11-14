@@ -427,6 +427,26 @@ def test_verify_a_sleeping_unit_restarts_the_window(ota_cli):
     assert set(v[:-1]) == {"pending"} and v[-1] == "failed"
 
 
+def test_verify_an_unreadable_running_state_stays_pending(ota_cli):
+    """A negative ``pending`` (the running partition's state could not be read) is unknown, not empty:
+    the verdict reads ``pending``, never settles to ``valid``, and the slot is never confirmed — even
+    when a link comes up. A later boot with a readable state decides.
+
+    .. test:: OTA verdict: an unreadable running state reads pending and never confirms the slot
+       :id: T_FW_OTA_VERIFY_UNREADABLE
+       :links: R_FW_OTA
+    """
+    out = run(
+        ota_cli,
+        "vbegin -1 0 %d %d %d %d" % (MIN, T, W, GONE),
+        step(MIN + 1000, link=1),  # a link would confirm a real pending image ...
+        step(T + 1000, link=1),  # ... and T passing would decide a real one
+        "json",
+    )
+    assert verdicts(out) == ["pending", "pending"]  # frozen: never valid
+    assert ota(out)["verify"] == "pending"
+
+
 def test_rollback_only_from_an_unconfirmed_image(ota_cli):
     """``cali_ota_rollback``: pending, failed, or valid-but-not-yet-confirmed images go back (the OTA
     task calls ops->rollback); a confirmed one (every image that needed no verdict) is refused with

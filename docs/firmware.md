@@ -946,10 +946,12 @@ the unit's advert itself comes from the NimBLE scan: a broken BLE stack sees no 
 otherwise pass as "no unit". The adverts come from the sensor scan windows (one a minute), so these
 windows run while the verdict is pending even with `exp_sensors` off.
 
-A failed image is never confirmed, and the firmware does not restart by itself: the next reset boots
-the previous slot. Until then the bootloader refuses every other OTA (`esp_ota_begin` answers
-`ESP_ERR_OTA_ROLLBACK_INVALID_STATE` while the running image is unconfirmed), so a failed verdict
-needs a person. The ways back, best first:
+A failed image is never confirmed, and the firmware does not restart by itself. As long as a previous
+slot still holds a good image, the next reset boots it; once that slot has been overwritten there is
+nothing to go back to (`POST /api/ota {"action":"rollback"}` then answers `409 no_previous`, and a
+reset would just boot the same unconfirmed image again). Until a confirmed image runs, the bootloader
+refuses every other OTA (`esp_ota_begin` answers `ESP_ERR_OTA_ROLLBACK_INVALID_STATE` while the
+running image is unconfirmed), so a failed verdict needs a person. The ways back, best first:
 
 1. `POST /api/ota {"action":"rollback"}` from any device in the van's WiFi, or over the setup
    hotspot (a new image that breaks the station WiFi falls back to the hotspot after 5 min without a
@@ -968,7 +970,8 @@ the NimBLE host task. The route answers when the host task runs but never syncs 
 not answer) and when `nimble_port_init` fails (a plain task then runs the tick). When the host task
 itself hangs, the web server is gone with it and no way over the LAN helps: a crash resets the chip
 and so goes back by itself; a hang needs power, which with buspi halted means physical access.
-A crash or reset while the verdict is pending boots the previous slot too. `ota status` logs `device.ota` and the
+A crash or reset while the verdict is pending boots the previous slot too, as long as that slot still
+holds an image. `ota status` logs `device.ota` and the
 running slot.
 
 **USB flashing.** `tools/esplab/flash_ci.sh <run-id>` writes the bootloader, the partition table,

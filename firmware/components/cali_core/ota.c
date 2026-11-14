@@ -206,12 +206,16 @@ static uint64_t s_v0;                     /* now_ms of the begin */
 static uint32_t s_vmin, s_vt, s_vw, s_vgone;
 static int s_vlink, s_vsynced;            /* latched since the begin */
 static int s_vunconfirmed;                /* a pending image's valid verdict, slot not yet marked valid */
+static int s_vfrozen;                     /* begun from an unreadable running state: never settles, never confirms */
 static uint64_t s_vadv;                   /* run time + 1 of the first counted advert; 0 none */
 
 void cali_ota_verify_begin(int pending, uint64_t now_ms, uint32_t min_ms, uint32_t t_ms, uint32_t w_ms,
                            uint32_t gone_ms) {
-    s_v = pending ? CALI_OTA_VERIFY_PENDING : CALI_OTA_VERIFY_VALID;
-    s_vunconfirmed = pending;
+    /* pending > 0: the image awaits its verdict. 0: nothing to verify (confirmed/factory) -> valid.
+     * < 0: the running state could not be read -> unknown: report pending, never settle, never confirm. */
+    s_vfrozen = pending < 0;
+    s_v = pending != 0 ? CALI_OTA_VERIFY_PENDING : CALI_OTA_VERIFY_VALID;
+    s_vunconfirmed = pending != 0;
     s_v0 = now_ms;
     s_vmin = min_ms;
     s_vt = t_ms;
@@ -230,6 +234,7 @@ static int verdict(int v, const char *why, uint64_t t) {
 }
 
 int cali_ota_verify_step(uint64_t now_ms, const cali_ota_verify_in_t *in) {
+    if (s_vfrozen) return s_v;   /* unreadable origin: stay pending, so no run ever confirms the slot */
     if (s_v != CALI_OTA_VERIFY_PENDING) return s_v;
     uint64_t t = now_ms - s_v0;
     s_vlink |= in->link_up;
