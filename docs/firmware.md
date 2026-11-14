@@ -955,8 +955,7 @@ running image is unconfirmed), so a failed verdict needs a person. The ways back
 
 1. `POST /api/ota {"action":"rollback"}`. The van router `busnet` advertises `192.168.8.0/24` into
    the tailnet, so this reaches the satellite from anywhere on the tailnet — no buspi, nobody in the
-   camper (measured 2026-11-14: `GET http://192.168.8.183/api/state` over the tailnet, HTTP 200 in
-   0.33 s). The satellite reaches the tailnet only through `busnet`, so whenever it answers at all,
+   camper. The satellite reaches the tailnet only through `busnet`, so whenever it answers at all,
    this route is open. `busnet` is the router, on the same van battery as the ESP and not on buspi's
    halt timer; the only recorded `busnet` outage was the battery going flat, which took the ESP
    offline too, so there is no state where the ESP answers but `busnet` does not. `busnet` offline
