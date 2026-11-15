@@ -122,6 +122,8 @@ static void state_print(const cali_thermo_state_t *st) {
     p64(st->ctl.hot_since_ms);
     p32(st->ctl.u);
     p32(st->ctl.u_out);
+    p32(st->ctl.t_prev);
+    p32(st->ctl.rate);
     printf(" %d", st->has_pending);
     if (st->has_pending) {
         printf(" %s", p->what);
@@ -224,6 +226,8 @@ int main(int argc, char **argv) {
             st.ctl.hot_since_ms = i64();
             st.ctl.u = i32();
             st.ctl.u_out = i32();
+            st.ctl.t_prev = i32();
+            st.ctl.rate = i32();
             st.has_pending = flag() > 0;
             st.pending.what = what();
             st.pending.value = i32();

@@ -56,8 +56,14 @@ int cali_thermo_heater_state(const cali_thermo_heater_t *h, int64_t age_ms, cons
 /* Python control(): updates ctl in place (every caller stores the new ctl); returns the level or NONE. */
 static int32_t control(int32_t t_ref, int32_t t_out, int32_t target, int64_t dt_ms, cali_thermo_ctl_t *ctl,
                        const cali_thermo_cfg_t *cfg, int32_t cur_level, int64_t now, const char **why) {
-    int64_t e = (int64_t)target - t_ref;
-    int64_t p = rdiv(cfg->kp * e, 100);
+    int gap = dt_ms > 3 * (int64_t)cfg->period_ms;
+    int64_t rate = ctl->rate, e, p;
+    if (ctl->t_prev == NONE || gap)
+        rate = 0;
+    else if (dt_ms > 0)
+        rate += rdiv(rdiv(((int64_t)t_ref - ctl->t_prev) * 60000, dt_ms) - rate, 3);
+    e = (int64_t)target - t_ref - CALI_THERMO_LEAD_MIN * rate;
+    p = rdiv(cfg->kp * e, 100);
     /* u_out NONE = no outside reading in use (Python None) */
     int64_t u_out = t_out == NONE ? NONE : mn(mx(rdiv(cfg->ka * mx(0, (int64_t)target - t_out), 100), 0), cfg->u_out_max);
     int64_t prev = ctl->u_out, ff = u_out == NONE ? 0 : u_out;
@@ -66,7 +72,7 @@ static int32_t control(int32_t t_ref, int32_t t_out, int32_t target, int64_t dt_
     if (cur_level != NONE && (prev == NONE) != (u_out == NONE))
         i += (prev == NONE ? 0 : prev) - ff; /* bumpless: the outside share moves into the integrator */
     u_old = p + i + ff;
-    frozen = dt_ms > 3 * (int64_t)cfg->period_ms || (u_old < (int64_t)cfg->min_level * 1000 && e < 0) ||
+    frozen = gap || (u_old < (int64_t)cfg->min_level * 1000 && e < 0) ||
              (u_old > 10000 && e > 0);
     if (!frozen) i += rdiv(cfg->ki * e * dt_ms, 100 * 60000);
     u = p + i + ff;
@@ -74,6 +80,8 @@ static int32_t control(int32_t t_ref, int32_t t_out, int32_t target, int64_t dt_
     ctl->i = (int32_t)i;
     ctl->u = (int32_t)u;
     ctl->u_out = (int32_t)u_out;
+    ctl->t_prev = t_ref;
+    ctl->rate = (int32_t)rate;
     ctl->hot_since_ms = hot ? (ctl->hot_since_ms != NONE_MS ? ctl->hot_since_ms : now) : NONE_MS;
     if (t_ref > (int64_t)target + cfg->overheat) {
         *why = "OVERHEAT";
@@ -99,10 +107,12 @@ static int32_t control(int32_t t_ref, int32_t t_out, int32_t target, int64_t dt_
     return (int32_t)level;
 }
 
-/* Python track(): the next demand equals the current level. */
+/* Python track(): the next demand equals the current level; the rate starts again. */
 static void track(cali_thermo_ctl_t *ctl, int32_t cur_level, int32_t t_ref, int32_t target, const cali_thermo_cfg_t *cfg) {
     int64_t p = rdiv(cfg->kp * ((int64_t)target - t_ref), 100);
     ctl->i = (int32_t)((int64_t)cur_level * 1000 - p - (ctl->u_out == NONE ? 0 : ctl->u_out));
+    ctl->t_prev = NONE; /* no lead on the next step either */
+    ctl->rate = 0;
 }
 
 static int valid(const cali_thermo_sensor_t *r, const cali_thermo_cfg_t *cfg) {
@@ -209,6 +219,8 @@ static void takeover(cali_thermo_state_t *st, const cali_thermo_snap_t *snap, in
     ctl0.hot_since_ms = NONE_MS;
     ctl0.u = 0;
     ctl0.u_out = 0;
+    ctl0.t_prev = NONE;
+    ctl0.rate = 0;
     st->ctl = ctl0;
     if (t_ref == NONE) return;
     lvl = control(t_ref, t_out, in->target, 0, &ctl0, cfg, NONE, now, &w);
@@ -297,6 +309,7 @@ void cali_thermo_init(cali_thermo_state_t *st) {
     st->mode = CALI_THERMO_OFF;
     st->ctl.hot_since_ms = NONE_MS;
     st->ctl.u_out = NONE; /* no outside reading in use yet */
+    st->ctl.t_prev = NONE;
     st->batt_low_since_ms = NONE_MS;
     st->last_ctl_ms = NONE_MS;
     st->wait_until_ms = NONE_MS;
@@ -465,6 +478,8 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         ctl0.hot_since_ms = NONE_MS;
         ctl0.u = 0;
         ctl0.u_out = 0;
+        ctl0.t_prev = NONE;
+        ctl0.rate = 0;
         st->mode = CALI_THERMO_AUTO;
         st->active = 0;
         st->has_pending = 0;

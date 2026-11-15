@@ -1445,8 +1445,14 @@ warm: instead of `OVERHEAT` or `TARGET_EXCEEDED_AT_MIN_LEVEL` it holds `min_leve
 
 The thermostat changes the **level** only (1 to 10). It never switches the heater on or off to
 regulate. Once per `period_ms`, and never while a command waits for its result, it computes a
-demand `u = p + i + u_out` in milli-levels from the error `target - t_ref`:
+demand `u = p + i + u_out` in milli-levels from the error `target - (t_ref + 5 × rate)`:
 
+- `rate` is how fast the reference rises, in centi-°C per minute. Each step moves it a third of the
+  way to the latest rise. The error therefore uses the cabin temperature about 5 minutes ahead
+  (`CALI_THERMO_LEAD_MIN`): the cabin keeps warming for minutes after a lower level, so a cabin that
+  still rises fast steps down before it reaches the target. The rate is zero on the first step, after
+  a step that comes more than three periods late, and after every switch that sets the integrator to
+  the current level. The `OVERHEAT` and `TARGET_EXCEEDED_AT_MIN_LEVEL` limits use `t_ref` itself.
 - `p` is `kp` times the error.
 - `i` is the integrator (`ki` per minute of error). It is frozen when a step comes more than three periods late, and while the demand is below `min_level` or above level 10 with the error pushing further (anti-windup). When AUTO takes over a running heater, the integrator starts at 0, so the demand starts at `p + u_out` and a valid reference can send a different level at once. When the controller switches between reference and backup or returns from degraded mode, the integrator is set so that the demand equals the current level: no jump. A target change keeps the integrator, so `p` follows the new target at once.
 - `u_out` is the outside {term}`feed-forward <outside compensation>`: `ka` per degree below the target at the outside thermometer, capped at `u_out_max`. It is zero when the switch is off or the outside reading is invalid (reason `OUTSIDE_INACTIVE` when it is switched on but not available). When the outside reading appears or disappears while the level is known, its share moves into the integrator, so the demand does not jump; after that, `u_out` follows the outside temperature.

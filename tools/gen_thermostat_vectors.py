@@ -117,7 +117,7 @@ def flat_st(s):
         ]
     )
     return [
-        s["mode"], s["active"], c["i"], c["last_change_ms"], c["hot_since_ms"], c["u"], c["u_out"],
+        s["mode"], s["active"], c["i"], c["last_change_ms"], c["hot_since_ms"], c["u"], c["u_out"], c["t_prev"], c["rate"],
         *pend, *_snap(s["expect"]), s["batt_low_since_ms"], *_snap(s["stop_snapshot"]),
         (s["stop_snapshot"] or {}).get("why"), s["last_ctl_ms"],
         s["night"], s["wait_until_ms"], s["cont_since_ms"],
@@ -993,7 +993,16 @@ def coverage():
     orig = th.control
 
     def spy(t_ref, t_out, target, dt_ms, ctl, cfg, cur_level, now_ms):
-        e = target - t_ref
+        gap = dt_ms > 3 * cfg["period_ms"]
+        rate = 0 if ctl["t_prev"] is None or gap else ctl["rate"]
+        if not gap and ctl["t_prev"] is not None and dt_ms > 0:
+            rate += th._rdiv(th._rdiv((t_ref - ctl["t_prev"]) * 60000, dt_ms) - rate, 3)
+            tags.add("lead_rising" if rate > 0 else "lead_falling" if rate < 0 else "lead_flat")
+        if gap and ctl["rate"]:
+            tags.add("lead_gap_reset")
+        e = target - t_ref - th.LEAD_MIN * rate
+        if (e < 0) != (target - t_ref < 0):
+            tags.add("lead_flips_error")
         kpe = cfg["kp"] * e
         u_out = (
             None
@@ -1006,7 +1015,6 @@ def coverage():
             i += (ctl["u_out"] or 0) - (u_out or 0)
         u_old = th._rdiv(kpe, 100) + i + (u_out or 0)
         lo = cfg["min_level"] * 1000
-        gap = dt_ms > 3 * cfg["period_ms"]
         if gap and e:
             tags.add("gap_frozen")
         if not gap and u_old < lo and e < 0:
