@@ -1,5 +1,10 @@
 # iOS app
 
+```{caution}
+**Experimental — under active development.** The iOS app is not released. Its screens, wording and
+requirements can still change. Phase 1 is built (below), but treat the app as a work in progress.
+```
+
 A native iPhone app talks **directly to the {term}`camper unit` over Bluetooth**, looks like a
 real iOS app, and takes voice commands through Siri and Shortcuts ({term}`App Intents`). Voice
 control is what it adds over the vendor app. A user installs it and pairs it with the camper, with no
