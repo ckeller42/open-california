@@ -11,6 +11,63 @@ is built: its requirements are `implemented`, each with its code and tests (the 
 the page). The phase-2 requirements are `open`, and so is `R_IOS_LOOK`: the unit reports no outside
 temperature, so the cockpit shows fresh water and solar only.
 
+## Screens
+
+These screens come from the app in the iOS Simulator against the **mock unit** (the test fixtures —
+no real vehicle, no real identifiers). Regenerate them with `tools/ios_gallery.sh`, which renders
+them from `ios/AppTests/DocsGallery.swift`.
+
+```{figure} screenshots/ios/cockpit.png
+:alt: The cockpit screen with the second battery, fresh water and function tiles
+:width: 260px
+
+The cockpit: the second battery, fresh water, and a tile for each function the van has.
+```
+
+```{figure} screenshots/ios/energy.png
+:alt: The energy screen
+:width: 260px
+
+Energy: the batteries and chargers the unit reports, in the web UI's order.
+```
+
+```{figure} screenshots/ios/water.png
+:alt: The water screen
+:width: 260px
+
+Water: the fresh and waste tanks, with a held reading shown as measured, never as live.
+```
+
+```{figure} screenshots/ios/lighting.png
+:alt: The lighting screen
+:width: 260px
+
+Lighting: all lights, the favourites, and a brightness slider per lamp.
+```
+
+```{figure} screenshots/ios/air-heater.png
+:alt: The air-heater screen
+:width: 260px
+
+Air heater: the status, immediate heating, and the run time and level the unit will use.
+```
+
+```{figure} screenshots/ios/setup.png
+:alt: The setup screen, including the unit-alerts toggle
+:width: 260px
+
+Setup: the camper-unit status, pairing, the Bluetooth trace, and the **unit-alerts** switch that
+turns on local notifications (`R_IOS_ALERTS`).
+```
+
+```{figure} screenshots/ios/cockpit-faults.png
+:alt: The cockpit with the unit's fault cards
+:width: 260px
+
+When the unit reports a problem, the app shows it — and, with unit alerts on, posts a local
+notification for the same fault.
+```
+
 ## Phases
 
 1. **Bluetooth app.** Direct link to the unit. Status and controls for everything this van has,
