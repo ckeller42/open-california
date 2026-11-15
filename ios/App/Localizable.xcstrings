@@ -256,6 +256,22 @@
         }
       }
     },
+    "A notification when the camper unit reports a problem. Only while the app holds its Bluetooth link.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Benachrichtigung, wenn die Camper-Einheit ein Problem meldet. Nur solange die App ihre Bluetooth-Verbindung hält."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A notification when the camper unit reports a problem. Only while the app holds its Bluetooth link."
+          }
+        }
+      }
+    },
     "A pairing request without a passcode is not the camper unit: cancel it.": {
       "extractionState": "manual",
       "localizations": {
@@ -762,6 +778,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cabinet"
+          }
+        }
+      }
+    },
+    "Camper alert": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camper-Warnung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camper alert"
           }
         }
       }
@@ -2394,6 +2426,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not sent: this app does not write this setting"
+          }
+        }
+      }
+    },
+    "Notify me of unit problems": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei Problemen der Einheit benachrichtigen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notify me of unit problems"
           }
         }
       }
@@ -4281,6 +4329,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Type the passcode from the camper screen into the iOS dialog"
+          }
+        }
+      }
+    },
+    "Unit alerts": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warnmeldungen der Einheit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unit alerts"
           }
         }
       }

@@ -33,6 +33,19 @@ final class CockpitUITests: XCTestCase {
         try app.auditScreen()
     }
 
+    /// Setup shows the unit-alerts switch (the notifications card is wired in).
+    ///
+    /// - Test: T_IOS_ALERTS_UI
+    /// - Verifies: R_IOS_ALERTS
+    @MainActor
+    func testSetupShowsUnitAlertsToggle() throws {
+        let app = launch("parked")
+        app.tabBars.buttons["Setup"].tap()
+        let toggle = app.switches["setup.alerts"]
+        if !toggle.waitForExistence(timeout: 3) { app.swipeUp() }
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3), "the unit-alerts switch")
+    }
+
     /// - Test: T_IOS_UI_NOT_INSTALLED
     /// - Verifies: R_IOS_INSTALLED
     @MainActor

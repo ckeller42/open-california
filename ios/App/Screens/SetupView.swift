@@ -2,6 +2,7 @@ import CaliBLE
 import CoreTransferable
 import SwiftUI
 import UniformTypeIdentifiers
+import UserNotifications
 
 /// The Setup tab: the page frame (pill with the clock-driven age, the feedback), the unit's status,
 /// the pairing guide and the Bluetooth trace.
@@ -17,6 +18,7 @@ struct SetupView: View {
             DeviceStatusView(store: store)
             PairingGuideView(store: store, guide: guide)
             TraceCard()
+            AlertsCard()
             NavigationLink {
                 DiagnosticsView(store: store)
             } label: {
@@ -100,6 +102,42 @@ struct TraceExport: Transferable {
         FileRepresentation(exportedContentType: UTType(filenameExtension: "jsonl") ?? .json) { export in
             guard let copy = await export.file.snapshot() else { throw CocoaError(.fileNoSuchFile) }
             return SentTransferredFile(copy)
+        }
+    }
+}
+
+/// The "Unit alerts" card: a switch that asks for notification permission when turned on, and a line
+/// on what the notifications are. Local notifications only; the fault text is the screens' own.
+///
+/// - Requirement: R_IOS_ALERTS
+struct AlertsCard: View {
+    @AppStorage(CamperStore.alertsKey) private var isOn = false
+    /// Asks the system for notification permission; injected so a test drives the denial path.
+    var requestAuth: () async -> Bool = {
+        (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])) ?? false
+    }
+
+    /// Leave the switch on only when permission was granted.
+    static func enable(_ granted: Bool, flag: inout Bool) { if !granted { flag = false } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Unit alerts").font(.headline).accessibilityAddTraits(.isHeader)
+            SwitchRow(id: "setup.alerts", label: Text("Notify me of unit problems"), isOn: $isOn)
+            Text("A notification when the camper unit reports a problem. Only while the app holds its Bluetooth link.")
+                .font(.footnote)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .onChange(of: isOn) { _, on in
+            guard on else { return }
+            Task {
+                let granted = await requestAuth()
+                var stays = isOn
+                Self.enable(granted, flag: &stays)
+                isOn = stays
+            }
         }
     }
 }

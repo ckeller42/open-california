@@ -84,6 +84,21 @@ reaches the unit in well under one second. When the iPhone leaves range, iOS rec
 itself when it comes back.
 ```
 
+```{req} Local notifications for unit alerts
+:id: R_IOS_ALERTS
+:status: implemented
+:tags: ios
+
+When the user turns on unit alerts in Setup, the app posts a local notification the first time the
+camper unit reports a problem — an energy or battery fault, a fresh- or waste-water alert, a cooler
+fault, or an air-heater error — with the text the function's own screen shows. Each alert posts once
+when it appears and not again while it stays; an alert that clears and returns posts again. The app
+asks for notification permission when the switch goes on and returns the switch to off if permission
+is refused. In the background the notification rides the Bluetooth link the app holds while camping
+mode is on (see R_IOS_BACKGROUND_LINK). The app invents no alert of its own, so there is no
+battery-level threshold: it notifies only what the unit itself flags.
+```
+
 ### Functions
 
 ```{req} Phase-1 functions

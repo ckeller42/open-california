@@ -100,6 +100,19 @@ struct UnitAlertMonitorTests {
         store.apply(st, .up)
         #expect(fake.posted == ["energy:ExtraFlag"])  // only the new one
     }
+
+    /// Review Focus 3: notification permission denied returns the switch to off; granted keeps it on.
+    ///
+    /// - Test: T_IOS_ALERTS_AUTH
+    /// - Verifies: R_IOS_ALERTS
+    @Test func deniedAuthorizationTurnsItOff() {
+        var flag = true
+        AlertsCard.enable(false, flag: &flag)
+        #expect(flag == false)
+        flag = true
+        AlertsCard.enable(true, flag: &flag)
+        #expect(flag == true)
+    }
 }
 
 /// Records the ids it was asked to post. Only ever called on the main actor (from `apply`).
