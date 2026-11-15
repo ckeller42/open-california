@@ -60,4 +60,50 @@ struct UnitAlertMonitorTests {
         #expect(alerts == [UnitAlert(id: "energy:MadeUpFlag", body: "Unknown fault of the energy system")])
         #expect(!alerts.contains { $0.id.hasPrefix("water:") })
     }
+
+    /// Enabled: applying a state with new alerts posts them once; applying the same state again posts
+    /// nothing.
+    ///
+    /// - Test: T_IOS_ALERTS_POST
+    /// - Verifies: R_IOS_ALERTS
+    @Test func applyPostsNewAlerts() {
+        let store = CamperStore.preview(.parked)
+        let fake = FakeNotifier()
+        store.alertNotifier = fake
+        store.alertsEnabled = { true }
+        store.apply(Fixture.faults.state(now: Date()), .up)
+        let expected: Set = ["energy:TwoBattNotCharged", "energy:CurrentDeratingTemperature", "water:fresh:pump_protection"]
+        #expect(Set(fake.posted) == expected)
+        store.apply(Fixture.faults.state(now: Date()), .up)
+        #expect(fake.posted.count == 3)  // the same alerts do not post again
+    }
+
+    /// Review Focus 2: the switch turned on while alerts are already active posts nothing for them; a
+    /// genuinely new alert after that does post. The disabled apply still tracks the set.
+    ///
+    /// - Test: T_IOS_ALERTS_POST
+    /// - Verifies: R_IOS_ALERTS
+    @Test func enablingDoesNotReplayActive() {
+        let store = CamperStore.preview(.parked)
+        let fake = FakeNotifier()
+        store.alertNotifier = fake
+        store.alertsEnabled = { false }
+        store.apply(Fixture.faults.state(now: Date()), .up)
+        #expect(fake.posted.isEmpty)  // off: nothing posts, but the set is tracked
+        store.alertsEnabled = { true }
+        store.apply(Fixture.faults.state(now: Date()), .up)
+        #expect(fake.posted.isEmpty)  // already-active alerts are not replayed
+        var st = Fixture.faults.state(now: Date())
+        var energy = st.interpreted["energy"] ?? [:]
+        if case .array(let flags)? = energy["faults"] { energy["faults"] = .array(flags + [.string("ExtraFlag")]) }
+        st.interpreted["energy"] = energy
+        store.apply(st, .up)
+        #expect(fake.posted == ["energy:ExtraFlag"])  // only the new one
+    }
+}
+
+/// Records the ids it was asked to post. Only ever called on the main actor (from `apply`).
+private final class FakeNotifier: UnitAlertNotifier {
+    var posted: [String] = []
+    func post(_ alerts: [UnitAlert]) { posted += alerts.map(\.id) }
 }

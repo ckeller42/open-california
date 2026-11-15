@@ -24,6 +24,12 @@ final class CamperStore {
     @ObservationIgnored let saveURL: URL?
     /// When the user forgot the unit: older frames are never shown or saved again.
     @ObservationIgnored private var forgottenAt: Date?
+    /// Posts a local notification per new unit alert; nil = none (tests, or before the app wires it).
+    @ObservationIgnored var alertNotifier: UnitAlertNotifier?
+    /// Whether the user turned unit-alert notifications on (the Setup switch); injectable for tests.
+    @ObservationIgnored var alertsEnabled: () -> Bool = { UserDefaults.standard.bool(forKey: CamperStore.alertsKey) }
+    /// The alert ids active at the last `apply`, so only the rising edges post.
+    @ObservationIgnored private var lastAlertIDs: Set<String> = []
 
     init(session: CamperSession, state: CamperState = CamperState(), link: LinkState = .off, saveURL: URL? = nil) {
         self.session = session
@@ -241,6 +247,18 @@ final class CamperStore {
         }
         self.state = state
         save()
+        notifyAlerts()
+    }
+
+    /// Posts a local notification for each alert that just appeared (never again while it stays). The
+    /// last set is tracked whether or not the switch is on, so turning it on does not replay alerts
+    /// already active.
+    ///
+    /// - Requirement: R_IOS_ALERTS
+    private func notifyAlerts() {
+        let alerts = UnitAlertMonitor.alerts(self)
+        if alertsEnabled() { alertNotifier?.post(UnitAlertMonitor.rising(from: lastAlertIDs, to: alerts)) }
+        lastAlertIDs = Set(alerts.map(\.id))
     }
 
     /// One connect attempt and its outcome; it waits out the unit's reconnect cooldown first. No

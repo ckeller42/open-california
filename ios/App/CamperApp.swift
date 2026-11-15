@@ -26,6 +26,8 @@ extension CamperStore {
     static let traceFile = TraceFile(url: URL.applicationSupportDirectory.appending(path: "ble-trace.jsonl"))
     /// The defaults key of the trace switch (`@AppStorage`); off when unset.
     nonisolated static let traceKey = "bleTrace"
+    /// The defaults key of the unit-alert-notifications switch (`@AppStorage`); off when unset.
+    nonisolated static let alertsKey = "unitAlerts"
 
     /// `transport` with the trace: it records into `file` while the switch in `defaults` is on.
     static func traced(
@@ -52,6 +54,7 @@ struct CamperApp: App {
                 .task {
                     guard live else { return }
                     MetricKitSink.shared.start()
+                    store.alertNotifier = SystemAlertNotifier()
                     store.start()
                     await store.connect()
                 }
