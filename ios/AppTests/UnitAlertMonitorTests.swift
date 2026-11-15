@@ -38,7 +38,7 @@ struct UnitAlertMonitorTests {
 
     /// Review Focus 4: a fault that clears and returns is a rising edge again.
     ///
-    /// - Test: T_IOS_ALERTS_EDGE
+    /// - Test: T_IOS_ALERTS_RETURN
     /// - Verifies: R_IOS_ALERTS
     @Test func clearedAlertPostsAgain() {
         let alert = UnitAlert(id: "cooler:door", body: "x")
@@ -49,7 +49,7 @@ struct UnitAlertMonitorTests {
     /// Review Focus 5: an uninstalled function yields no alert; an energy flag with no text keeps the
     /// screen's fallback body, never an empty one.
     ///
-    /// - Test: T_IOS_ALERTS
+    /// - Test: T_IOS_ALERTS_UNKNOWN
     /// - Verifies: R_IOS_ALERTS
     @Test func unknownAndUninstalledYieldNoAlert() {
         var st = CamperState()
@@ -81,7 +81,7 @@ struct UnitAlertMonitorTests {
     /// Review Focus 2: the switch turned on while alerts are already active posts nothing for them; a
     /// genuinely new alert after that does post. The disabled apply still tracks the set.
     ///
-    /// - Test: T_IOS_ALERTS_POST
+    /// - Test: T_IOS_ALERTS_REPLAY
     /// - Verifies: R_IOS_ALERTS
     @Test func enablingDoesNotReplayActive() {
         let store = CamperStore.preview(.parked)
@@ -104,7 +104,7 @@ struct UnitAlertMonitorTests {
     /// A relaunch restores a state whose faults were already notified last run; the first live apply
     /// of the same faults must not re-post them (the seed in `init`).
     ///
-    /// - Test: T_IOS_ALERTS_POST
+    /// - Test: T_IOS_ALERTS_RELAUNCH
     /// - Verifies: R_IOS_ALERTS
     @Test func restoredActiveAlertsDoNotRepostOnRelaunch() {
         let restored = Fixture.faults.state(now: Date())
