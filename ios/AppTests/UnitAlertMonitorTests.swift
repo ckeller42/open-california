@@ -101,6 +101,21 @@ struct UnitAlertMonitorTests {
         #expect(fake.posted == ["energy:ExtraFlag"])  // only the new one
     }
 
+    /// A relaunch restores a state whose faults were already notified last run; the first live apply
+    /// of the same faults must not re-post them (the seed in `init`).
+    ///
+    /// - Test: T_IOS_ALERTS_POST
+    /// - Verifies: R_IOS_ALERTS
+    @Test func restoredActiveAlertsDoNotRepostOnRelaunch() {
+        let restored = Fixture.faults.state(now: Date())
+        let store = CamperStore(session: Fixture.faults.makeSession(), state: restored, link: .up)
+        let fake = FakeNotifier()
+        store.alertNotifier = fake
+        store.alertsEnabled = { true }
+        store.apply(Fixture.faults.state(now: Date()), .up)  // the first live read: the same faults
+        #expect(fake.posted.isEmpty)
+    }
+
     /// Review Focus 3: notification permission denied returns the switch to off; granted keeps it on.
     ///
     /// - Test: T_IOS_ALERTS_AUTH

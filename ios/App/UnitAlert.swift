@@ -16,9 +16,10 @@ struct UnitAlert: Equatable, Identifiable {
 ///
 /// - Requirement: R_IOS_ALERTS
 enum UnitAlertMonitor {
-    /// Every alert the unit flags now, from the screens' own fault maps. An energy flag with no map
-    /// entry keeps the screen's fallback text (never an empty body); an unknown water/cooler/heater
-    /// value yields no alert at all.
+    /// Every alert the unit flags now, from the screens' own fault maps, mirroring each screen: an
+    /// energy flag or a heater error with no map entry keeps the screen's fallback text (never an
+    /// empty body, as EnergyView and AirHeaterView do); an unknown water or cooler value yields no
+    /// alert, as those screens show none.
     @MainActor static func alerts(_ store: CamperStore) -> [UnitAlert] {
         var out: [UnitAlert] = []
         if case .array(let flags)? = store.value("energy", "faults") {
@@ -38,8 +39,8 @@ enum UnitAlertMonitor {
         if let v = store.value("cooler", "fault")?.string, let text = CoolerView.faultText[v] {
             out.append(UnitAlert(id: "cooler:\(v)", body: text))
         }
-        if let v = store.value("airheater", "error")?.string, let text = AirHeaterView.errorText[v] {
-            out.append(UnitAlert(id: "heater:\(v)", body: text))
+        if let v = store.value("airheater", "error")?.string {
+            out.append(UnitAlert(id: "heater:\(v)", body: AirHeaterView.errorText[v] ?? "Heater error"))
         }
         return out
     }

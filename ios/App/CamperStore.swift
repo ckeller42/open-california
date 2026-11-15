@@ -36,6 +36,9 @@ final class CamperStore {
         self.state = state
         self.link = link
         self.saveURL = saveURL
+        // Seed from the initial (restored) state so a relaunch does not re-post faults that were
+        // already active and already notified last run; only alerts new since then are rising edges.
+        lastAlertIDs = Set(UnitAlertMonitor.alerts(self).map(\.id))
     }
 
     /// The app's saved state: Application Support/last_state.json (the unit's decoded frames only).
