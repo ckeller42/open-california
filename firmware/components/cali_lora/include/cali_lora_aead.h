@@ -28,6 +28,19 @@ extern "C" {
 int cali_lora_aead_open_psa(const uint8_t *key, const uint8_t *nonce, const uint8_t *ad, size_t ad_len,
                             const uint8_t *ct, size_t ct_len, const uint8_t *tag, uint8_t *out);
 
+/**
+ * @brief Seals one AES-128-GCM message with PSA.
+ * @param tag_len 16, or 8 for the shortened-tag GCM (PSA_ALG_AEAD_WITH_SHORTENED_TAG).
+ * @param len The length of `pt` and `ct`; at most CALI_LORA_XFER_MAX.
+ * @return 0 on success, -1 on a bad `tag_len`/`len` or a PSA failure.
+ */
+int cali_aead_seal_psa(const uint8_t *key, const uint8_t *nonce, const uint8_t *ad, size_t ad_len, const uint8_t *pt,
+                       size_t len, uint8_t *ct, uint8_t *tag, size_t tag_len);
+
+/** @brief Opens what cali_aead_seal_psa sealed; `out` is written only when the tag is valid. @return 0 or -1. */
+int cali_aead_open_psa(const uint8_t *key, const uint8_t *nonce, const uint8_t *ad, size_t ad_len, const uint8_t *ct,
+                       size_t len, const uint8_t *tag, size_t tag_len, uint8_t *out);
+
 #ifdef __cplusplus
 }
 #endif

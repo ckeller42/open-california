@@ -47,6 +47,10 @@ int main(void) {
     char line[2048], a[1024], b[1024], c[1024];
     while (fgets(line, sizeof line, stdin)) {
         uint8_t u[512], v[512], w[512];
+#ifdef CALI_LORA_REAL_AEAD
+        char d[1024], e[1024];
+        size_t tl = 0;
+#endif
         if (sscanf(line, "keypack %1023s", a) == 1) {
             int r = cali_lora_key_pack(a, u);
             if (r) puts("-1");
@@ -76,6 +80,20 @@ int main(void) {
             int r = cali_lora_xfer_rx(&x, v, fn, tk, de, stub_open, pl, &pn, cf, &cn);
             printf("%d ", r);
             hex(cf, cn), putchar(' '), hex(pl, pn), putchar('\n');
+#ifdef CALI_LORA_REAL_AEAD
+        } else if (sscanf(line, "seal %zu %1023s %1023s %1023s %1023s", &tl, a, b, c, d) == 5) {
+            uint8_t k[16], n[12], ad[64], tg[16];
+            unhex(a, k, 16), unhex(b, n, 12);
+            size_t al = unhex(c, ad, sizeof ad), pl = unhex(d, u, sizeof u);
+            int r = cali_aead_seal_psa(k, n, ad, al, u, pl, v, tg, tl);
+            printf("%d ", r), hex(v, pl), putchar(' '), hex(tg, tl), putchar('\n');
+        } else if (sscanf(line, "open %zu %1023s %1023s %1023s %1023s %1023s", &tl, a, b, c, d, e) == 6) {
+            uint8_t k[16], n[12], ad[64], tg[16];
+            unhex(a, k, 16), unhex(b, n, 12), unhex(e, tg, 16);
+            size_t al = unhex(c, ad, sizeof ad), cl = unhex(d, u, sizeof u);
+            int r = cali_aead_open_psa(k, n, ad, al, u, cl, tg, tl, v);
+            printf("%d ", r), hex(v, r ? 0 : cl), putchar('\n');
+#endif
         } else if (sscanf(line, "sha4 %1023s", a) == 1) {
             cali_lora_sha256_4(u, unhex(a, u, sizeof u), w);
             hex(w, 4), putchar('\n');
