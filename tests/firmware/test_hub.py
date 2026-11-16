@@ -16,7 +16,11 @@ pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-bui
 def _run(*lines):
     """Feed the lines to one hub_cli process; return one split output line per input line."""
     out = subprocess.run(
-        [str(build_host("hub_cli"))], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True
+        [str(build_host("hub_cli"))],
+        input="\n".join(lines) + "\n",
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.splitlines()
     assert len(out) == len(lines), out
     return [o.split() for o in out]
@@ -34,10 +38,11 @@ def test_seal_open_roundtrip():
     .. test:: hub frame seals and opens, wire layout ver|dir|nonce12|ct|tag16
        :id: T_FW_HUB_ROUNDTRIP
     """
-    r = _run(*SETUP, SEAL, "open 2")
+    r = _run(*SETUP, SEAL, "open 2 2")
     frame = r[2][0]
     assert frame[:4] == "0101" and len(frame) == 2 * (30 + N)
-    assert frame[12:28] == "0000000000000001"  # counter 1, big-endian
+    assert frame[4:6] == "01"  # the nonce starts with the dir
+    assert frame[20:28] == "00000001"  # counter 1, big-endian, last 4 nonce bytes
     assert r[3] == [str(N), "1", PT]
 
 
@@ -47,7 +52,7 @@ def test_open_rejects_flipped_tag():
     .. test:: hub frame with a flipped tag bit or a bad version is rejected
        :id: T_FW_HUB_TAG
     """
-    r = _run(*SETUP, SEAL, "flip", "open 2", "flip", "open 2", "badver", "open 2")
+    r = _run(*SETUP, SEAL, "flip", "open 2 2", "flip", "open 2 2", "badver", "open 2 2")
     assert r[4][0] == "-1"
     assert r[6][0] == str(N)  # flipped back: the bad one did not move the replay guard
     assert r[8][0] == "-1"
@@ -59,7 +64,7 @@ def test_open_rejects_replay():
     .. test:: hub frame replay and an older counter in the same session are rejected
        :id: T_FW_HUB_REPLAY
     """
-    r = _run(*SETUP, SEAL, "open 2", "open 2", SEAL, SEAL, "open 2", "open 2")
+    r = _run(*SETUP, SEAL, "open 2 2", "open 2 2", SEAL, SEAL, "open 2 2", "open 2 2")
     assert [r[3][0], r[4][0]] == [str(N), "-1"]
     assert r[7][0] == str(N) and r[8][0] == "-1"
 
@@ -70,8 +75,53 @@ def test_new_session_restarts_counter():
     .. test:: hub: a new peer session restarts the replay counter
        :id: T_FW_HUB_SESSION
     """
-    r = _run(*SETUP, "peer 1 0", SEAL, SEAL, "open 2", "seal 1 1 " + PT, "open 2", "open 2")
+    r = _run(*SETUP, "peer 1 0", SEAL, SEAL, "open 2 2", "seal 1 1 " + PT, "open 2 2", "open 2 2")
     assert [r[5][0], r[7][0], r[8][0]] == [str(N), str(N), "-1"]
+
+
+def test_old_session_replay_rejected():
+    """Ping-pong A, B, A: the frame of the older session A is a replay, although its counter is higher.
+
+    .. test:: hub: a replay of an older peer session (A, B, A) is rejected
+       :id: T_FW_HUB_PINGPONG
+    """
+    r = _run(*SETUP, "peer 1 0", SEAL, "open 2 2", "seal 1 1 " + PT, "open 2 2", SEAL, "open 2 2")
+    assert [r[4][0], r[6][0], r[8][0]] == [str(N), str(N), "-1"]
+
+
+def test_wrong_direction_rejected():
+    """A dir-1 frame given to an opener that expects dir 2 is rejected; dir 1 and 3 are fine for the app.
+
+    .. test:: hub: the opener rejects a dir it does not expect
+       :id: T_FW_HUB_DIR
+    """
+    r = _run(*SETUP, SEAL, "open 2 4", "open 2 10", "open 2 2")
+    assert [r[3][0], r[4][0], r[5][0]] == ["-1", str(N), "-1"]  # 10 = dirs 1,3 ; then the replay
+
+
+def test_counter_rotates_session():
+    """Before the 32-bit counter wraps the sender takes a new random session; the counter restarts at 1.
+
+    .. test:: hub: a new session before the counter wraps
+       :id: T_FW_HUB_ROTATE
+    """
+    r = _run("load 0", SEAL, "setctr 0 4294967295", SEAL)
+    a, b = r[1][0], r[3][0]
+    assert a[6:20] != b[6:20] and b[20:28] == "00000001"
+
+
+def test_rekey_store_failure_keeps_key():
+    """A failed store leaves the key and the session as they were.
+
+    .. test:: hub: rekey keeps the old key when the store fails
+       :id: T_FW_HUB_REKEY_FAIL
+    """
+    r = _run("load 0", "kvfail 1", "rekey 0", "key 0", "kvfail 0", "rekey 0")
+    assert r[2] == ["-1"] and r[3] == r[0] and r[5] != r[0]
+
+
+def test_cfg_load_terminates_strings():
+    assert _run("cfgfull")[0] == ["23", "95", "31", "47", "31", "47"]
 
 
 def test_key_persists():
@@ -90,7 +140,7 @@ def test_rekey_changes_key():
     .. test:: rekey makes and stores a new key; frames of the old key no longer open
        :id: T_FW_HUB_REKEY
     """
-    r = _run(*SETUP, SEAL, "rekey 0", "reload 0", "open 2", "peer 2 0", "open 2")
+    r = _run(*SETUP, SEAL, "rekey 0", "reload 0", "open 2 2", "peer 2 0", "open 2 2")
     assert r[3][0] != r[0][0] and r[4] == r[3]
     assert r[5][0] == str(N)  # ctx 2 still has the old key: opens its frame
     assert r[7][0] == "-1"  # now ctx 2 has the new key: the old frame fails
