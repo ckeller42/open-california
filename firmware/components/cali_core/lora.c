@@ -530,3 +530,25 @@ int cali_lora_console(const char *args) {
     }
     return 0;
 }
+
+static cali_hub_open_fn s_cmd_open;
+void cali_lora_cmd_set_open(cali_hub_open_fn open) { s_cmd_open = open; }
+
+int cali_lora_cmd(const uint8_t *p, size_t n, const uint8_t key[16], const uint8_t deveui[8], const char **fn,
+                  const char **what, const char **value) {
+    static const struct { const char *fn, *what, *value; } MAP[] = {
+        {"airheater", "power", "on"}, {"airheater", "power", "off"},
+        {"campingmode", "master", "on"}, {"campingmode", "master", "off"}};
+    uint8_t nonce[12] = {0x04}, code, last[2];
+    size_t ln = sizeof last;
+    if (!s_cmd_open || n != CALI_LORA_CMD_LEN) return -1;
+    memcpy(nonce + 1, deveui, 8);
+    memcpy(nonce + 10, p, 2);
+    if (s_cmd_open(key, nonce, p, 2, p + 2, 1, p + 3, 8, &code) != 0 || code < 1 || code > 4) return -1;
+    unsigned ctr = (unsigned)(p[0] << 8 | p[1]), prev = 0;
+    if (cali_kv_get(CALI_LORA_CMD_CTR_KEY, last, &ln) == CALI_KV_OK && ln == sizeof last) prev = (unsigned)(last[0] << 8 | last[1]);
+    if (ctr <= prev) return -1;
+    if (cali_kv_set(CALI_LORA_CMD_CTR_KEY, p, 2) != 0) return -1;
+    *fn = MAP[code - 1].fn, *what = MAP[code - 1].what, *value = MAP[code - 1].value;
+    return 0;
+}

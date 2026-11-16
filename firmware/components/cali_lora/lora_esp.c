@@ -17,6 +17,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "cali_control.h"
 #include "cali_lora.h"
 #include "cali_lora_aead.h"
 #include "cali_lora_setup.h"
@@ -273,11 +274,32 @@ static void xfer_rx(const cali_rak_event_t *e) {
     }
 }
 
+/* One sealed command of FPort 20. The data key is loaded (never made here) and wiped after use. */
+static void cmd_rx(const cali_rak_event_t *e) {
+    uint8_t key[16], eui[8];
+    size_t kl = sizeof key;
+    const char *fn, *what, *value, *reason = NULL;
+    if (unhex8(s_st.dev_eui, eui) != 0 || cali_kv_get(CALI_HUB_KEY_KEY, key, &kl) != CALI_KV_OK || kl != sizeof key) {
+        cali_log("lora: command without a DevEUI or a data key: dropped");
+        cali_wipe(key, sizeof key);
+        return;
+    }
+    int r = cali_lora_cmd(e->payload, e->payload_len, key, eui, &fn, &what, &value);
+    cali_wipe(key, sizeof key);
+    if (r != 0) {
+        cali_log("lora: command rejected (%u bytes)", e->payload_len);
+        return;
+    }
+    r = cali_ctl_submit(fn, what, value, -1, NULL, &reason, "lora");
+    cali_log("lora: command %s %s -> %d%s%s", fn, value, r, reason ? " " : "", reason ? reason : "");
+}
+
 static void handle_event(const cali_rak_event_t *e) {
     if (e->kind == CALI_RAK_RX) {
         /* every downlink (ADR, link check, a command, a transfer fragment) costs one of the day's downlinks */
         (void)cali_lora_downlink_take(&s_bud, (uint32_t)(cali_uptime_ms() / 1000));
         if (e->port == CALI_LORA_XFER_PORT) xfer_rx(e);
+        else if (e->port == CALI_LORA_PORT_CMD) cmd_rx(e);
     } else if (e->kind == CALI_RAK_JOINED) {
         s_st.joined = true;
     } else if (e->kind == CALI_RAK_TX_DONE && !s_in_send) {
@@ -531,6 +553,7 @@ static void lora_task(void *arg) {
     char fw[9] = "";
     memcpy(fw, esp_app_get_description()->version, sizeof fw - 1);   /* the first 8 characters */
     cali_lora_budget_init(&s_bud);
+    cali_lora_cmd_set_open(cali_aead_open_psa);
     cali_lora_tracker_init(&s_trk);
     for (;;) {
         (void)xQueueReceive(s_snap_q, &s_snap, pdMS_TO_TICKS(1000));   /* the newest snapshot, or the last one */

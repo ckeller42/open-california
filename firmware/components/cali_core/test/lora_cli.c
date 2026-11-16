@@ -9,6 +9,7 @@
  *            qr <exp_on> <present> <eui|-> [max] (prints "QR <text>", "QR -" when none and the buffer is
  *            zeroed, "QR dirty" when none and bytes stay) | sqr ... (the same for cali_lora_setup_qr_text) | ttnok <hex> |
  *            notk (cali_lora_confirm_no_tk as hex)
+ * Command:   cmd <key hex> <deveui hex> <frame hex> (cali_lora_cmd; CALI_LORA_REAL_AEAD = PSA open, else all fail)
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
  * Driven by tests/firmware/test_lora.py. Fakes: session frames, sensors, counters, clock, NVS, log. */
 #include <math.h>
@@ -19,6 +20,9 @@
 
 #include "cali_lora.h"
 #include "cali_platform.h"
+#ifdef CALI_LORA_REAL_AEAD
+#include "cali_lora_aead.h"
+#endif
 
 static uint8_t s_frames[CODEC_NCHARS][CODEC_FRAME_MAX];
 static size_t s_len[CODEC_NCHARS];
@@ -122,8 +126,11 @@ int main(void) {
     static cali_lora_tracker_t trk;
     static cali_lora_budget_t bud;
     uint32_t picked = 0;
+#ifdef CALI_LORA_REAL_AEAD
+    cali_lora_cmd_set_open(cali_aead_open_psa);
+#endif
     while (fgets(line, sizeof line, stdin)) {
-        char cmd[16], a[800], b[64];
+        char cmd[16], a[800], b[64], rest2[800];
         unsigned u1, u2, u3, u4;
         unsigned long long ull;
         line[strcspn(line, "\r\n")] = 0;
@@ -230,6 +237,13 @@ int main(void) {
         } else if (!strcmp(cmd, "kvset") && sscanf(rest, "%63s %799s", b, a) == 2) {
             uint8_t v[CALI_LORA_TTN_MAX];
             cali_kv_set(b, v, unhex(a, v, sizeof v));
+        } else if (!strcmp(cmd, "cmd") && sscanf(rest, "%63s %63s %799s", b, a, rest2) == 3) {
+            uint8_t k[16], eui[8], fr[64];
+            const char *fn, *what, *val;
+            unhex(b, k, 16), unhex(a, eui, 8);
+            size_t fl = unhex(rest2, fr, sizeof fr);
+            if (cali_lora_cmd(fr, fl, k, eui, &fn, &what, &val)) puts("-1");
+            else printf("0 %s %s %s\n", fn, what, val);
         } else if (!strcmp(cmd, "kvcorrupt")) {
             s_corrupt[0] = 0;
             sscanf(rest, "%15s", s_corrupt);

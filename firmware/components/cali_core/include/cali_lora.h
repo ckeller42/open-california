@@ -62,6 +62,7 @@
 #include "cali_json.h"
 #include "cali_sensors.h"
 #include "codec.h"
+#include "cali_hub.h"
 #include "codec_chars.h"
 
 #ifdef __cplusplus
@@ -139,6 +140,32 @@ typedef enum {
     CALI_RAK_RX,           /**< `+EVT:RX_...`: a downlink */
     CALI_RAK_VALUE,        /**< the value line of `AT+X=?` */
 } cali_rak_kind_t;
+
+/** @brief FPort of a sealed command from the app (ctr(2 BE) | cmd(1) | tag(8)). */
+#define CALI_LORA_PORT_CMD 20
+/** @brief KV key of the last accepted command counter (2 bytes, big-endian). */
+#define CALI_LORA_CMD_CTR_KEY "lora_cmd_ctr"
+/** @brief A command frame: counter, command code, tag. */
+#define CALI_LORA_CMD_LEN 11
+
+/** @brief Sets the AES-GCM open for cali_lora_cmd (cali_core cannot link cali_lora). Call once at boot. */
+void cali_lora_cmd_set_open(cali_hub_open_fn open);
+/**
+ * @brief Opens and checks one command frame of FPort 20.
+ *
+ * Nonce 0x04 | DevEUI | 0x00 | ctr, AD = ctr. The counter must be above the one in KV; it is stored
+ * before this returns, so the caller executes only after the replay guard has moved.
+ * @param p      The frame.
+ * @param n      Its length; anything but CALI_LORA_CMD_LEN is rejected.
+ * @param key    The 16-byte data key.
+ * @param deveui The 8-byte DevEUI.
+ * @param fn     Out: control function ("airheater" or "campingmode").
+ * @param what   Out: command name.
+ * @param value  Out: "on" or "off".
+ * @return 0, or -1 for a bad length, tag, old counter, unknown code or a counter that cannot be stored.
+ */
+int cali_lora_cmd(const uint8_t *p, size_t n, const uint8_t key[16], const uint8_t deveui[8], const char **fn,
+                  const char **what, const char **value);
 
 /** @brief A parsed line. */
 typedef struct {

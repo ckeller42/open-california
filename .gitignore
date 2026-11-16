@@ -106,3 +106,4 @@ ios/*.xcodeproj/project.xcworkspace/xcshareddata/*
 !ios/*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 ios/*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/*
 !ios/*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+firmware/host/lora_cmd_cli
