@@ -75,20 +75,18 @@ int cali_hub_open(cali_hub_crypto_t *c, const uint8_t *frame, size_t n, uint8_t 
     size_t len = n - CALI_HUB_OVERHEAD;
     const uint8_t *sess = frame + 3;
     uint32_t ctr = get_be32(frame + 10);
-    int cur = -1, seen = 0;
+    int at = -1;
     if (!(expect_mask >> d & 1) || frame[2] != d || len > max) return -1;
     for (int i = 0; i < c->rx_n[d]; i++)
-        if (!memcmp(sess, c->rx_ring[d][i], 7)) {
-            seen = 1;
-            if (i == c->rx_cur[d]) cur = i;
-        }
-    if (seen && (cur < 0 || ctr <= c->rx_last[d])) return -1; /* an old session, or an old counter */
+        if (!memcmp(sess, c->rx_ring[d][i], 7)) at = i;
+    if (at >= 0 && ctr <= c->rx_last[d][at]) return -1; /* a replay */
     if (s_open(c->key, frame + 2, frame, 14, frame + 14, len, frame + 14 + len, 16, out)) return -1;
-    if (!seen) { /* only an authentic frame moves the guard */
-        c->rx_cur[d] = c->rx_n[d] < CALI_HUB_RING ? c->rx_n[d]++ : (uint8_t)((c->rx_cur[d] + 1) % CALI_HUB_RING);
-        memcpy(c->rx_ring[d][c->rx_cur[d]], sess, 7);
+    if (at < 0) { /* only an authentic frame moves the guard */
+        at = c->rx_n[d] < CALI_HUB_RING ? c->rx_n[d]++ : (c->rx_cur[d] + 1) % CALI_HUB_RING;
+        c->rx_cur[d] = (uint8_t)at;
+        memcpy(c->rx_ring[d][at], sess, 7);
     }
-    c->rx_last[d] = ctr;
+    c->rx_last[d][at] = ctr;
     if (dir) *dir = d;
     return (int)len;
 }

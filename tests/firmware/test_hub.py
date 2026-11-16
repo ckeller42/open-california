@@ -42,6 +42,8 @@ def test_seal_open_roundtrip():
     frame = r[2][0]
     assert frame[:4] == "0101" and len(frame) == 2 * (30 + N)
     assert frame[4:6] == "01"  # the nonce starts with the dir
+    for d in (2, 3):  # dir 1 equals the version byte: check the others too
+        assert _run("load 0", f"seal 0 {d} " + PT)[1][0][4:6] == f"0{d}"
     assert frame[20:28] == "00000001"  # counter 1, big-endian, last 4 nonce bytes
     assert r[3] == [str(N), "1", PT]
 
@@ -80,13 +82,46 @@ def test_new_session_restarts_counter():
 
 
 def test_old_session_replay_rejected():
-    """Ping-pong A, B, A: the frame of the older session A is a replay, although its counter is higher.
+    """A, B, then a byte-identical replay of an earlier A frame: -1.
 
-    .. test:: hub: a replay of an older peer session (A, B, A) is rejected
+    .. test:: hub: a replayed frame of an older peer session is rejected
        :id: T_FW_HUB_PINGPONG
     """
-    r = _run(*SETUP, "peer 1 0", SEAL, "open 2 2", "seal 1 1 " + PT, "open 2 2", SEAL, "open 2 2")
-    assert [r[4][0], r[6][0], r[8][0]] == [str(N), str(N), "-1"]
+    r = _run(*SETUP, "peer 1 0", SEAL, "keep", "open 2 2", "seal 1 1 " + PT, "open 2 2", "use", "open 2 2")
+    assert [r[5][0], r[7][0], r[9][0]] == [str(N), str(N), "-1"]
+
+
+def test_interleaved_senders_accepted():
+    """Two live senders in one dir (A1, B1, A2, B2) are all accepted.
+
+    .. test:: hub: interleaved senders in one dir are all accepted
+       :id: T_FW_HUB_INTERLEAVE
+    """
+    r = _run(
+        *SETUP,
+        "peer 1 0",
+        SEAL,
+        "open 2 2",
+        "seal 1 1 " + PT,
+        "open 2 2",
+        SEAL,
+        "open 2 2",
+        "seal 1 1 " + PT,
+        "open 2 2",
+    )
+    assert [r[i][0] for i in (4, 6, 8, 10)] == [str(N)] * 4
+
+
+def test_older_session_higher_counter_accepted():
+    """After A then B, a fresh A frame with a higher counter is accepted.
+
+    .. test:: hub: a fresh frame of an earlier session is accepted
+       :id: T_FW_HUB_FRESH
+    """
+    r = _run(
+        *SETUP, "peer 1 0", SEAL, "open 2 2", SEAL, "keep", "seal 1 1 " + PT, "open 2 2", "use", "open 2 2"
+    )
+    assert [r[4][0], r[8][0], r[10][0]] == [str(N)] * 3
 
 
 def test_wrong_direction_rejected():

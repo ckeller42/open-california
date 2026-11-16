@@ -45,13 +45,13 @@ typedef struct {
     uint8_t sess[7];
     /** @brief The last counter sent; the next one is tx_ctr + 1. */
     uint32_t tx_ctr;
-    /** @brief The highest counter accepted per dir (index 1..3) in the current peer session. */
-    uint32_t rx_last[4];
+    /** @brief The highest counter accepted per dir and per ring entry. */
+    uint32_t rx_last[4][CALI_HUB_RING];
     /** @brief Per dir the peer sessions accepted this boot (a ring, oldest overwritten). */
     uint8_t rx_ring[4][CALI_HUB_RING][7];
     /** @brief Per dir how many ring entries are used. */
     uint8_t rx_n[4];
-    /** @brief Per dir the ring index of the current peer session. */
+    /** @brief Per dir the ring index of the newest peer session (eviction goes on from there). */
     uint8_t rx_cur[4];
 } cali_hub_crypto_t;
 
@@ -65,9 +65,10 @@ size_t cali_hub_seal(cali_hub_crypto_t *c, uint8_t dir, const uint8_t *pt, size_
 /**
  * @brief Opens a frame.
  *
- * Replay guard: per dir, a counter at or below rx_last in the current peer session is a replay; a session
- * that is in the ring (the last CALI_HUB_RING accepted) but is not the current one is a replay of an old
- * session (A, B, A); an unknown session starts a new one and the counter restarts.
+ * Replay guard: per dir, the last CALI_HUB_RING peer sessions are remembered, each with its own last
+ * counter. A frame of a remembered session is accepted only with a counter above that entry's last one, so
+ * several live senders in one dir (A1, B1, A2, B2) work and a replayed frame is -1. An unknown session is
+ * added (the oldest entry is evicted) and its counter starts fresh.
  * Replay state lives in RAM only: it is per boot. A replay after a reboot, or of a session older than the
  * ring, is covered by the 120 s time check of the caller (the RPC layer, Task 3), not here.
  * @param expect_mask Bit d set = a frame with dir d is accepted (ESP: 1<<2; app: (1<<1)|(1<<3)).

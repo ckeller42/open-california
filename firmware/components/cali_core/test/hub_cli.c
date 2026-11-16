@@ -1,6 +1,6 @@
 /* hub_cli.c — host driver for hub.c with the real PSA AES-GCM and an in-memory KV.
  * Three contexts (0..2). Lines: load i | reload i | rekey i | key i | peer i j (i gets j's key, prints ok) | seal i dir pthex |
- * open i mask (last frame) | kvfail 0/1 | setctr i n | cfgfull | flip | badver | big i | cfg | qr van url user pass keyhex.
+ * open i mask (last frame) | kvfail 0/1 | setctr i n | cfgfull | flip | badver | keep | use | big i | cfg | qr van url user pass keyhex.
  * Output: key = hex; seal = frame hex or "0"; open = "<rc> <dir> <pthex>"; big = "<rc> <len> <ok>".
  * Driven by tests/firmware/test_hub.py. */
 #include <stdio.h>
@@ -57,10 +57,10 @@ static size_t unhex(const char *s, uint8_t *out, size_t max) {
 int main(void) {
     static cali_hub_crypto_t c[3];
     static char line[16384], a[8192], b[8192], d[64], e[64], f[64];
-    static uint8_t last[8192 + 32], u[8192], v[8192], big[8192], bigf[8192 + 32], bigo[8192];
+    static uint8_t kept[8192 + 32], last[8192 + 32], u[8192], v[8192], big[8192], bigf[8192 + 32], bigo[8192];
     int i, dir;
     unsigned mask;
-    size_t lastn = 0;
+    size_t lastn = 0, keptn = 0;
     cali_hub_set_aead(cali_aead_seal_psa, cali_aead_open_psa);
     while (fgets(line, sizeof line, stdin)) {
         if (sscanf(line, "load %d", &i) == 1 || sscanf(line, "reload %d", &i) == 1) {
@@ -96,6 +96,12 @@ int main(void) {
             cali_hub_cfg_load(&r);
             printf("%u %u %u %u %u %u\n", (unsigned)strlen(r.van), (unsigned)strlen(r.url), (unsigned)strlen(r.user),
                    (unsigned)strlen(r.pass), (unsigned)strlen(r.app_user), (unsigned)strlen(r.app_pass));
+        } else if (!strncmp(line, "keep", 4)) { /* save the last frame */
+            memcpy(kept, last, lastn), keptn = lastn;
+            puts("ok");
+        } else if (!strncmp(line, "use", 3)) { /* make the saved frame the last one */
+            memcpy(last, kept, keptn), lastn = keptn;
+            puts("ok");
         } else if (!strncmp(line, "flip", 4)) { /* one tag bit of the last frame */
             last[lastn - 1] ^= 1;
             puts("ok");
