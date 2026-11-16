@@ -129,7 +129,8 @@ they skip). **Only GitHub runs:** `install-script` (shellcheck), `pairing-real-s
 the Bumble fake unit over real BlueZ in a VM, `tests/realstack/vm.sh`; not a required check yet), `ios`
 (macOS: the Swift package + the app tests on the simulator, when a PR touches the app or what it links;
 not required yet), the firmware jobs, and — on push to `main` only — `docs.yml` (the same build + Pages deploy) and
-`screenshots.yml` (commits `docs/screenshots` to `main` with `[skip ci]`).
+`screenshots.yml` (renders the web-UI shots over the mock and commits them to the `screenshots`
+branch; the docs and README reference them from there by raw URL, so none is committed to `main`).
 The `docs` job (doxygen + the `sphinx -W` site build on every PR) runs locally as `tools/ci.sh docs`.
 Test layers + harnesses: `docs/simulation-and-testing.md`.
 

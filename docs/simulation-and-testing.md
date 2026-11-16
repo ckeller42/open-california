@@ -175,8 +175,8 @@ python -m pytest tests/e2e -q
 ```
 
 The same mock also feeds the screenshots: `tools/ci.sh screenshots` runs `tools.ux_gallery` to
-render `docs/screenshots/`. On `main` the `screenshots.yml` workflow re-renders them and commits
-the result.
+render them. On `main` the `screenshots.yml` workflow re-renders them and commits the result to the
+`screenshots` branch; the docs and README reference them from there by raw URL.
 
 ## Real-unit traces (`CALICTL_BLE_TRACE` + `tools/trace_compare.py`)
 
@@ -376,4 +376,4 @@ The satellite's writes are proven in a ladder, each rung closer to hardware
 | `docs.yml` | push to `main` (docs/code paths) only | `sphinx -W` site build + GitHub Pages deploy (see {doc}`building-the-docs`) |
 | `docs-touched.yml` | every PR (also when its description is edited) | a PR that changes `calictl/`, `firmware/components/` or `csrc/` also changes the docs, or says why not (`tools/docs_touched.py`) |
 | `esp-stable.yml` | manual (`tools/esplab/promote_stable.sh`) | republishes a soaked `esp-latest` build as the `esp-stable` release |
-| `screenshots.yml` | push to `main` (web UI / mock paths) only | re-render `docs/screenshots` over the mock and commit them with `[skip ci]` |
+| `screenshots.yml` | push to `main` (web UI / mock paths) only | re-render the web-UI shots over the mock and commit them to the `screenshots` branch (docs + README link them from there) |

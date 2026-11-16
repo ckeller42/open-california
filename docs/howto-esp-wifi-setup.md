@@ -58,7 +58,7 @@ only: it is in no document, in no log and not in `/api/state`.
    on an iPhone that is **Maximize Compatibility**, because the
    satellite has only a 2.4 GHz radio.
 
-   ![The camper UI's WiFi setup screen on the satellite's hotspot: network list, password, Connect](screenshots/esp-setup-page.png)
+   ![The camper UI's WiFi setup screen on the satellite's hotspot: network list, password, Connect](https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/esp-setup-page.png)
 4. **Switch to the satellite's new address from the display.** While the satellite joins, its
    hotspot moves to your network's channel, so your phone may drop off the setup WiFi for a moment.
    Once the satellite is on your network, its **screen shows a second QR code** with
@@ -87,7 +87,7 @@ QR code for 2 minutes.
 *Satellite WiFi*, with the current WiFi state, the same network list and password form, and a link
 back to the camper UI. It is only a way back onto WiFi; everything else is in the camper UI.
 
-![The satellite's WiFi recovery page: state, network list, password, Connect](screenshots/esp-recovery-page.png)
+![The satellite's WiFi recovery page: state, network list, password, Connect](https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/esp-recovery-page.png)
 
 ### The setup wizard's steps
 
