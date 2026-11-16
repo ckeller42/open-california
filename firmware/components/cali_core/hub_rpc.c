@@ -179,7 +179,16 @@ static size_t rpc_run(const char *req_json, char *res_json, size_t max, int (*pu
         int r;
         ws(&c);
         if (first && c.p < c.end && *c.p == '}') break;
-        if (str(&c, key, sizeof key, &kl) != 0 || eat(&c, ':') != 0) return err(res_json, max, id, 400, "bad_json");
+        r = str(&c, key, sizeof key, &kl);
+        if (r == -2) { /* a key longer than any known one: unknown, skip the rest of its string */
+            while (c.p < c.end && *c.p != '"') c.p += *c.p == '\\' ? 2 : 1;
+            if (c.p >= c.end) return err(res_json, max, id, 400, "bad_json");
+            c.p++;
+            key[0] = 0;
+        } else if (r != 0) {
+            return err(res_json, max, id, 400, "bad_json");
+        }
+        if (eat(&c, ':') != 0) return err(res_json, max, id, 400, "bad_json");
         {   /* a known key twice fails closed; an unknown key's value is skipped (forward compatible) */
             static const char *const K[] = {"id", "t", "m", "p", "b"};
             for (unsigned i = 0; i < 5; i++)

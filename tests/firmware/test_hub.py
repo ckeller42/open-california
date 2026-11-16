@@ -351,3 +351,22 @@ def test_rpc_unknown_key_ignored_duplicate_rejected(rpc_cli):
     assert (res["id"], res["s"]) == (3, 200)
     res, _ = _rpc(rpc_cli, '{"id":3,"id":4,"m":"GET","p":"/api/state","b":null,"t":%d}' % NOW)
     assert res["s"] == 400
+
+
+def test_rpc_long_unknown_keys_ignored(rpc_cli):
+    res, _ = _rpc(
+        rpc_cli,
+        '{"timestamp":1,"id":3,"version_extra":"x","m":"GET","p":"/api/state","b":null,"t":%d,"k\\"y_long_one":[]}'
+        % NOW,
+    )
+    assert (res["id"], res["s"]) == (3, 200)
+
+
+def test_rpc_newline_escape_is_decoded(rpc_cli):
+    """A real LF in the body string travels as \\n and the router sees the LF: JSON whitespace there is
+    accepted (a literal backslash-n outside a string would be a 400)."""
+    body = '{"ssid":"minsel",\n"psk":"test-psk-1234"}'
+    assert "\n" in body and "\\n" not in body
+    res, other = _rpc(rpc_cli, {"id": 7, "m": "POST", "p": "/api/wifi", "b": body, "t": NOW})
+    assert "CALL set_creds [minsel] [test-psk-1234]" in other, (res, other)
+    assert "\\n" in json.dumps({"b": body})  # on the wire it is the two characters \ n
