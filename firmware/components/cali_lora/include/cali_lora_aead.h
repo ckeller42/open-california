@@ -31,7 +31,7 @@ int cali_lora_aead_open_psa(const uint8_t *key, const uint8_t *nonce, const uint
 /**
  * @brief Seals one AES-128-GCM message with PSA.
  * @param tag_len 16, or 8 for the shortened-tag GCM (PSA_ALG_AEAD_WITH_SHORTENED_TAG).
- * @param len The length of `pt` and `ct`; at most CALI_LORA_XFER_MAX.
+ * @param len The length of `pt` and `ct`; up to 16 MB (heap buffers, PSRAM on the board).
  * @return 0 on success, -1 on a bad `tag_len`/`len` or a PSA failure.
  */
 int cali_aead_seal_psa(const uint8_t *key, const uint8_t *nonce, const uint8_t *ad, size_t ad_len, const uint8_t *pt,
