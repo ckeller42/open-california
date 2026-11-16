@@ -546,6 +546,42 @@ def test_a_new_connection_wakes_the_mock_after_a_heartbeat_lapse():
     assert asyncio.run(run())["Mode"] == 12  # the REQUEST_CONFIG reply, not just the state echo
 
 
+def test_a_heartbeat_on_a_kept_link_wakes_the_mock_after_a_lapse():
+    """A central that resumes beating on a link it kept (iOS holds the link while the app restarts;
+    the lab runs the peripheral's own drop timer at 600 s) reaches an awake unit: the mock's 15 s
+    heartbeat-lapse ``drop()`` must not outlive that beat, or every write applies and no change is
+    ever notified — the app kept showing the air heater "Inactive" after a "heater on" it had sent
+    (iPhone bench lab 2026-11-02). The real unit ends such a link instead, so it cannot happen there.
+
+    .. test:: Fake peripheral wakes the mock on a heartbeat
+       :id: T_FAKE_WAKE_ON_BEAT
+       :links: R_FAKE_UNIT_FIDELITY
+    """
+    from bumble.device import Peer
+
+    from calictl import overrides, protocol
+
+    f = protocol.load()
+    overrides.apply(f)
+
+    async def run():
+        _, unit, central = await _unit_and_central()
+        conn = await central.connect(await scan_for(central))
+        peer = Peer(conn)
+        await peer.discover_services()
+        await peer.discover_characteristics()
+        got: asyncio.Queue = asyncio.Queue()
+        await _char(peer, "1502").subscribe(lambda v: got.put_nowait(bytes(v)))
+        unit.unit.drop()  # the mock's internal lapse while the app restarted (beats stopped)
+        await _char(peer, "1003").write_value(bytes(4), with_response=True)
+        await _char(peer, "1501").write_value(
+            bytes.fromhex("0d0c000000000000eeeeeeeeeeeeeeee"), with_response=True
+        )
+        return protocol.decode(f["lighting"], await asyncio.wait_for(got.get(), 2.0))
+
+    assert asyncio.run(run())["Mode"] == 12
+
+
 @pytest.mark.parametrize("answers", [True, False])
 def test_the_unit_hangs_up_on_a_central_that_never_answers_its_mtu_request(monkeypatch, answers):
     """The real unit sends every central an ATT Exchange MTU Request and terminates the link (HCI

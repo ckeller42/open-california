@@ -1,0 +1,7 @@
+// Shared build settings of the app. Personal signing values go in Local.xcconfig (gitignored);
+// copy Local.xcconfig.example. A simulator build needs no Local.xcconfig.
+BUNDLE_ID_PREFIX = org.example.opencalifornia
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

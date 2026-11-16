@@ -1,0 +1,33 @@
+# SwiftLint config of the iOS app and CaliKit. Run it from ios/ (`cd ios && swiftlint --strict`) so the
+# nested configs apply. swift-format (ios/.swift-format) owns the layout, so the layout rules it decides
+# are off here. Every disabled or tuned rule has its reason.
+excluded:
+  - Camper.xcodeproj
+disabled_rules:
+  - trailing_comma               # swift-format adds the trailing comma of a multi-line literal
+  - statement_position           # swift-format places `else` and `catch`
+  - vertical_parameter_alignment # swift-format breaks and indents parameter lists
+  - opening_brace                # swift-format puts `{` on its own line after a wrapped condition
+  - inclusive_language           # "master" is the unit's own name for the camping master switch
+line_length: 130                 # the same limit as ios/.swift-format
+identifier_name:                 # short names (fn, r, p, k) mirror the calictl and C twins of the code
+  min_length: 1
+  max_length: 60
+type_name:
+  min_length: 2                  # `Fx`: the test fixture of the BLE tests
+large_tuple: 5                   # labelled table rows, the same shape as the web UI's arrays
+# Size limits: the session actor, the CoreBluetooth transport and the screens are each one unit with
+# their tests beside them; a split only for the count makes them harder to read.
+file_length:
+  warning: 750
+  error: 800
+type_body_length:
+  warning: 450
+  error: 500
+function_body_length:
+  warning: 60
+  error: 80
+cyclomatic_complexity:
+  ignores_case_statements: true  # a switch over the command or refusal enum is one decision per case
+nesting:
+  type_level: 2                  # the JSON shape of a string catalog, decoded in a test

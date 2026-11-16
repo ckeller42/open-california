@@ -219,6 +219,21 @@ changed. Every 5.0.8 control write site has a 1:1 counterpart:
 | Water 1302 | same 9 fields, same unconditional decode (see `value-freshness.md` "App 5.4.0") |
 | 1004 vehicle | same layout; roll/pitch /100 |
 
+**Why the app writes the neutral frame (DECOMPILE 5.4.0, 2026-11-02).** Each control characteristic
+has one writer object with one mutable field model, shared by every screen (cooler and heater `jg/a`,
+camping `ch/a`, energy `gh/a`, lighting `vg/a`, roof `ah/a`). A command sets only its target field on
+that model and writes the whole model (`d4(true)`, e.g. the camping screen `bh/b.java:155-159`); 500 ms
+later the timer calls the writer's `c4()`, which sets every field back to its leave-unchanged sentinel,
+and writes the reset model (`f40/v.java:234-251`, `c1/c.java:342-352`). Without the reset the next
+command on the same characteristic would re-send the previous one's target ("heater on", then "level
+5" would send "on" again). Only streams skip it (`d4(false)`): the roof hold (`zg/d`, `u1/a`), the
+`1003` heartbeat (`n2/q1`) and V3 `F002` (`sg/e`); all 40 one-shot commands use `d4(true)`.
+calictl, the satellite and the iPhone app keep no model between commands: every frame is built fresh
+from the sentinels plus its own target (`control.build`, `control.c`), so the reset has nothing to
+clear and they send no neutral frame. The unit acts on the write, not on what stays in the register:
+calictl's "power on" without a neutral frame ran the heater exactly 30 min and it stayed idle after
+(CAPTURE 2026-10-11, `cooler-airheater.md`).
+
 New on this van's code path (no wire change): heater **ErrorCode 6/7** (`ig/b.java:606-700`,
 `alert-states.md` §3), the rear-USB rule (`signals.md`), the "Disconnected to save energy" card
 (`gg/k.java:44-95`; StateLand STANDBY now also counts as shore power for the stay-connected rule),
@@ -239,7 +254,7 @@ calictl decodes none of these and must not write any of them to this unit. None 
 | Chars **`2200` / `2201` / `2202`** VirtualBattery (function 22) | 2202 state (`Installed`, SoC/current/voltage of the high-voltage battery, `VirtualBatteryMode` 0 AUTOMATIC / 1 PERMANENT / 6 DISABLED, warnings), 2201 control (24-bit, sentinels 3 / 127) (`hh/g`, `ih/a`, `ih/b`) | California Next + VERSION_4 only — **unreachable in this build** (max accepted is 3) |
 | **CarVariant 2 = CALIFORNIA_NEXT** | 1004 CarVariant 0 T7, 1 Grand California, **2 California Next** (ID. Buzz based), else T7 (`qg/e.java:357-363`, `lf/a.java:25-31`) | other vehicles; this van reports 0 |
 | **Lighting zones 29–36** | Next-only zone IDs mapped onto existing 1501 brightness fields: 29→L7, 30→L4, 31→L1, 32→L2, 33→L9, 34→L8, 35→L3, 36→L5 (`ug/h` `:467-519`); light groups per variant (`ug/h` `:565-590`). No new wire field. L6 and L14–L16 stay unaddressed | California Next |
-| **Per-variant subscribe gate** | `isSupportedForVariant` (`gg/o`): roof T7 only; satellite, stairs, living-room heater, roof A/C **Grand California only**; VirtualBattery Next only; energy, water, heater, cooler T7 + GC; the rest all three. So a T7 app **no longer subscribes** 18xx / 19xx / 20xx / 21xx — matching the 8 subscriptions of the 2026-10-10 capture (`protocol-sequences` "Session foundation"). calictl still subscribes all 12; their `Installed` bit is 0 here. The ESP satellite gates like the app (`R_FW_VARIANT_GATE`) | all |
+| **Per-variant subscribe gate** | `isSupportedForVariant` (`gg/o`): roof T7 only; satellite, stairs, living-room heater, roof A/C **Grand California only**; VirtualBattery Next only; energy, water, heater, cooler T7 + GC; the rest all three. So a T7 app **no longer subscribes** 18xx / 19xx / 20xx / 21xx — matching the 8 subscriptions of the 2026-10-10 capture (`protocol-sequences` "Session foundation"). calictl still subscribes all 12; their `Installed` bit is 0 here. The ESP satellite and the iPhone app gate like the app (`R_FW_VARIANT_GATE`, `R_IOS_BLE_DIRECT`; one C function, `cali_variant_has`) | all |
 
 **calictl's guard.** `semantics._firmware_untested` already flags any `comm_version != 2`
 (`firmware_untested`, the web UI's "tested: amb 0409/0410 · comm 2" banner, and the raw-frame drift

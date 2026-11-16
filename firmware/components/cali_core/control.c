@@ -704,3 +704,23 @@ int cali_ctl_write_ok(uint16_t chr, size_t len) {
         if (CALI_CTL_CHARS[i].control_short == chr) return len == CALI_CTL_CHARS[i].frame_bytes;
     return 0;
 }
+
+/* The app's per-variant gate (5.4.0 isSupportedForVariant, gg/o; docs/business-logic/
+ * protocol-alignment.md "Per-variant subscribe gate"): bit 0 = California T7, 1 = Grand California,
+ * 2 = California Next. A function not listed here is on every variant. */
+static const struct {
+    const char *fn;
+    unsigned mask;
+} VARIANT_GATE[] = {
+    {"roof", 1u},
+    {"satelliteantenna", 2u}, {"stairs", 2u}, {"livingroomheater", 2u}, {"roofaircondition", 2u},
+    {"energy", 3u}, {"water", 3u}, {"airheater", 3u}, {"cooler", 3u},
+};
+
+int cali_variant_has(const char *function, int car_variant) {
+    if (car_variant < 0) return 1;
+    if (car_variant > 2) car_variant = 0;   /* the app: any other CarVariant is a T7 */
+    for (size_t k = 0; k < sizeof VARIANT_GATE / sizeof VARIANT_GATE[0]; k++)
+        if (strcmp(VARIANT_GATE[k].fn, function) == 0) return (int)(VARIANT_GATE[k].mask >> car_variant & 1u);
+    return 1;
+}

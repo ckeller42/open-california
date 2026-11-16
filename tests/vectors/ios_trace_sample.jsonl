@@ -1,0 +1,8 @@
+{"t":1700000000.0,"ev":"connect","addr":null}
+{"t":1700000000.5,"ev":"read","char":"1001","fn":"general","hex":"303431303032303702"}
+{"t":1700000001.0,"ev":"read","char":"1202","fn":"campingmode","hex":"20"}
+{"t":1700000001.5,"ev":"read","char":"1102","fn":"cooler","hex":"0843000000000000"}
+{"t":1700000002.0,"ev":"read","char":"1602","fn":"energy","hex":"00c0500a00ff810000003a00308d0000fffe00000000"}
+{"t":1700000002.5,"ev":"write","char":"1101","fn":"cooler","hex":"fd771e3e1f1f"}
+{"t":1700000003.0,"ev":"notify","char":"1202","fn":"campingmode","hex":"21"}
+{"t":1700000003.5,"ev":"disconnect","addr":null,"reason":"linkLost"}
