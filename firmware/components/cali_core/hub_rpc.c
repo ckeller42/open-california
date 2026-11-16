@@ -5,6 +5,15 @@
 #include <string.h>
 
 #include "cali_hub.h"
+
+#ifdef ESP_PLATFORM
+#include "esp_heap_caps.h"
+#define RPC_ALLOC(n) heap_caps_malloc_prefer((n), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#define RPC_FREE heap_caps_free
+#else
+#define RPC_ALLOC malloc
+#define RPC_FREE free
+#endif
 #include "cali_http.h"
 #include "cali_platform.h"
 #include "cali_time.h"
@@ -63,7 +72,7 @@ static int str(cur_t *c, char *out, size_t cap, size_t *len) {
             case 'r': ch = '\r'; break;
             case 't': ch = '\t'; break;
             case 'u':
-                if (hex4(c, &cp) != 0 || (cp >= 0xD800 && cp <= 0xDFFF)) return -1;
+                if (hex4(c, &cp) != 0 || cp == 0 || (cp >= 0xD800 && cp <= 0xDFFF)) return -1; /* NUL would cut the C string */
                 if (cp < 0x80) u[0] = (char)cp;
                 else if (cp < 0x800) {
                     u[0] = (char)(0xC0 | cp >> 6), u[1] = (char)(0x80 | (cp & 63)), k = 2;
@@ -84,6 +93,34 @@ static int str(cur_t *c, char *out, size_t cap, size_t *len) {
     *len = n;
     return 0;
 }
+/* Skips one JSON value of any type (an unknown key's), nested at most 8 deep. 0 ok, -1 malformed. A bare
+ * number or literal is skipped by its characters, not validated: the router never sees it. */
+static int skip(cur_t *c, int depth) {
+    ws(c);
+    if (c->p == c->end || depth > 8) return -1;
+    if (*c->p == '"') {
+        c->p++;
+        while (c->p < c->end && *c->p != '"') c->p += *c->p == '\\' ? 2 : 1;
+        if (c->p >= c->end) return -1;
+        c->p++;
+        return 0;
+    }
+    if (*c->p == '{' || *c->p == '[') {
+        char close = *c->p++ == '{' ? '}' : ']';
+        if (eat(c, close) == 0) return 0;
+        for (;;) {
+            if (close == '}' && (skip(c, depth + 1) != 0 || eat(c, ':') != 0)) return -1;
+            if (skip(c, depth + 1) != 0) return -1;
+            if (eat(c, ',') != 0) return eat(c, close);
+        }
+    }
+    {
+        const char *s = c->p;
+        while (c->p < c->end && !strchr(",}] \t\r\n", *c->p)) c->p++;
+        return c->p == s ? -1 : 0;
+    }
+}
+
 /* A JSON integer (optional '-', digits only) that fits int64. */
 static int num(cur_t *c, int64_t *v) {
     int neg = 0, any = 0;
@@ -126,12 +163,12 @@ static size_t err(char *out, size_t max, uint32_t id, int status, const char *ms
     return answer(out, max, id, status, msg, strlen(msg));
 }
 
-size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump)(void)) {
-    static char body[CALI_HUB_RPC_BODY_MAX], path[PATH_MAX_LEN];
+static size_t rpc_run(const char *req_json, char *res_json, size_t max, int (*pump)(void), char *body, char *path) {
     char method[8];
     cur_t c = {req_json, req_json + strlen(req_json)};
     uint32_t id = 0;
     int64_t t = 0, v;
+    unsigned seen = 0;
     int have_id = 0, have_t = 0, have_m = 0, have_p = 0, have_b = 0, rc, too_long = 0;
     size_t len = 0;
     if (max) res_json[0] = 0;
@@ -143,6 +180,14 @@ size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump
         ws(&c);
         if (first && c.p < c.end && *c.p == '}') break;
         if (str(&c, key, sizeof key, &kl) != 0 || eat(&c, ':') != 0) return err(res_json, max, id, 400, "bad_json");
+        {   /* a known key twice fails closed; an unknown key's value is skipped (forward compatible) */
+            static const char *const K[] = {"id", "t", "m", "p", "b"};
+            for (unsigned i = 0; i < 5; i++)
+                if (strcmp(key, K[i]) == 0) {
+                    if (seen & 1u << i) return err(res_json, max, id, 400, "bad_json");
+                    seen |= 1u << i;
+                }
+        }
         if (strcmp(key, "id") == 0) {
             if (num(&c, &v) != 0 || v < 0 || v > UINT32_MAX) return err(res_json, max, 0, 400, "bad_json");
             id = (uint32_t)v, have_id = 1;
@@ -154,7 +199,7 @@ size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump
             if (r != 0) return err(res_json, max, id, 400, "bad_json");
             have_m = 1;
         } else if (strcmp(key, "p") == 0) {
-            r = str(&c, path, sizeof path, &kl);
+            r = str(&c, path, PATH_MAX_LEN, &kl);
             if (r != 0) return err(res_json, max, id, 400, "bad_json");
             have_p = 1;
         } else if (strcmp(key, "b") == 0) {
@@ -163,7 +208,7 @@ size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump
                 c.p += 4;
                 len = 0, body[0] = 0, have_b = 1;
             } else {
-                r = str(&c, body, sizeof body, &len);
+                r = str(&c, body, CALI_HUB_RPC_BODY_MAX, &len);
                 if (r == -2) too_long = 1;
                 else if (r != 0) return err(res_json, max, id, 400, "bad_json");
                 if (r == -2) { /* skip the rest of the string */
@@ -173,7 +218,7 @@ size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump
                 }
                 have_b = 1;
             }
-        } else {
+        } else if (skip(&c, 0) != 0) {
             return err(res_json, max, id, 400, "bad_json");
         }
         if (eat(&c, ',') == 0) continue;
@@ -187,7 +232,9 @@ size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump
     if (!have_t) return err(res_json, max, id, 400, "missing_t");
     {
         int64_t now;
-        if (cali_time_ts(&now) == CALI_TSRC_NTP && (now > t ? now - t : t - now) > CALI_HUB_RPC_SKEW_MS)
+        /* t <= 0 is stale at once: it keeps now - t (both then >= 0) from overflowing */
+        if (cali_time_ts(&now) == CALI_TSRC_NTP &&
+            (t <= 0 || (now > t ? now - t : t - now) > CALI_HUB_RPC_SKEW_MS))
             return err(res_json, max, id, 408, "stale");
     }
     if (too_long) return err(res_json, max, id, 413, "too_long");
@@ -199,11 +246,24 @@ size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump
         if (q) *q = 0, rq.query = q + 1;
         while ((rc = cali_web_handle(&rq, &rs, NULL)) == CALI_HTTP_PENDING) {
             rq.resume = 1;
-            if ((pump && pump() != 0) || cali_uptime_ms() - t0 > CALI_HUB_RPC_PENDING_MS)
+            if (pump() != 0 || cali_uptime_ms() - t0 > CALI_HUB_RPC_PENDING_MS)
                 return err(res_json, max, id, 504, "timeout");
         }
         if (rc == 0) return err(res_json, max, id, 404, "");
         len = answer(res_json, max, id, rs.status, rs.body ? rs.body : "", rs.body ? rs.body_len : 0);
         return len ? len : err(res_json, max, id, 500, "too_big");
     }
+}
+
+size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump)(void)) {
+    size_t n;
+    char *buf;
+    if (!max) return 0;
+    res_json[0] = 0;
+    if (!pump) return err(res_json, max, 0, 500, "no_pump"); /* without it a pending route would spin 60 s */
+    buf = RPC_ALLOC(CALI_HUB_RPC_BODY_MAX + PATH_MAX_LEN);
+    if (!buf) return err(res_json, max, 0, 500, "no_memory");
+    n = rpc_run(req_json, res_json, max, pump, buf, buf + CALI_HUB_RPC_BODY_MAX);
+    RPC_FREE(buf);
+    return n;
 }

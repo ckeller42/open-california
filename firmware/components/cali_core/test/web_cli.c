@@ -15,6 +15,7 @@
  *                    "RESP <n>\n<the n response bytes>\n"
  *   rpc <json>       cali_hub_rpc(<json>) with a pump that advances the clock 10 ms and runs the ctldone countdown;
  *                    prints "RPC <res>" (the rest of the line, as is: no escapes)
+ *   rpc0 <json>      the same with a NULL pump; prints the bare answer
  *   sendmax <n>      tcp_send takes at most <n> bytes per poll (default unlimited)
  *   flip             toggle the cooler frame's Level 3 <-> 4
  *   flipping 0|1     1: flip after every poll while a response is being sent
@@ -456,7 +457,12 @@ int main(void) {
         int n = sscanf(line, "%63s %63s %63s %63s %63s", w, a1, a2, a3, a4);
         if (n < 1) continue;
         v = strtol(a1, NULL, 10);
-        if (strcmp(w, "rpc") == 0) {
+        if (strcmp(w, "rpc0") == 0) {   /* the same without a pump */
+            static char res0[256];
+            (void)cali_hub_rpc(line + 5, res0, sizeof res0, NULL);
+            printf("%s\n", res0);
+        }
+        else if (strcmp(w, "rpc") == 0) {
             static char res[OUT_MAX];
             line[strcspn(line, "\n")] = 0;
             (void)cali_hub_rpc(line + 4, res, sizeof res, rpc_pump);

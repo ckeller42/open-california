@@ -110,11 +110,13 @@ size_t cali_hub_qr_text(char *out, size_t max, const cali_hub_cfg_t *cfg, const 
  * Status: 400 bad request (not that JSON, an unknown method, a path without a leading '/', no `t`), 404 no
  * such route (empty body), 408 `stale` (SNTP time valid and |now - t| > CALI_HUB_RPC_SKEW_MS), 413 body too
  * long, 500 the answer does not fit `max`, 504 pending too long. Without SNTP time the `t` check is skipped
- * (the replay ring of cali_hub_open is then the only guard). Not reentrant: call from one task.
+ * (the replay ring of cali_hub_open is then the only guard). The 2.7 KB work buffer is on the heap (PSRAM first on the ESP) for the call. A \u0000 in a string and a
+ * duplicate known key are 400; unknown keys are ignored.
  * @param req_json The request plaintext, NUL-terminated.
  * @param res_json Receives the answer, NUL-terminated.
  * @param max Size of `res_json`.
- * @param pump Called between re-asks; may be NULL.
+ * @param pump Required (NULL answers 500 `no_pump`): called between re-asks, it must wait or yield so the
+ *        task does not spin up to 60 s (the caller's loop step, e.g. a short delay plus the control tick).
  * @return the answer length, or 0 if `max` is too small even for the short error answer.
  */
 size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump)(void));

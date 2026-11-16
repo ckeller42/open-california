@@ -304,3 +304,50 @@ def test_rpc_time_not_valid_accepts(rpc_cli):
         ["wifi online home 1.2.3.4 -60", "joined 1"],
     )
     assert res["s"] == 200
+
+
+def _get(**extra):
+    return {"id": 1, "m": "GET", "p": "/api/state", "b": None, "t": NOW, **extra}
+
+
+def test_rpc_t_extreme_negative_is_stale(rpc_cli):
+    """t near -INT64_MAX must not wrap now - t past the 120 s check."""
+    res, _ = _rpc(rpc_cli, '{"id":2,"m":"GET","p":"/api/state","b":null,"t":-9223372036854775807}')
+    assert (res["s"], res["b"]) == (408, "stale")
+
+
+def test_rpc_nul_escape_rejected(rpc_cli):
+    res, _ = _rpc(rpc_cli, r'{"id":2,"m":"POST","p":"/api/wifi","b":"{\"ssid\":\"a\u0000b\"}","t":%d}' % NOW)
+    assert res["s"] == 400
+
+
+def test_rpc_null_pump_is_500(rpc_cli):
+    """cali_hub_rpc without a pump answers 500 instead of spinning on a pending route."""
+    res, _ = _rpc(rpc_cli, json.dumps(_get()), ONLINE)
+    assert res["s"] == 200
+    out = subprocess.run([str(rpc_cli)], input="rpc0 {}\n", capture_output=True, text=True, check=True).stdout
+    assert '"s":500' in out
+
+
+def test_rpc_escapes_roundtrip_into_router(rpc_cli):
+    """Escapes in the request body string (\\" \\\\ \\u00e9) reach the router decoded.
+
+    .. test:: hub rpc decodes the body string and escapes the response body byte-exact
+       :id: T_FW_HUB_RPC_ESCAPES
+    """
+    body = '{"ssid":"a\\"b\\\\c\u00e9","psk":"test-psk-1234"}'  # the router sees a"b\cé
+    res, other = _rpc(rpc_cli, {"id": 5, "m": "POST", "p": "/api/wifi", "b": body, "t": NOW})
+    assert 'CALL set_creds [a"b\\cé] [test-psk-1234]' in other, (res, other)
+    res, _ = _rpc(rpc_cli, {"id": 6, "m": "POST", "p": "/api/wifi", "b": '{"ssid":"x\\ny"}', "t": NOW})
+    assert res["s"] == 400 and res["b"] == '{"ok":false,"error":"json"}'  # quotes come back byte-exact
+    res, _ = _rpc(rpc_cli, _get(), ['wifi online a"b\\c 1.2.3.4 -60', "joined 1", "ntp %d" % NOW])
+    assert json.loads(res["b"])["device"]["wifi"]["ssid"] == 'a"b\\c'
+
+
+def test_rpc_unknown_key_ignored_duplicate_rejected(rpc_cli):
+    res, _ = _rpc(
+        rpc_cli, '{"x":{"y":[1,"a\\\\"]},"id":3,"m":"GET","p":"/api/state","b":null,"t":%d,"z":1}' % NOW
+    )
+    assert (res["id"], res["s"]) == (3, 200)
+    res, _ = _rpc(rpc_cli, '{"id":3,"id":4,"m":"GET","p":"/api/state","b":null,"t":%d}' % NOW)
+    assert res["s"] == 400
