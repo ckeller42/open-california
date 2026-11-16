@@ -425,3 +425,13 @@ def test_rpc_unterminated_trailing_backslash_is_400(echo_cli):
             [str(echo_cli)], input=req + "\n", capture_output=True, text=True, check=True
         ).stdout
         assert '"s":400' in out, out
+
+
+def test_new_key_resets_the_lora_command_counter():
+    """A made or replaced data key writes ``lora_cmd_ctr`` = 0000; loading an existing key leaves it.
+
+    .. test:: a new hub key restarts the LoRa command counter
+       :id: T_FW_HUB_LORA_CTR
+    """
+    r = _run("lcr", "load 0", "lcr", "lcset", "reload 0", "lcr", "rekey 0", "lcr")
+    assert r[0] == ["-"] and r[2] == ["0000"] and r[5] == ["0009"] and r[7] == ["0000"]

@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "cali_lora.h"
+#include "cali_control.h"
 #include "cali_platform.h"
 #ifdef CALI_LORA_REAL_AEAD
 #include "cali_lora_aead.h"
@@ -61,6 +62,24 @@ int cali_sensors_first(const char *type, cali_sensor_reading_t *out) {
 const cali_energy_ctr_t *cali_energy_counters(void) { return &s_ctr; }
 uint32_t cali_time_boot(void) { return s_boot; }
 uint64_t cali_uptime_ms(void) { return 0; }
+#define CMDQ_N 2
+static const char *s_cq[CMDQ_N][3];
+static int s_cq_n;
+void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value) {
+    if (s_cq_n < CMDQ_N) s_cq[s_cq_n][0] = fn, s_cq[s_cq_n][1] = what, s_cq[s_cq_n++][2] = value;
+}
+int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value) {
+    if (!s_cq_n) return 0;
+    *fn = s_cq[0][0], *what = s_cq[0][1], *value = s_cq[0][2];
+    memmove(s_cq, s_cq + 1, sizeof s_cq[0] * (size_t)--s_cq_n);
+    return 1;
+}
+int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now, cali_ctl_done_t done,
+                    const char **reason, const char *src) {
+    (void)local_now, (void)done, (void)reason;
+    printf("SUBMIT %s %s %s %s\n", fn, what, value, src);
+    return CALI_CTL_PENDING;
+}
 int cali_kv_get(const char *key, void *buf, size_t *len) {
     int i = s_kv_find(key);
     if (!strcmp(key, s_corrupt)) return CALI_KV_CORRUPT;
@@ -244,6 +263,12 @@ int main(void) {
             size_t fl = unhex(rest2, fr, sizeof fr);
             if (cali_lora_cmd(fr, fl, k, eui, &fn, &what, &val)) puts("-1");
             else printf("0 %s %s %s\n", fn, what, val);
+        } else if (!strcmp(cmd, "cmdpost") && sscanf(rest, "%63s %63s %63s", b, a, rest2) == 3) {
+            static char sf[8][800], sw[8][800], sv[8][800];   /* the queue keeps pointers */
+            static int si;
+            snprintf(sf[si % 8], 800, "%s", b), snprintf(sw[si % 8], 800, "%s", a), snprintf(sv[si % 8], 800, "%s", rest2);
+            cali_lora_port_cmd_post(sf[si % 8], sw[si % 8], sv[si % 8]);
+            si++;
         } else if (!strcmp(cmd, "kvcorrupt")) {
             s_corrupt[0] = 0;
             sscanf(rest, "%15s", s_corrupt);

@@ -730,3 +730,17 @@ def test_decode_refuses_unknown_version(cli):
         d = web_decode(port, bytes([99]) + bytes(length - 1))
         assert d["version"] == 99 and d["fn"] == {} and set(d) == {"port", "version", "fn"}
         assert formatter(port, bytes([99]) + bytes(length - 1))["errors"]
+
+
+def test_posted_command_is_submitted_on_the_next_tick(cli):
+    """A command the LoRa task posted goes to cali_ctl_submit (src "lora") on the owner task's next tick, in order.
+
+    .. test:: a posted LoRa command is submitted by the owner task's tick
+       :id: T_FW_LORA_CMD_TICK
+    """
+    out = run(cli, "cmdpost airheater power on", "cmdpost campingmode master off", "tick 0", "tick 1")
+    assert [o for o in out if o.startswith("SUBMIT")] == [
+        "SUBMIT airheater power on lora",
+        "SUBMIT campingmode master off lora",
+    ]
+    assert "LOG lora: command airheater on -> %d" % 5 in out  # the submit result is logged

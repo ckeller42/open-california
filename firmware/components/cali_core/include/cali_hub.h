@@ -19,6 +19,8 @@ extern "C" {
 
 #define CALI_HUB_KEY_KEY "hub_key"
 #define CALI_HUB_CFG_KEY "hub_cfg"
+/** @brief KV key of the last accepted LoRa command counter (2 bytes, big-endian); reset to 0 with every new data key. */
+#define CALI_LORA_CMD_CTR_KEY "lora_cmd_ctr"
 #define CALI_HUB_VER 1
 #define CALI_HUB_DIR_ESP 1
 #define CALI_HUB_DIR_APP 2

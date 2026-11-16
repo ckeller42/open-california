@@ -4,6 +4,13 @@
 
 void cali_lora_port_post(const cali_lora_snap_t *s) { (void)s; }
 
+void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value) { (void)fn, (void)what, (void)value; }
+
+int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value) {
+    (void)fn, (void)what, (void)value;
+    return 0;
+}
+
 int cali_lora_port_status(cali_lora_status_t *out) {
     static const cali_lora_status_t none = {.present = 0, .sf = 12, .note = "no module driver in this build"};
     *out = none;

@@ -59,10 +59,10 @@
 #include <stdint.h>
 
 #include "cali_energy.h"
+#include "cali_hub.h"
 #include "cali_json.h"
 #include "cali_sensors.h"
 #include "codec.h"
-#include "cali_hub.h"
 #include "codec_chars.h"
 
 #ifdef __cplusplus
@@ -143,8 +143,6 @@ typedef enum {
 
 /** @brief FPort of a sealed command from the app (ctr(2 BE) | cmd(1) | tag(8)). */
 #define CALI_LORA_PORT_CMD 20
-/** @brief KV key of the last accepted command counter (2 bytes, big-endian). */
-#define CALI_LORA_CMD_CTR_KEY "lora_cmd_ctr"
 /** @brief A command frame: counter, command code, tag. */
 #define CALI_LORA_CMD_LEN 11
 
@@ -522,6 +520,22 @@ int cali_lora_console(const char *args);
 
 /* ---- the port: lora_esp.c (cali_lora) on the device, lora_port_none.c on the host ---- */
 
+/**
+ * @brief The LoRa task hands a decoded command to the owner task (a 2-deep queue; full = dropped). The
+ *        strings are static (cali_lora_cmd), so only the pointers are copied.
+ * @param fn Control function.
+ * @param what Command name.
+ * @param value Value text.
+ */
+void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value);
+/**
+ * @brief The owner task takes the next posted command (cali_lora_tick runs it through cali_ctl_submit).
+ * @param fn Out: control function.
+ * @param what Out: command name.
+ * @param value Out: value text.
+ * @return 1 when one was waiting, else 0.
+ */
+int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value);
 /**
  * @brief Hand a snapshot to the LoRa task (it keeps the newest).
  * @param s The snapshot.

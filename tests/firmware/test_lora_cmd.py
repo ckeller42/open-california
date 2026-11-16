@@ -47,6 +47,9 @@ def _run(*lines):
     return [o for o in out if not o.startswith("LOG ")]
 
 
+CTR0 = "kvset lora_cmd_ctr 0000"  # what hub.c writes with a new data key
+
+
 def _cmd(frame, key=KEY):
     return f"cmd {key} {EUI} {frame}"
 
@@ -58,7 +61,7 @@ def test_cmd_codes(code):
     .. test:: sealed LoRa command (FPort 20) opens and maps codes 1..4
        :id: T_FW_LORA_CMD
     """
-    assert _run(_cmd(_seal(1, code))) == [f"0 {MAP[code]}"]
+    assert _run(CTR0, _cmd(_seal(1, code))) == [f"0 {MAP[code]}"]
 
 
 def test_cmd_replay():
@@ -68,7 +71,7 @@ def test_cmd_replay():
        :id: T_FW_LORA_CMD_REPLAY
     """
     f = _seal(7, 1)
-    assert _run(_cmd(f), _cmd(f)) == ["0 airheater power on", "-1"]
+    assert _run(CTR0, _cmd(f), _cmd(f)) == ["0 airheater power on", "-1"]
 
 
 def test_cmd_old_ctr_after_restart():
@@ -91,8 +94,8 @@ def test_cmd_bad_tag():
     f = _seal(3, 1)
     bad = f[:-1] + f"{int(f[-1], 16) ^ 1:x}"
     assert _run(
-        _cmd(bad), _cmd(f, "ff" * 16), f"cmd {KEY} 70b3d57ed0000002 {f}", "kv lora_cmd_ctr", _cmd(f)
-    ) == ["-1", "-1", "-1", "lora_cmd_ctr -", "0 airheater power on"]
+        CTR0, _cmd(bad), _cmd(f, "ff" * 16), f"cmd {KEY} 70b3d57ed0000002 {f}", "kv lora_cmd_ctr", _cmd(f)
+    ) == ["-1", "-1", "-1", "lora_cmd_ctr 0000", "0 airheater power on"]
 
 
 def test_cmd_wrong_len_and_code():
@@ -102,4 +105,29 @@ def test_cmd_wrong_len_and_code():
        :id: T_FW_LORA_CMD_LEN
     """
     f = _seal(4, 1)
-    assert _run(_cmd(f[:-2]), _cmd(f + "00"), _cmd(_seal(4, 5)), _cmd(_seal(4, 0))) == ["-1"] * 4
+    assert _run(CTR0, _cmd(f[:-2]), _cmd(f + "00"), _cmd(_seal(4, 5)), _cmd(_seal(4, 0))) == ["-1"] * 4
+
+
+def test_cmd_guard_never_fails_open():
+    """A corrupt, odd-sized or missing counter record rejects every frame; ctr 0 is rejected after a new key.
+
+    .. test:: the LoRa command replay guard never fails open
+       :id: T_FW_LORA_CMD_FAILCLOSED
+    """
+    assert _run("kvcorrupt lora_cmd_ctr", _cmd(_seal(5, 1))) == ["-1"]
+    assert _run("kvset lora_cmd_ctr 05", _cmd(_seal(5, 1))) == ["-1"]
+    assert _run(_cmd(_seal(1, 1))) == ["-1"]  # key present, counter erased/never written
+    assert _run(CTR0, _cmd(_seal(0, 1)), _cmd(_seal(1, 1))) == ["-1", "0 airheater power on"]
+
+
+def test_cmd_counter_restarts_with_a_new_key():
+    """After a rekey the counter is 0 again: ctr 1 opens with the new key, the old key's frame is -1.
+
+    .. test:: the LoRa command counter restarts with a new data key
+       :id: T_FW_LORA_CMD_REKEY
+    """
+    new = "ff" * 16
+    assert _run("kvset lora_cmd_ctr 0009", CTR0, _cmd(_seal(1, 1), new), _cmd(_seal(1, 1))) == [
+        "-1",
+        "0 airheater power on",
+    ]

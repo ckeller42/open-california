@@ -36,9 +36,11 @@ int cali_hub_rekey(cali_hub_crypto_t *c) {
     int rc = -1;
     cali_random(k, sizeof k);
     if (cali_kv_set(CALI_HUB_KEY_KEY, k, sizeof k) == 0) { /* the old key stays unless the new one is stored */
+        static const uint8_t zero[2] = {0, 0};
         memcpy(c->key, k, sizeof k);
         new_session(c);
-        rc = 0;
+        /* the LoRa command counter belongs to the key: a new key restarts it (cali_lora_cmd rejects without it) */
+        rc = cali_kv_set(CALI_LORA_CMD_CTR_KEY, zero, sizeof zero) == 0 ? 0 : -1;
     }
     cali_wipe(k, sizeof k);
     return rc;

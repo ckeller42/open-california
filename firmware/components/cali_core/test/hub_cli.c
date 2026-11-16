@@ -1,6 +1,6 @@
 /* hub_cli.c — host driver for hub.c with the real PSA AES-GCM and an in-memory KV.
  * Three contexts (0..2). Lines: load i | reload i | rekey i | key i | peer i j (i gets j's key, prints ok) | seal i dir pthex |
- * open i mask (last frame) | kvfail 0/1 | setctr i n | cfgfull | flip | badver | keep | use | big i | cfg | qr van url user pass keyhex.
+ * lcr (LoRa command counter record) | lcset (counter 9) | open i mask (last frame) | kvfail 0/1 | setctr i n | cfgfull | flip | badver | keep | use | big i | cfg | qr van url user pass keyhex.
  * Output: key = hex; seal = frame hex or "0"; open = "<rc> <dir> <pthex>"; big = "<rc> <len> <ok>".
  * Driven by tests/firmware/test_hub.py. */
 #include <stdio.h>
@@ -13,9 +13,9 @@
 
 static uint8_t s_kv[4][2048];
 static size_t s_kv_len[4];
-static const char *const s_names[4] = {CALI_HUB_KEY_KEY, CALI_HUB_CFG_KEY, "", ""};
+static const char *const s_names[4] = {CALI_HUB_KEY_KEY, CALI_HUB_CFG_KEY, CALI_LORA_CMD_CTR_KEY, ""};
 static int slot(const char *key) {
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < 3; i++)
         if (!strcmp(key, s_names[i])) return i;
     return -1;
 }
@@ -88,6 +88,12 @@ int main(void) {
             puts("ok");
         } else if (sscanf(line, "setctr %d %u", &i, &mask) == 2) {
             c[i].tx_ctr = mask;
+            puts("ok");
+        } else if (!strncmp(line, "lcr", 3)) { /* the LoRa command counter record: hex, or "-" */
+            if (s_kv_len[2]) hex(s_kv[2], s_kv_len[2]), putchar('\n');
+            else puts("-");
+        } else if (!strncmp(line, "lcset", 5)) {
+            memcpy(s_kv[2], "\x00\x09", 2), s_kv_len[2] = 2;
             puts("ok");
         } else if (!strncmp(line, "cfgfull", 7)) { /* a stored config with no NUL in any field */
             cali_hub_cfg_t g, r;
