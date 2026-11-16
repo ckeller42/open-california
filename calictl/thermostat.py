@@ -45,6 +45,11 @@ THERMO_DEFAULTS: dict[str, int] = {
     "night_confirm_ms": 30000,  # ms (Dauerbetrieb counts after it held this long)
 }
 
+#: The demand acts on the reference this many minutes ahead: the cabin keeps rising for minutes after
+#: a lower level (van run 2026-11-09: +2.8 K over the target without the lead, about +1.6 K with it in
+#: a cabin model fitted to that run). C ``CALI_THERMO_LEAD_MIN``.
+LEAD_MIN = 5
+
 #: Target range in centi-°C.
 TARGET_MIN, TARGET_MAX, TARGET_STEP = 500, 3000, 50
 
@@ -160,21 +165,25 @@ def control(
        :tags: thermostat
 
        The thermostat shall compute the demand ``u = p + i + u_out`` in milli-levels from the
-       reference error (centi-°C), an integrator frozen on long step gaps and by anti-windup at
+       error ``target - (t_ref + LEAD_MIN * rate)`` (centi-°C), where ``rate`` is the reference's
+       rise per minute, smoothed (each step moves it a third of the way to the latest rise) and
+       zero after a long step gap and after every switch that sets the integrator to the current level
+       (:func:`track`); an integrator frozen on long step gaps and by anti-windup at
        ``min_level`` and level 10, and an outside feed-forward capped at ``u_out_max``. When the
        outside reading appears or disappears while the level is known, the feed-forward's share
        shall move into the integrator so that the demand does not jump. It shall change the level only when the
        demand differs from the current level by at least ``500 + hyst`` and ``min_dwell_ms`` has
        passed. It shall report ``OVERHEAT`` above ``target + overheat`` and
        ``TARGET_EXCEEDED_AT_MIN_LEVEL`` after ``hot_hold_ms`` above ``target + band_hi`` at the
-       minimum level. All arithmetic is integer; division uses :func:`_rdiv`.
+       minimum level, both from ``t_ref`` itself. All arithmetic is integer; division uses :func:`_rdiv`.
 
     :param t_ref: reference temperature in centi-°C.
     :param t_out: outside temperature in centi-°C, or ``None`` (no feed-forward).
     :param target: target temperature in centi-°C.
     :param dt_ms: time since the previous step in ms.
-    :param ctl: controller state ``{i, last_change_ms, hot_since_ms, u, u_out}``; not modified.
-        ``u_out`` is ``None`` while no outside reading is used.
+    :param ctl: controller state ``{i, last_change_ms, hot_since_ms, u, u_out, t_prev, rate}``; not
+        modified. ``u_out`` is ``None`` while no outside reading is used; ``t_prev`` is the previous
+        step's ``t_ref`` (``None``: no rate yet), ``rate`` the smoothed rise in centi-°C per minute.
     :param cfg: settings dict (:data:`THERMO_DEFAULTS` keys).
     :param cur_level: the heater's current level 1..10, or ``None`` when unknown.
     :param now_ms: current time in ms.
@@ -182,7 +191,13 @@ def control(
         ``OVERHEAT`` and ``TARGET_EXCEEDED_AT_MIN_LEVEL``. With ``cur_level`` ``None`` the level
         comes from the demand alone, with reason ``LEVEL_UP``.
     """
-    e = target - t_ref
+    gap = dt_ms > 3 * cfg["period_ms"]
+    rate = ctl["rate"]
+    if ctl["t_prev"] is None or gap:
+        rate = 0
+    elif dt_ms > 0:
+        rate += _rdiv(_rdiv((t_ref - ctl["t_prev"]) * 60000, dt_ms) - rate, 3)
+    e = target - t_ref - LEAD_MIN * rate
     p = _rdiv(cfg["kp"] * e, 100)
     u_out = (
         None
@@ -196,13 +211,13 @@ def control(
     ff = u_out or 0
     u_old = p + i + ff
     lo = cfg["min_level"] * 1000
-    frozen = dt_ms > 3 * cfg["period_ms"] or (u_old < lo and e < 0) or (u_old > 10000 and e > 0)
+    frozen = gap or (u_old < lo and e < 0) or (u_old > 10000 and e > 0)
     if not frozen:
         i += _rdiv(cfg["ki"] * e * dt_ms, 100 * 60000)
     u = p + i + ff
     hot = cur_level == cfg["min_level"] and t_ref > target + cfg["band_hi"]
     hot_since = (ctl["hot_since_ms"] if ctl["hot_since_ms"] is not None else now_ms) if hot else None
-    new = {**ctl, "i": i, "u": u, "u_out": u_out, "hot_since_ms": hot_since}
+    new = {**ctl, "i": i, "u": u, "u_out": u_out, "hot_since_ms": hot_since, "t_prev": t_ref, "rate": rate}
     if t_ref > target + cfg["overheat"]:
         return None, new, "OVERHEAT"
     if hot_since is not None and now_ms - hot_since >= cfg["hot_hold_ms"]:
@@ -228,10 +243,11 @@ def track(ctl: dict, cur_level: int, t_ref: int, target: int, cfg: dict) -> dict
     :param t_ref: reference temperature in centi-°C.
     :param target: target temperature in centi-°C.
     :param cfg: settings dict.
-    :returns: a copy of ``ctl`` whose integrator makes ``p + i + u_out == cur_level * 1000``.
+    :returns: a copy of ``ctl`` whose integrator makes ``p + i + u_out == cur_level * 1000``, with
+        the rate reset (``t_prev`` ``None``), so the next step has no lead either.
     """
     p = _rdiv(cfg["kp"] * (target - t_ref), 100)
-    return {**ctl, "i": cur_level * 1000 - p - (ctl["u_out"] or 0)}
+    return {**ctl, "i": cur_level * 1000 - p - (ctl["u_out"] or 0), "t_prev": None, "rate": 0}
 
 
 _FAULTS = ("FAULT", "LOCKED", "BLOCKED")
@@ -246,7 +262,15 @@ def initial_state() -> dict:
     return {
         "mode": "OFF",
         "active": "ref",
-        "ctl": {"i": 0, "last_change_ms": 0, "hot_since_ms": None, "u": 0, "u_out": None},
+        "ctl": {
+            "i": 0,
+            "last_change_ms": 0,
+            "hot_since_ms": None,
+            "u": 0,
+            "u_out": None,
+            "t_prev": None,
+            "rate": 0,
+        },
         "pending": None,
         "expect": None,
         "batt_low_since_ms": None,
@@ -352,7 +376,15 @@ def _takeover(
     now = inp["now_ms"]
     st["pending"], st["expect"], st["last_ctl_ms"] = None, dict(snap), now
     # integrator 0; the dwell restarts only with a level sent
-    ctl0 = {"i": 0, "last_change_ms": st["ctl"]["last_change_ms"], "hot_since_ms": None, "u": 0, "u_out": 0}
+    ctl0 = {
+        "i": 0,
+        "last_change_ms": st["ctl"]["last_change_ms"],
+        "hot_since_ms": None,
+        "u": 0,
+        "u_out": 0,
+        "t_prev": None,
+        "rate": 0,
+    }
     st["ctl"] = ctl0
     if t_ref is None:
         return []
@@ -688,7 +720,15 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         if sp is not None:
             st["pending"], cmds = None, []  # the last owner request wins: drop the owner's stop
         t_ref = inp["ref"]["value"]
-        ctl0 = {"i": 0, "last_change_ms": now, "hot_since_ms": None, "u": 0, "u_out": 0}
+        ctl0 = {
+            "i": 0,
+            "last_change_ms": now,
+            "hot_since_ms": None,
+            "u": 0,
+            "u_out": 0,
+            "t_prev": None,
+            "rate": 0,
+        }
         st.update(
             mode="AUTO",
             active="ref",

@@ -225,7 +225,12 @@ typedef struct {
     int64_t hot_since_ms;    /**< Start of the hot hold, or CALI_THERMO_NONE_MS. */
     int32_t u;               /**< Last demand, milli-level. */
     int32_t u_out;           /**< Last feed-forward, milli-level; CALI_THERMO_NONE while no outside reading is used. */
+    int32_t t_prev;          /**< The previous step's reference, centi-degrees C; CALI_THERMO_NONE: no rate yet. */
+    int32_t rate;            /**< Smoothed reference rise, centi-degrees C per minute. */
 } cali_thermo_ctl_t;
+
+/** @brief The demand acts on the reference this many minutes ahead (Python `LEAD_MIN`). */
+#define CALI_THERMO_LEAD_MIN 5
 
 /** @brief What the heater does (Python `expect` / `stop_snapshot`). */
 typedef struct {

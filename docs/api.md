@@ -100,6 +100,7 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: calictl.thermostat.eta
 .. autofunction:: tests.e2e.test_thermostat_card.test_eta_line
 .. autofunction:: tests.test_thermostat.test_cold_cabin_raises_level
+.. autofunction:: tests.test_thermostat.test_rising_cabin_steps_down_before_the_target
 .. autofunction:: tests.test_thermostat.test_heater_state_table
 .. autofunction:: tests.test_thermostat.test_auto_from_off_sends_runtime_level_power_in_order
 .. autofunction:: tests.test_thermostat.test_adopt_goes_to_demand

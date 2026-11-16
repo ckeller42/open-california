@@ -83,7 +83,16 @@ def test_settings_and_reasons():
 
 
 def _ctl(**kw):
-    return {"i": 0, "last_change_ms": -(10**9), "hot_since_ms": None, "u": 0, "u_out": 0, **kw}
+    return {
+        "i": 0,
+        "last_change_ms": -(10**9),
+        "hot_since_ms": None,
+        "u": 0,
+        "u_out": 0,
+        "t_prev": None,
+        "rate": 0,
+        **kw,
+    }
 
 
 def test_cold_cabin_raises_level():
@@ -96,6 +105,30 @@ def test_cold_cabin_raises_level():
     lvl, ctl, why = th.control(1700, None, 2100, 60000, _ctl(), CFG, 3, 0)
     assert lvl > 3 and why == "LEVEL_UP"
     assert ctl["u"] > 3000 and ctl["last_change_ms"] == 0
+
+
+def test_rising_cabin_steps_down_before_the_target():
+    """A cabin that still rises steps down before it reaches the target (the lead).
+
+    .. test:: Thermostat lead on a rising cabin
+       :id: T_THERMOSTAT_LEAD
+       :links: R_THERMOSTAT_CONTROL
+    """
+    ctl, t = _ctl(), 1200
+    for k in range(7):  # 0.3 K per minute up to 1.2 K below a 15.0 C target
+        _, ctl, _ = th.control(t, None, 1500, 60000, ctl, CFG, 6, k * 60000)
+        t += 30
+    assert ctl["t_prev"] == 1380 and ctl["rate"] == 27  # smoothed toward 30 centi-C per minute
+    # the demand sees 13.8 + 5 x 0.27 = 15.15 C: below the 6-level demand without the lead
+    assert ctl["u"] == th._rdiv(CFG["kp"] * (1500 - 1380 - 5 * 27), 100) + ctl["i"] < 2000
+    # the overheat and hot-hold checks read t_ref itself, not the lead
+    _, _, why = th.control(1500 + 400, None, 1500, 60000, {**ctl, "t_prev": 1500 + 300}, CFG, 1, 0)
+    assert why != "OVERHEAT"
+    # a long gap or a track() clears the rate
+    assert th.control(1400, None, 1500, 4 * 60000, ctl, CFG, 6, 10**7)[1]["rate"] == 0
+    assert (
+        th.track(ctl, 6, 1400, 1500, CFG)["rate"] == 0 and th.track(ctl, 6, 1400, 1500, CFG)["t_prev"] is None
+    )
 
 
 def test_hysteresis_and_dwell():
