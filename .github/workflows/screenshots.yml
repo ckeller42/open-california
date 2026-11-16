@@ -60,7 +60,7 @@ jobs:
           retention-days: 1
 
   # main is ruleset-protected (PRs only), so the shots live on their own `screenshots` branch: the
-  # README links them there and docs.yml lays them over main's copies before building. Only this
+  # README and the docs reference them there by raw URL (no copy committed to main). Only this
   # job holds write scopes, and it runs nothing but git + gh on the rendered PNGs.
   publish:
     needs: render

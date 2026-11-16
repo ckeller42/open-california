@@ -22,42 +22,42 @@ These screens come from the app in the iOS Simulator against the **mock unit** (
 no real vehicle, no real identifiers). Regenerate them with `tools/ios_gallery.sh`, which renders
 them from `ios/AppTests/DocsGallery.swift`.
 
-```{figure} screenshots/ios/cockpit.png
+```{figure} https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/ios/cockpit.png
 :alt: The cockpit screen with the second battery, fresh water and function tiles
 :width: 260px
 
 The cockpit: the second battery, fresh water, and a tile for each function the van has.
 ```
 
-```{figure} screenshots/ios/energy.png
+```{figure} https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/ios/energy.png
 :alt: The energy screen
 :width: 260px
 
 Energy: the batteries and chargers the unit reports, in the web UI's order.
 ```
 
-```{figure} screenshots/ios/water.png
+```{figure} https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/ios/water.png
 :alt: The water screen
 :width: 260px
 
 Water: the fresh and waste tanks, with a held reading shown as measured, never as live.
 ```
 
-```{figure} screenshots/ios/lighting.png
+```{figure} https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/ios/lighting.png
 :alt: The lighting screen
 :width: 260px
 
 Lighting: all lights, the favourites, and a brightness slider per lamp.
 ```
 
-```{figure} screenshots/ios/air-heater.png
+```{figure} https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/ios/air-heater.png
 :alt: The air-heater screen
 :width: 260px
 
 Air heater: the status, immediate heating, and the run time and level the unit will use.
 ```
 
-```{figure} screenshots/ios/setup.png
+```{figure} https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/ios/setup.png
 :alt: The setup screen, including the unit-alerts toggle
 :width: 260px
 
@@ -65,7 +65,7 @@ Setup: the camper-unit status, pairing, the Bluetooth trace, and the **unit-aler
 turns on local notifications (`R_IOS_ALERTS`).
 ```
 
-```{figure} screenshots/ios/cockpit-faults.png
+```{figure} https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/ios/cockpit-faults.png
 :alt: The cockpit with the unit's fault cards
 :width: 260px
 
