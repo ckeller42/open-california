@@ -362,11 +362,66 @@ def test_rpc_long_unknown_keys_ignored(rpc_cli):
     assert (res["id"], res["s"]) == (3, 200)
 
 
+@pytest.fixture(scope="module")
+def echo_cli(tmp_path_factory):
+    """hub_rpc.c over a stub router that echoes the body it receives (test/rpc_echo_cli.c)."""
+    import shutil
+
+    from .test_web_handlers import CORE, ROOT
+
+    cc = shutil.which("cc") or pytest.skip("no C compiler")
+    out = tmp_path_factory.mktemp("echo") / "rpc_echo_cli"
+    subprocess.run(
+        [
+            cc, "-std=c99", "-Wall", "-Wextra", "-Werror",
+            "-I", str(CORE / "include"),
+            "-I", str(ROOT / "firmware" / "components" / "platform" / "include"),
+            "-I", str(ROOT / "csrc"),
+            str(CORE / "hub_rpc.c"), str(CORE / "test" / "rpc_echo_cli.c"), "-o", str(out),
+        ],
+        check=True,
+    )  # fmt: skip
+    return out
+
+
+def _echo(cli, body):
+    """Send `body` (a Python str) as the request body; return the res plaintext line and the parsed res."""
+    req = json.dumps({"id": 7, "m": "POST", "p": "/x", "b": body, "t": NOW})
+    line = subprocess.run([str(cli)], input=req + "\n", capture_output=True, text=True, check=True).stdout
+    return line, json.loads(line)
+
+
+def test_rpc_newline_reaches_router_as_lf(echo_cli):
+    """A real LF in the body string reaches the router as the single byte 0x0a.
+
+    The stub router echoes the body it gets. The request carries the LF as the two characters backslash,
+    n; the response carries it as \\u000a, so the echo equals the original body byte for byte. If
+    hub_rpc did not decode, the router would see backslash, n and the echo would hold a backslash.
+    """
+    body = 'a"b\\c\nd\u00e9\te'
+    wire = json.dumps({"b": body})
+    assert "\\n" in wire and "\n" not in wire  # on the wire: backslash, n
+    line, res = _echo(echo_cli, body)
+    assert res["s"] == 200 and res["b"] == body
+    assert "\\u000a" in line and "\n" not in line.rstrip("\n")  # the answer escapes the LF as \\u000a
+
+
 def test_rpc_newline_escape_is_decoded(rpc_cli):
-    """A real LF in the body string travels as \\n and the router sees the LF: JSON whitespace there is
-    accepted (a literal backslash-n outside a string would be a 400)."""
+    """The real router accepts a decoded LF as JSON whitespace between two members.
+
+    A literal backslash, n outside a string would be a 400, so `CALL set_creds` proves the decode reached the
+    real handler; the byte itself is proven by test_rpc_newline_reaches_router_as_lf.
+    """
     body = '{"ssid":"minsel",\n"psk":"test-psk-1234"}'
     assert "\n" in body and "\\n" not in body
     res, other = _rpc(rpc_cli, {"id": 7, "m": "POST", "p": "/api/wifi", "b": body, "t": NOW})
     assert "CALL set_creds [minsel] [test-psk-1234]" in other, (res, other)
-    assert "\\n" in json.dumps({"b": body})  # on the wire it is the two characters \ n
+    assert "\\n" in json.dumps({"b": body})  # on the wire it is the two characters backslash, n
+
+
+def test_rpc_unterminated_trailing_backslash_is_400(echo_cli):
+    for req in ['{"id":1,"m":"GET","p":"/x","b":null,"t":1,"zzzzzzzzzz":"abc\\', '{"id":1,"zzzzzzzzzz\\']:
+        out = subprocess.run(
+            [str(echo_cli)], input=req + "\n", capture_output=True, text=True, check=True
+        ).stdout
+        assert '"s":400' in out, out

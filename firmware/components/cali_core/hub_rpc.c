@@ -95,15 +95,24 @@ static int str(cur_t *c, char *out, size_t cap, size_t *len) {
 }
 /* Skips one JSON value of any type (an unknown key's), nested at most 8 deep. 0 ok, -1 malformed. A bare
  * number or literal is skipped by its characters, not validated: the router never sees it. */
+/* Skips the rest of a string whose opening quote and some of its bytes are consumed, up to and past the closing
+ * quote. A backslash takes the next byte with it only if there is one. 0 ok, -1 unterminated. */
+static int skip_rest(cur_t *c) {
+    while (c->p < c->end && *c->p != '"') {
+        if (*c->p == '\\' && c->p + 1 >= c->end) return -1;
+        c->p += *c->p == '\\' ? 2 : 1;
+    }
+    if (c->p >= c->end) return -1;
+    c->p++;
+    return 0;
+}
+
 static int skip(cur_t *c, int depth) {
     ws(c);
     if (c->p == c->end || depth > 8) return -1;
     if (*c->p == '"') {
         c->p++;
-        while (c->p < c->end && *c->p != '"') c->p += *c->p == '\\' ? 2 : 1;
-        if (c->p >= c->end) return -1;
-        c->p++;
-        return 0;
+        return skip_rest(c);
     }
     if (*c->p == '{' || *c->p == '[') {
         char close = *c->p++ == '{' ? '}' : ']';
@@ -181,9 +190,7 @@ static size_t rpc_run(const char *req_json, char *res_json, size_t max, int (*pu
         if (first && c.p < c.end && *c.p == '}') break;
         r = str(&c, key, sizeof key, &kl);
         if (r == -2) { /* a key longer than any known one: unknown, skip the rest of its string */
-            while (c.p < c.end && *c.p != '"') c.p += *c.p == '\\' ? 2 : 1;
-            if (c.p >= c.end) return err(res_json, max, id, 400, "bad_json");
-            c.p++;
+            if (skip_rest(&c) != 0) return err(res_json, max, id, 400, "bad_json");
             key[0] = 0;
         } else if (r != 0) {
             return err(res_json, max, id, 400, "bad_json");
@@ -220,11 +227,7 @@ static size_t rpc_run(const char *req_json, char *res_json, size_t max, int (*pu
                 r = str(&c, body, CALI_HUB_RPC_BODY_MAX, &len);
                 if (r == -2) too_long = 1;
                 else if (r != 0) return err(res_json, max, id, 400, "bad_json");
-                if (r == -2) { /* skip the rest of the string */
-                    while (c.p < c.end && *c.p != '"') c.p += *c.p == '\\' ? 2 : 1;
-                    if (c.p >= c.end) return err(res_json, max, id, 400, "bad_json");
-                    c.p++;
-                }
+                if (r == -2 && skip_rest(&c) != 0) return err(res_json, max, id, 400, "bad_json");
                 have_b = 1;
             }
         } else if (skip(&c, 0) != 0) {
