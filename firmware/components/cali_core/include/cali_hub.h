@@ -91,6 +91,34 @@ int cali_hub_cfg_save(const cali_hub_cfg_t *cfg);
  *         or a field holds a '*'. */
 size_t cali_hub_qr_text(char *out, size_t max, const cali_hub_cfg_t *cfg, const uint8_t key[16]);
 
+/** Longest request body (after unescaping) cali_hub_rpc forwards; a longer one answers 413. */
+#define CALI_HUB_RPC_BODY_MAX 2560
+/** Longest a pending handler may take (ms); then 504. */
+#define CALI_HUB_RPC_PENDING_MS 60000u
+/** Largest |device clock - "t"| accepted while SNTP time is valid (ms). */
+#define CALI_HUB_RPC_SKEW_MS 120000
+
+/**
+ * @brief Runs one API request over the hub through cali_web_handle (hub_rpc.c).
+ *
+ * `req_json` is `{"id":<u32>,"m":"GET|POST|DELETE","p":"/api/...","b":<string|null>,"t":<unix ms>}`; the
+ * answer is `{"id":..,"s":<status>,"b":<string>}`. The router is called as the HTTP core would: while it
+ * answers CALI_HTTP_PENDING it is asked again with `resume = 1`, `pump` called between the tries (nonzero
+ * return = give up, 504), at most CALI_HUB_RPC_PENDING_MS. The body is copied out of the router's static
+ * buffer. Write routes keep their own 403 `setup_mode` outside station mode.
+ *
+ * Status: 400 bad request (not that JSON, an unknown method, a path without a leading '/', no `t`), 404 no
+ * such route (empty body), 408 `stale` (SNTP time valid and |now - t| > CALI_HUB_RPC_SKEW_MS), 413 body too
+ * long, 500 the answer does not fit `max`, 504 pending too long. Without SNTP time the `t` check is skipped
+ * (the replay ring of cali_hub_open is then the only guard). Not reentrant: call from one task.
+ * @param req_json The request plaintext, NUL-terminated.
+ * @param res_json Receives the answer, NUL-terminated.
+ * @param max Size of `res_json`.
+ * @param pump Called between re-asks; may be NULL.
+ * @return the answer length, or 0 if `max` is too small even for the short error answer.
+ */
+size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump)(void));
+
 #ifdef __cplusplus
 }
 #endif

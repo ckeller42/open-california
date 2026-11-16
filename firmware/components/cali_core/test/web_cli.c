@@ -13,6 +13,8 @@
  *   req <text>       one connection sending <text> (escapes \r \n \0 \\) as one fragment; polls the
  *                    core every 10 ms until it closes the connection, then prints
  *                    "RESP <n>\n<the n response bytes>\n"
+ *   rpc <json>       cali_hub_rpc(<json>) with a pump that advances the clock 10 ms and runs the ctldone countdown;
+ *                    prints "RPC <res>" (the rest of the line, as is: no escapes)
  *   sendmax <n>      tcp_send takes at most <n> bytes per poll (default unlimited)
  *   flip             toggle the cooler frame's Level 3 <-> 4
  *   flipping 0|1     1: flip after every poll while a response is being sent
@@ -85,6 +87,7 @@
 
 #include "cali_auto_camper.h"
 #include "cali_control.h"
+#include "cali_hub.h"
 #include "cali_ota.h"
 #include "cali_pi_wake.h"
 #include "cali_ble_exp.h"
@@ -396,6 +399,21 @@ static void flip(void) { s_cooler[1] = s_cooler[1] == 0x03 ? 0x04 : 0x03; }
 
 static int s_flipping;
 
+/* one poll's worth of the sequencer: the ctldone countdown */
+static void ctl_tick(void) {
+    if (s_done_after > 0 && --s_done_after == 0 && s_ctl_done) {
+        cali_ctl_done_t d = s_ctl_done;
+        s_ctl_done = NULL;
+        d(s_done_rc, s_done_reason[0] ? s_done_reason : NULL);
+    }
+}
+
+static int rpc_pump(void) {
+    s_now += 10;
+    ctl_tick();
+    return 0;
+}
+
 static void request(const char *text) {
     s_req_len = unescape(text, s_req, sizeof s_req);
     s_req_off = 0;
@@ -406,11 +424,7 @@ static void request(const char *text) {
         s_now += 10;
         cali_web_poll(s_now);
         cali_sdlog_page_serve();   /* the SD task's side of /api/log (a no-op unless requested) */
-        if (s_done_after > 0 && --s_done_after == 0 && s_ctl_done) {
-            cali_ctl_done_t d = s_ctl_done;
-            s_ctl_done = NULL;
-            d(s_done_rc, s_done_reason[0] ? s_done_reason : NULL);
-        }
+        ctl_tick();
         if (!s_pending && !s_open) break;
         if (s_flipping) flip();
     }
@@ -442,7 +456,13 @@ int main(void) {
         int n = sscanf(line, "%63s %63s %63s %63s %63s", w, a1, a2, a3, a4);
         if (n < 1) continue;
         v = strtol(a1, NULL, 10);
-        if (strcmp(w, "sendmax") == 0) s_send_max = v;
+        if (strcmp(w, "rpc") == 0) {
+            static char res[OUT_MAX];
+            line[strcspn(line, "\n")] = 0;
+            (void)cali_hub_rpc(line + 4, res, sizeof res, rpc_pump);
+            printf("RPC %s\n", res);
+        }
+        else if (strcmp(w, "sendmax") == 0) s_send_max = v;
         else if (strcmp(w, "flip") == 0) flip();
         else if (strcmp(w, "flipping") == 0) s_flipping = (int)v;
         else if (strcmp(w, "nofn") == 0) s_nofn = 1;

@@ -117,6 +117,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "pi_wake.c"),
             str(CORE / "ble_exp.c"),
             str(CORE / "ble_exp_run.c"),
+            str(CORE / "hub_rpc.c"),
             str(CORE / "display_cfg.c"),
             str(CORE / "battery.c"),
             str(CORE / "sensors.c"),

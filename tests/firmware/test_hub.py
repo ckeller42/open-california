@@ -4,6 +4,7 @@ One hub_cli process per test (in-memory KV); ctx 0 is the ESP, ctx 2 a peer hold
 (``peer 2 0``); ``open i`` opens the last sealed frame.
 """
 
+import json
 import subprocess
 
 import pytest
@@ -202,3 +203,104 @@ def test_qr_text():
     """
     key = "00112233445566778899aabbccddeeff"
     assert _run(f"qr van1 wss://h:8884/mqtt u p {key}")[0] == [f"OCH1*van1*wss://h:8884/mqtt*u*p*{key}"]
+
+
+# ---- cali_hub_rpc: a request plaintext through the web router (web_cli, `rpc <json>`) ----
+
+CMD = '{"function":"cooler","what":"power","value":"on","confirm":true}'
+NOW = 1_700_000_000_000
+ONLINE = ["wifi online home 192.168.1.20 -60", "joined 1", "ntp %d" % NOW]
+
+
+@pytest.fixture(scope="module")
+def rpc_cli(tmp_path_factory):
+    from .test_web_handlers import _build
+
+    return _build(tmp_path_factory, "web_cli_rpc")
+
+
+def _rpc(cli, req, setup=ONLINE):
+    """Run the setup lines, then `rpc <req>`; return the parsed res and the other output lines."""
+    lines = [*setup, "rpc " + (req if isinstance(req, str) else json.dumps(req))]
+    out = subprocess.run(
+        [str(cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    res = [line[4:] for line in out if line.startswith("RPC ")]
+    assert len(res) == 1, out
+    return json.loads(res[0]), [line for line in out if not line.startswith("RPC ")]
+
+
+def test_rpc_get_state(rpc_cli):
+    """GET /api/state answers 200 with the state document as the body string.
+
+    .. test:: hub rpc runs a GET through cali_web_handle
+       :id: T_FW_HUB_RPC_GET
+    """
+    res, _ = _rpc(rpc_cli, {"id": 7, "m": "GET", "p": "/api/state", "b": None, "t": NOW})
+    assert res["id"] == 7 and res["s"] == 200
+    assert "device" in json.loads(res["b"])
+
+
+def test_rpc_unknown_path_404(rpc_cli):
+    res, _ = _rpc(rpc_cli, {"id": 1, "m": "GET", "p": "/nope", "b": None, "t": NOW})
+    assert (res["id"], res["s"], res["b"]) == (1, 404, "")
+
+
+def test_rpc_command_resumes(rpc_cli):
+    """A /api/command that is PENDING twice ends with the final status, not 202.
+
+    .. test:: hub rpc re-asks a pending handler until it answers
+       :id: T_FW_HUB_RPC_PENDING
+    """
+    body = CMD
+    setup = [*ONLINE, "ctl pending", "ctldone ok 2"]
+    res, other = _rpc(rpc_cli, {"id": 9, "m": "POST", "p": "/api/command", "b": body, "t": NOW}, setup)
+    assert res["id"] == 9 and res["s"] == 200, res
+    assert any(line.startswith("CALL submit") for line in other)
+
+
+def test_rpc_setup_mode_keeps_403(rpc_cli):
+    body = CMD
+    setup = ["wifi setup_ap", "ntp %d" % NOW]
+    res, _ = _rpc(rpc_cli, {"id": 3, "m": "POST", "p": "/api/command", "b": body, "t": NOW}, setup)
+    assert res["s"] == 403
+
+
+@pytest.mark.parametrize(
+    "req",
+    [
+        "not json",
+        "{}",
+        '{"id":1,"m":"PUT","p":"/api/state","b":null,"t":1}',
+        '{"id":1,"m":"GET","p":"x","b":null,"t":1}',
+    ],
+)
+def test_rpc_bad_json(rpc_cli, req):
+    res, _ = _rpc(rpc_cli, req)
+    assert res["s"] == 400
+
+
+def test_rpc_missing_t(rpc_cli):
+    res, _ = _rpc(rpc_cli, {"id": 4, "m": "GET", "p": "/api/state", "b": None})
+    assert (res["id"], res["s"]) == (4, 400)
+
+
+def test_rpc_stale_time(rpc_cli):
+    """With valid time a request 10 min old is 408 stale; 60 s off is accepted.
+
+    .. test:: hub rpc rejects a request more than 120 s off the device clock
+       :id: T_FW_HUB_RPC_STALE
+    """
+    res, _ = _rpc(rpc_cli, {"id": 5, "m": "GET", "p": "/api/state", "b": None, "t": NOW - 600_000})
+    assert (res["id"], res["s"], res["b"]) == (5, 408, "stale")
+    res, _ = _rpc(rpc_cli, {"id": 6, "m": "GET", "p": "/api/state", "b": None, "t": NOW + 60_000})
+    assert res["s"] == 200
+
+
+def test_rpc_time_not_valid_accepts(rpc_cli):
+    res, _ = _rpc(
+        rpc_cli,
+        {"id": 8, "m": "GET", "p": "/api/state", "b": None, "t": 5},
+        ["wifi online home 1.2.3.4 -60", "joined 1"],
+    )
+    assert res["s"] == 200
