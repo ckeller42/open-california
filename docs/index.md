@@ -26,6 +26,7 @@ howto-esp-first-flash
 howto-esp-wifi-setup
 howto-esp-standalone
 howto-lora-remote-setup
+howto-remote-hub
 ```
 
 ```{toctree}

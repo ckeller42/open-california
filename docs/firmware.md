@@ -1842,6 +1842,31 @@ The status screen has one hidden second screen, for the LoRa setup ([LoRaWAN tel
   screen closes. While it is up, the console `screenshot` sends no frame
   (`LOG display: screenshot failed (lora screen)`), and no log line carries any part of the text.
 
+## Remote hub (`cali_hub`)
+
+The satellite can publish its state to an MQTT broker and take API requests from the remote app
+through it, so the app reaches the van from anywhere. Owner setup and operation:
+[How to set up the remote hub](howto-remote-hub.md).
+
+- **Client:** `cali_hub/hub_esp.c` (esp-mqtt over `wss://`, the CA bundle checks the broker; the same
+  URL as the app). Topics `oc/<van>/online` (last will `0`, retained `1` on connect), `oc/<van>/state`
+  (sealed `/api/state?hub=1`, retained, every 30 s), `oc/<van>/req` (in), `oc/<van>/res`. Nothing
+  runs without a hub config.
+- **Sealing:** AES-128-GCM with a per-van data key made on the satellite (KV `hub_key`). Frame
+  `ver | dir | nonce(12) | ciphertext | tag(16)`, nonce `dir | random(7) | counter(4)`, AD the first 14
+  bytes. A replay ring per direction and a time check (`|now - t| <= 120 s` while SNTP time is valid)
+  guard requests.
+- **Allowlist:** over the hub only `GET /api/...` and `POST /api/command` reach the router; every
+  other request answers `403 local_only`. Settings stay local.
+- **`/api/hub`:** `GET` (every mode) and `POST` (station only) of `{url, van, user, pass, app_user,
+  app_pass}`, the Satellite settings Hub card; no GET ever returns a password. `device.hub` in
+  `/api/state`: `configured`, `online`, `last_pub_s`, `error`.
+- **Display:** on the LoRa screen the long-press cycle is LoRa repair QR, **hub QR**
+  (`OCH1*<van>*<wss url>*<app user>*<app pass>*<key>`), LoRa setup QR. A 10 s press on the hub QR
+  makes a new data key (every phone then scans the new QR, and the bridge's `HUB_KEY` secret changes).
+- **LoRa commands:** FPort 20, 15 bytes (phone id, counter, command, tag); see
+  [LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora).
+
 ## Battery (`R_FW_BATTERY`)
 
 The {term}`CoreS3` has a 500 mAh cell. With WiFi + BLE linked it drains about 0.33 %/min (~100 mA),

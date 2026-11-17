@@ -6,6 +6,9 @@ from anywhere, with no router, no Raspberry Pi and no Tailscale in the van. The 
 web page that you put on your phone's home screen. It talks only to The Things Network, never to
 your router, your Pi or the satellite. It cannot control anything: the data is display only.
 
+To see the van over WiFi as well, and to switch the heater and camping mode from anywhere, set up the
+remote hub: [How to set up the remote hub](howto-remote-hub.md).
+
 This page takes you from nothing to the first numbers on your phone. The setup needs about ten
 minutes, and you do it once.
 
