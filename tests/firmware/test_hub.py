@@ -509,6 +509,20 @@ def test_rpc_allowlist_keeps_settings_local(rpc_cli):
     res = json.loads(next(ln[4:] for ln in out if ln.startswith("RPC ")))
     assert (res["s"], json.loads(res["b"])) == (403, {"error": "local_only"})
     assert "KV <missing>" in out
+    lines = [
+        *ONLINE,
+        "rpc " + json.dumps({"id": 5, "m": "POST", "p": "/api/hub_key", "b": '{"new_key":true}', "t": NOW}),
+        "kv hub_key",
+    ]
+    out = subprocess.run(
+        [str(rpc_cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    res = json.loads(next(ln[4:] for ln in out if ln.startswith("RPC ")))
+    assert (res["s"], json.loads(res["b"])) == (
+        403,
+        {"error": "local_only"},
+    )  # New data key: local only (R42)
+    assert "KV <missing>" in out
     for m, p in [
         ("POST", "/api/wifi"),
         ("DELETE", "/api/wifi"),

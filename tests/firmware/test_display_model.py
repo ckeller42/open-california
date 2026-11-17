@@ -912,10 +912,12 @@ def test_side_texts_name_the_screen_and_the_next_hold(cli):
     van's code and, with LoRa on, that the next hold shows LoRa."""
     v = run(cli, "reset", *presses(HUB_ONLY, 1), HUB_ONLY + " now=5000 lang=1")
     assert (v[-1]["show"], v[-1]["lhint"], v[-1]["lline"]) == ("4", APP_EN, "")
-    v = run(cli, "reset", *presses(HUB_ONLY, 2), HUB_ONLY + " now=9000 lang=1 qrok=1")
+    # no qrok: the painter sets lora_qr_ready only on the LoRa path (lora_inputs returns before it with LoRa
+    # off), so the hub QR's label must not wait for it (re-review N1)
+    v = run(cli, "reset", *presses(HUB_ONLY, 2), HUB_ONLY + " now=9000 lang=1")
     assert (v[-1]["show"], v[-1]["lhint"], v[-1]["lline"]) == ("3", "The van's code: scan in the app", "")
     t = LORA + " hub=1"
-    v = run(cli, "reset", *presses(t, 2), t + " now=9000 lang=0 qrok=1")
+    v = run(cli, "reset", *presses(t, 2), t + " now=9000 lang=0")
     assert (v[-1]["show"], v[-1]["lhint"], v[-1]["lline"]) == (
         "3",
         "Code des Fahrzeugs: in der App scannen",

@@ -263,15 +263,15 @@ static void lora_texts(const cali_display_in_t *in, int lang, cali_display_view_
         out->lora_hint = tx(K_APP_STEPS, lang);
         return;
     }
-    /* what it is, and what the next 3 s hold shows (ruling R41) */
-    out->lora_hint = tx(!in->lora_qr_ready                                  ? K_LORA_WAIT
-                        : out->show_lora == 3                               ? K_HUB_SCAN
-                        : out->show_lora == 1 && in->lora_has_ttn_keys      ? K_LORA_REPAIR
-                                                                            : K_LORA_SCAN, lang);
+    /* what it is, and what the next 3 s hold shows (ruling R41); the hub QR never waits for the LoRa QR */
     if (out->show_lora == 3) {
+        out->lora_hint = tx(K_HUB_SCAN, lang);
         if (in->lora_available) cali_display_fit_text(out->lora_line, tx(K_NEXT_LORA, lang));
         return;
     }
+    out->lora_hint = tx(!in->lora_qr_ready                             ? K_LORA_WAIT
+                        : out->show_lora == 1 && in->lora_has_ttn_keys ? K_LORA_REPAIR
+                                                                       : K_LORA_SCAN, lang);
     if (in->lora_confirmed_age_s >= 0) {
         fmt_uptime((uint64_t)in->lora_confirmed_age_s * 1000u, age);
         snprintf(last, sizeof last, tx(K_LORA_CONFIRMED, lang), age);
