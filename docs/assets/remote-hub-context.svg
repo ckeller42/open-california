@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="660" viewBox="0 0 1000 660" role="img" aria-label="System context: the phone app talks to the EMQX broker over sealed MQTT; the van ESP reaches the broker over WiFi, or sends LoRa uplinks through TTN and a Cloudflare Worker that seals them into the broker; LoRa commands go from the app through TTN to the ESP.">
+      <style>
+text{font-family:"IBM Plex Sans",system-ui,sans-serif}
+.box{fill:#fff;stroke:#1b2230;stroke-width:1.4}.ext{fill:#f6f7f9;stroke:#5b6577;stroke-width:1.2}
+.vanb{fill:none;stroke:#2f8f5b;stroke-width:1.5;stroke-dasharray:6 5}
+.t{font-size:15px;font-weight:600;fill:#1b2230}.s{font-size:12px;fill:#5b6577}
+.m{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;fill:#5b6577}
+.lbl{font-size:12px;paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.net{stroke:#1f6fd1;fill:none;stroke-width:2}.lora{stroke:#b8640a;fill:none;stroke-width:2}
+.key{stroke:#2f8f5b;fill:none;stroke-width:1.6;stroke-dasharray:5 4}.plain{stroke:#1b2230;fill:none;stroke-width:1.4}
+.cn{fill:#1f6fd1}.cl{fill:#b8640a}.ck{fill:#2f8f5b}.cf{fill:#1b2230}.vant{font-size:13px;font-weight:600;fill:#2f8f5b}
+</style><rect width="1000" height="660" fill="#fff"/><defs>
+        <marker id="an" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="cn"/></marker>
+        <marker id="al" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="cl"/></marker>
+        <marker id="ak" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="ck"/></marker>
+        <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="cf"/></marker>
+      </defs>
+
+      <!-- GitHub Pages -->
+      <rect class="ext" x="40" y="30" width="220" height="74" rx="6"/>
+      <text class="t" x="150" y="60" text-anchor="middle">GitHub Pages</text>
+      <text class="s" x="150" y="80" text-anchor="middle">static PWA files (OC_HUB_ORIGIN)</text>
+
+      <!-- Phone app -->
+      <rect class="box" x="40" y="240" width="220" height="100" rx="6"/>
+      <text class="t" x="150" y="270" text-anchor="middle">Remote app (PWA)</text>
+      <text class="s" x="150" y="290" text-anchor="middle">your phone · hub.js + MQTT.js</text>
+      <text class="m" x="150" y="310" text-anchor="middle">holds data key + command key</text>
+      <text class="m" x="150" y="327" text-anchor="middle">shows LoRa mode / stale values</text>
+
+      <!-- EMQX -->
+      <rect class="box" x="390" y="240" width="220" height="100" rx="6"/>
+      <text class="t" x="500" y="270" text-anchor="middle">EMQX Cloud broker</text>
+      <text class="s" x="500" y="290" text-anchor="middle">Serverless · oc-hub · Frankfurt</text>
+      <text class="m" x="500" y="310" text-anchor="middle">oc/&lt;van&gt;/online state req res</text>
+      <text class="m" x="500" y="327" text-anchor="middle">oc/&lt;van&gt;/lora/&lt;fport&gt;</text>
+
+      <!-- Cloudflare -->
+      <rect class="box" x="740" y="240" width="220" height="100" rx="6"/>
+      <text class="t" x="850" y="270" text-anchor="middle">Cloudflare Worker</text>
+      <text class="s" x="850" y="290" text-anchor="middle">bridge · stateless</text>
+      <text class="m" x="850" y="310" text-anchor="middle">secrets: HUB_KEY, WEBHOOK_SECRET,</text>
+      <text class="m" x="850" y="327" text-anchor="middle">broker login</text>
+
+      <!-- TTN -->
+      <rect class="ext" x="740" y="460" width="220" height="90" rx="6"/>
+      <text class="t" x="850" y="492" text-anchor="middle">The Things Network</text>
+      <text class="s" x="850" y="512" text-anchor="middle">TTS Cloud · gateways</text>
+      <text class="m" x="850" y="532" text-anchor="middle">≈10 downlinks / day</text>
+
+      <!-- Van boundary -->
+      <rect class="vanb" x="30" y="420" width="660" height="170" rx="10"/>
+      <text class="vant" x="46" y="442">The van</text>
+
+      <rect class="ext" x="50" y="465" width="150" height="85" rx="6"/>
+      <text class="t" x="125" y="497" text-anchor="middle">Camper</text>
+      <text class="s" x="125" y="517" text-anchor="middle">heater, camping</text>
+      <text class="s" x="125" y="533" text-anchor="middle">mode, sensors</text>
+
+      <rect class="box" x="260" y="455" width="200" height="105" rx="6"/>
+      <text class="t" x="360" y="485" text-anchor="middle">ESP satellite</text>
+      <text class="s" x="360" y="505" text-anchor="middle">CoreS3 + RAK3172 LoRa</text>
+      <text class="m" x="360" y="524" text-anchor="middle">makes the data key</text>
+      <text class="m" x="360" y="541" text-anchor="middle">shows it as hub QR</text>
+
+      <rect class="ext" x="520" y="465" width="150" height="85" rx="6"/>
+      <text class="t" x="595" y="497" text-anchor="middle">Van router</text>
+      <text class="s" x="595" y="517" text-anchor="middle">WiFi + mobile</text>
+      <text class="s" x="595" y="533" text-anchor="middle">internet</text>
+
+      <!-- Pages -> app -->
+      <line class="plain" x1="150" y1="104" x2="150" y2="236" marker-end="url(#ap)"/>
+      <text class="lbl cf" x="160" y="175">loads the app (HTTPS)</text>
+
+      <!-- app <-> broker -->
+      <line class="net" x1="264" y1="290" x2="386" y2="290" marker-start="url(#an)" marker-end="url(#an)"/>
+      <text class="lbl cn" x="325" y="280" text-anchor="middle">sealed frames</text>
+      <text class="lbl cn" x="325" y="308" text-anchor="middle">wss :8084</text>
+
+      <!-- Cloudflare -> broker -->
+      <line class="lora" x1="736" y1="290" x2="614" y2="290" marker-end="url(#al)"/>
+      <text class="lbl cl" x="675" y="280" text-anchor="middle">seals, publishes</text>
+      <text class="lbl cl" x="675" y="308" text-anchor="middle">lora/&lt;fport&gt;</text>
+
+      <!-- TTN -> Cloudflare -->
+      <line class="lora" x1="850" y1="456" x2="850" y2="344" marker-end="url(#al)"/>
+      <text class="lbl cl" x="860" y="395">webhook /ttn</text>
+      <text class="lbl cl" x="860" y="411">X-OC-Secret</text>
+
+      <!-- router <-> broker (WiFi path) -->
+      <line class="net" x1="560" y1="461" x2="560" y2="344" marker-start="url(#an)" marker-end="url(#an)"/>
+      <text class="lbl cn" x="552" y="372" text-anchor="end">state, res ↑ · req ↓</text>
+      <text class="lbl cn" x="552" y="388" text-anchor="end">sealed MQTT, wss</text>
+
+      <!-- ESP <-> router -->
+      <line class="net" x1="464" y1="507" x2="516" y2="507" marker-start="url(#an)" marker-end="url(#an)"/>
+      <text class="lbl cn" x="490" y="498" text-anchor="middle">WiFi</text>
+
+      <!-- camper <-> ESP -->
+      <line class="plain" x1="204" y1="507" x2="256" y2="507" marker-start="url(#ap)" marker-end="url(#ap)"/>
+      <text class="lbl cf" x="230" y="498" text-anchor="middle">BLE</text>
+
+      <!-- ESP <-> TTN over LoRa radio -->
+      <polyline class="lora" points="360,564 360,625 850,625 850,554" marker-start="url(#al)" marker-end="url(#al)"/>
+      <text class="lbl cl" x="605" y="618" text-anchor="middle">LoRa radio: uplinks (state) ↑ · FPort 20 commands ↓</text>
+
+      <!-- app -> TTN: LoRa command -->
+      <polyline class="lora" points="230,344 230,400 715,400 715,505 736,505" marker-end="url(#al)"/>
+      <text class="lbl cl" x="430" y="393" text-anchor="middle">LoRa command, FPort 20 (TTN API, command key)</text>
+
+      <!-- QR key exchange -->
+      <polyline class="key" points="300,451 300,370 110,370 110,344" marker-end="url(#ak)"/>
+      <text class="lbl ck" x="105" y="386">hub QR, once:</text>
+      <text class="lbl ck" x="105" y="401">data key</text>
+    </svg>

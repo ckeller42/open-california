@@ -17,6 +17,10 @@ WiFi](howto-esp-wifi-setup.md).
 
 ## How it fits together
 
+![System context: the phone app talks to the EMQX broker over sealed MQTT; the satellite reaches the broker over the van's WiFi, or sends LoRa uplinks through TTN and the Cloudflare Worker, which seals them for the broker; LoRa commands go from the app through TTN to the satellite; the data key moves once through the hub QR](assets/remote-hub-context.svg)
+
+Blue is the internet path: the satellite and the app exchange sealed frames through the broker, end to end. Amber is the LoRa path: uplinks go through TTN to the Worker, which seals them for the broker; the four LoRa commands go from the app to TTN and down to the satellite. Green is the key exchange: the data key moves once, through the hub QR on the satellite's screen. The same links as a flowchart:
+
 ```mermaid
 flowchart LR
     ESP["Satellite (ESP)"] <-->|"WiFi: sealed MQTT frames (wss)"| BROKER[("EMQX broker")]
