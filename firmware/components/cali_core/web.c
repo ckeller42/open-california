@@ -700,7 +700,9 @@ static int s_cmd = CALI_CTL_OK;
 static const char *s_cmd_reason;   /* the done callback's refusal text (static), else NULL */
 /* Ruling R19: the slot is held from the submit until its requester's resume collected the answer (two
  * channels resume against it: HTTP and the hub RPC). A requester that never resumes holds it at most
- * CALI_HUB_RPC_PENDING_MS after the submit (the longer of the two channels' waits). */
+ * CALI_HUB_RPC_PENDING_MS after the submit (the longer of the two channels' waits). The hub's t0 is taken just
+ * before its submit and both sides compare elapsed >= CALI_HUB_RPC_PENDING_MS (ruling R24), so the slot is never
+ * free while the hub may still resume. */
 static int s_cmd_held;
 static uint64_t s_cmd_at;
 

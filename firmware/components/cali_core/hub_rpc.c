@@ -298,7 +298,7 @@ int cali_hub_rpc_start(cali_hub_rpc_t *r, const char *req_json, char *res_json, 
 
 int cali_hub_rpc_poll(cali_hub_rpc_t *r, char *res_json, size_t max) {
     if (!r->buf) return 1;
-    if (cali_uptime_ms() - r->t0 > CALI_HUB_RPC_PENDING_MS) {
+    if (cali_uptime_ms() - r->t0 >= CALI_HUB_RPC_PENDING_MS) {   /* the same comparison as web.c's slot (R24) */
         err(res_json, max, r->id, 504, "timeout");
         return rpc_free(r), 1;
     }

@@ -360,7 +360,9 @@ static void do_work(void) {
             cali_wifi_run_tick(now);
             cali_captive_dns_poll();
             cali_web_poll(now);
+#if CONFIG_CALI_DISPLAY   /* ruling R24: only with the cali_hub port (QEMU: no client, no key, no buffers) */
             cali_hub_tick(now);   /* the remote hub (hub_run.c): requests in, state + answers out, after the web */
+#endif
         }
 #if CONFIG_CALI_DISPLAY
         cali_display_tick(now);   /* repaints at most every DISPLAY_REFRESH_MS; never blocks on BLE */

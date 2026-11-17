@@ -3854,3 +3854,36 @@ def test_an_uncollected_command_frees_the_slot_after_60_s(web_cli):
         ],
     )
     assert resps[1].status == 200 and resps[1].json()["function"] == "roof"
+
+
+def _slot_boundary(web_cli, at_ms):
+    """A hub command submitted at 1000 and finished but not collected; at `at_ms` (the handler's clock) a
+    second command arrives over HTTP, then the hub re-asks at that clock."""
+    first = json.dumps({"id": 8, "m": "POST", "p": "/api/command", "b": CMD, "t": 1})
+    roof = '{"function":"roof","what":"position","value":"open","confirm":true}'
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"now 1000",
+            b"ctl pending",
+            b"ctldone ok 1",
+            b"rpcbegin " + first.encode(),
+            req("GET", "/api/state"),
+            b"now %d" % (at_ms - 10),  # request() adds 10 ms before it hands the request over
+            b"ctldone ok 2",
+            req("POST", "/api/command", roof),
+            b"now %d" % at_ms,
+            b"rpcpoll",
+        ],
+    )
+    res = json.loads(next(ln for ln in other if ln.startswith("RPCS ")).split(" ", 2)[2])
+    return resps[1].status, res["s"]
+
+
+def test_slot_timeout_and_the_hub_give_up_at_the_same_instant(web_cli):
+    """Ruling R24: web.c frees the slot and cali_hub_rpc_poll gives up with the same comparison
+    (elapsed >= CALI_HUB_RPC_PENDING_MS): 1 ms before, the slot is held and the hub still collects; at the
+    limit the new command is accepted and the hub no longer resumes (504), never both."""
+    assert _slot_boundary(web_cli, 1000 + 59_999) == (409, 200)
+    assert _slot_boundary(web_cli, 1000 + 60_000) == (200, 504)

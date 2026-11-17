@@ -95,7 +95,8 @@ size_t cali_hub_qr_text(char *out, size_t max, const cali_hub_cfg_t *cfg, const 
 
 /** Longest request body (after unescaping) cali_hub_rpc forwards; a longer one answers 413. */
 #define CALI_HUB_RPC_BODY_MAX 2560
-/** Longest a pending handler may take (ms); then 504. */
+/** Longest a pending handler may take (ms); then 504. At elapsed >= this the hub gives up and web.c frees the
+ * command slot (the same comparison, ruling R24). */
 #define CALI_HUB_RPC_PENDING_MS 60000u
 /** Largest |device clock - "t"| accepted while SNTP time is valid (ms). */
 #define CALI_HUB_RPC_SKEW_MS 120000

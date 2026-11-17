@@ -19,7 +19,8 @@
  *   rpcs <json>      cali_hub_rpc_start, then per driver tick (clock +10 ms, the ctldone countdown) one
  *                    cali_hub_rpc_poll; prints "RPCS <ticks it stayed pending> <res>"
  *   rpcbegin <json>  cali_hub_rpc_start only (the request stays pending across later lines); prints
- *                    "RPCB <1 answered|0 pending>"; "rpcpoll" then finishes it as rpcs does ("RPCS …")
+ *                    "RPCB <1 answered|0 pending>"; "rpcpoll" then re-asks it at the current clock, and after each pump
+ *                    again, until it answers ("RPCS <pumps> <res>")
  *   sendmax <n>      tcp_send takes at most <n> bytes per poll (default unlimited)
  *   flip             toggle the cooler frame's Level 3 <-> 4
  *   flipping 0|1     1: flip after every poll while a response is being sent
@@ -474,9 +475,9 @@ int main(void) {
                 printf("RPCB %d\n", cali_hub_rpc_start(&r, line + 9, res, sizeof res));
                 continue;
             }
-            for (int done = 0; !done; ticks++) {
+            while (!cali_hub_rpc_poll(&r, res, sizeof res)) {   /* the first re-ask at the current clock */
                 rpc_pump();
-                done = cali_hub_rpc_poll(&r, res, sizeof res);
+                ticks++;
             }
             printf("RPCS %d %s\n", ticks, res);
         }
