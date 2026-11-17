@@ -73,6 +73,65 @@ page uses.
 Do not paste a secret into a chat, a file in the repository or a shell command line. The steps below
 read secrets from a prompt or a pipe.
 
+## Where each key goes
+
+Every key of the hub, the service where it is made, every place it must be put into, and where
+you keep a copy. "Your secret store" is the encrypted place for your private values (the owner
+uses `~/.env`, edited with `chezmoi edit ~/.env`). Never type a value into a command line, a chat,
+a file in this repository or a log.
+
+| Key | Made in | Put into | Copy kept in |
+| --- | --- | --- | --- |
+| EMQX login `van` (user, password) | EMQX console, **Access Control > Authentication** (step 1.6) | the satellite's **Remote hub** card, fields *van user* and *van password* (step 5.2) | your secret store |
+| EMQX login `app` (user, password) | EMQX console, step 1.6 | the satellite's **Remote hub** card, fields *app user* and *app password* (step 5.2); from there the hub QR carries it to every phone | your secret store |
+| EMQX login `bridge` (user, password) | EMQX console, step 1.6 | Cloudflare Worker secrets `BROKER_USER` and `BROKER_PASS` (`npx wrangler secret put`, steps 2.9 and 2.10) | your secret store |
+| Topic permissions (ACLs) | EMQX console, **Access Control > Client Authorization** (step 1.7) | nothing else: they stay in EMQX | not secret |
+| `WEBHOOK_SECRET` | your computer: `openssl rand -hex 24` (step 2.7) | Cloudflare Worker secret `WEBHOOK_SECRET` (step 2.8) **and** the TTN webhook header `X-OC-Secret` (step 3.3) | your secret store |
+| `HUB_KEY` (the data key) | the satellite, at the first save of the Hub card | the hub QR, scanned by every phone (step 5.4); Cloudflare Worker secret `HUB_KEY`, read from the QR with `zbarcam` (step 5.7) | no copy: the satellite holds it and the hub QR shows it again; a rekey makes a new one |
+| Bridge settings `VAN`, `BROKER_WSS`, `DEV_ID` | your choice; `DEV_ID` is the van's TTN device ID | `bridge/wrangler.toml` under `[vars]` (step 2.4) | the repository: they are not secret |
+| `REMOTE_APP_DEPLOY_KEY` (SSH key pair) | your computer, `ssh-keygen` in a temporary folder (step 4.3) | private half: GitHub secret of `ckeller42/open-california` (`gh secret set`); public half: deploy key with write access on the Pages repository | no copy: the temporary folder is deleted |
+| `OC_HUB_ORIGIN` | the broker URL of step 1.5 without the path | GitHub variable of `ckeller42/open-california` (`gh variable set`, step 4.4) | not secret |
+| Cloudflare access for `wrangler` | `npx wrangler login` in the browser (step 2.3), or an API token from the Cloudflare dashboard, **My Profile > API Tokens**, template *Edit Cloudflare Workers* | your computer only: `wrangler` keeps the login, or reads the token from `CLOUDFLARE_API_TOKEN` | your secret store (the token) |
+| EMQX platform API key (optional) | EMQX console, **Settings > Platform API Key > New API Key** | your computer only, as `EMQX_API_KEY` and `EMQX_API_SECRET`, for automation; the setup does not need it | your secret store |
+| EMQX deployment API key (optional) | EMQX console, the deployment's **API Key** page (**check in the console**; the Platform API cannot make one for Serverless) | your computer only, as `EMQX_DEPLOY_APP_ID` and `EMQX_DEPLOY_APP_SECRET`, to create logins and permissions through `https://<host>:8443/api/v5` | your secret store |
+| TTN full-rights API key | TTN console, the application's **API keys**, *Grant all current and future rights* | the remote app, **Set up LoRa**, once; the app deletes it after the setup | none |
+| TTN read key and command key | the remote app, during the LoRa setup | the phone; the app sends them to the satellite over LoRa (FPort 12, sealed with the transfer key) | the phone and the satellite only |
+| LoRaWAN AppKey and transfer key | the satellite, when its LoRa screen opens | the setup QR; from there the app registers the AppKey at TTN | the satellite and TTN |
+
+### The infrastructure setup in one picture
+
+Sections 1 to 4 below, with the keys that move between the services. Steps 5.2 to 5.7 then bring
+the keys into the satellite, the phones and the Worker (see [The van setup in one picture](#the-van-setup-in-one-picture)).
+
+```mermaid
+sequenceDiagram
+actor O as Owner
+participant S as Your secret store
+participant E as EMQX console
+participant C as Cloudflare (wrangler)
+participant T as TTN console
+participant G as GitHub
+O->>E: Serverless deployment, spend limit 0
+E-->>O: host, wss URL :8084/mqtt
+O->>E: logins van, app, bridge
+O->>S: keep the three passwords
+O->>E: topic permissions on oc/#lt;van#gt;/
+O->>C: wrangler login
+O->>C: wrangler.toml: VAN, BROKER_WSS, DEV_ID
+O->>S: WEBHOOK_SECRET (openssl rand)
+S->>C: secret put WEBHOOK_SECRET
+S->>C: secret put BROKER_USER, BROKER_PASS (bridge login)
+O->>C: wrangler deploy
+C-->>O: Worker URL /ttn
+O->>T: webhook: Worker URL, header X-OC-Secret = WEBHOOK_SECRET
+O->>G: Pages repo, deploy key (public half)
+O->>G: secret REMOTE_APP_DEPLOY_KEY (private half)
+O->>G: variable OC_HUB_ORIGIN = wss origin
+O->>G: tag remote-v*
+G-->>O: app on GitHub Pages
+Note over O,C: HUB_KEY comes later, from the satellite's hub QR (step 5.7)
+```
+
 ## Setup from zero
 
 ### 1. The broker: EMQX Cloud Serverless
@@ -366,7 +425,7 @@ There is no self-hosted fallback. If the hosted hub is down, the app says so.
 
 ## Secrets
 
-Never write a value into this repository, a chat or a log. Names and places only.
+Never write a value into this repository, a chat or a log. Names and places only. Where each key is made and put in: [Where each key goes](#where-each-key-goes).
 
 | Name | Place | What it can do | How to rotate |
 | --- | --- | --- | --- |
@@ -379,6 +438,10 @@ Never write a value into this repository, a chat or a log. Names and places only
 | `OC_HUB_ORIGIN` | GitHub variable (not a secret) | the broker origin in the page's `connect-src` | `gh variable set`, then a new tag. |
 | `EMQX_API_KEY`, `EMQX_API_SECRET` | your secret store | optional: the EMQX platform API for automation; this page does not need it | New key in the EMQX console. |
 | TTN full-rights API key | the phone, once | the app deletes it after the LoRa setup | n/a |
+| `EMQX_DEPLOY_APP_ID`, `EMQX_DEPLOY_APP_SECRET` | your secret store | optional: the EMQX deployment API (logins, permissions, clients) | Delete the key in the console and make a new one. |
+| `CLOUDFLARE_API_TOKEN` | your secret store | optional instead of `wrangler login`: deploy the Worker and set its secrets | Roll the token in the Cloudflare dashboard (**My Profile > API Tokens**). |
+| TTN read key and command key | the phone; the satellite | read the van's uplinks; send the four LoRa commands | [You lost a phone](howto-lora-remote-setup.md#you-lost-a-phone). |
+| LoRaWAN AppKey | the satellite; TTN | join the van to TTN | Forget LoRa on the satellite (`lora forget`) and do the LoRa setup again. |
 
 ## Deploy from a clean machine
 
