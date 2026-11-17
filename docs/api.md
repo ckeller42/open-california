@@ -347,6 +347,7 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.test_gen_lora_dict
 .. automodule:: tests.test_lora_setup_js
 .. automodule:: tests.test_ttn_js
+.. automodule:: tests.test_hub_js
 .. automodule:: tests.e2e.test_remote_app
 .. automodule:: tests.e2e.test_remote_setup
 .. automodule:: tools.build_remote

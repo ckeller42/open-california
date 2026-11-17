@@ -5,7 +5,10 @@ One hub_cli process per test (in-memory KV); ctx 0 is the ESP, ctx 2 a peer hold
 """
 
 import json
+import os
+import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -506,3 +509,55 @@ def test_rpc_allowlist_keeps_settings_local(rpc_cli):
         [*ONLINE, "ctl pending", "ctldone ok 2"],
     )
     assert res["s"] == 200 and any(ln.startswith("CALL submit") for ln in other)
+
+
+def _app(expr):
+    """Evaluate ``expr`` with calictl/webui/hub.js (and lora_setup.js) in a node vm; ``hex(b)`` is defined."""
+    node = shutil.which("node")
+    if not node:
+        (pytest.fail if os.environ.get("CI") else pytest.skip)("node not available")
+    web = Path(__file__).resolve().parents[2] / "calictl" / "webui"
+    js = (
+        'const fs=require("fs"),vm=require("vm"),c=vm.createContext({crypto:globalThis.crypto,Uint8Array,Map,'
+        "TextDecoder,console});for(const f of process.argv.slice(2))vm.runInContext(fs.readFileSync(f,'utf8'),c);"
+        'vm.runInContext(\'var hex=b=>Array.from(b,x=>x.toString(16).padStart(2,"0")).join("")\',c);'
+        "vm.runInContext(`(async()=>(${process.argv[1]}))()`,c).then(r=>console.log(JSON.stringify(r)))"
+    )
+    argv = [node, "-e", js, expr, str(web / "lora_setup.js"), str(web / "hub.js")]
+    return json.loads(subprocess.run(argv, capture_output=True, text=True, check=True).stdout)
+
+
+def test_app_parity():
+    """The remote app (hub.js) opens the ESP's and the bridge's frames, and the ESP opens the app's frame.
+
+    .. test:: hub frames are byte-compatible between hub.c and the remote app's hub.js in both directions
+       :id: T_FW_HUB_APP_PARITY
+    """
+    p = subprocess.Popen(
+        [str(build_host("hub_cli"))], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
+    )
+
+    def ask(line):
+        p.stdin.write(line + "\n")
+        p.stdin.flush()
+        return p.stdout.readline().strip()
+
+    try:
+        key = ask("load 0")
+        esp, bridge = ask("seal 0 1 " + PT), ask("seal 0 3 " + PT)
+        cfg = json.dumps({"key": key})
+        o = _app(
+            f"""(async()=>{{ const c={cfg}, u=loraUnhex, a=await hubOpen(c,u("{esp}")), b=await hubOpen(c,u("{bridge}"));
+            const f=await hubSeal(c,2,u("{PT}")), g=await hubSeal(c,2,u("{PT}"));
+            return [a.dir, hex(a.pt), b.dir, hex(b.pt), hex(f), hex(g)]; }})()"""
+        )
+        assert o[:4] == [1, PT, 3, PT]
+        f, g = o[4], o[5]
+        assert f[:6] == "010202" and f[20:28] == "00000001" and g[20:28] == "00000002" and f[6:20] == g[6:20]
+        assert ask("frame " + f) == "ok" and ask("open 0 2").split()[0] == "-1"  # mask: dir 1 only
+        assert ask("open 0 4").split() == [str(N), "2", PT]
+        assert ask("open 0 4").split()[0] == "-1"  # the same frame again: a replay
+        assert ask("frame " + g) == "ok" and ask("open 0 4").split()[0] == str(N)
+    finally:
+        p.stdin.close()
+        p.wait()

@@ -48,6 +48,8 @@ REMOTE_SCRIPTS = (
     "ttn.js",
     "lora_decode.js",
     "remote.js",
+    "vendor/mqtt/mqtt.min.js",
+    "hub.js",
 )
 
 

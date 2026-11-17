@@ -6,7 +6,8 @@
 // TTS keeps uplinks for 24 h only: the newest frame per function (with its time) and the energy counters
 // stay in localStorage. The keys stay in the configuration: never in a body, an error or a log.
 // Below remoteState: the setup screens (Set up LoRa, Scan the van's code, Remove this van) that app.js render()
-// shows in remote mode; they use the vendored QrScanner (vendor/qr-scanner) and lora_setup.js.
+// shows in remote mode; they use the vendored QrScanner (vendor/qr-scanner) and lora_setup.js. "Scan the van's code"
+// also takes the van's hub QR (OCH1, hub.js).
 
 const REMOTE_CFG_KEY = "oc.remote.cfg";       // {cluster, appId, devId, readKey, cmdKey}; the setup or a repair QR writes it
 const REMOTE_LAST_KEY = "oc.remote.last";     // the newest frame per function, the read cursor
@@ -75,25 +76,34 @@ async function remoteState(cfg, now) {
   for (const u of ups.slice().reverse()) {   // oldest first: a newer frame always wins
     if (u.receivedAt === last.cursor) continue;   // `after` may be inclusive: the cursor's own uplink again
     last.cursor = u.receivedAt;
-    const d = loraDecodeUplink(u.port, u.bytes);
-    if (d.error || d.port === 12) continue;
-    if (d.version !== undefined && d.version !== loraDecodeUplink.VERSION) { last.unknown = d.version; continue; }
-    if (d.version !== undefined) last.unknown = null;
-    for (const [name, fields] of Object.entries(d.fn)) last.fn[name] = { at: u.at, d: fields };
-    if (d.port === 2) {
-      last.ext = { at: u.at, ...d.ext };
-      const p = { at: u.at, boot: d.boot, ...d.counters };
-      last.energy = p;
-      const prev = points[points.length - 1];
-      // a new boot adds a point at once, but at most one a minute (a van in a reboot loop must not fill the storage)
-      if (!prev || p.at - prev.at >= (prev.boot !== p.boot ? 60000 : REMOTE_ENERGY_STEP_MS)) points.push(p);
-    }
-    if (d.port === 4) last.fw = d.fw;
-    last.newest = Math.max(last.newest || 0, u.at);
+    remoteTake(last, points, u);
   }
   remoteSave(REMOTE_LAST_KEY, last);
   remoteSave(REMOTE_ENERGY_KEY, points.filter((p) => now - p.at <= REMOTE_ENERGY_KEEP_MS));
   return remoteBody(last, now);
+}
+
+/**
+ * One uplink into the stored frames `last` (the newest frame per function, the Victron readings, the counters with
+ * their hourly `points`, the firmware); also hub.js's frames from the bridge. Port 12 (key-transfer confirmations)
+ * is not state. @param {any} last @param {any[]} points @param {{port: number, bytes: Uint8Array, at: number}} u
+ */
+function remoteTake(last, points, u) {
+  const d = loraDecodeUplink(u.port, u.bytes);
+  if (d.error || d.port === 12) return;
+  if (d.version !== undefined && d.version !== loraDecodeUplink.VERSION) { last.unknown = d.version; return; }
+  if (d.version !== undefined) last.unknown = null;
+  for (const [name, fields] of Object.entries(d.fn)) last.fn[name] = { at: u.at, d: fields };
+  if (d.port === 2) {
+    last.ext = { at: u.at, ...d.ext };
+    const p = { at: u.at, boot: d.boot, ...d.counters };
+    last.energy = p;
+    const prev = points[points.length - 1];
+    // a new boot adds a point at once, but at most one a minute (a van in a reboot loop must not fill the storage)
+    if (!prev || p.at - prev.at >= (prev.boot !== p.boot ? 60000 : REMOTE_ENERGY_STEP_MS)) points.push(p);
+  }
+  if (d.port === 4) last.fw = d.fw;
+  last.newest = Math.max(last.newest || 0, u.at);
 }
 
 /** @param {{cluster: string, appId: string, devId: string}} cfg the van's identity in oc.remote.last */
@@ -478,6 +488,14 @@ async function rsStepLocked() {
 
 /** A scanned repair QR (spec 5.2): the phone is configured, no TTN console work. @param {string} text */
 function rsRepairQr(text) {
+  const hq = parseHubQr(text.trim());   // the van's hub QR (hub.js): the remote hub's broker and key
+  if (hq) {
+    if (!hubSaveCfg(hq)) { rsMsg = REMOTE_STORE_MSG; rsRefresh(); return; }
+    rsMsg = "";
+    goto("home");
+    refreshState(true);
+    return;
+  }
   const r = parseRepairQr(text.trim());
   if (!r) { rsMsg = "This is not the van's code."; rsRefresh(); return; }
   /** @type {Record<string, string>} */
@@ -501,7 +519,8 @@ function rsRemove() {
   rsKey = rsKeyId = "";
   rsPhase = "key";
   // and app.js's offline snapshot: a reload never shows the removed van again (oc.remote.pushes stays: TTN counts on)
-  for (const k of [REMOTE_CFG_KEY, REMOTE_SETUP_KEY, REMOTE_ENERGY_KEY, REMOTE_LAST_KEY, LAST_STATE_KEY])
+  hubStop();   // and the remote hub's link (hub.js)
+  for (const k of [REMOTE_CFG_KEY, REMOTE_SETUP_KEY, REMOTE_ENERGY_KEY, REMOTE_LAST_KEY, LAST_STATE_KEY, HUB_CFG_KEY, HUB_LORA_KEY])
     try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ }
   STATE = {};
   lastRender = "";

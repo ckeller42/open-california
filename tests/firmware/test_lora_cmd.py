@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -131,3 +132,30 @@ def test_cmd_counter_restarts_with_a_new_key():
         "-1",
         "0 airheater power on",
     ]
+
+
+def _app_seal(ctr, code):
+    """The frame of calictl/webui/hub.js ``loraSealCmd`` (the remote app's sealer), hex."""
+    node = shutil.which("node")
+    if not node:
+        (pytest.fail if os.environ.get("CI") else pytest.skip)("node not available")
+    web = Path(__file__).resolve().parents[2] / "calictl" / "webui"
+    js = (
+        'const fs=require("fs"),vm=require("vm"),c=vm.createContext({crypto:globalThis.crypto,Uint8Array,console});'
+        "for(const f of process.argv.slice(1))vm.runInContext(fs.readFileSync(f,'utf8'),c);"
+        f"vm.runInContext(`loraSealCmd('{KEY}','{EUI.upper()}',{ctr},{code}).then(f=>console.log(Array.from(f,b=>b.toString(16).padStart(2,'0')).join('')))`,c)"
+    )
+    argv = [node, "-e", js, str(web / "lora_setup.js"), str(web / "hub.js")]
+    return subprocess.run(argv, capture_output=True, text=True, check=True).stdout.strip()
+
+
+@pytest.mark.parametrize("code", [1, 2, 3, 4])
+def test_app_sealer_matches_and_opens(code):
+    """hub.js seals the same 11 bytes as WebCrypto above, and the ESP opens them.
+
+    .. test:: the remote app's LoRa command sealer (hub.js) is byte-equal and opens on the ESP
+       :id: T_FW_LORA_CMD_APP
+    """
+    f = _app_seal(300, code)
+    assert f == _seal(300, code) and len(f) == 22
+    assert _run(CTR0, _cmd(f)) == [f"0 {MAP[code]}"]

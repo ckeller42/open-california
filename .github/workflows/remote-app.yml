@@ -34,7 +34,10 @@ jobs:
         with:
           python-version: '3.12'
       - name: Build the remote app
-        run: python3 -m tools.build_remote --out _build/remote
+        # the repository variable OC_HUB_ORIGIN (wss://<broker host>[:<port>]): the remote hub's broker in connect-src
+        env:
+          HUB_ORIGIN: ${{ vars.OC_HUB_ORIGIN }}
+        run: python3 -m tools.build_remote --out _build/remote ${HUB_ORIGIN:+--hub-origin "$HUB_ORIGIN"}
       - name: Push it to open-california/open-california.github.io (branch main)
         env:
           DEPLOY_KEY: ${{ secrets.REMOTE_APP_DEPLOY_KEY }}

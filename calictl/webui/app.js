@@ -169,8 +169,8 @@
 /**
  * `/api/command` success response (serve.py::command()). Error paths (web.py) return `{ error }`
  * only, so every field is optional here. `applied`: true=verified, false=not applied, null=sent
- * but not remotely verifiable.
- * @typedef {{ ok?: boolean, applied?: boolean|null, refused?: string, state?: FnState|null, error?: string|null, function?: string, unconfirmed?: boolean }} CommandResponse
+ * but not remotely verifiable. `note`: the remote hub's sentence (hub.js: sent over LoRa, result unknown, ...).
+ * @typedef {{ ok?: boolean, applied?: boolean|null, refused?: string, state?: FnState|null, error?: string|null, function?: string, unconfirmed?: boolean, note?: string }} CommandResponse
  */
 //
 // --- FEATURES config shapes -------------------------------------------------------------------
@@ -348,6 +348,7 @@ menuEl.onclick = (ev) => {
   // (R_UI_REMOTE_APP) has its setup screens there instead.
   if (REMOTE) groups[0].push(menuItem(T("Set up LoRa"), () => remoteOpen("remotesetup")),
     menuItem(T("Scan the van's code"), () => remoteOpen("remotescan")), menuItem(T("Remove this van"), () => remoteOpen("remoteremove")));
+  if (REMOTE && hubCfg()) { const n = menuItem(T(HUB_LOCAL_MSG), closeMenu); n.disabled = true; groups[0].push(n); }
   else groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));   // also before the first answer (M1)
   if (HELP[view]) groups[1].push(menuItem(/** @type {string} */ (t("Help")), openHelp));   // per-screen help (#314)
   // Language toggle: label names the language you'd switch TO.
@@ -1047,6 +1048,7 @@ const FEATURES = {
  * @returns {Promise<any>}
  */
 async function api(path, opts) {
+  if (REMOTE && hubCfg()) return hubApi(path, opts);   // the remote hub (hub.js): over MQTT, never this origin
   remoteGuard(path);
   // Defence in depth: the satellite serves /api/state, /api/pairing and, when it accepts writes,
   // /api/command (+ /api/auto_camper if reported) -- never let any caller fan out to a calictl-only
@@ -1224,7 +1226,7 @@ function paintLink() {
   const m = STATE._meta;
   const clock = m && m.last_seen ? clockText(m.last_seen) : null;
   const ago = agoText(m && m.age_s != null ? m.age_s + (Date.now() - stateAt) / 1000 : null);
-  if (s === "lora") setStatus(tf("LoRa · {ago}", { ago: ago }), remoteProblem ? "warn" : "");   // the newest frame's age
+  if (s === "lora") setStatus(hubCfg() ? hubPill() : tf("LoRa · {ago}", { ago: ago }), remoteProblem ? "warn" : "");   // the newest frame's age
   else if (!hasWork()) setStatus(LINK_PILL[s][0], LINK_PILL[s][1]);   // a command keeps "Sending…"
   let cls = "offline", tmpl = "", tick = "ago", restNext = "";
   /** @type {Record<string, any>} */
@@ -1258,6 +1260,7 @@ function paintLink() {
     const version = m && m.remote ? m.remote.version : null;
     if (version != null) tmpl = "The van sends data in a newer format — please update the app.";
     else if (remoteProblem === "setup") tmpl = "LoRa is not set up on this phone.";
+    else if (remoteProblem === "key") tmpl = HUB_KEY_MSG;
     else if (remoteProblem === "ttn") tmpl = clock ? "The Things Stack does not answer. Last data {clock} ({ago})."
       : "The Things Stack does not answer.";
   } else if (s === "unpaired" && view !== "wifisetup" && view !== "setup") {   // WiFi setup: its unpaired banner says it once
@@ -1330,6 +1333,7 @@ let remoteAt = 0, remoteProblem = "";
 /** One TTS read (remote.js) -> the satellite-shaped body. @returns {Promise<any>} */
 async function remotePoll() {
   remoteAt = Date.now();
+  if (hubCfg()) { remoteProblem = hub.problem; return hubPoll(); }   // the remote hub (hub.js); null: unchanged
   const cfg = remoteCfg();
   if (!cfg) { remoteProblem = "setup"; throw new Error("no LoRa configuration"); }
   try {
@@ -1367,7 +1371,7 @@ async function refreshState(force) {
   // WebKit (Safari, iPhone) does not and would stack a connection per 2 s tick on the stalled core,
   // then drain them oldest-first (tests/e2e/test_satellite.py pins "at most one waiting", both engines).
   if (polling) { forceNext = forceNext || !!force; seenNext = seenNext || !!force; return; }
-  if (REMOTE && !force && Date.now() - remoteAt < REMOTE_POLL_MS) { remoteAges(); return; }   // the 2 s tick only repaints
+  if (REMOTE && !force && !hubCfg() && Date.now() - remoteAt < REMOTE_POLL_MS) { remoteAges(); return; }   // the 2 s tick only repaints
   const seen = !!force || seenNext;
   seenNext = false;
   polling = true;
@@ -1423,7 +1427,7 @@ async function refreshState(force) {
   // The setup hotspot (device.wifi.mode setup/off) or a first-time setup not done yet (device.setup.pending):
   // the app lands on the setup wizard once per load, at the step the state allows (setupStep). Back in
   // station mode WiFi setup gives way to Home (unless the join was made here: it shows the result).
-  const sat = satellite() && STATE._meta && STATE._meta.sat, wm = sat && sat.wifi ? sat.wifi.mode : null;
+  const sat = !REMOTE && satellite() && STATE._meta && STATE._meta.sat, wm = sat && sat.wifi ? sat.wifi.mode : null;
   let landed = false;
   if (STATE._meta && !landChecked) {
     landChecked = true;
@@ -1519,7 +1523,8 @@ async function processQueue() {
   const done = inflight;
   inflight = null;
   const expected = satellite() ? expectedState(done) : null;
-  if (res && res.ok && res.refused) toast(res.refused, "warn");   // physical precondition not met
+  if (res && res.note) toast(res.note, res.ok ? "ok" : "warn");   // the remote hub's word (hub.js)
+  else if (res && res.ok && res.refused) toast(res.refused, "warn");   // physical precondition not met
   else if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
   // The ESP satellite has no readback (applied is always null): confirm from the unit's own state.
   // unconfirmed (#264): the link dropped after the write left — wait out the reconnect + read-all.
@@ -3700,7 +3705,7 @@ function renderDashboard() {
     // A feature's own warn(s) doubles as the dashboard alert signal (cooler fault, roof alert):
     // non-null -> the tile gets a ⚠ badge + highlight so a fault is visible without drilling in.
     const alertMsg = f.warn ? f.warn(s) : null;
-    tile.className = "tile" + (alertMsg ? " alert" : "");
+    tile.className = "tile" + (alertMsg ? " alert" : "") + (REMOTE && hubStale(fn) ? " stale" : "");
     tile.innerHTML = (alertMsg ? `<div class="tbadge">⚠</div>` : "") +
       `<div class="ti">${iconSvg(f.icon)}</div><div class="tt">${t(f.title)}</div>` +
       `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>` +
@@ -4006,7 +4011,8 @@ function renderFeature(fn) {
   titleEl.textContent = /** @type {string} */ (t(f.title));
   if (remoteAgo(fn)) {                  // remote mode: when this function's values came over LoRa
     const b = document.createElement("div");
-    b.className = "note"; b.textContent = tf("Values via LoRa, {ago}", { ago: remoteAgo(fn) });
+    b.className = "note";
+    b.textContent = REMOTE && hubStale(fn) ? tf("Last WiFi values, {ago}", { ago: remoteAgo(fn) }) : tf("Values via LoRa, {ago}", { ago: remoteAgo(fn) });
     app.appendChild(b);
   }
   if (f.warn) {                         // dynamic FAULT banner (e.g. fridge door open) — red/alert
@@ -4357,7 +4363,7 @@ function thermoReasonShown(code) {
 }
 
 // Display-only satellites (no control path) show no card: its switches could not work there.
-const thermoWanted = () => satellite() && !readOnly() && extEntries("govee").length > 0;
+const thermoWanted = () => satellite() && !readOnly() && !REMOTE && extEntries("govee").length > 0;
 const thermoShown = () => !!THERMO && thermoWanted();
 
 /** Fetch GET /api/thermostat (404 / no Govee: no card). @returns {Promise<void>} */
@@ -4666,7 +4672,7 @@ function autoCamperCard() {
   sw.className = "switch";
   sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", "Auto camper mode");
   sw.setAttribute("aria-checked", ac.enabled ? "true" : "false");
-  sw.disabled = readOnly();
+  sw.disabled = readOnly() || REMOTE;   // a setting: only in the van's WiFi
   sw.onclick = async () => {
     sw.disabled = true;
     try {
@@ -4895,7 +4901,7 @@ if (PWA) {
 const INPUT_REPORT_MS = 30000;
 let inputAt = 0;
 function reportInput() {
-  if (!satellite() || readOnly() || Date.now() - inputAt < INPUT_REPORT_MS) return;
+  if (!satellite() || REMOTE || readOnly() || Date.now() - inputAt < INPUT_REPORT_MS) return;
   inputAt = Date.now();
   satFetch("/api/ble", { active: true }).catch(() => { /* the next input reports again */ });
 }

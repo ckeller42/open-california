@@ -139,7 +139,7 @@ def test_freshness_also_checks_the_header_text_around_the_array(tmp_path, monkey
 
 def test_remote_only_scripts_are_not_in_the_bundle():
     """The remote app's scripts (TTN client, LoRa decoder and setup, remote data source, the QR library) stay out of the ESP bundle."""
-    remote = ("remote.js", "ttn.js", "lora_decode.js", "lora_setup.js")
+    remote = ("remote.js", "ttn.js", "lora_decode.js", "lora_setup.js", "hub.js")
     assert not set(remote) & set(gen_c_dict._APP_SCRIPTS)
     html = gen_c_dict.render_app_bundle()
     for marker in (
@@ -151,6 +151,8 @@ def test_remote_only_scripts_are_not_in_the_bundle():
         "qr-scanner-worker",  # the vendored QR library (calictl/webui/vendor/qr-scanner)
         "QrScanner",
         "Talking to TTN",  # a remote-only German string (strings.remote.de.js)
+        "function hubOpen(",  # the remote hub client (hub.js)
+        "MqttClient",  # the vendored MQTT.js client (calictl/webui/vendor/mqtt)
     ):
         assert marker not in html, marker
 
@@ -164,5 +166,18 @@ def test_vendored_qr_scanner_matches_its_readme():
         )
     )
     assert set(table) == {"qr-scanner.umd.min.js", "qr-scanner-worker.min.js", "LICENSE"}
+    for name, digest in table.items():
+        assert hashlib.sha256((d / name).read_bytes()).hexdigest() == digest, name
+
+
+def test_vendored_mqtt_matches_its_readme():
+    """The vendored MQTT.js files are the ones whose sha256 the README records (calictl/webui/vendor/mqtt)."""
+    d = ROOT / "calictl" / "webui" / "vendor" / "mqtt"
+    table = dict(
+        re.findall(
+            r"^\| `([^`]+)` \| `([0-9a-f]{64})` \|$", (d / "README.md").read_text(encoding="utf-8"), re.M
+        )
+    )
+    assert set(table) == {"mqtt.min.js", "LICENSE.md"}
     for name, digest in table.items():
         assert hashlib.sha256((d / name).read_bytes()).hexdigest() == digest, name

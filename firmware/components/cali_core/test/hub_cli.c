@@ -1,6 +1,6 @@
 /* hub_cli.c — host driver for hub.c with the real PSA AES-GCM and an in-memory KV.
  * Three contexts (0..2). Lines: load i | reload i | rekey i | key i | peer i j (i gets j's key, prints ok) | seal i dir pthex |
- * lcr (LoRa command counter record) | lcset (counter 9) | open i mask (last frame) | kvfail 0/1 | setctr i n | cfgfull | flip | badver | keep | use | big i | cfg | qr van url user pass keyhex.
+ * lcr (LoRa command counter record) | lcset (counter 9) | frame hex (set the last frame) | open i mask (last frame) | kvfail 0/1 | setctr i n | cfgfull | flip | badver | keep | use | big i | cfg | qr van url user pass keyhex.
  * Output: key = hex; seal = frame hex or "0"; open = "<rc> <dir> <pthex>"; big = "<rc> <len> <ok>".
  * Driven by tests/firmware/test_hub.py. */
 #include <stdio.h>
@@ -83,6 +83,9 @@ int main(void) {
             memcpy(last, v, r), lastn = r; /* the frame "open i" and "flip" use */
             if (r) hex(v, r), putchar('\n');
             else puts("0");
+        } else if (sscanf(line, "frame %8191s", a) == 1) { /* a frame sealed elsewhere (the app) becomes the last */
+            lastn = unhex(a, last, sizeof last);
+            puts("ok");
         } else if (sscanf(line, "kvfail %d", &dir) == 1) {
             s_kv_fail = dir;
             puts("ok");

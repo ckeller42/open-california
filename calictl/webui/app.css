@@ -62,6 +62,7 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 .tile:active { transform: scale(.98); }
 .tile { position: relative; }
 /* a feature with an active fault/alert (cooler door, roof child-lock, ...) */
+.tile.stale { opacity: .55; }   /* the remote hub in LoRa mode: the last WiFi value (hub.js) */
 .tile.alert { border-color: var(--warn-text); box-shadow: 0 0 0 1px var(--warn-text) inset, var(--shadow); }   /* 3:1 on --card */
 .tile .tbadge { position: absolute; top: .5rem; right: .6rem; font-size: 1rem; line-height: 1; }
 .tile .ti { line-height: 1; }
