@@ -744,3 +744,57 @@ def test_posted_command_is_submitted_on_the_next_tick(cli):
         "SUBMIT campingmode master off lora",
     ]
     assert "LOG lora: command airheater on -> %d" % 5 in out  # the submit result is logged
+
+
+PENDING, BUSY, NOT_READY = 5, 6, 7  # enum cali_ctl_rc_e
+
+
+def _submits(out):
+    return [o for o in out if o.startswith("SUBMIT")]
+
+
+def test_command_waits_for_the_camper_link_and_is_submitted_once(cli):
+    """C1: a LoRa command that meets a resting (NOT_READY) or busy link is held on the owner task and offered again
+    every 2 s until the link takes it; once taken it is not offered again, and the next queued command follows.
+
+    .. test:: a LoRa command waits for the camper link instead of being lost
+       :id: T_FW_LORA_CMD_WAIT
+    """
+    out = run(
+        cli,
+        "submitrc %d" % NOT_READY,
+        "cmdpost airheater power on",
+        "cmdpost campingmode master on",
+        "tick 0",
+        "tick 1000",  # inside the 2 s retry step: not offered
+        "tick 2000",
+        "submitrc %d" % BUSY,
+        "tick 4000",
+        "submitrc %d" % PENDING,
+        "tick 6000",
+        "tick 8000",
+        "tick 60000",
+    )
+    assert _submits(out) == ["SUBMIT airheater power on lora"] * 4 + ["SUBMIT campingmode master on lora"]
+    assert out.count("LOG lora: command airheater on waits for the camper link") == 1
+    assert "LOG lora: command airheater on -> %d" % PENDING in out
+    assert "LOG lora: command campingmode on -> %d" % PENDING in out
+    assert not any("dropped" in o for o in out)
+
+
+def test_command_dropped_after_the_wait_with_a_log(cli):
+    """C1: a link that never becomes ready: the command is dropped after 120 s with a log line, and the next queued
+    command gets its own wait."""
+    ticks = ["tick %d" % t for t in range(0, 122001, 2000)]
+    out = run(
+        cli,
+        "submitrc %d" % NOT_READY,
+        "cmdpost airheater power off",
+        "cmdpost campingmode master off",
+        *ticks,
+    )
+    heater = [o for o in _submits(out) if "airheater" in o]
+    assert len(heater) == 61  # 0, 2, ... 120 s: the last try at the bound itself drops it
+    assert "LOG lora: command airheater off dropped: the camper link was not ready in 120 s" in out
+    assert _submits(out)[-1] == "SUBMIT campingmode master off lora"  # its own wait starts at once
+    assert not any("campingmode off dropped" in o for o in out)

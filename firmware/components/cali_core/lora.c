@@ -478,14 +478,43 @@ static cali_lora_status_t s_st = {.present = -1, .sf = 12};
 static uint64_t s_next_snap;
 static int s_was_on;
 
+/* One taken command the camper link did not accept yet (NOT_READY / BUSY): retried, never taken twice from the
+ * queue; while it waits, the queue waits behind it, so the order holds. Its counter is already spent. */
+static struct {
+    const char *fn, *what, *value;
+    uint64_t until, next;
+    int on;
+} s_owed;
+
+static void run_commands(uint64_t now_ms) {
+    const char *reason = NULL;
+    for (;;) {   /* owner task: the only caller of cali_ctl_submit */
+        if (!s_owed.on) {
+            if (!cali_lora_port_cmd_take(&s_owed.fn, &s_owed.what, &s_owed.value)) return;
+            s_owed.on = 1;
+            s_owed.until = now_ms + CALI_LORA_CMD_WAIT_MS;
+        } else if (now_ms < s_owed.next) {
+            return;
+        }
+        int r = cali_ctl_submit(s_owed.fn, s_owed.what, s_owed.value, -1, NULL, &reason, "lora");
+        if ((r == CALI_CTL_NOT_READY || r == CALI_CTL_BUSY) && now_ms < s_owed.until) {
+            if (!s_owed.next) cali_log("lora: command %s %s waits for the camper link", s_owed.fn, s_owed.value);
+            s_owed.next = now_ms + CALI_LORA_CMD_RETRY_MS;   /* submit's NOT_READY already woke the link */
+            return;
+        }
+        if (r == CALI_CTL_NOT_READY || r == CALI_CTL_BUSY)
+            cali_log("lora: command %s %s dropped: the camper link was not ready in %u s", s_owed.fn, s_owed.value,
+                     CALI_LORA_CMD_WAIT_MS / 1000u);
+        else
+            cali_log("lora: command %s %s -> %d%s%s", s_owed.fn, s_owed.value, r, reason ? " " : "", reason ? reason : "");
+        reason = NULL;
+        memset(&s_owed, 0, sizeof s_owed);
+    }
+}
+
 void cali_lora_tick(uint64_t now_ms) {
     cali_lora_status_t st;
-    const char *fn, *what, *value, *reason = NULL;
-    while (cali_lora_port_cmd_take(&fn, &what, &value)) {   /* owner task: the only caller of cali_ctl_submit */
-        int r = cali_ctl_submit(fn, what, value, -1, NULL, &reason, "lora");
-        cali_log("lora: command %s %s -> %d%s%s", fn, value, r, reason ? " " : "", reason ? reason : "");
-        reason = NULL;
-    }
+    run_commands(now_ms);
     if (cali_lora_port_status(&st)) s_st = st;
     int on = cali_exp_lora();
     if (now_ms < s_next_snap && on == s_was_on) return;   /* a switch change goes over at once */

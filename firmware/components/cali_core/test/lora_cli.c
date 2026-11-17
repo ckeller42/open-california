@@ -11,6 +11,8 @@
  *            notk (cali_lora_confirm_no_tk as hex)
  * Command:   cmd <key hex> <frame hex> (cali_lora_cmd; CALI_LORA_REAL_AEAD = PSA open, else all fail)
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
+ * Commands:  cmdpost <fn> <what> <value> (the LoRa task's post) | submitrc <n> (what cali_ctl_submit answers from
+ *            now on; default CALI_CTL_PENDING; each call prints "SUBMIT <fn> <what> <value> <src>")
  * Driven by tests/firmware/test_lora.py. Fakes: session frames, sensors, counters, clock, NVS, log. */
 #include <math.h>
 #include <stdarg.h>
@@ -65,6 +67,7 @@ uint64_t cali_uptime_ms(void) { return 0; }
 #define CMDQ_N 2
 static const char *s_cq[CMDQ_N][3];
 static int s_cq_n;
+static int s_submit_rc = CALI_CTL_PENDING;   /* "submitrc <n>": what the fake cali_ctl_submit answers */
 void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value) {
     if (s_cq_n < CMDQ_N) s_cq[s_cq_n][0] = fn, s_cq[s_cq_n][1] = what, s_cq[s_cq_n++][2] = value;
 }
@@ -78,7 +81,7 @@ int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t
                     const char **reason, const char *src) {
     (void)local_now, (void)done, (void)reason;
     printf("SUBMIT %s %s %s %s\n", fn, what, value, src);
-    return CALI_CTL_PENDING;
+    return s_submit_rc;
 }
 int cali_kv_get(const char *key, void *buf, size_t *len) {
     int i = s_kv_find(key);
@@ -263,6 +266,8 @@ int main(void) {
             size_t fl = unhex(rest2, fr, sizeof fr);
             if (cali_lora_cmd(fr, fl, k, &fn, &what, &val)) puts("-1");
             else printf("0 %s %s %s\n", fn, what, val);
+        } else if (!strcmp(cmd, "submitrc") && sscanf(rest, "%u", &u1) == 1) {
+            s_submit_rc = (int)u1;
         } else if (!strcmp(cmd, "cmdpost") && sscanf(rest, "%63s %63s %63s", b, a, rest2) == 3) {
             static char sf[8][800], sw[8][800], sv[8][800];   /* the queue keeps pointers */
             static int si;

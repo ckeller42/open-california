@@ -157,7 +157,8 @@ void cali_lora_cmd_set_open(cali_hub_open_fn open);
  * Nonce 0x04 | phone(4) | 0x00 x5 | ctr(2), AD = phone | ctr: each phone has its own 4 random bytes, so two
  * phones with the one key never share a nonce. The counter is global (one per data key, all phones): it must be
  * above the one in KV; it is stored before this returns, so the caller executes only after the replay guard has
- * moved. The last accepted counter is in /api/state (device.hub.lora_ctr): a phone sends max(own, that) + 1.
+ * moved. The last accepted counter is the top-level `lora_ctr` of the hub's state publish (GET /api/state?hub=1):
+ * a phone sends max(own, that) + 1.
  * @param p      The frame.
  * @param n      Its length; anything but CALI_LORA_CMD_LEN is rejected.
  * @param key    The 16-byte data key.
@@ -505,8 +506,18 @@ int cali_exp_lora(void);
  */
 int cali_exp_lora_set(int on);
 
+/** How long a LoRa command waits for the camper link (ms). Waking a resting link takes the 7 s unit cooldown, up to
+ * 20 s to connect and 15 s to encrypt, then the read pass: about 45 s per attempt; 120 s covers a second attempt
+ * after a failed one. Then the command is dropped and logged (its counter stays spent: fail closed). */
+#define CALI_LORA_CMD_WAIT_MS 120000u
+/** How often a waiting LoRa command is offered again (ms); the WiFi path (app.js) retries at the same pace. */
+#define CALI_LORA_CMD_RETRY_MS 2000u
+
 /**
- * @brief The owner-task tick: every CALI_LORA_SNAP_MS a snapshot to the task, and its status back.
+ * @brief The owner-task tick: posted LoRa commands to cali_ctl_submit, and every CALI_LORA_SNAP_MS a snapshot to the
+ *        task and its status back. A command the link does not take yet (CALI_CTL_NOT_READY or CALI_CTL_BUSY) is
+ *        held and offered again every CALI_LORA_CMD_RETRY_MS, for at most CALI_LORA_CMD_WAIT_MS, then dropped
+ *        with a log line; later commands wait behind it. The final result is logged.
  * @param now_ms Uptime.
  */
 void cali_lora_tick(uint64_t now_ms);
