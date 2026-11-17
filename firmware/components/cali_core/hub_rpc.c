@@ -93,8 +93,6 @@ static int str(cur_t *c, char *out, size_t cap, size_t *len) {
     *len = n;
     return 0;
 }
-/* Skips one JSON value of any type (an unknown key's), nested at most 8 deep. 0 ok, -1 malformed. A bare
- * number or literal is skipped by its characters, not validated: the router never sees it. */
 /* Skips the rest of a string whose opening quote and some of its bytes are consumed, up to and past the closing
  * quote. A backslash takes the next byte with it only if there is one. 0 ok, -1 unterminated. */
 static int skip_rest(cur_t *c) {
@@ -107,6 +105,8 @@ static int skip_rest(cur_t *c) {
     return 0;
 }
 
+/* Skips one JSON value of any type (an unknown key's), nested at most 8 deep. 0 ok, -1 malformed. A bare
+ * number or literal is skipped by its characters, not validated: the router never sees it. */
 static int skip(cur_t *c, int depth) {
     ws(c);
     if (c->p == c->end || depth > 8) return -1;
@@ -254,10 +254,12 @@ static size_t rpc_parse(cali_hub_rpc_t *st, const char *req_json, char *res_json
     if (!have_t) return err(res_json, max, id, 400, "missing_t");
     {
         int64_t now;
+        int ntp = cali_time_ts(&now) == CALI_TSRC_NTP;
         /* t <= 0 is stale at once: it keeps now - t (both then >= 0) from overflowing */
-        if (cali_time_ts(&now) == CALI_TSRC_NTP &&
-            (t <= 0 || (now > t ? now - t : t - now) > CALI_HUB_RPC_SKEW_MS))
+        if (ntp && (t <= 0 || (now > t ? now - t : t - now) > CALI_HUB_RPC_SKEW_MS))
             return err(res_json, max, id, 408, "stale");
+        /* without SNTP time only the RAM replay ring guards, and it is empty after a reboot: no state change then */
+        if (!ntp && strcmp(method, "GET") != 0) return err(res_json, max, id, 503, "no_time");
     }
     if (too_long) return err(res_json, max, id, 413, "too_long");
     {

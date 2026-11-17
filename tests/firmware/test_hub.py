@@ -309,6 +309,23 @@ def test_rpc_time_not_valid_accepts(rpc_cli):
     assert res["s"] == 200
 
 
+def test_rpc_no_state_change_without_ntp(rpc_cli):
+    """I3: without SNTP time the RAM replay ring is the only guard, and it is empty after a reboot: a command (any
+    method but GET) answers 503 no_time and never reaches the router; a GET still runs.
+
+    .. test:: hub rpc refuses a state change while the ESP has no SNTP time
+       :id: T_FW_HUB_RPC_NO_TIME
+    """
+    no_ntp = ["wifi online home 1.2.3.4 -60", "joined 1", "ctl ok"]
+    res, other = _rpc(rpc_cli, {"id": 8, "m": "POST", "p": "/api/command", "b": CMD, "t": NOW}, no_ntp)
+    assert (res["id"], res["s"], res["b"]) == (8, 503, "no_time")
+    assert not any(line.startswith("CALL submit") for line in other)
+    res, _ = _rpc(rpc_cli, {"id": 9, "m": "DELETE", "p": "/api/state", "b": None, "t": NOW}, no_ntp)
+    assert res["s"] == 403  # the R21 allowlist answers first
+    res, _ = _rpc(rpc_cli, {"id": 10, "m": "GET", "p": "/api/state", "b": None, "t": 5}, no_ntp)
+    assert res["s"] == 200
+
+
 def _get(**extra):
     return {"id": 1, "m": "GET", "p": "/api/state", "b": None, "t": NOW, **extra}
 

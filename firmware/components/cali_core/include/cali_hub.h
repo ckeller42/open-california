@@ -98,7 +98,8 @@ size_t cali_hub_seal(cali_hub_crypto_t *c, uint8_t dir, const uint8_t *pt, size_
  * several live senders in one dir (A1, B1, A2, B2) work and a replayed frame is -1. An unknown session is
  * added (the oldest entry is evicted) and its counter starts fresh.
  * Replay state lives in RAM only: it is per boot. A replay after a reboot, or of a session older than the
- * ring, is covered by the 120 s time check of the caller (the RPC layer, Task 3), not here.
+ * ring, is covered by the caller (the RPC layer): the 120 s time check with SNTP time, and without it no method
+ * but GET runs; the ESP port also drops a retained request frame.
  * @param expect_mask Bit d set = a frame with dir d is accepted (ESP: 1<<2; app: (1<<1)|(1<<3)).
  * @param dir Receives the frame's dir; may be NULL.
  * @return the plaintext length, or -1 (bad version, dir, nonce, size, tag or replay).
@@ -170,8 +171,9 @@ size_t cali_hub_qr_text(char *out, size_t max, const cali_hub_cfg_t *cfg, const 
  *
  * Status: 400 bad request (not that JSON, an unknown method, a path without a leading '/', no `t`), 404 no
  * such route (empty body), 408 `stale` (SNTP time valid and |now - t| > CALI_HUB_RPC_SKEW_MS), 413 body too
- * long, 500 the answer does not fit `max`, 504 pending too long. Without SNTP time the `t` check is skipped
- * (the replay ring of cali_hub_open is then the only guard). The 2.7 KB work buffer is on the heap (PSRAM first on the ESP) for the call. A `\u0000` in a string and a
+ * long, 500 the answer does not fit `max`, 503 `no_time` (a method other than GET without SNTP time), 504
+ * pending too long. Without SNTP time the `t` check is skipped and only GETs run: the replay ring of
+ * cali_hub_open is then the only guard, and it is empty after a reboot (ruling R8), so no state change runs. The 2.7 KB work buffer is on the heap (PSRAM first on the ESP) for the call. A `\u0000` in a string and a
  * duplicate known key are 400; unknown keys are ignored.
  * @param req_json The request plaintext, NUL-terminated.
  * @param res_json Receives the answer, NUL-terminated.

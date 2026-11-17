@@ -53,9 +53,9 @@ void cali_random(void *buf, size_t len) {
     fclose(f);
 }
 uint64_t cali_uptime_ms(void) { return s_now; }
-int cali_time_ts(int64_t *out) {
-    *out = 0;
-    return CALI_TSRC_NONE;
+int cali_time_ts(int64_t *out) {   /* SNTP time, fixed: a POST over the hub runs only with it */
+    *out = 1700000000000LL;
+    return CALI_TSRC_NTP;
 }
 void cali_log(const char *fmt, ...) {
     va_list ap;

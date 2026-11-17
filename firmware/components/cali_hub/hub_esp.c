@@ -102,6 +102,10 @@ static void rx_data(client_t *c, const esp_mqtt_event_t *e) {
         heap_caps_free(c->rx.buf);
         c->rx.buf = NULL;
         if (e->topic_len != (int)strlen(c->topic[T_REQ]) || memcmp(e->topic, c->topic[T_REQ], (size_t)e->topic_len)) return;
+        if (e->retain) {   /* the app never retains a request: a retained one would run again at every subscribe */
+            cali_log("hub: retained request dropped");
+            return;
+        }
         if (e->total_data_len <= 0 || e->total_data_len > CALI_HUB_REQ_MAX) {
             cali_log("hub: request of %d bytes dropped", e->total_data_len);
             return;

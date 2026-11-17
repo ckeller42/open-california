@@ -56,6 +56,7 @@
  *   pwinit           cali_pw_init (the Pi-wake toggle from the kv store, as at boot)
  *   ign <-1|0|1>     cali_pw_step(<ignition>, the clock): the Pi wake's edge rule (R_FW_PI_WAKE)
  *   ntp <epoch_ms>   SNTP synced at this (fixed) wall clock: cali_time_ts answers it (R_FW_BLE_EXP)
+ *   unitclock <hex>  cali_time_on_vehicle(<the 1004 frame>): the unit's clock, without SNTP
  *   bxtick           cali_ble_exp_tick(the clock): one step of the BLE experiment
  *   bxinit           cali_ble_exp_init (the idle policy from the kv store, as at boot: R_FW_BLE_IDLE)
  *   pwtick           cali_pw_tick(the clock): ends a pulse that is due (the session is never ready here,
@@ -553,6 +554,15 @@ int main(void) {
             s_epoch_ms = (int64_t)ms;
             cali_time_source(fake_epoch);
             cali_time_synced();
+        }
+        else if (strcmp(w, "unitclock") == 0) {
+            uint8_t f[16];
+            size_t n = 0;
+            for (const char *h = a1; h[0] && h[1] && n < sizeof f; h += 2) {
+                char b[3] = {h[0], h[1], 0};
+                f[n++] = (uint8_t)strtoul(b, NULL, 16);
+            }
+            cali_time_on_vehicle(f, n);
         }
         else if (strcmp(w, "phhalt") == 0) printf("PHHALT %d\n", cali_ph_halt("manual"));
         else if (strcmp(w, "battlow") == 0)

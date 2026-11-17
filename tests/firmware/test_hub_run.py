@@ -14,7 +14,7 @@ from .conftest import build_host
 
 pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
 
-CMD = {"id": 1, "m": "POST", "p": "/api/command", "b": "{}", "t": 1}
+CMD = {"id": 1, "m": "POST", "p": "/api/command", "b": "{}", "t": 1_700_000_000_000}  # the fake SNTP clock
 
 
 def _run(*lines):

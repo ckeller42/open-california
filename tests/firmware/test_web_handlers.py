@@ -942,6 +942,8 @@ def test_post_root_is_not_served(web_cli):
 STATION = ["wifi online minsel 192.168.1.23 -61"]
 CMD = '{"function":"cooler","what":"power","value":"on","confirm":true}'
 OK = {"ok": True, "applied": None, "state": None, "error": None, "function": "cooler"}
+HUB_NOW = 1_700_000_000_000
+HUB_STATION = [*STATION, "ntp %d" % HUB_NOW]  # a command over the hub runs only with SNTP time (503 no_time)
 NOT_STATION = [("setup_ap", 0), ("setup_ap_retrying", 0), ("connecting", 0), ("unprovisioned", 0)]
 
 
@@ -3806,16 +3808,33 @@ def test_hub_state_publish_carries_its_time_and_the_lora_counter(web_cli):
     assert "hub_t" not in plain and "lora_ctr" not in plain
 
 
+def test_hub_state_publish_has_no_time_from_the_unit_clock(web_cli):
+    """I2: ``hub_t`` comes only from SNTP time; the unit clock (1004 CarTime*) can be hours off, and the app keeps the
+    newest hub_t it saw, so with only the unit clock the publish says null."""
+    frame = "80" + bytes([126, 9, 11, 14, 30, 5, 0, 0, 0, 0]).hex()  # 1004, ignition on, 2026-10-11 14:30:05
+    resps, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"unitclock " + frame.encode(),
+            req("GET", "/api/state?hub=1&diag=1"),
+        ],
+    )
+    st = resps[0].json()
+    assert st["hub_t"] is None
+    assert st["device"]["time"]["source"] == "unit"  # the unit clock really is set
+
+
 def test_second_command_while_one_is_pending_is_409_and_keeps_the_first(web_cli):
     """Ruling R18: two channels (HTTP and the hub RPC) share api_command's one pending slot. A new
     command while one is pending answers 409 busy at once and never touches that slot, so the first
     requester still gets its own result."""
-    first = json.dumps({"id": 5, "m": "POST", "p": "/api/command", "b": CMD, "t": 1})
+    first = json.dumps({"id": 5, "m": "POST", "p": "/api/command", "b": CMD, "t": HUB_NOW})
     other_cmd = '{"function":"roof","what":"position","value":"open","confirm":true}'
     resps, other = drive(
         web_cli,
         [
-            *(s.encode() for s in STATION),
+            *(s.encode() for s in HUB_STATION),
             b"ctl pending",
             b"ctldone ok 40",
             b"rpcbegin " + first.encode(),
@@ -3834,12 +3853,12 @@ def test_command_slot_stays_busy_until_its_owner_collects(web_cli):
     """Ruling R19: the slot is held from the submit until the owner's resume collected the result. A
     finished but uncollected command still makes a new one 409; the owner then gets its own result,
     and after that a new command is accepted."""
-    first = json.dumps({"id": 6, "m": "POST", "p": "/api/command", "b": CMD, "t": 1})
+    first = json.dumps({"id": 6, "m": "POST", "p": "/api/command", "b": CMD, "t": HUB_NOW})
     roof = '{"function":"roof","what":"position","value":"open","confirm":true}'
     resps, other = drive(
         web_cli,
         [
-            *(s.encode() for s in STATION),
+            *(s.encode() for s in HUB_STATION),
             b"ctl pending",
             b"ctldone ok 1",
             b"rpcbegin " + first.encode(),
@@ -3859,12 +3878,12 @@ def test_command_slot_stays_busy_until_its_owner_collects(web_cli):
 
 def test_an_uncollected_command_frees_the_slot_after_60_s(web_cli):
     """A requester that never resumes holds the slot at most CALI_HUB_RPC_PENDING_MS after its submit."""
-    first = json.dumps({"id": 7, "m": "POST", "p": "/api/command", "b": CMD, "t": 1})
+    first = json.dumps({"id": 7, "m": "POST", "p": "/api/command", "b": CMD, "t": HUB_NOW})
     roof = '{"function":"roof","what":"position","value":"open","confirm":true}'
     resps, other = drive(
         web_cli,
         [
-            *(s.encode() for s in STATION),
+            *(s.encode() for s in HUB_STATION),
             b"now 1000",
             b"ctl pending",
             b"ctldone ok 1",
@@ -3881,12 +3900,12 @@ def test_an_uncollected_command_frees_the_slot_after_60_s(web_cli):
 def _slot_boundary(web_cli, at_ms):
     """A hub command submitted at 1000 and finished but not collected; at `at_ms` (the handler's clock) a
     second command arrives over HTTP, then the hub re-asks at that clock."""
-    first = json.dumps({"id": 8, "m": "POST", "p": "/api/command", "b": CMD, "t": 1})
+    first = json.dumps({"id": 8, "m": "POST", "p": "/api/command", "b": CMD, "t": HUB_NOW})
     roof = '{"function":"roof","what":"position","value":"open","confirm":true}'
     resps, other = drive(
         web_cli,
         [
-            *(s.encode() for s in STATION),
+            *(s.encode() for s in HUB_STATION),
             b"now 1000",
             b"ctl pending",
             b"ctldone ok 1",
