@@ -340,6 +340,18 @@ int cali_display_ready(void) { return s_ok; }
 
 int cali_display_lora_shown(void) { return __atomic_load_n(&s_lora_shown, __ATOMIC_RELAXED); }
 
+int cali_display_qr_mask_area(int *x1, int *y1, int *x2, int *y2) {
+    lv_area_t a;
+    if (!__atomic_load_n(&s_lora_shown, __ATOMIC_RELAXED)) return 0;
+    if (s_lora_show == 4) return 0;   /* the app QR: a plain URL, no secret (ruling R46) */
+    if (!s_lqr) return -1;            /* any other state: fail closed */
+    lv_obj_update_layout(s_lqr);      /* the width the painter just set (the app QR's box) is applied */
+    lv_obj_get_coords(s_lqr, &a);
+    if (a.x2 < a.x1 || a.y2 < a.y1) return -1;
+    *x1 = a.x1, *y1 = a.y1, *x2 = a.x2, *y2 = a.y2;
+    return 1;
+}
+
 #if CONFIG_LV_USE_GESTURE_RECOGNITION
 #error "touch_read replaces esp_lvgl_port's read, which also feeds LVGL's gesture recognizers"
 #endif

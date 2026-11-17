@@ -61,7 +61,9 @@
  *    (alphanumeric mode, error correction L, whole pixels per module, a 4-module quiet zone, black on
  *    white) waits behind "Preparing…" until the QR text exists and no setup request is pending, under
  *    the scan hint, beside one status line (joined or not, the age of the last uplink the module
- *    confirmed with ``TX_DONE``), EN + DE. No screenshot frame is sent while it is up.
+ *    confirmed with ``TX_DONE``), EN + DE. A screenshot taken while it is up masks a QR that holds keys
+ *    (repair, setup, hub QR) with solid grey before the frame leaves the device, and sends no frame when
+ *    it cannot (ruling R46); the app QR is sent as it is.
  * @endverbatim
  */
 #ifndef CALI_DISPLAY_MODEL_H
@@ -269,6 +271,25 @@ void cali_display_model_init(cali_display_model_t *m);
 void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_t now_ms, int lang,
                         const cali_display_in_t *in, const cali_display_cfg_t *cfg, const char *ap_qr,
                         cali_display_view_t *out);
+
+/** @brief The grey a screenshot paints over a secret QR (RGB565 mid-grey, ruling R46). */
+#define CALI_SHOT_MASK_RGB565 0x8410u
+
+/**
+ * @brief Fills the rectangle x1..x2, y1..y2 (inclusive, screen pixels) of an RGB565 frame with `color`,
+ *        clipped to the frame: the screenshot's mask over a QR that holds keys (ruling R46).
+ * @param buf The frame, `h` rows of `stride` bytes.
+ * @param w Frame width in pixels.
+ * @param h Frame height in pixels.
+ * @param stride Bytes per row.
+ * @param x1 Left edge.
+ * @param y1 Top edge.
+ * @param x2 Right edge.
+ * @param y2 Bottom edge.
+ * @param color The RGB565 value to write.
+ * @return The number of pixels written.
+ */
+long cali_shot_mask(uint8_t *buf, int w, int h, int stride, int x1, int y1, int x2, int y2, uint16_t color);
 
 /**
  * @brief The touch read filter, run in LVGL's task.

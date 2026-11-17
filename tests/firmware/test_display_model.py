@@ -939,3 +939,39 @@ def test_app_and_hub_qr_close(cli, n, show):
     assert [x["show"] for x in v[-2:]] == [show, "0"]
     v = run(cli, *opened, BASE + f" now={since + 1000} lora=0 hub=0 auto=0 max=60")
     assert v[-1]["show"] == "0"
+
+
+MASK_MAIN = r"""
+#include <stdio.h>
+#include <string.h>
+#include "cali_display_model.h"
+int main(void) {
+    static uint8_t buf[8 * 2 * 4];   /* 8 x 4 pixels, stride 16 */
+    long n;
+    memset(buf, 0x11, sizeof buf);
+    n = cali_shot_mask(buf, 8, 4, 16, 6, -3, 20, 1, CALI_SHOT_MASK_RGB565);   /* clipped: x 6..7, y 0..1 */
+    printf("%ld", n);
+    for (int y = 0; y < 4; y++) {
+        putchar(' ');
+        for (int x = 0; x < 8; x++) putchar(buf[y * 16 + 2 * x] == 0x10 && buf[y * 16 + 2 * x + 1] == 0x84 ? 'G' : '.');
+    }
+    printf(" %ld\n", cali_shot_mask(buf, 8, 4, 16, 9, 0, 12, 3, CALI_SHOT_MASK_RGB565));   /* off the frame: none */
+    return 0;
+}
+"""
+
+
+def test_shot_mask_fills_the_rectangle_clipped_to_the_frame(tmp_path):
+    """Ruling R46: the screenshot greys out a secret QR's rectangle, clipped to the frame, little-endian
+    RGB565; a rectangle off the frame writes nothing (shot.c then refuses the frame)."""
+    cc = shutil.which("cc") or pytest.skip("no C compiler")
+    (tmp_path / "m.c").write_text(MASK_MAIN)
+    exe = tmp_path / "m"
+    subprocess.run(
+        [cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-I", str(CORE / "include"), "-I", str(PLATFORM / "include"),
+         "-I", str(ROOT / "csrc"), "-I", str(ROOT / "firmware/web"), str(CORE / "display_model.c"),
+         str(CORE / "ap_identity.c"), str(PLATFORM / "host/platform_host.c"), str(tmp_path / "m.c"), "-o", str(exe), "-lm"],
+        check=True,
+    )  # fmt: skip
+    out = subprocess.run([str(exe)], capture_output=True, text=True, check=True).stdout.split()
+    assert out == ["4", "......GG", "......GG", "........", "........", "0"]

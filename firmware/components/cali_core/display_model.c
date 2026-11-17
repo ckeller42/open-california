@@ -452,6 +452,22 @@ void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_
     wake_and_brightness(m, now_ms, in, cfg, out);
 }
 
+long cali_shot_mask(uint8_t *buf, int w, int h, int stride, int x1, int y1, int x2, int y2, uint16_t color) {
+    long n = 0;
+    if (x1 < 0) x1 = 0;
+    if (y1 < 0) y1 = 0;
+    if (x2 >= w) x2 = w - 1;
+    if (y2 >= h) y2 = h - 1;
+    for (int y = y1; y <= y2; y++) {
+        uint8_t *row = buf + (size_t)y * (size_t)stride;
+        for (int x = x1; x <= x2; x++, n++) {   /* little-endian RGB565, as LVGL stores it */
+            row[2 * x] = (uint8_t)(color & 0xff);
+            row[2 * x + 1] = (uint8_t)(color >> 8);
+        }
+    }
+    return n;
+}
+
 int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake, int read_ok) {
     if (!read_ok) return 0;   /* a failed read: "released" for the widgets, but the press (and its swallow) goes on */
     if (!pressed) *swallow = 0;

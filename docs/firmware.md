@@ -1850,8 +1850,13 @@ The status screen has one hidden second screen, for the LoRa setup ([LoRaWAN tel
   LVGL 9.6.0 encodes in byte mode at error correction M and keeps a copy of the text on the heap.
 - **Keys stay off the wire:** the QR text exists only for the paint (polled once a second, repainted
   only when it changes, wiped at once; a 32-bit hash tells a change). The bitmap is cleared when the
-  screen closes. While it is up, the console `screenshot` sends no frame
-  (`LOG display: screenshot failed (lora screen)`), and no log line carries any part of the text.
+  screen closes. The console `screenshot` works while it is up (ruling R46): the app QR (no secret)
+  is sent as it is; for the repair, LoRa setup and hub QR, the QR canvas's screen rectangle (quiet zone
+  included, read from LVGL under the same lock as the snapshot) is painted solid grey in the PSRAM copy
+  before encoding (`cali_shot_mask`), with `LOG display: screenshot (QR masked)`, so no module of the
+  code leaves the device; the side texts stay for the layout check. Fail closed: when the rectangle
+  cannot be read or the mask writes nothing, no frame is sent
+  (`LOG display: screenshot failed (lora screen)`). No log line carries any part of the text.
 
 ## Remote hub (`cali_hub`)
 
@@ -2698,8 +2703,8 @@ collected here. `firmware/README.md` has the human-readable version of the same 
   closes it, the rotation press, nothing without the module, the texts in EN + DE) and
   `T_FW_LORA_SETUP_QR` (`tests/firmware/test_lora.py`: the setup QR text also after the TTN keys
   arrived, none and a zeroed buffer without a transfer key or on a store error). The LVGL view (the
-  press clock in the touch read, the QR canvas, the poll, the screenshot refusal) is compiled, not yet
-  run on the board.
+  press clock in the touch read, the QR canvas, the poll, the screenshot mask) is compiled, not yet
+  run on the board; the mask's rectangle fill is `test_shot_mask_fills_the_rectangle_clipped_to_the_frame`.
 - **`R_FW_SENSORS`** — verified by `T_FW_SENSORS_CORE` (`tests/firmware/test_sensors.py`: both Govee
   layouts, the seen table (16 rows, unknown manufacturer ids ignored, boot-local ids), add / rename /
   remove rules, the list surviving a reboot, the `ext` record and its once-a-minute limit, the
