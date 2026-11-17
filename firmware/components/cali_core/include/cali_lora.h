@@ -508,7 +508,8 @@ int cali_exp_lora_set(int on);
 
 /** How long a LoRa command waits for the camper link (ms). Waking a resting link takes the 7 s unit cooldown, up to
  * 20 s to connect and 15 s to encrypt, then the read pass: about 45 s per attempt; 120 s covers a second attempt
- * after a failed one. Then the command is dropped and logged (its counter stays spent: fail closed). */
+ * after a failed one, counted from the command's arrival (the port stamps it). Then the command is dropped and
+ * logged (its counter stays spent: fail closed). */
 #define CALI_LORA_CMD_WAIT_MS 120000u
 /** How often a waiting LoRa command is offered again (ms); the WiFi path (app.js) retries at the same pace. */
 #define CALI_LORA_CMD_RETRY_MS 2000u
@@ -516,11 +517,19 @@ int cali_exp_lora_set(int on);
 /**
  * @brief The owner-task tick: posted LoRa commands to cali_ctl_submit, and every CALI_LORA_SNAP_MS a snapshot to the
  *        task and its status back. A command the link does not take yet (CALI_CTL_NOT_READY or CALI_CTL_BUSY) is
- *        held and offered again every CALI_LORA_CMD_RETRY_MS, for at most CALI_LORA_CMD_WAIT_MS, then dropped
- *        with a log line; later commands wait behind it. The final result is logged.
+ *        held and offered again every CALI_LORA_CMD_RETRY_MS until CALI_LORA_CMD_WAIT_MS after its arrival, then
+ *        dropped with a log line; later commands wait behind it. The final result is logged. With the switch
+ *        `exp_lora` off (also after cali_lora_forget) every held and queued command is dropped (cali_lora_cmds_drop).
  * @param now_ms Uptime.
  */
 void cali_lora_tick(uint64_t now_ms);
+/**
+ * @brief Drop the held LoRa command and every queued one, with one log line when there was any. Owner task only.
+ *        Called when the switch is off, after a new data key (cali_hub_new_key) and when a newer command from
+ *        WiFi (HTTP or the hub) was accepted: the newer intent wins.
+ * @param why The reason, for the log line.
+ */
+void cali_lora_cmds_drop(const char *why);
 /**
  * @brief Write `device.lora` from the last status (only call while the switch is on).
  * @param j The writer.
@@ -548,9 +557,10 @@ void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value
  * @param fn Out: control function.
  * @param what Out: command name.
  * @param value Out: value text.
+ * @param at_ms Out: cali_uptime_ms() when it was posted (its arrival).
  * @return 1 when one was waiting, else 0.
  */
-int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value);
+int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value, uint64_t *at_ms);
 /**
  * @brief Hand a snapshot to the LoRa task (it keeps the newest).
  * @param s The snapshot.

@@ -803,6 +803,7 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
                              cmd_done, &reason, "web");
         if (rc == CALI_CTL_PENDING) {
             s_cmd_held = 1, s_cmd_at = cali_uptime_ms();
+            cali_lora_cmds_drop("a newer WiFi command runs");   /* a held LoRa command must not undo it later */
             return CALI_HTTP_PENDING;
         }
         s_cmd = rc;

@@ -11,8 +11,9 @@
  *            notk (cali_lora_confirm_no_tk as hex)
  * Command:   cmd <key hex> <frame hex> (cali_lora_cmd; CALI_LORA_REAL_AEAD = PSA open, else all fail)
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
- * Commands:  cmdpost <fn> <what> <value> (the LoRa task's post) | submitrc <n> (what cali_ctl_submit answers from
- *            now on; default CALI_CTL_PENDING; each call prints "SUBMIT <fn> <what> <value> <src>")
+ * Commands:  cmdpost <fn> <what> <value> [at_ms] (the LoRa task's post; arrival stamp, default 0) |
+ *            cmddrop <why> (cali_lora_cmds_drop) | submitrc <n> (what cali_ctl_submit answers from now on;
+ *            default CALI_CTL_PENDING; each call prints "SUBMIT <fn> <what> <value> <src>")
  * Driven by tests/firmware/test_lora.py. Fakes: session frames, sensors, counters, clock, NVS, log. */
 #include <math.h>
 #include <stdarg.h>
@@ -66,14 +67,17 @@ uint32_t cali_time_boot(void) { return s_boot; }
 uint64_t cali_uptime_ms(void) { return 0; }
 #define CMDQ_N 2
 static const char *s_cq[CMDQ_N][3];
+static uint64_t s_cq_at[CMDQ_N];
+static uint64_t s_post_at;   /* the arrival stamp of the next cmdpost */
 static int s_cq_n;
 static int s_submit_rc = CALI_CTL_PENDING;   /* "submitrc <n>": what the fake cali_ctl_submit answers */
 void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value) {
-    if (s_cq_n < CMDQ_N) s_cq[s_cq_n][0] = fn, s_cq[s_cq_n][1] = what, s_cq[s_cq_n++][2] = value;
+    if (s_cq_n < CMDQ_N) s_cq_at[s_cq_n] = s_post_at, s_cq[s_cq_n][0] = fn, s_cq[s_cq_n][1] = what, s_cq[s_cq_n++][2] = value;
 }
-int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value) {
+int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value, uint64_t *at_ms) {
     if (!s_cq_n) return 0;
-    *fn = s_cq[0][0], *what = s_cq[0][1], *value = s_cq[0][2];
+    *fn = s_cq[0][0], *what = s_cq[0][1], *value = s_cq[0][2], *at_ms = s_cq_at[0];
+    memmove(s_cq_at, s_cq_at + 1, sizeof s_cq_at[0] * (size_t)(s_cq_n - 1));
     memmove(s_cq, s_cq + 1, sizeof s_cq[0] * (size_t)--s_cq_n);
     return 1;
 }
@@ -266,12 +270,16 @@ int main(void) {
             size_t fl = unhex(rest2, fr, sizeof fr);
             if (cali_lora_cmd(fr, fl, k, &fn, &what, &val)) puts("-1");
             else printf("0 %s %s %s\n", fn, what, val);
+        } else if (!strcmp(cmd, "cmddrop")) {
+            cali_lora_cmds_drop(rest);
         } else if (!strcmp(cmd, "submitrc") && sscanf(rest, "%u", &u1) == 1) {
             s_submit_rc = (int)u1;
         } else if (!strcmp(cmd, "cmdpost") && sscanf(rest, "%63s %63s %63s", b, a, rest2) == 3) {
             static char sf[8][800], sw[8][800], sv[8][800];   /* the queue keeps pointers */
             static int si;
             snprintf(sf[si % 8], 800, "%s", b), snprintf(sw[si % 8], 800, "%s", a), snprintf(sv[si % 8], 800, "%s", rest2);
+            unsigned long long at = 0;
+            s_post_at = sscanf(rest, "%*s %*s %*s %llu", &at) == 1 ? at : 0;
             cali_lora_port_cmd_post(sf[si % 8], sw[si % 8], sv[si % 8]);
             si++;
         } else if (!strcmp(cmd, "kvcorrupt")) {

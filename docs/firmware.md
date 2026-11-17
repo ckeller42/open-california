@@ -1867,7 +1867,9 @@ through it, so the app reaches the van from anywhere. Owner setup and operation:
   makes a new data key (every phone then scans the new QR, and the bridge's `HUB_KEY` secret changes).
 - **LoRa commands:** FPort 20, 15 bytes (phone id, counter, command, tag); see
   [LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora). A command the camper link does not take yet
-  (not ready or busy) is offered again every 2 s for up to 120 s, then dropped with a log line.
+  (not ready or busy) is offered again every 2 s until 120 s after its arrival, then dropped with a
+  log line. LoRa off (or `lora forget`), a new data key and an accepted newer WiFi command drop every
+  held LoRa command.
 
 ## Battery (`R_FW_BATTERY`)
 

@@ -479,24 +479,40 @@ static uint64_t s_next_snap;
 static int s_was_on;
 
 /* One taken command the camper link did not accept yet (NOT_READY / BUSY): retried, never taken twice from the
- * queue; while it waits, the queue waits behind it, so the order holds. Its counter is already spent. */
+ * queue; while it waits, the queue waits behind it, so the order holds. Its counter is already spent. `until` is
+ * CALI_LORA_CMD_WAIT_MS after its arrival (the port's stamp), so a command that waited in the queue gets no more. */
 static struct {
     const char *fn, *what, *value;
     uint64_t until, next;
     int on;
 } s_owed;
 
+void cali_lora_cmds_drop(const char *why) {
+    const char *fn, *what, *value;
+    uint64_t at;
+    unsigned n = s_owed.on ? 1u : 0u;
+    memset(&s_owed, 0, sizeof s_owed);
+    while (cali_lora_port_cmd_take(&fn, &what, &value, &at)) n++;
+    if (n) cali_log("lora: %u held command%s dropped: %s", n, n == 1 ? "" : "s", why);
+}
+
 static void run_commands(uint64_t now_ms) {
     const char *reason = NULL;
+    uint64_t at;
+    if (!cali_exp_lora()) {   /* switched off or forgotten (cali_lora_forget turns the switch off first) */
+        cali_lora_cmds_drop("LoRa is off");
+        return;
+    }
     for (;;) {   /* owner task: the only caller of cali_ctl_submit */
         if (!s_owed.on) {
-            if (!cali_lora_port_cmd_take(&s_owed.fn, &s_owed.what, &s_owed.value)) return;
+            if (!cali_lora_port_cmd_take(&s_owed.fn, &s_owed.what, &s_owed.value, &at)) return;
             s_owed.on = 1;
-            s_owed.until = now_ms + CALI_LORA_CMD_WAIT_MS;
+            s_owed.until = at + CALI_LORA_CMD_WAIT_MS;
         } else if (now_ms < s_owed.next) {
             return;
         }
-        int r = cali_ctl_submit(s_owed.fn, s_owed.what, s_owed.value, -1, NULL, &reason, "lora");
+        int r = CALI_CTL_NOT_READY;
+        if (now_ms < s_owed.until) r = cali_ctl_submit(s_owed.fn, s_owed.what, s_owed.value, -1, NULL, &reason, "lora");
         if ((r == CALI_CTL_NOT_READY || r == CALI_CTL_BUSY) && now_ms < s_owed.until) {
             if (!s_owed.next) cali_log("lora: command %s %s waits for the camper link", s_owed.fn, s_owed.value);
             s_owed.next = now_ms + CALI_LORA_CMD_RETRY_MS;   /* submit's NOT_READY already woke the link */

@@ -85,3 +85,5 @@ def test_key_failure_retries_every_30_s_and_reports_it():
 def test_a_new_key_republishes_under_it():
     out = _run(*UP, "mark", "newkey", "tick 1100")
     assert _posts(out[out.index("MARK") :]) == ['POST state {"st":2}']  # the fake app took the new key
+    # a LoRa command held under the old key does not run (cali_lora_cmds_drop)
+    assert "DROP new data key" in out

@@ -66,6 +66,7 @@ void cali_log(const char *fmt, ...) {
     putchar('\n');
 }
 int cali_http_busy(void) { return s_busy; }
+void cali_lora_cmds_drop(const char *why) { printf("DROP %s\n", why); }   /* lora.c is not linked here */
 
 /* ---- the fake router ---- */
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {

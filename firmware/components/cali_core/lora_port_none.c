@@ -1,14 +1,26 @@
 /* lora_port_none.c — the LoRa port where there is no module driver: the host build, QEMU and the host
  * tests (R_FW_LORA). The device build links cali_lora's lora_esp.c instead. The module reads "absent". */
 #include "cali_lora.h"
+#include "cali_platform.h"
 
 void cali_lora_port_post(const cali_lora_snap_t *s) { (void)s; }
 
-void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value) { (void)fn, (void)what, (void)value; }
+/* No module posts here; the one-slot queue lets a host test hand the owner task a command (web_cli "loracmd"). */
+static struct {
+    const char *fn, *what, *value;
+    uint64_t at;
+    int on;
+} s_cmd;
 
-int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value) {
-    (void)fn, (void)what, (void)value;
-    return 0;
+void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value) {
+    if (!s_cmd.on) s_cmd.fn = fn, s_cmd.what = what, s_cmd.value = value, s_cmd.at = cali_uptime_ms(), s_cmd.on = 1;
+}
+
+int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value, uint64_t *at_ms) {
+    if (!s_cmd.on) return 0;
+    *fn = s_cmd.fn, *what = s_cmd.what, *value = s_cmd.value, *at_ms = s_cmd.at;
+    s_cmd.on = 0;
+    return 1;
 }
 
 int cali_lora_port_status(cali_lora_status_t *out) {

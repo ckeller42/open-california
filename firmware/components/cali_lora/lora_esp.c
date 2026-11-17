@@ -84,17 +84,18 @@ static void publish(void) {
 
 typedef struct {
     const char *fn, *what, *value;
+    uint64_t at;   /* arrival: the owner task's wait bound counts from it */
 } cmd_msg_t;
 
 void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value) {
-    cmd_msg_t m = {fn, what, value};
+    cmd_msg_t m = {fn, what, value, cali_uptime_ms()};
     if (!s_cmd_q || xQueueSend(s_cmd_q, &m, 0) != pdTRUE) cali_log("lora: command queue full: dropped");
 }
 
-int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value) {
+int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value, uint64_t *at_ms) {
     cmd_msg_t m;
     if (!s_cmd_q || xQueueReceive(s_cmd_q, &m, 0) != pdTRUE) return 0;
-    *fn = m.fn, *what = m.what, *value = m.value;
+    *fn = m.fn, *what = m.what, *value = m.value, *at_ms = m.at;
     return 1;
 }
 

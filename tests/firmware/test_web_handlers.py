@@ -969,6 +969,20 @@ def test_command_pends_until_the_write_completes(web_cli):
     ]  # 200 only after done: PENDING would be 502
 
 
+def test_accepted_wifi_command_drops_a_held_lora_command(web_cli):
+    """A command from WiFi (HTTP or the hub) that the sequencer accepted drops a held LoRa command: the newer intent
+    wins, a stale LoRa "heater on" must not undo a later "off". A refused one leaves it.
+
+    .. test:: an accepted WiFi command drops held LoRa commands
+       :id: T_FW_COMMAND_DROPS_LORA
+    """
+    _, other = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "loracmd", "ctl busy"])
+    assert not any("held command" in line for line in other)
+    setup = [*STATION, "loracmd", "ctl pending", "ctldone ok 1"]
+    _, other = one(web_cli, "POST", "/api/command", CMD, setup=setup)
+    assert "LOG lora: 1 held command dropped: a newer WiFi command runs" in other
+
+
 def test_command_answer_waits_many_polls(web_cli):
     """A done callback 300 polls (3 s of driver time) in is still waited for — no idle timeout."""
     r, other = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "ctl pending", "ctldone ok 300"])

@@ -738,7 +738,8 @@ def test_posted_command_is_submitted_on_the_next_tick(cli):
     .. test:: a posted LoRa command is submitted by the owner task's tick
        :id: T_FW_LORA_CMD_TICK
     """
-    out = run(cli, "cmdpost airheater power on", "cmdpost campingmode master off", "tick 0", "tick 1")
+    posts = ("cmdpost airheater power on", "cmdpost campingmode master off")
+    out = run(cli, "console on", *posts, "tick 0", "tick 1")
     assert [o for o in out if o.startswith("SUBMIT")] == [
         "SUBMIT airheater power on lora",
         "SUBMIT campingmode master off lora",
@@ -762,6 +763,7 @@ def test_command_waits_for_the_camper_link_and_is_submitted_once(cli):
     """
     out = run(
         cli,
+        "console on",
         "submitrc %d" % NOT_READY,
         "cmdpost airheater power on",
         "cmdpost campingmode master on",
@@ -783,18 +785,70 @@ def test_command_waits_for_the_camper_link_and_is_submitted_once(cli):
 
 
 def test_command_dropped_after_the_wait_with_a_log(cli):
-    """C1: a link that never becomes ready: the command is dropped after 120 s with a log line, and the next queued
-    command gets its own wait."""
-    ticks = ["tick %d" % t for t in range(0, 122001, 2000)]
+    """C1: a link that never becomes ready: the command is dropped 120 s after its arrival with a log line. The next
+    command's 120 s also count from its own arrival, not from when it left the queue.
+
+    .. test:: a held LoRa command is dropped 120 s after its arrival
+       :id: T_FW_LORA_CMD_BOUND
+    """
     out = run(
         cli,
+        "console on",
         "submitrc %d" % NOT_READY,
-        "cmdpost airheater power off",
-        "cmdpost campingmode master off",
-        *ticks,
+        "cmdpost airheater power off 0",
+        *("tick %d" % t for t in range(0, 30001, 2000)),
+        "cmdpost campingmode master off 30000",  # arrives while the heater command is held
+        *("tick %d" % t for t in range(32000, 152001, 2000)),
     )
     heater = [o for o in _submits(out) if "airheater" in o]
-    assert len(heater) == 61  # 0, 2, ... 120 s: the last try at the bound itself drops it
+    camping = [o for o in _submits(out) if "campingmode" in o]
+    assert len(heater) == 60  # 0, 2, ... 118 s; at 120 s it is dropped without another try
+    assert len(camping) == 15  # taken at 120 s, offered until 150 s = its arrival + 120 s
     assert "LOG lora: command airheater off dropped: the camper link was not ready in 120 s" in out
-    assert _submits(out)[-1] == "SUBMIT campingmode master off lora"  # its own wait starts at once
-    assert not any("campingmode off dropped" in o for o in out)
+    assert "LOG lora: command campingmode off dropped: the camper link was not ready in 120 s" in out
+    last_heater = max(i for i, o in enumerate(out) if "airheater" in o)
+    assert out.index("SUBMIT campingmode master off lora") > last_heater
+
+
+def test_held_commands_dropped_when_lora_goes_off(cli):
+    """Switching LoRa off (also `lora forget`, which turns the switch off first) drops the held command and the
+    queue with one log line; nothing is offered after that.
+
+    .. test:: LoRa off drops held LoRa commands
+       :id: T_FW_LORA_CMD_OFF
+    """
+    out = run(
+        cli,
+        "console on",
+        "submitrc %d" % NOT_READY,
+        "cmdpost airheater power on",
+        "cmdpost campingmode master on",
+        "tick 0",
+        "console off",
+        "submitrc %d" % PENDING,
+        "tick 2000",
+        "tick 4000",
+    )
+    assert _submits(out) == ["SUBMIT airheater power on lora"]
+    assert [o for o in out if "dropped" in o] == ["LOG lora: 2 held commands dropped: LoRa is off"]
+
+
+def test_drop_empties_the_slot_and_the_queue(cli):
+    """cali_lora_cmds_drop (a new data key; a newer WiFi command): the held command and the queue go, one log line;
+    an empty drop logs nothing; a later command runs normally."""
+    out = run(
+        cli,
+        "console on",
+        "submitrc %d" % NOT_READY,
+        "cmdpost airheater power on",
+        "cmdpost campingmode master on",
+        "tick 0",
+        "cmddrop new data key",
+        "cmddrop new data key",
+        "submitrc %d" % PENDING,
+        "tick 2000",
+        "cmdpost airheater power off 3000",
+        "tick 4000",
+    )
+    assert _submits(out) == ["SUBMIT airheater power on lora", "SUBMIT airheater power off lora"]
+    assert [o for o in out if "dropped" in o] == ["LOG lora: 2 held commands dropped: new data key"]

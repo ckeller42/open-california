@@ -6,6 +6,7 @@
 
 #include "cali_http.h"
 #include "cali_hub.h"
+#include "cali_lora.h" /* cali_lora_cmds_drop */
 #include "cali_lora_setup.h" /* cali_wipe */
 #include "cali_platform.h"
 #include "cali_web.h"
@@ -130,5 +131,6 @@ int cali_hub_new_key(void) {
     if (!s_key_ok || cali_hub_rekey(&s_c) != 0) return -1;
     s_pub_due = 1; /* the state under the new key at once */
     cali_log("hub: new data key");
+    cali_lora_cmds_drop("new data key");   /* a held command arrived under the old key */
     return 0;
 }
