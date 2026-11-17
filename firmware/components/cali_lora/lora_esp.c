@@ -291,15 +291,15 @@ static void xfer_rx(const cali_rak_event_t *e) {
 
 /* One sealed command of FPort 20. The data key is loaded (never made here) and wiped after use. */
 static void cmd_rx(const cali_rak_event_t *e) {
-    uint8_t key[16], eui[8];
+    uint8_t key[16];
     size_t kl = sizeof key;
     const char *fn, *what, *value;
-    if (unhex8(s_st.dev_eui, eui) != 0 || cali_kv_get(CALI_HUB_KEY_KEY, key, &kl) != CALI_KV_OK || kl != sizeof key) {
-        cali_log("lora: command without a DevEUI or a data key: dropped");
+    if (cali_kv_get(CALI_HUB_KEY_KEY, key, &kl) != CALI_KV_OK || kl != sizeof key) {
+        cali_log("lora: command without a data key: dropped");
         cali_wipe(key, sizeof key);
         return;
     }
-    int r = cali_lora_cmd(e->payload, e->payload_len, key, eui, &fn, &what, &value);
+    int r = cali_lora_cmd(e->payload, e->payload_len, key, &fn, &what, &value);
     cali_wipe(key, sizeof key);
     if (r != 0) {
         cali_log("lora: command rejected (%u bytes)", e->payload_len);

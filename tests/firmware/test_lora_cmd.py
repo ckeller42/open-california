@@ -12,7 +12,7 @@ from .conftest import build_host
 pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
 
 KEY = "000102030405060708090a0b0c0d0e0f"
-EUI = "70b3d57ed0000001"
+PHONE = "a1b2c3d4"  # the phone's 4 random bytes (ruling R25)
 MAP = {
     1: "airheater power on",
     2: "airheater power off",
@@ -21,8 +21,9 @@ MAP = {
 }
 
 
-def _seal(ctr, code):
-    """The 11-byte frame ctr(2 BE) | cmd | tag(8), sealed by WebCrypto (node vm)."""
+def _seal(ctr, code, phone=PHONE):
+    """The 15-byte frame phone(4) | ctr(2 BE) | cmd | tag(8), sealed by WebCrypto (node vm); nonce 04 | phone |
+    00 x5 | ctr, AD = phone | ctr."""
     node = shutil.which("node")
     if not node:
         (pytest.fail if os.environ.get("CI") else pytest.skip)("node not available")
@@ -31,8 +32,8 @@ def _seal(ctr, code):
         'const vm=require("vm"),c=vm.createContext({crypto:globalThis.crypto,Uint8Array,Buffer,console});'
         "vm.runInContext(`(async()=>{const h=s=>Uint8Array.from(Buffer.from(s,'hex'));"
         f"const k=await crypto.subtle.importKey('raw',h('{KEY}'),'AES-GCM',false,['encrypt']);"
-        f"const r=Buffer.from(await crypto.subtle.encrypt({{name:'AES-GCM',iv:h('04{EUI}00{c}'),additionalData:h('{c}'),tagLength:64}},k,h('{code:02x}'))).toString('hex');"
-        f"console.log('{c}'+r)}})()`,c)"
+        f"const r=Buffer.from(await crypto.subtle.encrypt({{name:'AES-GCM',iv:h('04{phone}0000000000{c}'),additionalData:h('{phone}{c}'),tagLength:64}},k,h('{code:02x}'))).toString('hex');"
+        f"console.log('{phone}{c}'+r)}})()`,c)"
     )
     return subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout.strip()
 
@@ -52,7 +53,7 @@ CTR0 = "kvset lora_cmd_ctr 0000"  # what hub.c writes with a new data key
 
 
 def _cmd(frame, key=KEY):
-    return f"cmd {key} {EUI} {frame}"
+    return f"cmd {key} {frame}"
 
 
 @pytest.mark.parametrize("code", [1, 2, 3, 4])
@@ -87,7 +88,7 @@ def test_cmd_old_ctr_after_restart():
 
 
 def test_cmd_bad_tag():
-    """A flipped tag bit, a wrong key or a wrong DevEUI is -1 and does not move the counter.
+    """A flipped tag bit, a wrong key or another phone id in the clear is -1 and does not move the counter.
 
     .. test:: a LoRa command with a bad tag is rejected
        :id: T_FW_LORA_CMD_TAG
@@ -95,12 +96,12 @@ def test_cmd_bad_tag():
     f = _seal(3, 1)
     bad = f[:-1] + f"{int(f[-1], 16) ^ 1:x}"
     assert _run(
-        CTR0, _cmd(bad), _cmd(f, "ff" * 16), f"cmd {KEY} 70b3d57ed0000002 {f}", "kv lora_cmd_ctr", _cmd(f)
+        CTR0, _cmd(bad), _cmd(f, "ff" * 16), _cmd("a1b2c3d5" + f[8:]), "kv lora_cmd_ctr", _cmd(f)
     ) == ["-1", "-1", "-1", "lora_cmd_ctr 0000", "0 airheater power on"]
 
 
 def test_cmd_wrong_len_and_code():
-    """Any length but 11 and an unknown code are -1.
+    """Any length but 15 and an unknown code are -1.
 
     .. test:: a LoRa command of the wrong length or code is rejected
        :id: T_FW_LORA_CMD_LEN
@@ -143,7 +144,7 @@ def _app_seal(ctr, code):
     js = (
         'const fs=require("fs"),vm=require("vm"),c=vm.createContext({crypto:globalThis.crypto,Uint8Array,console});'
         "for(const f of process.argv.slice(1))vm.runInContext(fs.readFileSync(f,'utf8'),c);"
-        f"vm.runInContext(`loraSealCmd('{KEY}','{EUI.upper()}',{ctr},{code}).then(f=>console.log(Array.from(f,b=>b.toString(16).padStart(2,'0')).join('')))`,c)"
+        f"vm.runInContext(`loraSealCmd('{KEY}','{PHONE}',{ctr},{code}).then(f=>console.log(Array.from(f,b=>b.toString(16).padStart(2,'0')).join('')))`,c)"
     )
     argv = [node, "-e", js, str(web / "lora_setup.js"), str(web / "hub.js")]
     return subprocess.run(argv, capture_output=True, text=True, check=True).stdout.strip()
@@ -151,11 +152,27 @@ def _app_seal(ctr, code):
 
 @pytest.mark.parametrize("code", [1, 2, 3, 4])
 def test_app_sealer_matches_and_opens(code):
-    """hub.js seals the same 11 bytes as WebCrypto above, and the ESP opens them.
+    """hub.js seals the same 15 bytes as WebCrypto above, and the ESP opens them.
 
     .. test:: the remote app's LoRa command sealer (hub.js) is byte-equal and opens on the ESP
        :id: T_FW_LORA_CMD_APP
     """
     f = _app_seal(300, code)
-    assert f == _seal(300, code) and len(f) == 22
+    assert f == _seal(300, code) and len(f) == 30
     assert _run(CTR0, _cmd(f)) == [f"0 {MAP[code]}"]
+
+
+def test_two_phones_never_share_a_nonce():
+    """Two phones with the one key and the same counter seal different frames (the phone id is in the nonce); the
+    counter is one per key, so the second phone's equal counter is a replay and its next one passes.
+
+    .. test:: two phones with one key never reuse a LoRa command nonce (ruling R25)
+       :id: T_FW_LORA_CMD_PHONES
+    """
+    a, b = _seal(5, 1), _seal(5, 1, "0badf00d")
+    assert a[:8] != b[:8] and a[12:] != b[12:]
+    assert _run(CTR0, _cmd(a), _cmd(b), _cmd(_seal(6, 2, "0badf00d"))) == [
+        "0 airheater power on",
+        "-1",
+        "0 airheater power off",
+    ]

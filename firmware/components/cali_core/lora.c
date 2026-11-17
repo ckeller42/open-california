@@ -541,8 +541,8 @@ int cali_lora_console(const char *args) {
 static cali_hub_open_fn s_cmd_open;
 void cali_lora_cmd_set_open(cali_hub_open_fn open) { s_cmd_open = open; }
 
-int cali_lora_cmd(const uint8_t *p, size_t n, const uint8_t key[16], const uint8_t deveui[8], const char **fn,
-                  const char **what, const char **value) {
+int cali_lora_cmd(const uint8_t *p, size_t n, const uint8_t key[16], const char **fn, const char **what,
+                  const char **value) {
     static const struct { const char *fn, *what, *value; } MAP[] = {
         {"airheater", "power", "on"}, {"airheater", "power", "off"},
         {"campingmode", "master", "on"}, {"campingmode", "master", "off"}};
@@ -550,15 +550,15 @@ int cali_lora_cmd(const uint8_t *p, size_t n, const uint8_t key[16], const uint8
     size_t ln = sizeof last;
     int g;
     if (!s_cmd_open || n != CALI_LORA_CMD_LEN) return -1;
-    memcpy(nonce + 1, deveui, 8);
-    memcpy(nonce + 10, p, 2);
-    if (s_cmd_open(key, nonce, p, 2, p + 2, 1, p + 3, 8, &code) != 0 || code < 1 || code > 4) return -1;
-    unsigned ctr = (unsigned)(p[0] << 8 | p[1]), prev;
+    memcpy(nonce + 1, p, 4);       /* the phone */
+    memcpy(nonce + 10, p + 4, 2);  /* the counter */
+    if (s_cmd_open(key, nonce, p, 6, p + 6, 1, p + 7, 8, &code) != 0 || code < 1 || code > 4) return -1;
+    unsigned ctr = (unsigned)(p[4] << 8 | p[5]), prev;
     g = cali_kv_get(CALI_LORA_CMD_CTR_KEY, last, &ln);
     if (g == CALI_KV_OK && ln == sizeof last) prev = (unsigned)(last[0] << 8 | last[1]);
     else return -1;   /* missing, corrupt or odd-sized: the guard is gone, never fail open (hub.c writes it with the key) */
     if (ctr <= prev) return -1;
-    if (cali_kv_set(CALI_LORA_CMD_CTR_KEY, p, 2) != 0) return -1;
+    if (cali_kv_set(CALI_LORA_CMD_CTR_KEY, p + 4, 2) != 0) return -1;
     *fn = MAP[code - 1].fn, *what = MAP[code - 1].what, *value = MAP[code - 1].value;
     return 0;
 }

@@ -512,7 +512,8 @@ def test_rpc_allowlist_keeps_settings_local(rpc_cli):
 
 
 def _app(expr):
-    """Evaluate ``expr`` with calictl/webui/hub.js (and lora_setup.js) in a node vm; ``hex(b)`` is defined."""
+    """Evaluate ``expr`` with calictl/webui/hub.js (and lora_setup.js, remote.js) in a node vm; ``hex(b)`` is
+    defined. No localStorage: hub.js keeps what it saw in memory."""
     node = shutil.which("node")
     if not node:
         (pytest.fail if os.environ.get("CI") else pytest.skip)("node not available")
@@ -523,7 +524,7 @@ def _app(expr):
         'vm.runInContext(\'var hex=b=>Array.from(b,x=>x.toString(16).padStart(2,"0")).join("")\',c);'
         "vm.runInContext(`(async()=>(${process.argv[1]}))()`,c).then(r=>console.log(JSON.stringify(r)))"
     )
-    argv = [node, "-e", js, expr, str(web / "lora_setup.js"), str(web / "hub.js")]
+    argv = [node, "-e", js, expr, *(str(web / n) for n in ("lora_setup.js", "remote.js", "hub.js"))]
     return json.loads(subprocess.run(argv, capture_output=True, text=True, check=True).stdout)
 
 

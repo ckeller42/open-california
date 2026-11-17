@@ -4,17 +4,21 @@
 // from The Things Stack). The wire format is firmware/components/cali_core/include/cali_hub.h: ver(1)=1 | dir(1) |
 // nonce(12) = dir | session(7) | counter(4, BE) | ct | tag(16); AD = the first 14 bytes. The app sends dir 2 and
 // opens dir 1 (ESP) and 3 (bridge) only. Topics oc/<van>/online (clear "1"/"0", retained), state (dir 1, retained:
-// the ESP's /api/state body), req (dir 2), res (dir 1), lora/<fport> (dir 3, retained: {fcnt, t, hex}).
-// Heater and camping commands go over the hub; when the ESP does not answer in 30 s and is not online, they go
-// once over LoRa (FPort 20, ttn.js pushDownlinks, the daily downlink limit of remote.js).
+// the ESP's /api/state?hub=1 body with its wall clock `hub_t`), req (dir 2), res (dir 1), lora/<fport> (dir 3,
+// retained: {fcnt, t, hex}). The state's age comes from its sealed `hub_t` (ruling R26): the clear online flag is
+// only a hint (it can make the van not live, never live). What was shown (the ESP sessions' counters, the newest
+// fcnt per port, the state, the LoRa frames) stays in oc.hub.seen, so a reload never takes a replayed frame.
+// Heater and camping commands go over the hub; when the ESP does not answer in 30 s and is not live and online,
+// they go once over LoRa (FPort 20, ttn.js pushDownlinks, the daily downlink limit of remote.js).
 // A classic script (no module), loaded after remote.js; app.js calls it only when window.OC_REMOTE is true and
 // oc.hub.cfg is set. NOT served by the ESP. The key and the passwords stay in oc.hub.cfg: never in a log, an
 // error or the DOM; no plaintext frame is logged.
 
 const HUB_CFG_KEY = "oc.hub.cfg";     // {van, url, user, pass, key}: the hub QR (OCH1) writes it
-const HUB_LORA_KEY = "oc.hub.lora";   // {ctr, devEui}: the last LoRa command counter, the van's DevEUI
-const HUB_LIVE_MS = 90000;            // a WiFi state older than this is not live
-const HUB_RETAINED_MS = 30000;        // a retained state while the ESP is online: at most one publish period old
+const HUB_LORA_KEY = "oc.hub.lora";   // {ctr, devEui, phone}: the last LoRa command counter, the van's DevEUI
+// (the daily downlink count is per DevEUI), this phone's 4 random bytes (hex) in every LoRa command (ruling R25)
+const HUB_SEEN_KEY = "oc.hub.seen";   // {ring, fcnt, state, lora}: what was shown (see hubSeen)
+const HUB_LIVE_MS = 90000;            // a WiFi state older than this (by its hub_t) is not live
 const HUB_CMD_WAIT_MS = 30000;        // no answer this long and the ESP not online: the command goes over LoRa
 const HUB_GIVEUP_MS = 65000;          // the ESP gives a pending command up after 60 s (CALI_HUB_RPC_PENDING_MS)
 const HUB_RING = 8;                   // CALI_HUB_RING: the ESP sessions remembered (replay guard)
@@ -33,11 +37,8 @@ const hub = {
   conn: "",                                   // the configuration the client was made for
   /** @type {Uint8Array|null} */ sess: null,  // this page's 7-byte session; the counter goes on from `ctr`
   ctr: 0,
-  /** @type {Array<{s: string, c: number}>} */ ring: [],
-  /** @type {Record<string, number>} the newest fcnt shown per fport (R12) */ fcnt: {},
   /** @type {string|null} the clear online flag: "1", "0", null = not yet known */ online: null,
-  /** @type {{body: any, at: number, retained: boolean}|null} the newest ESP state */ state: null,
-  /** @type {any} */ lora: { fn: {}, ext: null, energy: null, fw: null, newest: null, unknown: null },
+  /** @type {any} oc.hub.seen, loaded once (hubSeen) */ seen: null,
   /** @type {Map<number, (r: {s: number, b: string}) => void>} */ pending: new Map(),
   problem: "",                                // "" | "key" (a fresh frame did not open)
   /** @type {string[]} the functions shown with their last WiFi value in LoRa mode */ stale: [],
@@ -79,11 +80,26 @@ function hubSaveCfg(cfg) {
   if (!old || old.key !== cfg.key) {
     const rec = remoteLoad(HUB_LORA_KEY) || {};
     if (!remoteSave(HUB_LORA_KEY, { ...rec, ctr: 0 })) return false;
+    try { localStorage.removeItem(HUB_SEEN_KEY); } catch (e) { /* storage blocked */ }
   }
   if (!remoteSave(HUB_CFG_KEY, cfg)) return false;
   hubStop();
   return true;
 }
+
+/** What was shown, kept across reloads: `ring` the ESP sessions' last counters (dir 1, as cali_hub_open), `fcnt` the
+ * newest fcnt per fport (R12), `state` the newest ESP state body, `lora` remote.js's frame store of the bridge's
+ * frames. @returns {{ring: Array<{s: string, c: number}>, fcnt: Record<string, number>, state: any, lora: any}} */
+function hubSeen() {
+  if (!hub.seen) {
+    const v = remoteLoad(HUB_SEEN_KEY);
+    hub.seen = v && Array.isArray(v.ring) && v.fcnt && v.lora ? v
+      : { ring: [], fcnt: {}, state: null, lora: { fn: {}, ext: null, energy: null, fw: null, newest: null, unknown: null } };
+  }
+  return hub.seen;
+}
+/** Store hubSeen() (blocked storage: it lives on in this page only). */
+const hubSeenSave = () => remoteSave(HUB_SEEN_KEY, hubSeen());
 
 /** The AES key of `cfg` (imported once). @param {{key: string}} cfg @returns {Promise<CryptoKey>} */
 async function hubKey(cfg) {
@@ -127,9 +143,10 @@ async function hubOpen(cfg, f) {
       { name: "AES-GCM", iv: f.slice(2, 14), additionalData: f.slice(0, 14), tagLength: 128 }, await hubKey(cfg), f.slice(14)));
   } catch (e) { return { error: "key" }; }
   if (f[1] === 1) {   // only an authentic frame moves the guard
-    const now = hub.ring.find((e) => e.s === s);
+    const ring = hubSeen().ring, now = ring.find((e) => e.s === s);
     if (now) { if (c <= now.c) return { error: "replay" }; now.c = c; }
-    else { hub.ring.push({ s, c }); if (hub.ring.length > HUB_RING) hub.ring.shift(); }
+    else { ring.push({ s, c }); if (ring.length > HUB_RING) ring.shift(); }
+    hubSeenSave();
   }
   return { dir: f[1], pt };
 }
@@ -159,8 +176,7 @@ function hubStart() {
 /** Close the client and forget what it brought (a new configuration, "Remove this van"). */
 function hubStop() {
   if (hub.client) try { hub.client.end(true); } catch (e) { /* already closed */ }
-  Object.assign(hub, { client: null, conn: "", online: null, state: null, ring: [], fcnt: {}, problem: "", stale: [], last: "",
-    lora: { fn: {}, ext: null, energy: null, fw: null, newest: null, unknown: null } });
+  Object.assign(hub, { client: null, conn: "", online: null, seen: null, problem: "", stale: [], last: "" });
   for (const done of hub.pending.values()) done({ s: 0, b: "" });
   hub.pending.clear();
 }
@@ -181,8 +197,12 @@ async function hubMessage(cfg, sub, bytes, retained) {
   let j;
   try { j = JSON.parse(new TextDecoder().decode(o.pt)); } catch (e) { return; }
   if (!j || typeof j !== "object") return;
+  const seen = hubSeen();
   if (sub === "state") {
-    hub.state = { body: j, at: Date.now(), retained };
+    const old = seen.state && seen.state.hub_t;
+    if (typeof j.hub_t === "number" && typeof old === "number" && j.hub_t < old) return;   // older than the one shown
+    seen.state = j;
+    hubSeenSave();
     const eui = j.device && j.device.lora && j.device.lora.dev_eui;
     const rec = remoteLoad(HUB_LORA_KEY) || {};
     if (typeof eui === "string" && /^[0-9A-Fa-f]{16}$/.test(eui) && rec.devEui !== eui.toUpperCase())
@@ -193,9 +213,10 @@ async function hubMessage(cfg, sub, bytes, retained) {
   } else if (port) {
     const p = Number(port[1]), at = ttnParseTime(j.t);
     if (typeof j.fcnt !== "number" || typeof j.hex !== "string" || !/^([0-9a-fA-F]{2})*$/.test(j.hex) || Number.isNaN(at)) return;
-    if (hub.fcnt[p] !== undefined && j.fcnt <= hub.fcnt[p]) return;   // R12: not newer than the one shown (retained)
-    hub.fcnt[p] = j.fcnt;
-    remoteTake(hub.lora, [], { port: p, bytes: loraUnhex(j.hex), at });
+    if (seen.fcnt[p] !== undefined && j.fcnt <= seen.fcnt[p]) return;   // R12: not newer than the one shown (retained)
+    seen.fcnt[p] = j.fcnt;
+    remoteTake(seen.lora, [], { port: p, bytes: loraUnhex(j.hex), at });
+    hubSeenSave();
   }
 }
 
@@ -224,46 +245,46 @@ const LORA_FIELDS = (() => {
 })();
 
 /**
- * The van as the app shows it: the ESP's state while it is live (online and at most 90 s old), else that state
- * with every function a newer LoRa frame carries replaced by it. `ageMs` is the WiFi state's age (null: not
- * known, a retained state while the ESP is not online). In LoRa mode the body is marked `device.source = "lora"`
+ * The van as the app shows it: the ESP's state while it is live (its sealed `hub_t` at most 90 s old, and the
+ * online flag not "0"), else that state with every function a newer LoRa frame carries replaced by it. `ageMs` is
+ * the WiFi state's age by its `hub_t` (null: the ESP had no clock). In LoRa mode the body is marked `device.source = "lora"`
  * with an age per function (semantics.js: `_meta.remote`), and `stale` lists the functions that show their last
  * WiFi value.
  * @param {number} [now]
  * @returns {{state: any, src: "wifi"|"lora", ageMs: number|null, online: string|null, stale: string[]}}
  */
 function hubState(now = Date.now()) {
-  const s = hub.state;
-  const ageMs = !s ? null : !s.retained ? now - s.at : hub.online === "1" ? HUB_RETAINED_MS + now - s.at : null;
-  if (hub.online === "1" && ageMs !== null && ageMs <= HUB_LIVE_MS) {
+  const seen = hubSeen(), s = seen.state, lora = seen.lora;
+  const ageMs = s && typeof s.hub_t === "number" ? Math.max(0, now - s.hub_t) : null;
+  if (hub.online !== "0" && ageMs !== null && ageMs <= HUB_LIVE_MS) {
     hub.stale = [];
-    return { state: s && s.body, src: "wifi", ageMs, online: hub.online, stale: [] };
+    return { state: s, src: "wifi", ageMs, online: hub.online, stale: [] };
   }
-  if (!s && hub.lora.newest == null) return { state: null, src: "lora", ageMs, online: hub.online, stale: [] };
+  if (!s && lora.newest == null) return { state: null, src: "lora", ageMs, online: hub.online, stale: [] };
   const wifiAt = ageMs === null ? -Infinity : now - ageMs;
-  const body = s ? JSON.parse(JSON.stringify(s.body)) : { fn: {}, device: {} };
+  const body = s ? JSON.parse(JSON.stringify(s)) : { fn: {}, device: {} };
   body.fn = body.fn || {};
   body.device = body.device || {};
-  const lb = remoteBody(hub.lora, now);
+  const lb = remoteBody(lora, now);
   /** @type {Record<string, number>} */
   const ages = {};
   const stale = [];
   const ten = (/** @type {number} */ sec) => Math.floor(sec / 10) * 10;   // the body changes once in 10 s, not each poll
   for (const name of Object.keys(body.fn)) {
-    if (hub.lora.fn[name] && hub.lora.fn[name].at > wifiAt) continue;
+    if (lora.fn[name] && lora.fn[name].at > wifiAt) continue;
     stale.push(name);
     if (ageMs !== null) ages[name] = ten(ageMs / 1000);
   }
-  for (const [name, v] of Object.entries(hub.lora.fn)) {
+  for (const [name, v] of Object.entries(lora.fn)) {
     if (v.at <= wifiAt && body.fn[name]) continue;
     body.fn[name] = v.d;
     ages[name] = ten(lb.device.ages_s[name]);
   }
-  if (hub.lora.ext && hub.lora.ext.at > wifiAt) body.ext = { ...(body.ext || {}), ...lb.ext };
-  const newest = Math.max(wifiAt, hub.lora.newest == null ? -Infinity : hub.lora.newest);
+  if (lora.ext && lora.ext.at > wifiAt) body.ext = { ...(body.ext || {}), ...lb.ext };
+  const newest = Math.max(wifiAt, lora.newest == null ? -Infinity : lora.newest);
   body.device.source = "lora";
   body.device.ages_s = ages;
-  body.device.lora_version = hub.lora.unknown;
+  body.device.lora_version = lora.unknown;
   body.device.link = newest === -Infinity ? {} : { last_snap_age_ms: ten(now - newest) };
   hub.stale = stale.sort();
   return { state: body, src: "lora", ageMs, online: hub.online, stale: hub.stale };
@@ -285,8 +306,9 @@ function hubPoll() {
 function hubPill() {
   const h = hubState();
   if (h.src === "wifi") return tf("WLAN · {ago}", { ago: agoText((h.ageMs || 0) / 1000) });
-  if (hub.lora.newest == null) return T("offline");
-  return tf("LoRa · {ago}", { ago: agoText(Math.max(0, (Date.now() - hub.lora.newest) / 1000)) });
+  const newest = hubSeen().lora.newest;
+  if (newest == null) return T("offline");
+  return tf("LoRa · {ago}", { ago: agoText(Math.max(0, (Date.now() - newest) / 1000)) });
 }
 
 /** In LoRa mode: does `fn` show its last WiFi value (greyed)? @param {string} fn */
@@ -344,10 +366,11 @@ async function hubCommand(body) {
   let c;
   try { c = JSON.parse(body); } catch (e) { c = {}; }
   const code = HUB_LORA_CODES[[c.function, c.what, c.value].join(" ")] || 0;
-  if (hub.online !== "1" && !code) return { ok: false, note: HUB_LORA_ONLY_MSG };
+  if (hubState().src !== "wifi" && !code) return { ok: false, note: HUB_LORA_ONLY_MSG };
   const p = hubRequest("POST", "/api/command", body);
   let r = await hubWithin(p, HUB_CMD_WAIT_MS);
-  if (!r && hub.online !== "1" && code) {
+  // the flag is a hint: LoRa unless the ESP says it is online AND its sealed state is fresh
+  if (!r && code && !(hub.online === "1" && hubState().src === "wifi")) {
     p.catch(() => { /* a late answer is dropped */ });
     try {
       return (await loraCommand(code)) === "sent" ? { ok: true, note: HUB_LORA_SENT_MSG } : { ok: false, note: REMOTE_LIMIT_MSG };
@@ -362,27 +385,31 @@ async function hubCommand(body) {
 }
 
 /**
- * The 11-byte LoRa command: ctr(2 BE) | cmd(1) | tag(8); nonce = 0x04 | DevEUI(8) | 0x00 | ctr(2); AD = ctr
- * (cali_lora_cmd). @param {string} keyHex @param {string} devEui 16 hex @param {number} ctr @param {number} code
+ * The 15-byte LoRa command (ruling R25): phone(4) | ctr(2 BE) | cmd(1) | tag(8); nonce = 0x04 | phone(4) | 0x00 x5 |
+ * ctr(2); AD = phone | ctr (cali_lora_cmd). Each phone has its own `phone` bytes, so two phones with one key never
+ * share a nonce. @param {string} keyHex @param {string} phone 8 hex @param {number} ctr @param {number} code
  * @returns {Promise<Uint8Array>}
  */
-async function loraSealCmd(keyHex, devEui, ctr, code) {
-  const c = Uint8Array.from([ctr >> 8, ctr & 255]);
+async function loraSealCmd(keyHex, phone, ctr, code) {
+  const ad = new Uint8Array(6);
+  ad.set(loraUnhex(phone));
+  ad.set([ctr >> 8, ctr & 255], 4);
   const iv = new Uint8Array(12);
   iv.set([4]);
-  iv.set(loraUnhex(devEui), 1);
-  iv.set(c, 10);
+  iv.set(ad.slice(0, 4), 1);
+  iv.set(ad.slice(4), 10);
   const key = await crypto.subtle.importKey("raw", loraUnhex(keyHex), "AES-GCM", false, ["encrypt"]);
-  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: c, tagLength: 64 }, key, Uint8Array.from([code])));
-  const out = new Uint8Array(11);
-  out.set(c);
-  out.set(sealed, 2);
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: ad, tagLength: 64 }, key, Uint8Array.from([code])));
+  const out = new Uint8Array(15);
+  out.set(ad);
+  out.set(sealed, 6);
   return out;
 }
 
 /**
  * One LoRa command (code 1..4) to the van: counts against REMOTE_DOWNLINKS per 24 h (the setup's count, remote.js).
- * The counter is stored before the seal (it is the nonce: never twice); a push TTS refused is not counted.
+ * The counter is max(this phone's, the ESP's last accepted `lora_ctr` from the state) + 1, stored before the seal
+ * (with the phone id it is the nonce: never twice); a push TTS refused is not counted.
  * Throws without a TTN configuration, the van's DevEUI (from a WiFi state) or the hub key.
  * @param {number} code @returns {Promise<"sent"|"limit">}
  */
@@ -392,10 +419,13 @@ async function loraCommand(code) {
   const run = async () => {
     const now = Date.now(), pushes = rsPushes({ devEui: dev }, now);
     if (pushes.length >= REMOTE_DOWNLINKS) return /** @type {const} */ ("limit");
-    const rec = remoteLoad(HUB_LORA_KEY) || {}, ctr = (rec.ctr || 0) + 1;
+    const rec = remoteLoad(HUB_LORA_KEY) || {}, st = hubSeen().state;
+    const esp = st && typeof st.lora_ctr === "number" ? st.lora_ctr : 0, ctr = Math.max(rec.ctr || 0, esp) + 1;
+    const phone = typeof rec.phone === "string" && /^[0-9a-f]{8}$/.test(rec.phone) ? rec.phone
+      : Array.from(crypto.getRandomValues(new Uint8Array(4)), (x) => x.toString(16).padStart(2, "0")).join("");
     if (ctr > 0xffff) throw new Error("LoRa counter used up: make a new hub key");
-    if (!remoteSave(HUB_LORA_KEY, { ...rec, ctr })) throw new Error("storage");
-    const frame = await loraSealCmd(cfg.key, dev, ctr, code);
+    if (!remoteSave(HUB_LORA_KEY, { ...rec, ctr, phone })) throw new Error("storage");
+    const frame = await loraSealCmd(cfg.key, phone, ctr, code);
     rsPushSave(dev, [...pushes, now]);
     try {
       await pushDownlinks(remoteBase(rc), rc.cmdKey, rc.appId, rc.devId, [frame], 20);

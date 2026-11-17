@@ -3784,6 +3784,28 @@ def test_hub_state_publish_is_not_a_viewer(web_cli):
     assert [r.json()["device"]["link"]["rest"] for r in resps] == [True, False]
 
 
+def test_hub_state_publish_carries_its_time_and_the_lora_counter(web_cli):
+    """Rulings R25/R26: the hub's state publish (``?hub=1``) starts with ``hub_t`` (the ESP's wall clock in unix ms,
+    null without one: the app judges the frame's age from it) and ``lora_ctr`` (the last accepted LoRa command
+    counter, null when none is stored: a phone sends max(own, it) + 1). A plain GET carries neither."""
+    resps, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("GET", "/api/state?hub=1"),
+            b"ntp 1790000000000",
+            b"kvhex lora_cmd_ctr 012c",
+            req("GET", "/api/state?hub=1"),
+            req("GET", "/api/state"),
+        ],
+    )
+    a, b, plain = (r.json() for r in resps)
+    assert (a["hub_t"], a["lora_ctr"]) == (None, None)
+    assert (b["hub_t"], b["lora_ctr"]) == (1790000000000, 300)
+    assert list(b)[:3] == ["hub_t", "lora_ctr", "fn"]
+    assert "hub_t" not in plain and "lora_ctr" not in plain
+
+
 def test_second_command_while_one_is_pending_is_409_and_keeps_the_first(web_cli):
     """Ruling R18: two channels (HTTP and the hub RPC) share api_command's one pending slot. A new
     command while one is pending answers 409 busy at once and never touches that slot, so the first

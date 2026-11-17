@@ -70,12 +70,17 @@ def js(expr, base=""):
     return json.loads(subprocess.run(argv, capture_output=True, text=True, check=True).stdout)
 
 
-SETUP = f"remoteSave(HUB_CFG_KEY,{json.dumps(CFG)})"
-# the ESP's /api/state body as the hub publishes it: two functions, writes allowed, the LoRa DevEUI
+# the ESP's /api/state?hub=1 body as the hub publishes it: two functions, writes allowed, the LoRa DevEUI, the last
+# accepted LoRa command counter 7; st(dt) adds its wall clock hub_t = now + dt ms
 STATE = {
+    "lora_ctr": 7,
     "fn": {"cooler": {"State": 0}, "water": {"FreshWaterLevel": 40}},
     "device": {"control": {"writes": True}, "lora": {"dev_eui": EUI}, "link": {"last_snap_age_ms": 1000}},
 }
+SETUP = (
+    f"remoteSave(HUB_CFG_KEY,{json.dumps(CFG)}); const S={json.dumps(STATE)};"
+    "const st=(dt=0)=>({...S,hub_t:Date.now()+dt})"
+)
 
 
 def test_parse_hub_qr():
@@ -112,24 +117,40 @@ def test_open_rejects_replay_and_wrong_direction():
 
 
 def test_stale_when_offline():
+    """Ruling R26: live only with a sealed state whose hub_t is at most 90 s old; the online flag can only take
+    "live" away; a state without a clock is never live."""
     r = js(
-        f"""(async()=>{{ {SETUP}; const out=[], now=Date.now(), s=()=>{{const h=hubState(Date.now());return [h.src,h.online]}};
-        await deliver("online","1"); await deliver("state",{json.dumps(STATE)});
-        out.push(s(), hubState(Date.now()+91000).src);
+        f"""(async()=>{{ {SETUP}; const out=[], s=()=>{{const h=hubState(Date.now());return [h.src,h.online]}};
+        await deliver("online","1"); await deliver("state",st(-5000));
+        out.push(s(), hubState(Date.now()+86000).src, Math.round(hubState().ageMs/1000));
         await deliver("online","0"); out.push(s());
-        // after a reload: a retained state while the van is offline has no known age
-        hub.state=null; await deliver("state",{json.dumps(STATE)},true); out.push(hubState().ageMs);
-        await deliver("online","1"); out.push(s());
+        await deliver("online","1"); await deliver("state",st(-91000)); out.push(hubState().src);   // older: not taken
+        await deliver("state",{{...S,hub_t:null}}); out.push(hubState().src, hubState().ageMs);   // no clock
+        hubStop(); await deliver("state",st(-100000)); out.push(hubState().src);   // only the flag says online
         return out; }})()"""
     )
-    assert r == [["wifi", "1"], "lora", ["lora", "0"], None, ["wifi", "1"]]
+    assert r == [["wifi", "1"], "lora", 5, ["lora", "0"], "wifi", "lora", None, "lora"]
+
+
+def test_reload_rejects_replays_and_keeps_what_was_shown():
+    """Ruling R26: the ESP sessions' counters, the fcnt per port, the state and the LoRa frames survive a reload
+    (hubStop forgets the page's memory, oc.hub.seen stays): a replayed state or LoRa frame is not taken again."""
+    r = js(
+        f"""(async()=>{{ {SETUP}; const cfg=hubCfg(), t=new Date(Date.now()+5000).toISOString();
+        const a=await deliver("state",st()), b=await deliver("lora/3",{{fcnt:9,t,hex:"02020101"}});
+        hubStop(); await deliver("online","0");   // a reload; the van has gone offline since
+        const ra=await hubOpen(cfg,a); await hubMessage(cfg,"lora/3",b,true);
+        await deliver("lora/3",{{fcnt:9,t,hex:"0202ffff"}},true);   // the same fcnt, other bytes: ignored
+        const h=hubState(); return [ra.error, h.state.fn.cooler.State, h.state.fn.water, hubSeen().fcnt]; }})()"""
+    )
+    assert r == ["replay", 1, STATE["fn"]["water"], {"3": 9}]
 
 
 def test_lora_fields_marked():
     # a port-3 uplink with the cooler (function index 2) newer than the WiFi state; the water stays WiFi-only
     r = js(
         f"""(async()=>{{ {SETUP};
-        await deliver("online","0"); await deliver("state",{json.dumps(STATE)});
+        await deliver("online","0"); await deliver("state",st());
         const t=new Date(Date.now()+5000).toISOString();
         await deliver("lora/3",{{fcnt:7,t,hex:"0202"+"0101"}});
         await deliver("lora/3",{{fcnt:7,t,hex:"0202"+"ffff"}});   // the same fcnt again (retained): ignored
@@ -151,9 +172,9 @@ def test_lora_fields_marked():
 def test_key_changed_message():
     r = js(
         f"""(async()=>{{ {SETUP}; const bad="ff".repeat(16);
-        await deliver("state",{json.dumps(STATE)},true,1,bad); const a=hub.problem;   // a retained frame: no verdict
-        await deliver("state",{json.dumps(STATE)},false,1,bad); const b=hub.problem;
-        await deliver("state",{json.dumps(STATE)}); return [a,b,hub.problem,HUB_KEY_MSG]; }})()"""
+        await deliver("state",st(),true,1,bad); const a=hub.problem;   // a retained frame: no verdict
+        await deliver("state",st(),false,1,bad); const b=hub.problem;
+        await deliver("state",st()); return [a,b,hub.problem,HUB_KEY_MSG]; }})()"""
     )
     assert r == ["", "key", "", "Key changed: scan the hub QR"]
 
@@ -165,7 +186,7 @@ def _lora_setup(fake, pushes=0):
     old = f'{{"{EUI}":Array.from({{length:{pushes}}},(_,i)=>Date.now()-i*1000)}}'  # setup downlinks of the last 24 h
     return (
         f"{SETUP}; remoteSave(REMOTE_CFG_KEY,{json.dumps(rc)}); remoteSave(REMOTE_PUSH_KEY,{old});"
-        f'await deliver("online","0"); await deliver("state",{json.dumps(STATE)});'
+        f'await deliver("online","0"); await deliver("state",st());'
     )
 
 
@@ -187,8 +208,10 @@ def test_one_lora_send_per_action():
     a, b, c, n1, n, topic, m, p, t, ctr = r
     assert a == {"ok": True, "note": "Sent over LoRa."} == b
     assert c["ok"] is False and "LoRa" in c["note"]  # only the heater and camping mode go over LoRa: no send
-    assert (n1, n, topic, m, p, t, ctr) == (1, 2, "oc/van1/req", "POST", "/api/command", "number", 2)
-    assert [(d[1], len(d[2]), d[2][:2]) for d in downs] == [(20, 11, b"\x00\x01"), (20, 11, b"\x00\x02")]
+    assert (n1, n, topic, m, p, t, ctr) == (1, 2, "oc/van1/req", "POST", "/api/command", "number", 9)
+    # R25: phone(4) | ctr | cmd | tag; the counter goes on from the ESP's lora_ctr 7; one phone id
+    assert [(d[1], len(d[2]), d[2][4:6]) for d in downs] == [(20, 15, b"\x00\x08"), (20, 15, b"\x00\x09")]
+    assert downs[0][2][:4] == downs[1][2][:4]
 
 
 def test_lora_limit():
@@ -206,7 +229,7 @@ def test_lora_limit():
 def test_answer_and_504_over_the_hub():
     # the ESP answers: 200 passes through, 504 is "result unknown" (the command may still run), 403 local_only
     r = js(
-        f"""(async()=>{{ {SETUP}; await deliver("online","1"); await deliver("state",{json.dumps(STATE)});
+        f"""(async()=>{{ {SETUP}; await deliver("online","1"); await deliver("state",st());
         const answer=async(s,b)=>{{ while(!pubs.length) await new Promise(r=>setTimeout(r,1));
           const q=await espOpen(Uint8Array.from(pubs.shift().b)); await deliver("res",{{id:q.id,s,b}}); }};
         const post=()=>hubApi("/api/command",{{method:"POST",body:{json.dumps(HEATER_ON)}}});
@@ -222,8 +245,8 @@ def test_answer_and_504_over_the_hub():
 
 def test_new_key_resets_the_lora_counter():
     r = js(
-        f"""(async()=>{{ {SETUP}; remoteSave(HUB_LORA_KEY,{{ctr:5,devEui:"{EUI}"}});
+        f"""(async()=>{{ {SETUP}; remoteSave(HUB_LORA_KEY,{{ctr:5,devEui:"{EUI}",phone:"0badf00d"}});
         hubSaveCfg({json.dumps(CFG)}); const a=remoteLoad(HUB_LORA_KEY).ctr;
         hubSaveCfg({json.dumps({**CFG, "key": "ff" * 16})}); return [a, remoteLoad(HUB_LORA_KEY)]; }})()"""
     )
-    assert r == [5, {"ctr": 0, "devEui": EUI}]
+    assert r == [5, {"ctr": 0, "devEui": EUI, "phone": "0badf00d"}]  # the phone id stays (R25)

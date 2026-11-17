@@ -9,7 +9,7 @@
  *            qr <exp_on> <present> <eui|-> [max] (prints "QR <text>", "QR -" when none and the buffer is
  *            zeroed, "QR dirty" when none and bytes stay) | sqr ... (the same for cali_lora_setup_qr_text) | ttnok <hex> |
  *            notk (cali_lora_confirm_no_tk as hex)
- * Command:   cmd <key hex> <deveui hex> <frame hex> (cali_lora_cmd; CALI_LORA_REAL_AEAD = PSA open, else all fail)
+ * Command:   cmd <key hex> <frame hex> (cali_lora_cmd; CALI_LORA_REAL_AEAD = PSA open, else all fail)
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
  * Driven by tests/firmware/test_lora.py. Fakes: session frames, sensors, counters, clock, NVS, log. */
 #include <math.h>
@@ -256,12 +256,12 @@ int main(void) {
         } else if (!strcmp(cmd, "kvset") && sscanf(rest, "%63s %799s", b, a) == 2) {
             uint8_t v[CALI_LORA_TTN_MAX];
             cali_kv_set(b, v, unhex(a, v, sizeof v));
-        } else if (!strcmp(cmd, "cmd") && sscanf(rest, "%63s %63s %799s", b, a, rest2) == 3) {
-            uint8_t k[16], eui[8], fr[64];
+        } else if (!strcmp(cmd, "cmd") && sscanf(rest, "%63s %799s", b, rest2) == 2) {
+            uint8_t k[16], fr[64];
             const char *fn, *what, *val;
-            unhex(b, k, 16), unhex(a, eui, 8);
+            unhex(b, k, 16);
             size_t fl = unhex(rest2, fr, sizeof fr);
-            if (cali_lora_cmd(fr, fl, k, eui, &fn, &what, &val)) puts("-1");
+            if (cali_lora_cmd(fr, fl, k, &fn, &what, &val)) puts("-1");
             else printf("0 %s %s %s\n", fn, what, val);
         } else if (!strcmp(cmd, "cmdpost") && sscanf(rest, "%63s %63s %63s", b, a, rest2) == 3) {
             static char sf[8][800], sw[8][800], sv[8][800];   /* the queue keeps pointers */

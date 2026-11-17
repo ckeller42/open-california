@@ -183,7 +183,9 @@
  *   - `hub`: the remote hub's MQTT client (cali_hub.h): a config is stored, the client is connected,
  *     seconds since the last sealed state publish (null: none yet), `error` "key" while the data key cannot be
  *     stored (retried every 30 s). `?hub=1` is that publish's own GET:
- *     it is no viewer (no BLE mark), or the link would never rest.
+ *     it is no viewer (no BLE mark), or the link would never rest. Its body starts with `hub_t` (the wall
+ *     clock in unix ms, null without one: the app judges the sealed state's age from it) and `lora_ctr` (the last
+ *     accepted LoRa command counter, null: none stored), rulings R25/R26.
  *   - `GET /api/hub`: 200 `{"van","url","user","app_user","configured","online","last_pub_s","error"}`, never the
  *     two passwords; every mode. `POST /api/hub` `{"url","van","user","app_user"[,"pass"][,"app_pass"]}`
  *     (station only, else 403 `setup_mode`): a left-out password keeps the stored one; 400 `bad_json`,

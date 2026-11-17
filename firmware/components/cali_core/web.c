@@ -283,6 +283,19 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     int diag = strstr(req->query, "diag=1") != NULL;
 
     cali_json_begin(&j, s_json, sizeof s_json);
+    if (strstr(req->query, "hub=1")) {
+        /* the hub publish (rulings R25/R26): its wall clock, so the app can judge the sealed state's age, and the
+         * last accepted LoRa command counter (one per data key), so a phone sends max(its own, this) + 1 */
+        int64_t now_ms;
+        uint8_t ctr[2];
+        size_t cl = sizeof ctr;
+        cali_json_key(&j, "hub_t");
+        if (cali_time_ts(&now_ms) != CALI_TSRC_NONE) cali_json_int(&j, (long long)now_ms);
+        else cali_json_null(&j);
+        cali_json_key(&j, "lora_ctr");
+        if (cali_kv_get(CALI_LORA_CMD_CTR_KEY, ctr, &cl) == CALI_KV_OK && cl == sizeof ctr) cali_json_int(&j, ctr[0] << 8 | ctr[1]);
+        else cali_json_null(&j);
+    }
     if (diag) {
         cali_json_key(&j, "t");
         cali_json_int(&j, (long long)st.uptime_ms);

@@ -520,7 +520,7 @@ function rsRemove() {
   rsPhase = "key";
   // and app.js's offline snapshot: a reload never shows the removed van again (oc.remote.pushes stays: TTN counts on)
   hubStop();   // and the remote hub's link (hub.js)
-  for (const k of [REMOTE_CFG_KEY, REMOTE_SETUP_KEY, REMOTE_ENERGY_KEY, REMOTE_LAST_KEY, LAST_STATE_KEY, HUB_CFG_KEY, HUB_LORA_KEY])
+  for (const k of [REMOTE_CFG_KEY, REMOTE_SETUP_KEY, REMOTE_ENERGY_KEY, REMOTE_LAST_KEY, LAST_STATE_KEY, HUB_CFG_KEY, HUB_LORA_KEY, HUB_SEEN_KEY])
     try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ }
   STATE = {};
   lastRender = "";
