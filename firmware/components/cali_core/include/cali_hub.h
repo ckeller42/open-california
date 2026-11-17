@@ -71,23 +71,23 @@ typedef struct {
 
 /**
  * @brief Loads the key from KV, or makes and stores one; starts a new session. @return 0, -1 if it cannot be stored.
- * @param c The crypto context.
+ * @param c The key, session, counter and replay ring (cali_hub_crypto_t).
  */
 int cali_hub_key_load_or_make(cali_hub_crypto_t *c);
 /**
  * @brief Makes and stores a new key and a new session (the old app is locked out). @return 0 or -1.
- * @param c The crypto context.
+ * @param c The key, session, counter and replay ring (cali_hub_crypto_t).
  */
 int cali_hub_rekey(cali_hub_crypto_t *c);
 
 /**
  * @brief Seals `pt` (dir 1..3) into `out`. @return the frame length, or 0 (bad dir, `max` too small, cipher failed).
- * @param c The crypto context.
- * @param dir The direction.
+ * @param c The key, session, counter and replay ring (cali_hub_crypto_t).
+ * @param dir CALI_HUB_DIR_ESP, CALI_HUB_DIR_APP or CALI_HUB_DIR_BRIDGE (1..3).
  * @param pt The plaintext.
- * @param n Length of the data.
- * @param out Receives the result.
- * @param max Size of the output buffer.
+ * @param n Length of `pt` in bytes.
+ * @param out Receives the sealed frame (ver, dir, nonce, ciphertext, tag).
+ * @param max Size of `out`; at least n + CALI_HUB_OVERHEAD.
  */
 size_t cali_hub_seal(cali_hub_crypto_t *c, uint8_t dir, const uint8_t *pt, size_t n, uint8_t *out, size_t max);
 /**
@@ -102,11 +102,11 @@ size_t cali_hub_seal(cali_hub_crypto_t *c, uint8_t dir, const uint8_t *pt, size_
  * @param expect_mask Bit d set = a frame with dir d is accepted (ESP: 1<<2; app: (1<<1)|(1<<3)).
  * @param dir Receives the frame's dir; may be NULL.
  * @return the plaintext length, or -1 (bad version, dir, nonce, size, tag or replay).
- * @param c The crypto context.
+ * @param c The key, session, counter and replay ring (cali_hub_crypto_t).
  * @param frame The sealed frame.
- * @param n Length of the data.
- * @param out Receives the result.
- * @param max Size of the output buffer.
+ * @param n Length of `frame` in bytes (at least CALI_HUB_OVERHEAD).
+ * @param out Receives the plaintext; written only for a valid frame.
+ * @param max Size of `out`.
  */
 int cali_hub_open(cali_hub_crypto_t *c, const uint8_t *frame, size_t n, uint8_t *out, size_t max, unsigned expect_mask,
                   uint8_t *dir);
@@ -129,20 +129,22 @@ typedef struct {
 
 /**
  * @brief @return 0, or -1 (missing or wrong size; `cfg` is then all zero).
- * @param cfg The hub config.
+ * @param cfg Receives the config from KV hub_cfg.
  */
 int cali_hub_cfg_load(cali_hub_cfg_t *cfg);
 /**
  * @brief @return 0 or -1.
- * @param cfg The hub config.
+ * @param cfg The config to store in KV hub_cfg.
  */
 int cali_hub_cfg_save(const cali_hub_cfg_t *cfg);
 
-/** @brief Writes `OCH1*<van>*<url>*<app user>*<app pass>*<key hex32>`. @return its length, or 0 if it does not fit
- * @param out Receives the result.
- * @param max Size of the output buffer.
- * @param cfg The hub config.
- * @param key The 16-byte AES-128 key.
+/**
+ * @brief Writes `OCH1*<van>*<url>*<app user>*<app pass>*<key hex32>`.
+ * @param out Receives the NUL-terminated QR text.
+ * @param max Size of `out`.
+ * @param cfg The van, broker URL and app credentials to put in the QR.
+ * @param key The 16-byte AES-128 data key.
+ * @return its length, or 0 if it does not fit or a field (van, url, app user, app pass) holds a '*'.
  */
 size_t cali_hub_qr_text(char *out, size_t max, const cali_hub_cfg_t *cfg, const uint8_t key[16]);
 
@@ -198,17 +200,17 @@ typedef struct {
  * back the BLE events that complete the command. So the hub asks once per tick instead.
  * @return 1 when `res_json` holds the answer (`r` is idle again), 0 while the router answers PENDING
  *         (call cali_hub_rpc_poll on a later tick; `r` holds the request).
- * @param r The request.
+ * @param r The request state: zeroed (idle) on entry; holds the request while it is pending.
  * @param req_json The request plaintext.
  * @param res_json Receives the answer.
- * @param max Size of the output buffer.
+ * @param max Size of `res_json`.
  */
 int cali_hub_rpc_start(cali_hub_rpc_t *r, const char *req_json, char *res_json, size_t max);
 /**
  * @brief Re-asks a pending request once (504 after CALI_HUB_RPC_PENDING_MS). @return as cali_hub_rpc_start.
- * @param r The request.
+ * @param r The pending request started by cali_hub_rpc_start.
  * @param res_json Receives the answer.
- * @param max Size of the output buffer.
+ * @param max Size of `res_json`.
  */
 int cali_hub_rpc_poll(cali_hub_rpc_t *r, char *res_json, size_t max);
 
@@ -252,8 +254,8 @@ typedef struct {
 void cali_hub_status(cali_hub_status_t *st);
 /**
  * @brief The hub QR text (cali_hub_qr_text with the live key). @return its length, 0 = no hub. Owner task.
- * @param out Receives the result.
- * @param max Size of the output buffer.
+ * @param out Receives the NUL-terminated QR text.
+ * @param max Size of `out`.
  */
 size_t cali_hub_qr(char *out, size_t max);
 /** @brief A new data key (cali_hub_rekey); the old app is locked out; the state goes out under it. Owner task.
@@ -265,7 +267,7 @@ int cali_hub_new_key(void);
 
 /**
  * @brief Starts the client with this config (it copies what it keeps). @return 0, or -1 (retried later).
- * @param cfg The hub config.
+ * @param cfg The broker URL, van and credentials to connect with.
  */
 int cali_hub_port_start(const cali_hub_cfg_t *cfg);
 /** @brief Stops the client; drops the frames still queued. */
@@ -277,15 +279,15 @@ void cali_hub_port_stop(void);
 int cali_hub_port_online(void);
 /**
  * @brief Copies the next request frame into `buf`. @return its length, 0 = none (a longer one is dropped).
- * @param buf The buffer.
- * @param max Size of the output buffer.
+ * @param buf Receives the next request frame.
+ * @param max Size of `buf`.
  */
 size_t cali_hub_port_take(uint8_t *buf, size_t max);
 /**
  * @brief Hands a sealed frame to the client for `topic` (it copies it; never waits). @return 0 or -1.
  * @param topic The topic (CALI_HUB_T_STATE or CALI_HUB_T_RES).
  * @param frame The sealed frame.
- * @param n Length of the data.
+ * @param n Length of `frame` in bytes.
  */
 int cali_hub_port_post(int topic, const uint8_t *frame, size_t n);
 /** @brief Every tick while the client runs: the port's own housekeeping (hub_esp.c: wake the MQTT task when

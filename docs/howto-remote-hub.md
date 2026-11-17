@@ -109,7 +109,7 @@ read secrets from a prompt or a pipe.
    console.** If they do not, the three credentials share all topics. Then the broker's ACL is not
    a second line of defence: the data stays sealed, but a leaked app password could publish where
    the van or the bridge publishes (availability, not secrecy). Write that in your notes.
-   **Check:** with the test client, logged in as `app`, publish to `oc/<van>/req` works and
+   **Check** (after step 9, which introduces the test client): with the test client, logged in as `app`, publish to `oc/<van>/req` works and
    publish to `oc/<van>/state` is refused (ACL working), or note that it is not refused.
 8. Retained messages: the satellite publishes `oc/<van>/state` and `oc/<van>/online` retained,
    and the bridge publishes `oc/<van>/lora/*` retained. **Check in the console** that the deployment
@@ -123,7 +123,7 @@ read secrets from a prompt or a pipe.
 
 Optional alternative to the click path of steps 1 to 3: create the deployment with the EMQX Platform
 API (`POST {platform}/deployments`, with the platform's base URL from the EMQX API documentation and
-the platform API key as credential, read from `~/.env`, never typed into the command line). The body
+the platform API key as credential, read from your secret store, never typed into the command line). The body
 holds `platform`, `region`, `connections` 1000, `tps` 1000, `deploymentType` `"serverless"`,
 `deploymentVersion` `"v5"`, `projectID` and `freeTrial` `false`. The `201` answer shows
 `spec.spendLimit` 0 and `spendLimitAction` `"stop"`: check both before you go on. Serverless exposes
@@ -132,7 +132,7 @@ example format: take the real host from the answer or the Overview). The deploym
 (`https://<host>:8443/api/v5`) needs a deployment API key, and the Platform API cannot make one for
 Serverless: make it in the console. The path `/mqtt` stays **check in the console**.
 
-The EMQX platform API key can automate the console steps. It belongs in `~/.env` as
+The EMQX platform API key can automate the console steps. It belongs in your secret store as
 `EMQX_API_KEY` and `EMQX_API_SECRET` (names only). This page does not depend on it.
 
 ### 2. Cloudflare: the bridge Worker
@@ -157,7 +157,7 @@ The EMQX platform API key can automate the console steps. It belongs in `~/.env`
    store, for example as `OC_WEBHOOK_SECRET`. Never type it into a command line.
    **Check:** the secret store holds a value of 48 characters.
 8. Store it in the Worker. The command reads the value from the pipe, so it is in no file and no
-   shell history (with `~/.env`: `cd bridge`, `. ~/.env`, then):
+   shell history (load the value into `$OC_WEBHOOK_SECRET` from your secret store first, in `bridge/`):
 
    ```sh
    printf %s "$OC_WEBHOOK_SECRET" | npx wrangler secret put WEBHOOK_SECRET
@@ -183,8 +183,7 @@ The EMQX platform API key can automate the console steps. It belongs in `~/.env`
    Custom webhook** (**check in the console**).
 2. Give it an ID, for example `oc-bridge`. Format: **JSON**. Base URL: the Worker URL from step 2.11.
 3. Under **Additional headers** add the header `X-OC-Secret` with the value of your webhook secret.
-   Copy it from your secret store. (The owner's way: `. ~/.env; printf %s "$OC_WEBHOOK_SECRET" |
-   wl-copy`, any clipboard tool does.)
+   Copy it from your secret store with any clipboard tool.
 4. Under **Enabled event types** turn on **Uplink message** with the path `/ttn`, and turn **everything
    else off**. The bridge reads uplink messages only. No TTN API key goes to the bridge: LoRa
    commands use the app's own command key.
@@ -269,7 +268,8 @@ The first steps cannot use the hub: a fresh satellite is reachable only on its o
    zbarcam -1 --raw --nodisplay | cut -d'*' -f6 | tr -d '\r\n' | npx wrangler secret put HUB_KEY
    ```
 
-   `zbarcam` is in the package `zbar-tools`; `-1` makes it exit after the first code. The value must be exactly 32 hex characters; the bridge answers 500 for anything
+   `zbarcam` is in the package `zbar-tools`; `-1` makes it exit after the first code.
+   The value must be exactly 32 hex characters; the bridge answers 500 for anything
    else, a trailing newline included, which is why `tr` strips it. Do not read the QR text in a
    normal phone scanner app: it shows the app password and the key on the screen and in its history.
    **Check:** `npx wrangler secret list` names `HUB_KEY`, and the LoRa smoke test below passes.
@@ -289,7 +289,7 @@ The first steps cannot use the hub: a fresh satellite is reachable only on its o
    16 characters, or `HUB_KEY` is not 32 hex. `502`: the broker refused the bridge or did not answer
    in 5 seconds (credential, ACL, `BROKER_WSS`). `400`: the body is not a TTN uplink.
    A check without TTN: `curl -i -X POST <Worker URL>/ttn -H "X-OC-Secret: $OC_WEBHOOK_SECRET" -d '{}'`
-   (after `. ~/.env`) answers `400`: the secret is right and the body is empty.
+   (with the secret in `$OC_WEBHOOK_SECRET`, loaded from your secret store) answers `400`: the secret is right and the body is empty.
 3. **App → broker → satellite.** In the app, switch the **air heater** or **camping mode** while the
    phone is on mobile data (not the van's WiFi). The app shows the answer within a few seconds.
    Fail: the app shows "Key changed: scan the hub QR" (rekeyed, scan again) or "No connection to the
@@ -329,11 +329,11 @@ Never write a value into this repository, a chat or a log. Names and places only
 | `van` user and password | EMQX console; the satellite's flash (Hub card) | publish the van's topics, read `req` | New password in the console, then the Hub card. |
 | `app` user and password | EMQX console; the hub QR; every phone | read the van's topics, publish `req` (frames still need the data key) | New password in the console, new password in the Hub card, then every phone scans the hub QR again. |
 | `bridge` user and password = `BROKER_USER`, `BROKER_PASS` | EMQX console; Cloudflare secrets | publish `oc/<van>/lora/#` | New password in the console, then `npx wrangler secret put BROKER_PASS`. |
-| `WEBHOOK_SECRET` | Cloudflare secret; the TTN webhook header `X-OC-Secret`; `~/.env` | make the bridge accept an uplink (it can feed the app fake LoRa values; the bridge still seals them) | New value in `~/.env`, `wrangler secret put WEBHOOK_SECRET`, new header value in the TTN webhook. |
+| `WEBHOOK_SECRET` | Cloudflare secret; the TTN webhook header `X-OC-Secret`; your secret store | make the bridge accept an uplink (it can feed the app fake LoRa values; the bridge still seals them) | New value in your secret store, `wrangler secret put WEBHOOK_SECRET`, new header value in the TTN webhook. |
 | `HUB_KEY` (the data key) | the satellite's flash; the hub QR; every phone; Cloudflare secret | read the van's WiFi data, send valid commands | [Rekey](#lost-phone-or-leaked-key-rekey). |
 | `REMOTE_APP_DEPLOY_KEY` | GitHub secret of `ckeller42/open-california`; the public half is the deploy key of the Pages repo | write to the Pages repository only | Step 4.3 again with a new key, then delete the old deploy key (`gh repo deploy-key delete`). |
 | `OC_HUB_ORIGIN` | GitHub variable (not a secret) | the broker origin in the page's `connect-src` | `gh variable set`, then a new tag. |
-| `EMQX_API_KEY`, `EMQX_API_SECRET` | `~/.env` (chezmoi) | optional: the EMQX platform API for automation; this page does not need it | New key in the EMQX console. |
+| `EMQX_API_KEY`, `EMQX_API_SECRET` | your secret store | optional: the EMQX platform API for automation; this page does not need it | New key in the EMQX console. |
 | TTN full-rights API key | the phone, once | the app deletes it after the LoRa setup | n/a |
 
 ## Deploy from a clean machine

@@ -35,11 +35,11 @@ int cali_lora_aead_open_psa(const uint8_t *key, const uint8_t *nonce, const uint
  * @return 0 on success, -1 on a bad `tag_len`/`len` or a PSA failure.
  * @param key The 16-byte AES-128 key.
  * @param nonce The 12-byte nonce.
- * @param ad The associated data.
+ * @param ad Authenticated, not encrypted: for the hub frame its first 14 header bytes.
  * @param ad_len Length of `ad`.
  * @param pt The plaintext.
- * @param ct The ciphertext.
- * @param tag The tag.
+ * @param ct Receives `len` bytes of ciphertext (output).
+ * @param tag Receives the `tag_len`-byte GCM tag (output).
  */
 int cali_aead_seal_psa(const uint8_t *key, const uint8_t *nonce, const uint8_t *ad, size_t ad_len, const uint8_t *pt,
                        size_t len, uint8_t *ct, uint8_t *tag, size_t tag_len);
@@ -48,13 +48,13 @@ int cali_aead_seal_psa(const uint8_t *key, const uint8_t *nonce, const uint8_t *
  * @brief Opens what cali_aead_seal_psa sealed; `out` is written only when the tag is valid. @return 0 or -1.
  * @param key The 16-byte AES-128 key.
  * @param nonce The 12-byte nonce.
- * @param ad The associated data.
+ * @param ad Authenticated, not encrypted: for the hub frame its first 14 header bytes.
  * @param ad_len Length of `ad`.
- * @param ct The ciphertext.
- * @param len Length of the data.
- * @param tag The tag.
+ * @param ct The `len` bytes of ciphertext to open.
+ * @param len Length of `ct` and `out` in bytes.
+ * @param tag The `tag_len`-byte GCM tag to check.
  * @param tag_len Length of the tag.
- * @param out Receives the result.
+ * @param out Receives the plaintext (`len` bytes); written only when the tag is valid.
  */
 int cali_aead_open_psa(const uint8_t *key, const uint8_t *nonce, const uint8_t *ad, size_t ad_len, const uint8_t *ct,
                        size_t len, const uint8_t *tag, size_t tag_len, uint8_t *out);
