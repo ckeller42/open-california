@@ -258,6 +258,8 @@ static void dispatch(uint64_t now_ms) {
     answer(&req, S.handler(&req, &resp, S.ctx), &resp, now_ms);
 }
 
+int cali_http_busy(void) { return S.fd >= 0 && S.sending; }
+
 void cali_http_stop(void) {
     if (S.fd >= 0) close_conn();
     if (S.lfd >= 0) S.net->tcp_close(S.lfd);

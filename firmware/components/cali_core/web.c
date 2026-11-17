@@ -757,6 +757,10 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {   /* never over the setup hotspot (ruling B) */
         SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (s_cmd == CALI_CTL_PENDING) {
+        /* ruling R18: one pending slot for two channels (HTTP and the hub RPC): a second command never
+         * touches s_cmd/s_cmd_fn/s_cmd_reason, so the first requester's resume keeps its own result */
+        SET_CONST(resp, 409, ERR_BUSY);
     } else if (parse_command(req->body, req->body_len, &cmd) != 0) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
     } else if (!cmd.fn[0] || !cmd.what[0]) {

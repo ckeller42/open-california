@@ -244,7 +244,8 @@ void cali_hub_esp_tick(uint64_t now_ms) {
         stop();
         start();
     }
-    if (!s_client) return;
+    /* the HTTP core may still be sending a body out of the router's static buffer: no router call now */
+    if (!s_client || cali_http_busy()) return;
     if (s_rpc.buf) {   /* a pending request: one more ask */
         if (cali_hub_rpc_poll(&s_rpc, s_res, RES_MAX)) answered(now_ms);
     } else if (xQueueReceive(s_req_q, &f, 0) == pdTRUE) {

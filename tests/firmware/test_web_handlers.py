@@ -3774,3 +3774,27 @@ def test_hub_state_publish_is_not_a_viewer(web_cli):
         ],
     )
     assert [r.json()["device"]["link"]["rest"] for r in resps] == [True, False]
+
+
+def test_second_command_while_one_is_pending_is_409_and_keeps_the_first(web_cli):
+    """Ruling R18: two channels (HTTP and the hub RPC) share api_command's one pending slot. A new
+    command while one is pending answers 409 busy at once and never touches that slot, so the first
+    requester still gets its own result."""
+    first = json.dumps({"id": 5, "m": "POST", "p": "/api/command", "b": CMD, "t": 1})
+    other_cmd = '{"function":"roof","what":"position","value":"open","confirm":true}'
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"ctl pending",
+            b"ctldone ok 40",
+            b"rpcbegin " + first.encode(),
+            req("POST", "/api/command", other_cmd),
+            b"rpcpoll",
+        ],
+    )
+    assert "RPCB 0" in other  # the hub's command is pending
+    assert (resps[0].status, resps[0].json()) == (409, {"ok": False, "error": "busy"})
+    res = json.loads(next(ln for ln in other if ln.startswith("RPCS ")).split(" ", 2)[2])
+    assert (res["id"], res["s"]) == (5, 200) and json.loads(res["b"]) == OK
+    assert submits(other) == ["CALL submit [cooler] [power] [on]"]
