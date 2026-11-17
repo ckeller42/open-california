@@ -150,6 +150,8 @@ jobs:
         run: pre-commit run --all-files --show-diff-on-failure
       - name: mypy type check (calictl/)
         run: python -m mypy calictl/
+      - name: Bridge tests (the Cloudflare Worker that authenticates the TTN webhook; = tools/ci.sh bridge)
+        run: node --test "bridge/test/*.test.mjs"
       - name: gitleaks over the working tree (the commit hook only scans staged changes)
         run: pre-commit run --hook-stage manual gitleaks-dir --all-files
 
