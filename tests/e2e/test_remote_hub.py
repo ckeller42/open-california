@@ -302,6 +302,10 @@ def test_live_then_lora_and_a_command_by_lora(world):
         expect(_tile(pg, "Cooler")).to_be_visible()
         assert pg.locator(".tile.stale").count() == 0
         assert broker.logins[0][0][-2:] == ["app", "app-pass"]
+        pg.locator("#menu").click()  # hub mode: the settings are named as local only, no Device status
+        expect(pg.get_by_role("menuitem", name="Settings: only in the van's WiFi")).to_be_disabled()
+        expect(pg.get_by_role("menuitem", name="Device status")).to_have_count(0)
+        pg.keyboard.press("Escape")
 
         # a command over WiFi: the ESP answers it
         answers.append('{"ok":true,"applied":true}')

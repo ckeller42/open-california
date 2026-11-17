@@ -42,7 +42,7 @@ for(const f of JSON.parse(process.argv[1]))vm.runInContext(fs.readFileSync(f,"ut
 ctx.B=process.argv[3];
 vm.runInContext(`
 var pubs=[], sess=crypto.getRandomValues(new Uint8Array(7)), ctr=0;
-hub.client={publish:(t,b)=>pubs.push({t,b:Array.from(b)}),end(){}};
+hub.client={connected:true,publish:(t,b)=>pubs.push({t,b:Array.from(b)}),end(){}};
 async function seal(dir,obj,key){
   const pt=obj instanceof Uint8Array?obj:new TextEncoder().encode(JSON.stringify(obj)),c=++ctr;
   const head=Uint8Array.from([1,dir,dir,...sess,c>>>24,(c>>>16)&255,(c>>>8)&255,c&255]);
@@ -74,7 +74,11 @@ def js(expr, base=""):
 # accepted LoRa command counter 7; st(dt) adds its wall clock hub_t = now + dt ms
 STATE = {
     "lora_ctr": 7,
-    "fn": {"cooler": {"State": 0}, "water": {"FreshWaterLevel": 40}},
+    "fn": {"cooler": {"State": 0, "Gone": 5}, "water": {"FreshWaterLevel": 40}},
+    "ext": {
+        "Kitchen": {"type": "govee", "temp_c": 21.5, "age_s": 10},
+        "Solar": {"type": "victron_mppt", "pv_power": 3, "age_s": 2},
+    },
     "device": {"control": {"writes": True}, "lora": {"dev_eui": EUI}, "link": {"last_snap_age_ms": 1000}},
 }
 SETUP = (
@@ -143,30 +147,89 @@ def test_reload_rejects_replays_and_keeps_what_was_shown():
         await deliver("lora/3",{{fcnt:9,t,hex:"0202ffff"}},true);   // the same fcnt, other bytes: ignored
         const h=hubState(); return [ra.error, h.state.fn.cooler.State, h.state.fn.water, hubSeen().fcnt]; }})()"""
     )
-    assert r == ["replay", 1, STATE["fn"]["water"], {"3": 9}]
+    assert r[:3] == ["replay", 1, STATE["fn"]["water"]] and r[3]["3"]["fcnt"] == 9
 
 
 def test_lora_fields_marked():
-    # a port-3 uplink with the cooler (function index 2) newer than the WiFi state; the water stays WiFi-only
+    """Per signal: a LoRa frame newer than the WiFi state updates the fields it carries (LORA_FIELDS) inside the
+    WiFi function; every other field keeps its WiFi value, is marked stale and the function shows the WiFi age. The
+    ext rule is the same: a WiFi-only sensor is stale and its age grows by the WiFi age."""
     r = js(
         f"""(async()=>{{ {SETUP};
-        await deliver("online","0"); await deliver("state",st());
+        await deliver("online","0"); await deliver("state",st(-60000));
         const t=new Date(Date.now()+5000).toISOString();
         await deliver("lora/3",{{fcnt:7,t,hex:"0202"+"0101"}});
-        await deliver("lora/3",{{fcnt:7,t,hex:"0202"+"ffff"}});   // the same fcnt again (retained): ignored
+        await deliver("lora/3",{{fcnt:7,t,hex:"0202"+"ffff"}});   // a byte-identical replay's twin: ignored
+        await deliver("lora/2",{{fcnt:1,t,hex:"01"+"00".repeat(24)+"ff".repeat(6)+"0017005700000000ffff"+"00".repeat(9)}});
         const h=hubState(Date.now()+6000), d=h.state.device;
-        return {{fields: LORA_FIELDS, cooler: h.state.fn.cooler, water: h.state.fn.water, src: h.src,
-          source: d.source, stale: h.stale, ages: Object.keys(d.ages_s).sort()}}; }})()"""
+        return {{fields: LORA_FIELDS, cooler: h.state.fn.cooler, water: h.state.fn.water, src: h.src, ext: h.state.ext,
+          source: d.source, stale: h.stale, ages: d.ages_s, grey: ["cooler","water","energy","ext.Kitchen","ext.Solar"].map(hubStale)}}; }})()"""
     )
-    assert {"fn.energy", "fn.water", "fn.general", "fn.cooler", "fn.airheater", "fn.campingmode"} <= set(
-        r["fields"]
-    )
-    assert {"ext.victron_mppt", "ext.victron_battery"} <= set(r["fields"])
+    f = set(r["fields"])
+    assert {"fn.cooler.State", "fn.cooler.Mode", "fn.water.FreshWaterLevel", "fn.airheater.HeatingLevel"} <= f
+    assert {"fn.general.CmSwVersion", "ext.victron_mppt.pv_power", "ext.victron_battery.battery_voltage"} <= f
+    assert not any(x.startswith("fn.cooler.Gone") or x.startswith("ext.govee") for x in f)
     assert r["src"] == "lora" and r["source"] == "lora"
-    assert r["cooler"]["Installed"] == 0 and r["cooler"]["State"] == 1  # from the LoRa frame 0x0101
-    assert r["water"] == STATE["fn"]["water"]  # the WiFi value, marked stale
-    assert r["stale"] == ["water"]
-    assert r["ages"] == ["cooler", "water"]
+    # merged per field: State from the LoRa frame 0x0101, the WiFi-only field stays (greyed)
+    assert r["cooler"]["State"] == 1 and r["cooler"]["Installed"] == 0 and r["cooler"]["Gone"] == 5
+    assert r["water"] == STATE["fn"]["water"]
+    assert r["stale"] == ["ext.Kitchen", "fn.cooler.Gone", "fn.water.FreshWaterLevel"]
+    assert r["grey"] == [True, True, False, True, False]
+    assert r["ages"]["water"] == 60 and r["ages"]["cooler"] == 60 and r["ages"]["energy"] == 0
+    assert r["ext"]["Kitchen"]["age_s"] == 70  # 10 s at the publish + the WiFi state's 60 s
+    assert r["ext"]["Solar"]["pv_power"] == 87 and r["ext"]["Solar"]["age_s"] == 0  # LoRa port 2
+
+
+def test_rejoin_restarts_fcnt():
+    """R12 after a rejoin: a frame with a lower fcnt but a newer (sealed) uplink time is taken; a byte-identical
+    replay and an older one are not."""
+    r = js(
+        f"""(async()=>{{ {SETUP}; await deliver("online","0");
+        const t0=new Date(Date.now()-60000).toISOString(), t1=new Date().toISOString(), c=()=>hubSeen().lora.fn.cooler.d.State;
+        await deliver("lora/3",{{fcnt:900,t:t0,hex:"02020000"}}); const a=c();
+        const f=await deliver("lora/3",{{fcnt:1,t:t1,hex:"02020101"}}); const b=c();
+        await deliver("lora/3",{{fcnt:900,t:t0,hex:"02020000"}}); const d=c();   // the old frame again
+        await hubMessage(hubCfg(),"lora/3",f,true); return [a,b,d,hubSeen().fcnt["3"]]; }})()"""
+    )
+    assert r[:3] == [0, 1, 1] and r[3]["fcnt"] == 1
+
+
+def test_not_connected_goes_to_lora_at_once():
+    """No broker connection: hubRequest rejects at once (MQTT.js would queue a QoS 0 req and send it after the LoRa
+    command); the heater goes over LoRa without the 30 s wait, a light command says there is no connection."""
+    with FakeTtn() as fake:
+        r = js(
+            f"""(async()=>{{ {_lora_setup(fake)} hub.client.connected=false;
+            const q=await hubRequest("GET","/api/state").then(()=>"answer",e=>e.message);
+            const st0=setTimeout; setTimeout=(f,ms)=>ms===HUB_CMD_WAIT_MS?0:st0(f,ms);   // the 30 s wait never ends
+            const a=await hubApi("/api/command",{{method:"POST",body:{json.dumps(HEATER_ON)}}});
+            const b=await hubApi("/api/command",{{method:"POST",body:{json.dumps(LIGHT)}}});
+            return [q, a.note, pubs.length, b.note===HUB_NOCONN_MSG]; }})()""",
+            fake.base,
+        )
+        assert len(fake.downlinks) == 1
+    assert r == ["hub: not connected", "Sent over LoRa.", 0, False]  # offline: the light is LoRa-only
+
+
+def test_late_phone_clock_does_not_keep_a_state_live():
+    """R28: age = max(now - hub_t, now - local receive time): a phone clock 5 min behind the van still ages."""
+    r = js(
+        f"""(async()=>{{ {SETUP}; await deliver("online","1"); await deliver("state",st(300000));
+        return [hubState().src, hubState(Date.now()+91000).src, Math.round(hubState(Date.now()+91000).ageMs/1000)]; }})()"""
+    )
+    assert r == ["wifi", "lora", 91]
+
+
+def test_messages_open_in_arrival_order():
+    """R28: frames are opened one after the other: a big res (counter 1) that decrypts slower than the state after it
+    (counter 2) of the same ESP session is not taken as a replay."""
+    r = js(
+        f"""(async()=>{{ {SETUP}; let got=null; hub.pending.set(77,(x)=>{{got=x.s}});
+        const a=await seal(1,{{id:77,s:200,b:"x".repeat(4000000)}}), b=await seal(1,st());
+        await Promise.all([hubMessage(hubCfg(),"res",a,false), hubMessage(hubCfg(),"state",b,false)]);
+        return [got, hubSeen().state.lora_ctr]; }})()"""
+    )
+    assert r == [200, 7]
 
 
 def test_key_changed_message():

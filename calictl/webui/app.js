@@ -346,10 +346,11 @@ menuEl.onclick = (ev) => {
   const groups = [[], []];
   // The in-app Device-status screen, on both flavors (the satellite's settings open from it). The remote app
   // (R_UI_REMOTE_APP) has its setup screens there instead.
-  if (REMOTE) groups[0].push(menuItem(T("Set up LoRa"), () => remoteOpen("remotesetup")),
-    menuItem(T("Scan the van's code"), () => remoteOpen("remotescan")), menuItem(T("Remove this van"), () => remoteOpen("remoteremove")));
-  if (REMOTE && hubCfg()) { const n = menuItem(T(HUB_LOCAL_MSG), closeMenu); n.disabled = true; groups[0].push(n); }
-  else groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));   // also before the first answer (M1)
+  if (REMOTE) {
+    groups[0].push(menuItem(T("Set up LoRa"), () => remoteOpen("remotesetup")),
+      menuItem(T("Scan the van's code"), () => remoteOpen("remotescan")), menuItem(T("Remove this van"), () => remoteOpen("remoteremove")));
+    if (hubCfg()) { const n = menuItem(T(HUB_LOCAL_MSG), closeMenu); n.disabled = true; groups[0].push(n); }   // hub.js
+  } else groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));   // also before the first answer (M1)
   if (HELP[view]) groups[1].push(menuItem(/** @type {string} */ (t("Help")), openHelp));   // per-screen help (#314)
   // Language toggle: label names the language you'd switch TO.
   groups[1].push(menuItem(LANG === "de" ? "English" : "Deutsch", () => { setLang(LANG === "de" ? "en" : "de"); }));
@@ -3654,7 +3655,7 @@ function renderSensors() {
     const age = typeof r.age_s === "number" ? ageNow(r.age_s) : null;
     const stale = age != null && age > SENSOR_STALE_S;
     const row = document.createElement("div");
-    row.className = "row sensor" + (stale ? " stale" : "");
+    row.className = "row sensor" + (stale || (REMOTE && hubStale("ext." + alias)) ? " stale" : "");   // hub.js: WiFi-only
     const lbl = document.createElement("span"); lbl.className = "lbl";
     const name = document.createElement("span"); name.className = "sname";
     name.textContent = alias;   // the name the owner gave the device: this UI knows no better one

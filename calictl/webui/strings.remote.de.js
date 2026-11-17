@@ -54,6 +54,7 @@ Object.assign(window.STRINGS_DE, {
   "Settings: only in the van's WiFi": "Einstellungen: nur im WLAN des Fahrzeugs",
   "Over LoRa only the heater and camping mode can be switched.": "Über LoRa lassen sich nur die Heizung und der Campingmodus schalten.",
   "Sent over LoRa.": "Über LoRa gesendet.",
+  "No connection to the hub: try again in a moment.": "Keine Verbindung zum Hub: Versuche es gleich noch einmal.",
   "Result unknown: the van may still carry out the command.": "Ergebnis unbekannt: Das Fahrzeug führt den Befehl vielleicht noch aus.",
   "The van refused the command: set this phone's clock to the network time.": "Das Fahrzeug hat den Befehl abgelehnt: Stelle die Uhr dieses Telefons auf die Netzzeit.",
   "Last WiFi values, {ago}": "Letzte WLAN-Werte, {ago}",

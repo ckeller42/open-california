@@ -488,7 +488,9 @@ async function rsStepLocked() {
 
 /** A scanned repair QR (spec 5.2): the phone is configured, no TTN console work. @param {string} text */
 function rsRepairQr(text) {
-  const hq = parseHubQr(text.trim());   // the van's hub QR (hub.js): the remote hub's broker and key
+  // the van's hub QR (hub.js): the remote hub's broker and key. Ruling R27: the repair QR (OCR1) does not carry the
+  // hub configuration; the owner scans the hub QR (OCH1) on this same screen.
+  const hq = parseHubQr(text.trim());
   if (hq) {
     if (!hubSaveCfg(hq)) { rsMsg = REMOTE_STORE_MSG; rsRefresh(); return; }
     rsMsg = "";

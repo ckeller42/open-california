@@ -188,6 +188,14 @@ def test_remote_never_calls_same_origin_api(site, ttn, error_gated_page):
         )
         assert all(r.startswith("remote: no /api/") for r in refused), refused
         assert len(reqs) == n
+        # the remote menu (no hub configuration): its own screens, never the local app's Device status
+        pg.locator("#menu").click()
+        items = pg.get_by_role("menuitem")
+        expect(items.first).to_be_visible()
+        names = items.all_inner_texts()
+        assert {"Set up LoRa", "Scan the van's code", "Remove this van"} <= set(names), names
+        assert "Device status" not in names and "Settings: only in the van's WiFi" not in names
+        pg.keyboard.press("Escape")
         assert secret not in pg.content()
         energy = json.loads(pg.evaluate("localStorage.getItem('oc.remote.energy')"))
         assert energy and energy[-1]["solar_wh"] == 123.4 and energy[-1]["boot"] == 7
