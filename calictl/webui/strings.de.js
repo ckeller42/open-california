@@ -735,6 +735,7 @@ window.STRINGS_DE = {
   "App password": "Passwort der App",
   "unchanged": "unverändert",
   "Not connected": "Nicht verbunden",
+  "The data key cannot be stored (retried every 30 s)": "Der Datenschlüssel kann nicht gespeichert werden (neuer Versuch alle 30 s)",
   "Connected": "Verbunden",
   "Connected · state sent {n} s ago": "Verbunden · Zustand vor {n} s gesendet",
   "Saved": "Gespeichert",

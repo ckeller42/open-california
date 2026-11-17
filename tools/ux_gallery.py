@@ -340,7 +340,7 @@ def esp_fixtures():
             "ux": {"enabled": True},
             "experimental": {"sensors": False, "lora": False},
             "energy": {"boot": 17, "solar_wh": 812.4, "load_wh": 655.0, "batt_net_wh": 157.4, "load_a": 2.1},
-            "hub": {"configured": False, "online": False, "last_pub_s": None},
+            "hub": {"configured": False, "online": False, "last_pub_s": None, "error": None},
             "water_held": False,
         },
     }
@@ -389,7 +389,7 @@ def esp_fixtures():
                     "ux": {"enabled": True},
                     "experimental": {"sensors": False, "lora": False},
                     "energy": {"boot": 1, "solar_wh": 0, "load_wh": 0, "batt_net_wh": 0, "load_a": None},
-                    "hub": {"configured": False, "online": False, "last_pub_s": None},
+                    "hub": {"configured": False, "online": False, "last_pub_s": None, "error": None},
                     "water_held": False,
                 },
             },

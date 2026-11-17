@@ -104,7 +104,6 @@
 #include "cali_display_model.h"
 #if CONFIG_CALI_DISPLAY
 #include "cali_display.h"
-#include "cali_hub_esp.h"
 #include "cali_lora_esp.h"
 #include "cali_sdcard_esp.h"
 #endif
@@ -361,9 +360,7 @@ static void do_work(void) {
             cali_wifi_run_tick(now);
             cali_captive_dns_poll();
             cali_web_poll(now);
-#if CONFIG_CALI_DISPLAY
-            cali_hub_esp_tick(now);   /* the remote hub: requests in, state + answers out (after the web) */
-#endif
+            cali_hub_tick(now);   /* the remote hub (hub_run.c): requests in, state + answers out, after the web */
         }
 #if CONFIG_CALI_DISPLAY
         cali_display_tick(now);   /* repaints at most every DISPLAY_REFRESH_MS; never blocks on BLE */
@@ -661,7 +658,6 @@ void app_main(void) {
 #if CONFIG_CALI_DISPLAY
     if (cali_display_init(ble) == 0) cali_sdcard_esp_start();   /* -1: no screen (and no SD); BLE/WiFi carry on */
     cali_lora_esp_start();   /* R_FW_LORA: idle, no pin touched, until exp_lora is on */
-    cali_hub_esp_start();    /* the remote hub: nothing runs without a hub config */
 #endif
 
     const esp_timer_create_args_t targs = {.callback = tick_cb, .name = "cali_tick"};

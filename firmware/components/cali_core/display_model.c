@@ -207,13 +207,25 @@ static uint8_t on_level(float x, const cali_display_cfg_t *c) {
 /* The LoRa screen's gestures (R_FW_LORA_SCREEN), from the press duration seen each tick: a press is new
  * when the duration starts or drops; one that starts on a dark screen is spent (the wake press); an
  * unspent press fires once at DISPLAY_LORA_PRESS_MS; an unspent press that ends shorter, or a tap
- * between two ticks, closes the screen. Each firing goes one state on: closed -> 1 (with the module) ->
- * 2 (with the TTN keys) -> 3, the hub QR (with a hub config); a state whose condition is missing is
- * skipped. On the hub QR a press fires only at DISPLAY_HUB_REKEY_MS: a new data key. */
+ * between two ticks, closes the screen. Each firing goes one state on (ruling R23): closed -> 1, the
+ * selector (with the module) -> 3, the hub QR (with a hub config) -> 2, the LoRa setup QR (with the TTN
+ * keys: the rotation, the only step after the opening that asks for a new transfer key); a state whose
+ * condition is missing is skipped. On the hub QR a press held DISPLAY_HUB_REKEY_MS asks for a new data
+ * key; one released between DISPLAY_LORA_PRESS_MS and that goes on to the next state. */
 static int lora_next(int show, const cali_display_in_t *in) {
-    if (show == 0 && in->lora_available) return 1;
-    if (show == 1 && in->lora_has_ttn_keys) return 2;
-    return show < 3 && in->hub_available ? 3 : show;
+    if (show == 0) return in->lora_available ? 1 : in->hub_available ? 3 : 0;
+    if (show == 1) return in->hub_available ? 3 : in->lora_has_ttn_keys ? 2 : 1;
+    if (show == 3) return in->lora_available && in->lora_has_ttn_keys ? 2 : 3;
+    return show;
+}
+
+static void lora_go(cali_display_model_t *m, int next, uint64_t now_ms, const cali_display_in_t *in,
+                    cali_display_view_t *out) {
+    if (next == m->show_lora) return;
+    /* open: a new transfer key before the TTN keys; -> 2: the rotation (spec 5.3); the hub QR: none */
+    out->lora_request = next == 2 || (next == 1 && !in->lora_has_ttn_keys);
+    m->show_lora = next;
+    m->lora_since = now_ms;
 }
 
 static void lora_screen(cali_display_model_t *m, uint64_t now_ms, const cali_display_in_t *in, cali_display_view_t *out) {
@@ -221,20 +233,20 @@ static void lora_screen(cali_display_model_t *m, uint64_t now_ms, const cali_dis
     int new_press = p && (!m->press_ms || p < m->press_ms);
     int ended = m->press_ms && (!p || new_press);
     out->lora_request = out->hub_rekey = 0;
+    if (m->show_lora == 3 && ended && !m->press_spent && m->press_ms >= DISPLAY_LORA_PRESS_MS) {
+        m->press_spent = 1;   /* released between 3 and 10 s: the next state (or stay), never a close */
+        lora_go(m, lora_next(3, in), now_ms, in, out);
+    }
     if (m->show_lora && ((ended && !m->press_spent) || (in->touched && !p && !m->press_ms))) m->show_lora = 0;
     if (new_press)   /* dim or off; the open LoRa screen is lit whatever the last tick was */
         m->press_spent = !m->show_lora && m->started && now_ms - m->last_wake_ms >= DISPLAY_DIM_AFTER_MS;
     if (p >= (m->show_lora == 3 ? DISPLAY_HUB_REKEY_MS : DISPLAY_LORA_PRESS_MS) && !m->press_spent) {
-        int next = lora_next(m->show_lora, in);
         m->press_spent = 1;
         if (m->show_lora == 3) {   /* a new hub data key: the QR changes, the 120 s start again */
             out->hub_rekey = 1;
             m->lora_since = now_ms;
-        } else if (next != m->show_lora) {
-            /* open: a new transfer key before the TTN keys; 1 -> 2: rotation (spec 5.3) */
-            out->lora_request = next == 2 || (next == 1 && !in->lora_has_ttn_keys);
-            m->show_lora = next;
-            m->lora_since = now_ms;
+        } else {
+            lora_go(m, lora_next(m->show_lora, in), now_ms, in, out);
         }
     }
     m->press_ms = p;

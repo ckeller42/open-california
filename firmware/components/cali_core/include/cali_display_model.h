@@ -204,9 +204,9 @@ typedef struct {
     int32_t prox;            /**< The last valid proximity reading, -1 = none. */
     int32_t motion;          /**< This tick's accel change in mg; -1 = none (no IMU, a failed read, the first read). */
     uint8_t brightness_pct;  /**< Backlight percent, 0 when off. */
-    int show_lora;           /**< The LoRa screen: 0 closed, 1 the QR selector (setup or repair QR), 2 the setup QR (rotation), 3 the hub QR (holds the data key). */
+    int show_lora;           /**< The LoRa screen: 0 closed, 1 the QR selector (setup or repair QR), 2 the setup QR (rotation), 3 the hub QR (holds the data key). The cycle (ruling R23): 1 -> 3 -> 2. */
     int lora_request;        /**< 1 on the one tick the painter must call cali_lora_port_setup_request(). */
-    int hub_rekey;           /**< 1 on the one tick the painter must call cali_hub_port_rekey(). */
+    int hub_rekey;           /**< 1 on the one tick the painter must call cali_hub_new_key(). */
     const char *lora_hint;   /**< Over the QR: "Preparing…" or the scan hint; "" while closed. */
     char lora_line[CALI_ROW_TEXT_MAX];   /**< The status line: joined or not, the last confirmed uplink; "" while closed. */
 } cali_display_view_t;

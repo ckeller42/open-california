@@ -1,28 +1,21 @@
-/* hub_esp.c — the remote hub's MQTT client (cali_hub.h, cali_hub_esp.h). Board package only; the host build
- * and QEMU link cali_core's hub_port_none.c instead.
+/* hub_esp.c — the remote hub's port on the board (cali_hub.h: cali_hub_port_*): the esp-mqtt glue under
+ * cali_core's hub_run.c. Board package only; the host build and QEMU link cali_core's hub_port_none.c.
  *
  * Tasks (ruling R16): the esp-mqtt task only moves bytes. Its event handler copies a request frame from
- * oc/<van>/req into a PSRAM buffer and posts it to s_req_q; it publishes the sealed frames the owner task
- * left in s_out_q (woken by an MQTT_USER_EVENT "kick"). The owner task (cali_hub_esp_tick, next to
- * cali_web_poll) owns the data key and the replay ring: it opens a request, runs it through
- * cali_hub_rpc_start/poll (one ask per tick: the owner is the NimBLE host task, which must never block while
- * a command waits for the unit), seals the answer to oc/<van>/res and the /api/state body to oc/<van>/state
- * (retained) after each answer and every HUB_PUB_MS. The owner never calls into esp-mqtt while the client
- * runs (its API lock is held through a TLS connect): it only posts the kick, without waiting.
+ * oc/<van>/req into a PSRAM buffer and posts it to s_req_q (cali_hub_port_take hands it to the owner); it
+ * publishes the sealed frames the owner left in s_out_q (cali_hub_port_post), woken by an MQTT_USER_EVENT
+ * "kick". The owner task never calls into esp-mqtt while the client runs (its API lock is held through a TLS
+ * connect and every read/write): it only posts the kick, without waiting. Only start/stop call esp-mqtt.
  *
- * The broker URL is the config's wss:// URL, the one in the hub QR (the app connects to it too). Last will
- * oc/<van>/online = "0" retained; on connect "1" retained and the subscription. Nothing runs while the hub
- * config (KV hub_cfg) is missing. No secret (passwords, key, frames) is ever logged. */
+ * The broker URL is the config's wss:// URL, the one in the hub QR (ruling R20). Last will oc/<van>/online =
+ * "0" retained; on connect "1" retained and the subscription. No secret (passwords, key, frames) is logged. */
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "cali_hub.h"
-#include "cali_hub_esp.h"
-#include "cali_lora_setup.h" /* cali_wipe */
 #include "cali_platform.h"
-#include "cali_web.h"
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
@@ -30,37 +23,29 @@
 #include "freertos/queue.h"
 #include "mqtt_client.h"
 
-#define HUB_PUB_MS 30000u
 #define HUB_KEEPALIVE_S 60
-#define REQ_MAX 8192   /* the longest request frame taken (the RPC body cap is 2.5 KB, escaped up to 6x) */
-#define RES_MAX 12288  /* the longest answer plaintext (an escaped /api/state of NET_JSON_MAX) */
+/* Network timeouts: the owner task (the NimBLE host task) runs cali_hub_port_stop on a config change, and
+ * esp_mqtt_client_destroy waits for the MQTT task to leave its loop. That task can be inside a TCP/TLS
+ * connect or a write (HUB_NET_TIMEOUT_MS) or its read poll (MQTT_POLL_READ_TIMEOUT_MS, 1 s): the owner
+ * blocks at most about 3 s + 1 s there, once per config change. */
+#define HUB_NET_TIMEOUT_MS 3000
+#define HUB_RECONNECT_MS 10000
+#define REQ_DEPTH 2
 #define OUT_DEPTH 4
 
-enum { T_STATE, T_RES, T_REQ, T_ONLINE, T_N };
-
-typedef struct {
-    uint8_t *buf;
-    size_t len;
-} frame_t;
+enum { T_REQ = CALI_HUB_T_RES + 1, T_ONLINE, T_N };
 
 typedef struct {
     uint8_t *buf;
     size_t len;
     int topic;
-} out_t;
+} frame_t;
 
 static esp_mqtt_client_handle_t s_client;
 static QueueHandle_t s_req_q, s_out_q;
 static char s_topic[T_N][40];
-static atomic_int s_online, s_kicked, s_pub_due;
-static atomic_uint s_last_pub_s;
-static bool s_restart, s_key_ok;
-static cali_hub_crypto_t s_crypto;   /* owner task only */
-static cali_hub_rpc_t s_rpc;         /* owner task only; s_rpc.buf != NULL = a request is pending */
-static char *s_pt, *s_res;           /* owner task: the request and answer plaintexts (PSRAM) */
-static uint64_t s_next_pub;
+static atomic_int s_online, s_kicked;
 static frame_t s_rx;                 /* MQTT task: the request being reassembled */
-static size_t s_rx_total;
 
 static void *ps_alloc(size_t n) {
     return heap_caps_malloc_prefer(n, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -69,12 +54,15 @@ static void *ps_alloc(size_t n) {
 /* ---- the MQTT task ---- */
 
 static void publish_out(void) {
-    out_t o;
+    frame_t o;
     atomic_store(&s_kicked, 0);   /* before the drain: a frame posted during it kicks again */
     while (xQueueReceive(s_out_q, &o, 0) == pdTRUE) {
-        if (atomic_load(&s_online) &&
-            esp_mqtt_client_publish(s_client, s_topic[o.topic], (const char *)o.buf, (int)o.len, 0, o.topic == T_STATE) < 0)
-            cali_log("hub: publish failed (%u bytes)", (unsigned)o.len);
+        int id = -1;
+        if (atomic_load(&s_online))
+            id = esp_mqtt_client_publish(s_client, s_topic[o.topic], (const char *)o.buf, (int)o.len, 0,
+                                         o.topic == CALI_HUB_T_STATE);
+        if (id < 0) cali_log("hub: publish failed (%u bytes)", (unsigned)o.len);
+        else if (o.topic == CALI_HUB_T_STATE) cali_hub_published();   /* last_pub_s: really sent */
         heap_caps_free(o.buf);
     }
 }
@@ -85,21 +73,20 @@ static void rx_data(const esp_mqtt_event_t *e) {
         heap_caps_free(s_rx.buf);
         s_rx.buf = NULL;
         if (e->topic_len != (int)strlen(s_topic[T_REQ]) || memcmp(e->topic, s_topic[T_REQ], (size_t)e->topic_len)) return;
-        if (e->total_data_len <= 0 || e->total_data_len > REQ_MAX) {
+        if (e->total_data_len <= 0 || e->total_data_len > CALI_HUB_REQ_MAX) {
             cali_log("hub: request of %d bytes dropped", e->total_data_len);
             return;
         }
-        s_rx_total = (size_t)e->total_data_len;
-        s_rx.buf = ps_alloc(s_rx_total);
+        s_rx.len = (size_t)e->total_data_len;
+        s_rx.buf = ps_alloc(s_rx.len);
         if (!s_rx.buf) {
             cali_log("hub: request dropped: no memory");
             return;
         }
     }
-    if (!s_rx.buf || e->data_len < 0 || (size_t)e->current_data_offset + (size_t)e->data_len > s_rx_total) return;
+    if (!s_rx.buf || e->data_len < 0 || (size_t)e->current_data_offset + (size_t)e->data_len > s_rx.len) return;
     memcpy(s_rx.buf + e->current_data_offset, e->data, (size_t)e->data_len);
-    if ((size_t)e->current_data_offset + (size_t)e->data_len < s_rx_total) return;
-    s_rx.len = s_rx_total;
+    if ((size_t)e->current_data_offset + (size_t)e->data_len < s_rx.len) return;
     if (xQueueSend(s_req_q, &s_rx, 0) != pdTRUE) {
         cali_log("hub: request queue full: dropped");
         heap_caps_free(s_rx.buf);
@@ -115,7 +102,6 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
         atomic_store(&s_online, 1);
         esp_mqtt_client_publish(s_client, s_topic[T_ONLINE], "1", 1, 1, 1);
         esp_mqtt_client_subscribe(s_client, s_topic[T_REQ], 0);
-        atomic_store(&s_pub_due, 1);
         cali_log("hub: connected");
         break;
     case MQTT_EVENT_DISCONNECTED:
@@ -132,157 +118,90 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
     }
 }
 
-/* ---- the owner task ---- */
+/* ---- the port (owner task) ---- */
 
-static void out_free_all(void) {
-    out_t o;
-    frame_t f;
-    while (s_out_q && xQueueReceive(s_out_q, &o, 0) == pdTRUE) heap_caps_free(o.buf);
-    while (s_req_q && xQueueReceive(s_req_q, &f, 0) == pdTRUE) heap_caps_free(f.buf);
-}
-
-static void stop(void) {
-    if (!s_client) return;
-    esp_mqtt_client_destroy(s_client);   /* stops the task: nothing below races it */
-    s_client = NULL;
-    atomic_store(&s_online, 0);
-    atomic_store(&s_kicked, 0);
-    heap_caps_free(s_rx.buf);
-    s_rx.buf = NULL;
-    out_free_all();
-}
-
-static void start(void) {
-    cali_hub_cfg_t cfg;
-    if (cali_hub_cfg_load(&cfg) != 0) return;   /* no config: nothing runs */
-    if (!s_key_ok) {
-        if (cali_hub_key_load_or_make(&s_crypto) != 0) {   /* -1: the context is not used */
-            cali_log("hub: data key cannot be stored: not started");
-            cali_wipe(&cfg, sizeof cfg);
-            return;
-        }
-        s_key_ok = true;
+static void kick(void) {
+    if (!atomic_exchange(&s_kicked, 1)) {
+        esp_mqtt_event_t k = {.event_id = MQTT_USER_EVENT};
+        if (esp_mqtt_dispatch_custom_event(s_client, &k) != ESP_OK) atomic_store(&s_kicked, 0);   /* the tick retries */
     }
+}
+
+int cali_hub_port_start(const cali_hub_cfg_t *cfg) {
     static const char *const SUF[T_N] = {"state", "res", "req", "online"};
-    for (int i = 0; i < T_N; i++) snprintf(s_topic[i], sizeof s_topic[i], "oc/%s/%s", cfg.van, SUF[i]);
+    if (!s_req_q) s_req_q = xQueueCreateWithCaps(REQ_DEPTH, sizeof(frame_t), MALLOC_CAP_SPIRAM);
+    if (!s_out_q) s_out_q = xQueueCreateWithCaps(OUT_DEPTH, sizeof(frame_t), MALLOC_CAP_SPIRAM);
+    if (!s_req_q || !s_out_q) {
+        cali_log("hub: no memory: not started");
+        return -1;
+    }
+    for (int i = 0; i < T_N; i++) snprintf(s_topic[i], sizeof s_topic[i], "oc/%s/%s", cfg->van, SUF[i]);
     const esp_mqtt_client_config_t mc = {
-        .broker.address.uri = cfg.url,
+        .broker.address.uri = cfg->url,
         .broker.verification.crt_bundle_attach = esp_crt_bundle_attach,
-        .credentials.username = cfg.user,
-        .credentials.authentication.password = cfg.pass,
+        .credentials.username = cfg->user,
+        .credentials.authentication.password = cfg->pass,
         .session.keepalive = HUB_KEEPALIVE_S,
         .session.last_will = {.topic = s_topic[T_ONLINE], .msg = "0", .msg_len = 1, .qos = 1, .retain = 1},
+        .network.timeout_ms = HUB_NET_TIMEOUT_MS,
+        .network.reconnect_timeout_ms = HUB_RECONNECT_MS,
     };
     s_client = esp_mqtt_client_init(&mc);   /* copies the strings */
-    cali_wipe(&cfg, sizeof cfg);
     if (!s_client) {
         cali_log("hub: client init failed");
-        return;
+        return -1;
     }
     esp_mqtt_client_register_event(s_client, MQTT_EVENT_ANY, on_event, NULL);
     if (esp_mqtt_client_start(s_client) != ESP_OK) {
         cali_log("hub: client start failed");
         esp_mqtt_client_destroy(s_client);
         s_client = NULL;
-        return;
+        return -1;
     }
     cali_log("hub: started");
+    return 0;
 }
 
-/* seals `pt` for the MQTT task to publish on `topic`; never waits */
-static void post(int topic, const char *pt, size_t n) {
-    out_t o = {ps_alloc(n + CALI_HUB_OVERHEAD), 0, topic};
-    if (!o.buf) return;
-    o.len = cali_hub_seal(&s_crypto, CALI_HUB_DIR_ESP, (const uint8_t *)pt, n, o.buf, n + CALI_HUB_OVERHEAD);
-    if (!o.len || xQueueSend(s_out_q, &o, 0) != pdTRUE) {
-        cali_log("hub: %s not sent", topic == T_STATE ? "state" : "answer");
-        heap_caps_free(o.buf);
-        return;
-    }
-    if (!atomic_exchange(&s_kicked, 1)) {
-        esp_mqtt_event_t k = {.event_id = MQTT_USER_EVENT};
-        if (esp_mqtt_dispatch_custom_event(s_client, &k) != ESP_OK) atomic_store(&s_kicked, 0);   /* next post retries */
-    }
-}
-
-/* the /api/state body ("?hub=1": not a viewer) */
-static void publish_state(uint64_t now_ms) {
-    cali_http_req_t rq = {"GET", "/api/state", "hub=1", "", 0, 0, NULL};
-    cali_http_resp_t rs = {200, "text/plain", NULL, 0, NULL, NULL, NULL, NULL};
-    s_next_pub = now_ms + HUB_PUB_MS;
-    if (cali_web_handle(&rq, &rs, NULL) != 1 || rs.status != 200 || !rs.body) return;
-    post(T_STATE, rs.body, rs.body_len);
-    uint32_t s = (uint32_t)(now_ms / 1000u);
-    atomic_store(&s_last_pub_s, s ? s : 1u);
-}
-
-static void answered(uint64_t now_ms) {
-    if (atomic_load(&s_online)) {
-        post(T_RES, s_res, strlen(s_res));
-        publish_state(now_ms);
-    }
-    cali_wipe(s_res, RES_MAX);
-}
-
-void cali_hub_esp_start(void) {
-    s_req_q = xQueueCreateWithCaps(2, sizeof(frame_t), MALLOC_CAP_SPIRAM);
-    s_out_q = xQueueCreateWithCaps(OUT_DEPTH, sizeof(out_t), MALLOC_CAP_SPIRAM);
-    s_pt = ps_alloc(REQ_MAX + 1);
-    s_res = ps_alloc(RES_MAX);
-    if (!s_req_q || !s_out_q || !s_pt || !s_res) {
-        cali_log("hub: no memory: not started");
-        return;
-    }
-    s_restart = true;   /* the first tick starts the client (or finds no config) */
-}
-
-void cali_hub_esp_tick(uint64_t now_ms) {
+void cali_hub_port_stop(void) {
     frame_t f;
-    if (!s_res) return;
-    if (s_restart) {
-        s_restart = false;
-        stop();
-        start();
-    }
-    /* the HTTP core may still be sending a body out of the router's static buffer: no router call now */
-    if (!s_client || cali_http_busy()) return;
-    if (s_rpc.buf) {   /* a pending request: one more ask */
-        if (cali_hub_rpc_poll(&s_rpc, s_res, RES_MAX)) answered(now_ms);
-    } else if (xQueueReceive(s_req_q, &f, 0) == pdTRUE) {
-        int n = cali_hub_open(&s_crypto, f.buf, f.len, (uint8_t *)s_pt, REQ_MAX, 1u << CALI_HUB_DIR_APP, NULL);
-        heap_caps_free(f.buf);
-        if (n < 0) {
-            cali_log("hub: request rejected (%u bytes)", (unsigned)f.len);   /* bad tag, replay, wrong dir */
-        } else {
-            s_pt[n] = 0;
-            if (cali_hub_rpc_start(&s_rpc, s_pt, s_res, RES_MAX)) answered(now_ms);
-            cali_wipe(s_pt, (size_t)n);
-        }
-    }
-    if (atomic_load(&s_online) && (atomic_exchange(&s_pub_due, 0) || now_ms >= s_next_pub)) publish_state(now_ms);
+    if (!s_client) return;
+    esp_mqtt_client_destroy(s_client);   /* stops the task (see HUB_NET_TIMEOUT_MS): nothing below races it */
+    s_client = NULL;
+    atomic_store(&s_online, 0);
+    atomic_store(&s_kicked, 0);
+    heap_caps_free(s_rx.buf);
+    s_rx.buf = NULL;
+    while (xQueueReceive(s_out_q, &f, 0) == pdTRUE) heap_caps_free(f.buf);
+    while (xQueueReceive(s_req_q, &f, 0) == pdTRUE) heap_caps_free(f.buf);
 }
 
-/* ---- the port (cali_hub.h) ---- */
+int cali_hub_port_online(void) { return s_client && atomic_load(&s_online); }
 
-void cali_hub_port_status(int *online, uint32_t *last_pub_s) {
-    *online = atomic_load(&s_online);
-    *last_pub_s = atomic_load(&s_last_pub_s);
-}
-
-void cali_hub_port_cfg_changed(void) { s_restart = s_res != NULL; }
-
-size_t cali_hub_port_qr(char *out, size_t max) {
-    cali_hub_cfg_t cfg;
+size_t cali_hub_port_take(uint8_t *buf, size_t max) {
+    frame_t f;
     size_t n = 0;
-    if (s_key_ok && cali_hub_cfg_load(&cfg) == 0) n = cali_hub_qr_text(out, max, &cfg, s_crypto.key);
-    cali_wipe(&cfg, sizeof cfg);
+    if (!s_client || xQueueReceive(s_req_q, &f, 0) != pdTRUE) return 0;
+    if (f.len <= max) memcpy(buf, f.buf, n = f.len);
+    heap_caps_free(f.buf);
     return n;
 }
 
-int cali_hub_port_rekey(void) {
-    if (!s_key_ok) return -1;
-    if (cali_hub_rekey(&s_crypto) != 0) return -1;
-    atomic_store(&s_pub_due, 1);   /* the state under the new key at once */
-    cali_log("hub: new data key");
+int cali_hub_port_post(int topic, const uint8_t *frame, size_t n) {
+    frame_t o = {ps_alloc(n), n, topic};
+    if (!s_client || !o.buf) {
+        heap_caps_free(o.buf);
+        return -1;
+    }
+    memcpy(o.buf, frame, n);
+    if (xQueueSend(s_out_q, &o, 0) != pdTRUE) {
+        heap_caps_free(o.buf);
+        return -1;
+    }
+    kick();
     return 0;
+}
+
+/* a kick that could not be queued (the event loop's queue full) is retried while frames wait */
+void cali_hub_port_tick(void) {
+    if (s_client && uxQueueMessagesWaiting(s_out_q)) kick();
 }

@@ -242,7 +242,7 @@ def test_rpc_get_state(rpc_cli):
 
 
 def test_rpc_unknown_path_404(rpc_cli):
-    res, _ = _rpc(rpc_cli, {"id": 1, "m": "GET", "p": "/nope", "b": None, "t": NOW})
+    res, _ = _rpc(rpc_cli, {"id": 1, "m": "GET", "p": "/api/nope", "b": None, "t": NOW})
     assert (res["id"], res["s"], res["b"]) == (1, 404, "")
 
 
@@ -335,11 +335,13 @@ def test_rpc_escapes_roundtrip_into_router(rpc_cli):
     .. test:: hub rpc decodes the body string and escapes the response body byte-exact
        :id: T_FW_HUB_RPC_ESCAPES
     """
-    body = '{"ssid":"a\\"b\\\\c\u00e9","psk":"test-psk-1234"}'  # the router sees a"b\cé
-    res, other = _rpc(rpc_cli, {"id": 5, "m": "POST", "p": "/api/wifi", "b": body, "t": NOW})
-    assert 'CALL set_creds [a"b\\cé] [test-psk-1234]' in other, (res, other)
-    res, _ = _rpc(rpc_cli, {"id": 6, "m": "POST", "p": "/api/wifi", "b": '{"ssid":"x\\ny"}', "t": NOW})
-    assert res["s"] == 400 and res["b"] == '{"ok":false,"error":"json"}'  # quotes come back byte-exact
+    body = '{"function":"cooler","what":"power","value":"a\\"b\\\\c\u00e9","confirm":true}'  # the router sees a"b\cé
+    res, other = _rpc(
+        rpc_cli, {"id": 5, "m": "POST", "p": "/api/command", "b": body, "t": NOW}, [*ONLINE, "ctl ok"]
+    )
+    assert 'CALL submit [cooler] [power] [a"b\\cé]' in other, (res, other)
+    res, _ = _rpc(rpc_cli, {"id": 6, "m": "POST", "p": "/api/command", "b": '{"function":"x\\ny"}', "t": NOW})
+    assert res["s"] == 400 and res["b"] == '{"ok":false,"error":"bad_json"}'  # quotes come back byte-exact
     res, _ = _rpc(rpc_cli, _get(), ['wifi online a"b\\c 1.2.3.4 -60', "joined 1", "ntp %d" % NOW])
     assert json.loads(res["b"])["device"]["wifi"]["ssid"] == 'a"b\\c'
 
@@ -386,7 +388,7 @@ def echo_cli(tmp_path_factory):
 
 def _echo(cli, body):
     """Send `body` (a Python str) as the request body; return the res plaintext line and the parsed res."""
-    req = json.dumps({"id": 7, "m": "POST", "p": "/x", "b": body, "t": NOW})
+    req = json.dumps({"id": 7, "m": "POST", "p": "/api/command", "b": body, "t": NOW})
     line = subprocess.run([str(cli)], input=req + "\n", capture_output=True, text=True, check=True).stdout
     return line, json.loads(line)
 
@@ -409,13 +411,15 @@ def test_rpc_newline_reaches_router_as_lf(echo_cli):
 def test_rpc_newline_escape_is_decoded(rpc_cli):
     """The real router accepts a decoded LF as JSON whitespace between two members.
 
-    A literal backslash, n outside a string would be a 400, so `CALL set_creds` proves the decode reached the
+    A literal backslash, n outside a string would be a 400, so `CALL submit` proves the decode reached the
     real handler; the byte itself is proven by test_rpc_newline_reaches_router_as_lf.
     """
-    body = '{"ssid":"minsel",\n"psk":"test-psk-1234"}'
+    body = '{"function":"cooler","what":"power",\n"value":"on","confirm":true}'
     assert "\n" in body and "\\n" not in body
-    res, other = _rpc(rpc_cli, {"id": 7, "m": "POST", "p": "/api/wifi", "b": body, "t": NOW})
-    assert "CALL set_creds [minsel] [test-psk-1234]" in other, (res, other)
+    res, other = _rpc(
+        rpc_cli, {"id": 7, "m": "POST", "p": "/api/command", "b": body, "t": NOW}, [*ONLINE, "ctl ok"]
+    )
+    assert "CALL submit [cooler] [power] [on]" in other, (res, other)
     assert "\\n" in json.dumps({"b": body})  # on the wire it is the two characters backslash, n
 
 
@@ -459,3 +463,46 @@ def test_rpc_steps_return_to_the_owner_while_pending(rpc_cli):
     assert ticks == 0 and res["s"] == 200
     ticks, res = _rpcs(rpc_cli, {"id": 3, "m": "GET", "p": "/api/state", "b": None})
     assert ticks == 0 and res["s"] == 400
+
+
+def test_rpc_allowlist_keeps_settings_local(rpc_cli):
+    """Ruling R21: over the hub only GET /api/* and POST /api/command reach the router; every other
+    method or path is 403 local_only and changes nothing (a key holder cannot repoint the broker)."""
+    hub = json.dumps(
+        {
+            "url": "wss://evil:8884/mqtt",
+            "van": "v",
+            "user": "u",
+            "pass": "p",
+            "app_user": "a",
+            "app_pass": "b",
+        }
+    )
+    lines = [
+        *ONLINE,
+        "rpc " + json.dumps({"id": 1, "m": "POST", "p": "/api/hub", "b": hub, "t": NOW}),
+        "kv hub_cfg",
+    ]
+    out = subprocess.run(
+        [str(rpc_cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    res = json.loads(next(ln[4:] for ln in out if ln.startswith("RPC ")))
+    assert (res["s"], json.loads(res["b"])) == (403, {"error": "local_only"})
+    assert "KV <missing>" in out
+    for m, p in [
+        ("POST", "/api/wifi"),
+        ("DELETE", "/api/wifi"),
+        ("POST", "/api/ota"),
+        ("GET", "/device"),
+        ("GET", "/"),
+    ]:
+        res, _ = _rpc(rpc_cli, {"id": 2, "m": m, "p": p, "b": "{}", "t": NOW})
+        assert res["s"] == 403, (m, p)
+    res, _ = _rpc(rpc_cli, {"id": 3, "m": "GET", "p": "/api/state?diag=1", "b": None, "t": NOW})
+    assert res["s"] == 200
+    res, other = _rpc(
+        rpc_cli,
+        {"id": 4, "m": "POST", "p": "/api/command", "b": CMD, "t": NOW},
+        [*ONLINE, "ctl pending", "ctldone ok 2"],
+    )
+    assert res["s"] == 200 and any(ln.startswith("CALL submit") for ln in other)

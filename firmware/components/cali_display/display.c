@@ -689,7 +689,7 @@ static void lora_paint(const cali_display_view_t *v, uint64_t now_ms) {
         uint32_t sig;
         s_qr_poll = now_ms;
         if (v->show_lora == 3) {   /* the hub QR: lower-case URL and key hex, byte mode (237 chars fit version 10) */
-            n = (int)cali_hub_port_qr(text, sizeof text);
+            n = (int)cali_hub_qr(text, sizeof text);
         } else if (!cali_lora_port_setup_pending()) {
             n = v->show_lora == 2 ? cali_lora_port_setup_qr(text, sizeof text) : 0;
             /* the selector; also after a finished rotation (its transfer key erased): the repair QR */
@@ -739,7 +739,7 @@ static void lora_inputs(cali_display_in_t *in, uint64_t now_ms) {
     if (!s_qr_buf) return;
     if (in->pressed_ms || s_lora_show) {   /* the hub QR exists (a config and a data key); the text is wiped */
         char t[QR_TEXT_MAX];
-        in->hub_available = cali_hub_port_qr(t, sizeof t) > 0;
+        in->hub_available = cali_hub_qr(t, sizeof t) > 0;
         cali_wipe(t, sizeof t);
     }
     if (!cali_exp_lora() || !cali_lora_port_status(&ls) || ls.present != 1) return;
@@ -788,7 +788,7 @@ void cali_display_tick(uint64_t now_ms) {
     if (st.wifi_mode != CALI_WIFI_MODE_SETUP || cali_ap_wifi_qr(ap_qr, sizeof ap_qr) < 0) ap_qr[0] = 0;
     cali_display_model(&s_model, &st, now_ms, LANG, &in, cali_display_cfg(), ap_qr[0] ? ap_qr : NULL, &v);
     if (v.lora_request) cali_lora_port_setup_request();   /* before the poll: the QR waits for the new transfer key */
-    if (v.hub_rekey && cali_hub_port_rekey() != 0) cali_log("display: hub: new data key failed");
+    if (v.hub_rekey && cali_hub_new_key() != 0) cali_log("display: hub: new data key failed");
     __atomic_store_n(&s_awake, v.state == CALI_DISP_ON, __ATOMIC_RELAXED);
     __atomic_store_n(&s_scr, (int)v.state, __ATOMIC_RELAXED);
 

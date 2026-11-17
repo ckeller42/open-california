@@ -240,17 +240,20 @@ static void res_json(cali_json_t *j) {
 
 static int hub_cfg(cali_hub_cfg_t *c) { return cali_hub_cfg_load(c) == 0; }
 
-/* "configured","online","last_pub_s" (seconds since the last state publish, null = none yet) */
+/* "configured","online","last_pub_s" (seconds since the last state publish, null = none yet),
+ * "error" ("key": the data key cannot be stored, retried every 30 s; else null) */
 static void hub_status_members(cali_json_t *j, int configured) {
-    int online;
-    uint32_t at;
-    cali_hub_port_status(&online, &at);
+    cali_hub_status_t st;
+    cali_hub_status(&st);
     cali_json_key(j, "configured");
     cali_json_bool(j, configured);
     cali_json_key(j, "online");
-    cali_json_bool(j, online);
+    cali_json_bool(j, st.online);
     cali_json_key(j, "last_pub_s");
-    if (at) cali_json_int(j, (long long)(cali_uptime_ms() / 1000u - at));
+    if (st.last_pub_s) cali_json_int(j, (long long)(cali_uptime_ms() / 1000u - st.last_pub_s));
+    else cali_json_null(j);
+    cali_json_key(j, "error");
+    if (st.key_error) cali_json_str(j, "key");
     else cali_json_null(j);
 }
 
@@ -695,6 +698,11 @@ static int parse_command(const char *body, size_t body_len, cmd_t *cmd) {
 static char s_cmd_fn[24];
 static int s_cmd = CALI_CTL_OK;
 static const char *s_cmd_reason;   /* the done callback's refusal text (static), else NULL */
+/* Ruling R19: the slot is held from the submit until its requester's resume collected the answer (two
+ * channels resume against it: HTTP and the hub RPC). A requester that never resumes holds it at most
+ * CALI_HUB_RPC_PENDING_MS after the submit (the longer of the two channels' waits). */
+static int s_cmd_held;
+static uint64_t s_cmd_at;
 
 static void cmd_done(int result, const char *reason) {
     s_cmd = result;
@@ -751,15 +759,17 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
     if (req->resume) {   /* the core re-asks while we wait for the sequencer */
         if (s_cmd == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
         cmd_answer(resp, s_cmd, s_cmd_reason);
+        s_cmd_held = 0;   /* collected */
         return 1;
     }
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {   /* never over the setup hotspot (ruling B) */
         SET_CONST(resp, 403, ERR_SETUP_MODE);
-    } else if (s_cmd == CALI_CTL_PENDING) {
-        /* ruling R18: one pending slot for two channels (HTTP and the hub RPC): a second command never
-         * touches s_cmd/s_cmd_fn/s_cmd_reason, so the first requester's resume keeps its own result */
+    } else if (s_cmd == CALI_CTL_PENDING ||
+               (s_cmd_held && cali_uptime_ms() - s_cmd_at < CALI_HUB_RPC_PENDING_MS)) {
+        /* rulings R18/R19: one slot for two channels (HTTP and the hub RPC): a second command never
+         * touches s_cmd/s_cmd_fn/s_cmd_reason before the first requester collected its own result */
         SET_CONST(resp, 409, ERR_BUSY);
     } else if (parse_command(req->body, req->body_len, &cmd) != 0) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
@@ -775,7 +785,10 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
         s_cmd_reason = NULL;
         rc = cali_ctl_submit(cmd.fn, cmd.what, cmd.value, cmd.has_local_now ? (int64_t)cmd.local_now : -1,
                              cmd_done, &reason, "web");
-        if (rc == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
+        if (rc == CALI_CTL_PENDING) {
+            s_cmd_held = 1, s_cmd_at = cali_uptime_ms();
+            return CALI_HTTP_PENDING;
+        }
         s_cmd = rc;
         cmd_answer(resp, rc, reason);
     }
@@ -1658,7 +1671,7 @@ static void api_hub(const cali_http_req_t *req, cali_http_resp_t *resp) {
         } else if (cali_hub_cfg_save(&r.c) != 0) {
             SET_CONST(resp, 500, ERR_STORE);
         } else {
-            cali_hub_port_cfg_changed();
+            cali_hub_cfg_changed();
             SET_CONST(resp, 200, OK_BODY);
         }
     }

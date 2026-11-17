@@ -1,14 +1,24 @@
 /* hub_port_none.c — the hub port where there is no MQTT client: the host build, QEMU and the host tests.
- * The board links cali_hub's hub_esp.c instead. The hub reads offline; no QR, no rekey. */
+ * The board links cali_hub's hub_esp.c instead. The client never starts, so cali_hub_tick does nothing. */
 #include "cali_hub.h"
 
-void cali_hub_port_status(int *online, uint32_t *last_pub_s) { *online = 0, *last_pub_s = 0; }
+int cali_hub_port_start(const cali_hub_cfg_t *cfg) {
+    (void)cfg;
+    return -1;
+}
 
-void cali_hub_port_cfg_changed(void) {}
+void cali_hub_port_stop(void) {}
 
-size_t cali_hub_port_qr(char *out, size_t max) {
-    (void)out, (void)max;
+int cali_hub_port_online(void) { return 0; }
+
+size_t cali_hub_port_take(uint8_t *buf, size_t max) {
+    (void)buf, (void)max;
     return 0;
 }
 
-int cali_hub_port_rekey(void) { return -1; }
+int cali_hub_port_post(int topic, const uint8_t *frame, size_t n) {
+    (void)topic, (void)frame, (void)n;
+    return -1;
+}
+
+void cali_hub_port_tick(void) {}

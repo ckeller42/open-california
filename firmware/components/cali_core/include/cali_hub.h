@@ -109,6 +109,9 @@ size_t cali_hub_qr_text(char *out, size_t max, const cali_hub_cfg_t *cfg, const 
  * return = give up, 504), at most CALI_HUB_RPC_PENDING_MS. The body is copied out of the router's static
  * buffer. Write routes keep their own 403 `setup_mode` outside station mode.
  *
+ * Allowlist (ruling R21): only GET /api/... and POST /api/command reach the router; any other method or path
+ * answers 403 with the body `{"error":"local_only"}` (settings, WiFi, OTA and pairing stay local).
+ *
  * Status: 400 bad request (not that JSON, an unknown method, a path without a leading '/', no `t`), 404 no
  * such route (empty body), 408 `stale` (SNTP time valid and |now - t| > CALI_HUB_RPC_SKEW_MS), 413 body too
  * long, 500 the answer does not fit `max`, 504 pending too long. Without SNTP time the `t` check is skipped
@@ -146,18 +149,61 @@ int cali_hub_rpc_start(cali_hub_rpc_t *r, const char *req_json, char *res_json, 
 /** @brief Re-asks a pending request once (504 after CALI_HUB_RPC_PENDING_MS). @return as cali_hub_rpc_start. */
 int cali_hub_rpc_poll(cali_hub_rpc_t *r, char *res_json, size_t max);
 
-/* ---- the port: the MQTT client on the ESP (cali_hub/hub_esp.c), hub_port_none.c elsewhere ---- */
+/* ---- the client run (hub_run.c): owner task, over a port ---- */
 
-/** @brief The client's state for /api/state device.hub: connected, and the uptime s of the last state
- *         publish (0 = none yet). Any task. */
-void cali_hub_port_status(int *online, uint32_t *last_pub_s);
-/** @brief /api/hub stored a new config: the owner tick (re)starts the client with it. Owner task. */
-void cali_hub_port_cfg_changed(void);
+/** @brief The publish period of the sealed /api/state; also the retry period of a data key that cannot be stored. */
+#define CALI_HUB_PUB_MS 30000u
+/** @brief The longest request frame taken from the port. */
+#define CALI_HUB_REQ_MAX 8192
+/** @brief The longest answer plaintext (an escaped /api/state of NET_JSON_MAX). */
+#define CALI_HUB_RES_MAX 12288
+/** @brief Topics of cali_hub_port_post: oc/<van>/state (retained) and oc/<van>/res. */
+enum { CALI_HUB_T_STATE, CALI_HUB_T_RES };
+
+/**
+ * @brief Owner task, every tick (after cali_web_poll): (re)starts the client after a config change (and
+ *        every CALI_HUB_PUB_MS while the data key cannot be stored), takes one request frame, opens it
+ *        (dir 2 only, replay ring), runs it in steps (cali_hub_rpc_start/poll), and posts the sealed answer
+ *        and then the sealed `/api/state?hub=1` body; the state also on connect, on a new key and every
+ *        CALI_HUB_PUB_MS. Offline, answers and states are dropped. No router call while the HTTP core
+ *        sends (cali_http_busy). Nothing runs while the hub config is missing.
+ */
+void cali_hub_tick(uint64_t now_ms);
+/** @brief /api/hub stored a new config: the next tick restarts the client with it. Owner task. */
+void cali_hub_cfg_changed(void);
+/** @brief Any task (the port, after a state frame went out): stamps last_pub_s. */
+void cali_hub_published(void);
+
+typedef struct {
+    int online;          /**< The client runs and is connected. */
+    uint32_t last_pub_s; /**< Uptime s of the last state publish, 0 = none yet. */
+    int key_error;       /**< The data key cannot be stored (retried every CALI_HUB_PUB_MS). */
+} cali_hub_status_t;
+
+/** @brief For /api/state device.hub. */
+void cali_hub_status(cali_hub_status_t *st);
 /** @brief The hub QR text (cali_hub_qr_text with the live key). @return its length, 0 = no hub. Owner task. */
-size_t cali_hub_port_qr(char *out, size_t max);
-/** @brief A new data key (cali_hub_rekey) for the running client; the old app is locked out. Owner task.
+size_t cali_hub_qr(char *out, size_t max);
+/** @brief A new data key (cali_hub_rekey); the old app is locked out; the state goes out under it. Owner task.
  *  @return 0 or -1. */
-int cali_hub_port_rekey(void);
+int cali_hub_new_key(void);
+
+/* ---- the port: the MQTT client (cali_hub/hub_esp.c on the board, hub_port_none.c elsewhere, a fake in
+ * test/hub_run_cli.c). All owner task. ---- */
+
+/** @brief Starts the client with this config (it copies what it keeps). @return 0, or -1 (retried later). */
+int cali_hub_port_start(const cali_hub_cfg_t *cfg);
+/** @brief Stops the client; drops the frames still queued. */
+void cali_hub_port_stop(void);
+/** @brief The client is connected. */
+int cali_hub_port_online(void);
+/** @brief Copies the next request frame into `buf`. @return its length, 0 = none (a longer one is dropped). */
+size_t cali_hub_port_take(uint8_t *buf, size_t max);
+/** @brief Hands a sealed frame to the client for `topic` (it copies it; never waits). @return 0 or -1. */
+int cali_hub_port_post(int topic, const uint8_t *frame, size_t n);
+/** @brief Every tick while the client runs: the port's own housekeeping (hub_esp.c: wake the MQTT task when
+ *  frames wait). */
+void cali_hub_port_tick(void);
 
 #ifdef __cplusplus
 }

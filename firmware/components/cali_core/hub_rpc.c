@@ -244,6 +244,13 @@ static size_t rpc_parse(cali_hub_rpc_t *st, const char *req_json, char *res_json
     if (c.p != c.end || !have_id || !have_m || !have_p || !have_b ||
         (strcmp(method, "GET") && strcmp(method, "POST") && strcmp(method, "DELETE")) || path[0] != '/')
         return err(res_json, max, id, 400, "bad_json");
+    {   /* ruling R21: over the hub only reads and commands; settings, WiFi, OTA, pairing... stay local */
+        size_t pl = strcspn(path, "?");
+        int get = strcmp(method, "GET") == 0;
+        if (!(get && strncmp(path, "/api/", 5) == 0) &&
+            !(strcmp(method, "POST") == 0 && pl == 12 && strncmp(path, "/api/command", 12) == 0))
+            return err(res_json, max, id, 403, "{\"error\":\"local_only\"}");
+    }
     if (!have_t) return err(res_json, max, id, 400, "missing_t");
     {
         int64_t now;

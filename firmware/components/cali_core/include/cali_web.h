@@ -153,7 +153,7 @@
  *            "lora":{"module","joined","at_unanswered","sf","last_s","airtime_ms_24h",
  *                    "airtime_charged_ms_24h","unconfirmed_sends","downlinks_24h","uplinks","note"}
  *                   [only while exp_lora is on],
- *            "hub":{"configured":<bool>,"online":<bool>,"last_pub_s":<int|null>},
+ *            "hub":{"configured":<bool>,"online":<bool>,"last_pub_s":<int|null>,"error":"key"|null},
  *            "water_held":<bool>,
  *            "water_held_age_ms":<int>},
  *  "ext":{"<alias>":{"type":"<id>",<field>:<num|null>,…,"age_s":<int|null>},…}}
@@ -181,13 +181,15 @@
  *     the LoRa switch (NVS exp_lora, default off; R_FW_LORA).
  *   - `energy`: cali_energy.h (R_FW_ENERGY_COUNTERS). `lora`: cali_lora.h (R_FW_LORA).
  *   - `hub`: the remote hub's MQTT client (cali_hub.h): a config is stored, the client is connected,
- *     seconds since the last sealed state publish (null: none yet). `?hub=1` is that publish's own GET:
+ *     seconds since the last sealed state publish (null: none yet), `error` "key" while the data key cannot be
+ *     stored (retried every 30 s). `?hub=1` is that publish's own GET:
  *     it is no viewer (no BLE mark), or the link would never rest.
- *   - `GET /api/hub`: 200 `{"van","url","user","app_user","configured","online","last_pub_s"}`, never the
+ *   - `GET /api/hub`: 200 `{"van","url","user","app_user","configured","online","last_pub_s","error"}`, never the
  *     two passwords; every mode. `POST /api/hub` `{"url","van","user","app_user"[,"pass"][,"app_pass"]}`
  *     (station only, else 403 `setup_mode`): a left-out password keeps the stored one; 400 `bad_json`,
  *     400 `bad_value` (a field empty or too long for cali_hub_cfg_t, a '*', url not `wss://`, van not
- *     [A-Za-z0-9_-]), 500 `store`; 200 `{"ok":true}` restarts the client with the new config.
+ *     [A-Za-z0-9_-]), 500 `store`; 200 `{"ok":true}` restarts the client with the new config. Over the hub (cali_hub_rpc) it is 403
+ *     `local_only` (ruling R21).
  *   - `water_held_age_ms`: present only while the water level is held AND the baseline was measured
  *     on this boot.
  *

@@ -857,23 +857,47 @@ def shows(v):
 
 
 def test_long_press_cycle_reaches_the_hub_qr(cli):
-    """Each further 3 s press goes one state on: selector, (rotation with TTN keys), hub QR; without
-    the LoRa module the first press opens the hub QR; without a hub config the cycle stops as before."""
-    b = LORA + " hub=1"
-    v = run(cli, "reset", b + " now=0", *hold(b, 200, 3000, 1000), b + " now=4200", *hold(b, 200, 3000, 5000))
-    assert shows(v) == ["0", "1", "3"] and v[-1]["bright"] == "100"
-    t = b + " ttn=1"
+    """Ruling R23: each 3 s press goes one state on: the selector (repair QR), the hub QR, then the
+    LoRa setup QR (rotation: the setup request). Reaching the hub QR never asks for a LoRa setup;
+    without the module the first press opens the hub QR; without a hub config the cycle is as before."""
+    t = LORA + " hub=1 ttn=1"
+    v = run(
+        cli,
+        "reset",
+        t + " now=0",
+        *hold(t, 200, 3000, 1000),
+        t + " now=4200",
+        *hold(t, 200, 3000, 5000),
+        t + " now=8200",
+    )
+    assert shows(v) == ["0", "1", "3"] and {x["req"] for x in v} == {"0"} and v[-1]["bright"] == "100"
+    # on the hub QR the 3 s step fires on the release (a press held on goes to the 10 s new key instead)
     v = run(
         cli,
         "reset",
         t + " now=0",
         *hold(t, 200, 3000, 1000),
         *hold(t, 200, 3000, 5000),
-        *hold(t, 200, 3000, 9000),
+        *hold(t, 200, 5000, 9000),
+        t + " now=14200",
     )
-    assert shows(v) == ["0", "1", "2", "3"]
+    assert shows(v) == ["0", "1", "3", "2"]
+    assert [x["show"] for x in v if x["req"] == "1"] == ["2"] and {x["rekey"] for x in v} == {"0"}
+    b = LORA + " hub=1"  # no TTN keys: the selector already is the setup QR (its request on opening)
+    v = run(
+        cli,
+        "reset",
+        b + " now=0",
+        *hold(b, 200, 3000, 1000),
+        b + " now=4200",
+        *hold(b, 200, 3000, 5000),
+        b + " now=8200",
+        *hold(b, 200, 5000, 9000),
+        b + " now=14200",
+    )
+    assert shows(v) == ["0", "1", "3"] and [x["show"] for x in v if x["req"] == "1"] == ["1"]
     v = run(cli, "reset", HUB_ONLY + " now=0", *hold(HUB_ONLY, 200, 3000, 1000))
-    assert shows(v) == ["0", "3"] and {x["rekey"] for x in v} == {"0"}
+    assert shows(v) == ["0", "3"] and {x["rekey"] for x in v} == {"0"} and {x["req"] for x in v} == {"0"}
     t = LORA + " ttn=1"
     v = run(
         cli,
@@ -888,7 +912,8 @@ def test_long_press_cycle_reaches_the_hub_qr(cli):
 
 def test_hub_qr_rekey_needs_a_new_10_s_press(cli):
     """On the hub QR a new press held 10 s asks once for a new data key (and restarts the 120 s); the
-    press that opened it never does, however long it is held; a shorter press closes it, no new key."""
+    press that opened it never does, however long it is held; a press under 3 s closes it, no new key;
+    3..10 s without a next state keeps it."""
     opened = ["reset", HUB_ONLY + " now=0", *hold(HUB_ONLY, 200, 3000, 1000), HUB_ONLY + " now=4200"]
     v = run(cli, *opened, *hold(HUB_ONLY, 200, 10000, 5000), HUB_ONLY + " now=15400")
     keyed = [i for i, x in enumerate(v) if x["rekey"] == "1"]
@@ -899,8 +924,10 @@ def test_hub_qr_rekey_needs_a_new_10_s_press(cli):
     assert [x["show"] for x in v[-2:]] == ["3", "0"]  # 120 s from the new key (at 15000)
     v = run(cli, "reset", HUB_ONLY + " now=0", *hold(HUB_ONLY, 200, 12000, 1000))
     assert v[-1]["show"] == "3" and {x["rekey"] for x in v} == {"0"}
-    v = run(cli, *opened, *hold(HUB_ONLY, 200, 5000, 5000), HUB_ONLY + " now=10400")
+    v = run(cli, *opened, *hold(HUB_ONLY, 200, 2000, 5000), HUB_ONLY + " now=7400")
     assert v[-1]["show"] == "0" and {x["rekey"] for x in v} == {"0"}
+    v = run(cli, *opened, *hold(HUB_ONLY, 200, 5000, 5000), HUB_ONLY + " now=10400")
+    assert v[-1]["show"] == "3" and {x["rekey"] for x in v} == {"0"}
 
 
 def test_hub_qr_closes_like_the_lora_qr(cli):

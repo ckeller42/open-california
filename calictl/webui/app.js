@@ -55,7 +55,7 @@
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
  * @property {{ages: Record<string, number>, version: number|null}} [remote]  set only by adaptSatellite() for remote.js's body: each function's age in s, an unknown uplink version
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora_on?: boolean|null, lora?: ?SatLora, hub?: ?{configured: boolean, online: boolean, last_pub_s: number|null}, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora_on?: boolean|null, lora?: ?SatLora, hub?: ?{configured: boolean, online: boolean, last_pub_s: number|null, error?: string|null}, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -3287,6 +3287,7 @@ function satRenderHub(hb, st) {
   sq("hub").hidden = !hb;
   if (!hb) return;
   sq("hub-status").textContent = !hb.configured ? T("Not set up")
+    : hb.error === "key" ? T("The data key cannot be stored (retried every 30 s)")
     : !hb.online ? T("Not connected")
     : hb.last_pub_s === null ? T("Connected") : tf("Connected · state sent {n} s ago", { n: Math.round(/** @type {number} */ (ageNow(hb.last_pub_s))) });
   sq("hub-save").hidden = !st;   // station only (403 setup_mode over the hotspot)

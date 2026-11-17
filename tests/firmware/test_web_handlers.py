@@ -119,6 +119,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "ble_exp_run.c"),
             str(CORE / "hub_rpc.c"),
             str(CORE / "hub.c"),
+            str(CORE / "hub_run.c"),
             str(CORE / "hub_port_none.c"),
             str(CORE / "display_cfg.c"),
             str(CORE / "battery.c"),
@@ -342,7 +343,7 @@ EXPECTED_DEVICE_TAIL = (
     '"ux":{"enabled":true},'
     '"experimental":{"sensors":false,"lora":false},'
     '"energy":{"boot":0,"solar_wh":0,"load_wh":0,"batt_net_wh":0,"load_a":null},'
-    '"hub":{"configured":false,"online":false,"last_pub_s":null},'
+    '"hub":{"configured":false,"online":false,"last_pub_s":null,"error":null},'
     '"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","reverted":false,"scan":[]}'
@@ -3665,6 +3666,7 @@ HUB_NONE = {
     "app_user": "",
     "online": False,
     "last_pub_s": None,
+    "error": None,
 }
 
 
@@ -3691,8 +3693,14 @@ def test_api_hub_get_hides_the_passwords_and_post_stores(web_cli):
         "app_user": "appuser",
         "online": False,
         "last_pub_s": None,
+        "error": None,
     }
-    assert rs[3].json()["device"]["hub"] == {"configured": True, "online": False, "last_pub_s": None}
+    assert rs[3].json()["device"]["hub"] == {
+        "configured": True,
+        "online": False,
+        "last_pub_s": None,
+        "error": None,
+    }
     for r in rs:
         assert b"secret" not in r.body
 
@@ -3798,3 +3806,51 @@ def test_second_command_while_one_is_pending_is_409_and_keeps_the_first(web_cli)
     res = json.loads(next(ln for ln in other if ln.startswith("RPCS ")).split(" ", 2)[2])
     assert (res["id"], res["s"]) == (5, 200) and json.loads(res["b"]) == OK
     assert submits(other) == ["CALL submit [cooler] [power] [on]"]
+
+
+def test_command_slot_stays_busy_until_its_owner_collects(web_cli):
+    """Ruling R19: the slot is held from the submit until the owner's resume collected the result. A
+    finished but uncollected command still makes a new one 409; the owner then gets its own result,
+    and after that a new command is accepted."""
+    first = json.dumps({"id": 6, "m": "POST", "p": "/api/command", "b": CMD, "t": 1})
+    roof = '{"function":"roof","what":"position","value":"open","confirm":true}'
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"ctl pending",
+            b"ctldone ok 1",
+            b"rpcbegin " + first.encode(),
+            req("GET", "/api/state"),  # its polls run the ctl countdown: A is done, not collected
+            req("POST", "/api/command", roof),
+            b"rpcpoll",
+            b"ctldone ok 2",
+            req("POST", "/api/command", roof),
+        ],
+    )
+    assert (resps[1].status, resps[1].json()) == (409, {"ok": False, "error": "busy"})
+    res = json.loads(next(ln for ln in other if ln.startswith("RPCS ")).split(" ", 2)[2])
+    assert (res["id"], res["s"], json.loads(res["b"])["function"]) == (6, 200, "cooler")
+    assert resps[2].status == 200 and resps[2].json()["function"] == "roof"
+    assert submits(other) == ["CALL submit [cooler] [power] [on]", "CALL submit [roof] [position] [open]"]
+
+
+def test_an_uncollected_command_frees_the_slot_after_60_s(web_cli):
+    """A requester that never resumes holds the slot at most CALI_HUB_RPC_PENDING_MS after its submit."""
+    first = json.dumps({"id": 7, "m": "POST", "p": "/api/command", "b": CMD, "t": 1})
+    roof = '{"function":"roof","what":"position","value":"open","confirm":true}'
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"now 1000",
+            b"ctl pending",
+            b"ctldone ok 1",
+            b"rpcbegin " + first.encode(),
+            req("GET", "/api/state"),
+            b"now 62000",
+            b"ctldone ok 2",
+            req("POST", "/api/command", roof),
+        ],
+    )
+    assert resps[1].status == 200 and resps[1].json()["function"] == "roof"
