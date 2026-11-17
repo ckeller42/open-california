@@ -1261,7 +1261,7 @@ function paintLink() {
   } else if (s === "lora") {
     const version = m && m.remote ? m.remote.version : null;
     if (version != null) tmpl = "The van sends data in a newer format — please update the app.";
-    else if (remoteProblem === "setup") tmpl = "No van on this phone yet: open ⋮ and choose Scan the van's code.";
+    else if (remoteProblem === "setup") tmpl = "No van on this phone yet: open ⋮ and choose Scan the van's code (with LoRa only: Set up LoRa, needs a TTN account).";
     else if (remoteProblem === "key") tmpl = HUB_KEY_MSG;
     else if (remoteProblem === "ttn") tmpl = clock ? "The Things Stack does not answer. Last data {clock} ({ago})."
       : "The Things Stack does not answer.";
@@ -2730,8 +2730,8 @@ function buildSetup() {
         h("h2", null, T("The remote app")), h("p", null, appLink()),
         p(T("iPhone: open the link in Safari, tap Share, then Add to Home Screen. The icon is called OC Remote."), "setup-app-ios"),
         p(T("Android: open the link in Chrome, tap ⋮, then Install app (or Add to Home screen). The icon is called OC Remote."), "setup-app-android"),
-        p(T("In the app, open ⋮ and choose Scan the van's code. On the satellite, hold the screen 3 s (the app's code shows), then hold it 3 s again until “The van's code” shows, and scan that one in the app."), "setup-app-scan"),
-        p(T("Then come back here (Safari) and tap Next."), "setup-app-back")),
+        p(T("In the app, open ⋮ and choose Scan the van's code. On the satellite, tap the screen once to light it, hold it 3 s (the app's code shows), then hold it 3 s again until “The van's code” shows, and scan that one in the app."), "setup-app-scan"),
+        p(T("Then come back to this page and tap Next."), "setup-app-back")),
       h("h2", null, T("Over LoRa")),
       h("p", { class: "note" }, T("Only for a satellite with the LoRa module (RAK3172). Works without a remote hub.")),
       h("div", { id: "lora" }, satSwitchRow("lora"), satMsg("lora-msg")),

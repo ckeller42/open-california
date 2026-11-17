@@ -3,8 +3,9 @@
 The satellite can send a few numbers (batteries, water, solar, the cooler) over {term}`LoRaWAN` to
 The Things Network. The **Open California remote app** reads them from there, so you see your van
 from anywhere, with no router, no Raspberry Pi and no Tailscale in the van. The remote app is a
-web page that you put on your phone's home screen. It talks only to The Things Network, never to
-your router, your Pi or the satellite. Over LoRa alone, the app only shows the data; with the remote
+web page that you put on your phone's home screen. Over LoRa alone it talks only to The Things
+Network, never to your router, your Pi or the satellite (with the remote hub it also talks to your
+broker). Over LoRa alone, the app only shows the data; with the remote
 hub set up, it also sends a few commands (heater, camping mode), over LoRa too.
 
 To see the van over WiFi as well, and to switch the heater and camping mode from anywhere, set up the

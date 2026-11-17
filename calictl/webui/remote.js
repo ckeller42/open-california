@@ -480,7 +480,7 @@ async function rsStepLocked() {
       delete st.tk;
       st.step = "rescan";
       rsSave(st);
-      rsMsg = "The van did not confirm. Hold its screen for 3 seconds and scan the setup code again.";
+      rsMsg = "The van did not confirm. On the satellite, tap the screen once, then hold it 3 s until the LoRa setup code shows (with a remote hub: the third screen), and scan it again.";
     }
   }
   rsPoll();
@@ -500,6 +500,9 @@ function rsRepairQr(text) {
   }
   if (/^https?:\/\//i.test(text.trim())) {   // the display's "Get the app" QR (R36): the van's code is the next screen
     rsMsg = "This is the app's code: on the satellite, hold the screen 3 s again for the van's code."; rsRefresh(); return;
+  }
+  if (parseSetupQr(text.trim())) {   // a LoRa-only first time: the LoRa screen shows the setup code before the TTN keys
+    rsMsg = "This is the LoRa setup code: open ⋮ and choose Set up LoRa (needs a TTN account)."; rsRefresh(); return;
   }
   const r = parseRepairQr(text.trim());
   if (!r) { rsMsg = "This is not the van's code."; rsRefresh(); return; }
@@ -570,7 +573,7 @@ function rsBuild(v, phase) {
   const msg = h("p", { class: "warn", id: "rs-msg", "aria-live": "polite" });
   const card = (/** @type {(Node|string|null)[]} */ ...kids) => h("div", { class: "sat" }, h("div", { class: "card dcard" }, ...kids));
   if (v === "remotescan")
-    return card(h("p", null, T("On the satellite, hold the screen 3 s, and again until “The van's code” shows (without a remote hub: the LoRa code), then scan it here.")),
+    return card(h("p", null, T("On the satellite, tap the screen once to light it, then hold it 3 s, and again, until “The van's code” shows (without a remote hub: the LoRa code), then scan it here.")),
       rsScanner(rsRepairQr), msg);
   if (v === "remoteremove") {
     const ok = satBtn(T("Remove"), "danger"), no = satBtn(T("Cancel"));

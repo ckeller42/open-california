@@ -282,7 +282,7 @@ def test_key_changed_message():
         await deliver("state",st(),false,1,bad); const b=hub.problem;
         await deliver("state",st()); return [a,b,hub.problem,HUB_KEY_MSG]; }})()"""
     )
-    assert r == ["", "key", "", "Key changed: scan the hub QR"]
+    assert r == ["", "key", "", "Key changed: scan the van's code again"]
 
 
 def _lora_setup(fake, pushes=0):

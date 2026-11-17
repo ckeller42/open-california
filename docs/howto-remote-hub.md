@@ -337,8 +337,8 @@ O->>E: hold 3 s - the app QR
 O->>P: camera, install, icon OC Remote
 O->>E: hold 3 s again - the van's code
 O->>P: OC Remote, Scan the van's code
-O->>E: hold 3 s again - the LoRa code
-O->>P: OC Remote, Set up LoRa (TTN key)
+O->>P: OC Remote, Set up LoRa - check the TTN key
+O->>E: hold 3 s again - the LoRa code, scan it in OC Remote
 end
 rect rgb(235, 242, 250)
 Note over O,E: Satellite wizard, back in Safari
@@ -453,7 +453,7 @@ B-->>P: res, app shows the answer
    (with the secret in `$OC_WEBHOOK_SECRET`, loaded from your secret store) answers `400`: the secret is right and the body is empty.
 3. **App → broker → satellite.** In the app, switch the **air heater** or **camping mode** while the
    phone is on mobile data (not the van's WiFi). The app shows the answer within a few seconds.
-   Fail: the app shows "Key changed: scan the hub QR" (rekeyed, scan again) or "No connection to the
+   Fail: the app shows "Key changed: scan the van's code again" (rekeyed, scan again) or "No connection to the
    hub" (broker or `app` credential).
 4. **LoRa command.** Turn off the satellite's WiFi (or block the broker), switch camping mode in the
    app. After 30 seconds the app sends it over LoRa and says **Sent over LoRa.** The satellite acts
@@ -531,7 +531,7 @@ A phone with the hub QR can read the van's WiFi data and send commands until the
    in the lost phone).
 2. In the satellite's **Satellite settings**, card **Remote hub**, tap **New data key** and confirm
    (only in the van's WiFi). The satellite makes a **new data key**; the van's code changes. Old
-   phones stop working: the app says "Key changed: scan the hub QR".
+   phones stop working: the app says "Key changed: scan the van's code again".
 3. On the satellite, hold the screen for 3 seconds, and again, until **The van's code** shows.
 4. Scan it on every phone you keep (**Scan the van's code**).
 5. Put the new key into the bridge (step 5.7 above). **If you skip this, LoRa values stop reaching

@@ -23,7 +23,7 @@ const HUB_AHEAD_MS = 300000;          // a hub_t further ahead of this phone's c
 const HUB_CMD_WAIT_MS = 30000;        // no answer this long and the ESP not online: the command goes over LoRa
 const HUB_GIVEUP_MS = 65000;          // the ESP gives a pending command up after 60 s (CALI_HUB_RPC_PENDING_MS)
 const HUB_RING = 8;                   // CALI_HUB_RING: the ESP sessions remembered (replay guard)
-const HUB_KEY_MSG = "Key changed: scan the hub QR";
+const HUB_KEY_MSG = "Key changed: scan the van's code again";
 const HUB_LOCAL_MSG = "Settings: only in the van's WiFi";
 const HUB_LORA_ONLY_MSG = "Over LoRa only the heater and camping mode can be switched.";
 const HUB_LORA_SENT_MSG = "Sent over LoRa.";
@@ -433,7 +433,7 @@ async function hubCommand(body) {
     try {
       return (await loraCommand(code)) === "sent" ? { ok: true, note: HUB_LORA_SENT_MSG } : { ok: false, note: REMOTE_LIMIT_MSG };
     } catch (e) {
-      return { ok: false, note: e instanceof TtnError || e instanceof TypeError ? rsErrText(e) : "LoRa is not set up on this phone." };
+      return { ok: false, note: e instanceof TtnError || e instanceof TypeError ? rsErrText(e) : "LoRa is not set up on this phone: open ⋮ and choose Set up LoRa (needs a TTN account)." };
     }
   }
   if (!r) r = await hubWithin(p, HUB_GIVEUP_MS - HUB_CMD_WAIT_MS);

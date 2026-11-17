@@ -351,4 +351,4 @@ def test_key_changed(world):
         expect(pg.locator("#status")).to_have_text("WLAN · just now")
         head = bytes([1, 1, 1]) + other.sess + (1).to_bytes(4, "big")  # a fresh frame under another key
         broker.publish("oc/%s/state" % VAN, head + AESGCM(b"\xff" * 16).encrypt(head[2:], b"{}", head))
-        expect(pg.get_by_text("Key changed: scan the hub QR")).to_be_visible()
+        expect(pg.get_by_text("Key changed: scan the van's code again")).to_be_visible()

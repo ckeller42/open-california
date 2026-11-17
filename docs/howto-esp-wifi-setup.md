@@ -125,7 +125,8 @@ opt Remote access, over the internet (optional)
 end
 opt Remote access, over LoRa (optional)
     O->>P: LoRa switch on
-    O->>E: hold 3 s until the LoRa code - Set up LoRa in OC Remote
+    O->>P: OC Remote, Set up LoRa - check the TTN key
+    O->>E: hold 3 s until the LoRa code, scan it in OC Remote
 end
 O->>P: Home - add this page, icon OC Van
 O->>P: Done

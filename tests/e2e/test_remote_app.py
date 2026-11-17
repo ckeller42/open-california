@@ -374,5 +374,5 @@ def test_a_phone_without_a_van_is_sent_to_the_vans_code(site, error_gated_page):
     it), not the LoRa setup (a TTN account)."""
     with error_gated_page(site, init_script="window.OC_REMOTE = true;", service_workers="block") as pg:
         expect(
-            pg.get_by_text("No van on this phone yet: open ⋮ and choose Scan the van's code.")
+            pg.get_by_text("No van on this phone yet: open ⋮ and choose Scan the van's code (with LoRa only: Set up LoRa, needs a TTN account).")
         ).to_be_visible()

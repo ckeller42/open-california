@@ -665,3 +665,22 @@ def test_a_status_0_of_other_keys_is_not_a_failure(site, ttn, error_gated_page):
         assert pg.get_by_text(tx["rescan"]).count() == 0
         _confirm(pg, ttn, b"\x00" + hashlib.sha256(_plain(frags)).digest()[:4])
         pg.get_by_text(tx["done"]).wait_for()
+
+
+@pytest.mark.parametrize(
+    "text,msg",
+    [
+        (setup_qr(), "This is the LoRa setup code: open ⋮ and choose Set up LoRa (needs a TTN account)."),
+        (
+            "HTTPS://OPEN-CALIFORNIA.GITHUB.IO/",  # upper case: qr_png encodes in alphanumeric mode
+            "This is the app's code: on the satellite, hold the screen 3 s again for the van's code.",
+        ),
+    ],
+)
+def test_scan_the_vans_code_names_the_other_codes(site, ttn, error_gated_page, text, msg):  # noqa: F811
+    """Re-review N4 and finding 3: the van's-code scanner names a LoRa setup code (a LoRa-only first time:
+    Set up LoRa, needs TTN) and the display's app QR instead of only "This is not the van's code."."""
+    with _page(error_gated_page, site, ttn) as pg:
+        _menu(pg, "Scan the van's code")
+        _photo(pg, text)
+        pg.locator("#rs-msg").get_by_text(msg).wait_for()

@@ -344,7 +344,7 @@ def test_the_remote_step_saves_the_hub_then_shows_the_app(station_pending, local
         expect(app.locator('a[href="https://open-california.github.io/"]')).to_be_visible()
         for text in (
             "iPhone: open the link in Safari, tap Share, then Add to Home Screen. The icon is called OC Remote.",
-            "Then come back here (Safari) and tap Next.",
+            "Then come back to this page and tap Next.",
         ):
             expect(app).to_contain_text(tr(text, lang))
         pg.get_by_role("button", name=tr("Next", lang), exact=True).click()
