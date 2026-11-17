@@ -111,7 +111,18 @@ read secrets from a prompt or a pipe.
    accepts retained messages: publish a retained test message as `van`, subscribe with a new client
    and see it arrive at once.
 
-Optional: the EMQX platform API key can automate the console steps. It belongs in `~/.env` as
+Optional alternative to the click path of steps 1 to 3: create the deployment with the EMQX Platform
+API (`POST {platform}/deployments`, with the platform's base URL from the EMQX API documentation and
+the platform API key as credential, read from `~/.env`, never typed into the command line). The body
+holds `platform`, `region`, `connections` 1000, `tps` 1000, `deploymentType` `"serverless"`,
+`deploymentVersion` `"v5"`, `projectID` and `freeTrial` `false`. The `201` answer shows
+`spec.spendLimit` 0 and `spendLimitAction` `"stop"`: check both before you go on. Serverless exposes
+only port 8084 (wss) and 8883 (mqtts), and the host looks like `<id>.ala.<region>.emqxsl.com` (an
+example format: take the real host from the answer or the Overview). The deployment API
+(`https://<host>:8443/api/v5`) needs a deployment API key, and the Platform API cannot make one for
+Serverless: make it in the console. The path `/mqtt` stays **check in the console**.
+
+The EMQX platform API key can automate the console steps. It belongs in `~/.env` as
 `EMQX_API_KEY` and `EMQX_API_SECRET` (names only). This page does not depend on it.
 
 ### 2. Cloudflare: the bridge Worker
