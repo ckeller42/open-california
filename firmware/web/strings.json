@@ -32,5 +32,6 @@
   "d_lora_not_joined": {"en": "not joined", "de": "nicht im Netz"},
   "d_lora_confirmed": {"en": "last uplink confirmed %s ago", "de": "letzte Sendung bestätigt vor %s"},
   "d_lora_none": {"en": "no uplink confirmed yet", "de": "noch keine Sendung bestätigt"},
-  "d_hub_line": {"en": "Remote hub · hold 10 s for a new key", "de": "Fern-Hub · 10 s halten für neuen Schlüssel"}
+  "d_hub_line": {"en": "Remote hub · hold 10 s for a new key", "de": "Fern-Hub · 10 s halten für neuen Schlüssel"},
+  "d_app_steps": {"en": "1. Scan with the camera: get the app\n2. Add it to the home screen\n3. Press again: the van's code, scan it in the app", "de": "1. Mit der Kamera scannen: App holen\n2. Zum Home-Bildschirm hinzufügen\n3. Erneut drücken: Code des Fahrzeugs, in der App scannen"}
 }

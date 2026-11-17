@@ -257,10 +257,13 @@ static void hub_status_members(cali_json_t *j, int configured) {
     else cali_json_null(j);
 }
 
+/* device.hub: the status, plus "app_url" (the remote app, read-only, also before a config: ruling R35) */
 static void hub_status_json(cali_json_t *j) {
     cali_hub_cfg_t c;
     cali_json_obj_begin(j);
     hub_status_members(j, hub_cfg(&c));
+    cali_json_key(j, "app_url");
+    cali_json_str(j, CALI_HUB_APP_URL);
     cali_json_obj_end(j);
     cali_wipe(&c, sizeof c);
 }

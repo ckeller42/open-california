@@ -130,6 +130,7 @@ static const char *const SCR_NAMES[] = {"on", "dim", "off"};
 #define QR_TEXT_MAX 400
 #define QR_POLL_MS 1000
 #define LORA_COL_X (LQR_BOX + 4)
+#define APP_QR_BOX 168   /* the app QR (show_lora 4): a short URL, so a narrower code and a wider text column for its 3 steps */
 
 LV_FONT_DECLARE(font_latin1_16);
 LV_FONT_DECLARE(font_latin1_24);
@@ -289,6 +290,7 @@ static void build(void) {
         memset(s_qr_buf->data + 8, 0, (size_t)s_qr_buf->header.stride * LQR_BOX);   /* +8: the palette */
         s_lqr = lv_canvas_create(s_lora);
         lv_canvas_set_draw_buf(s_lqr, s_qr_buf);
+        lv_image_set_inner_align(s_lqr, LV_IMAGE_ALIGN_TOP_LEFT);   /* a narrower width clips the right, not both sides */
         lv_obj_set_pos(s_lqr, 0, 0);
     } else {
         cali_log("display: lora qr buffer allocation failed: no LoRa screen");   /* lora_inputs: no setup either */
@@ -639,21 +641,22 @@ static void touch_errors_evt(uint64_t now_ms) {
 }
 
 /* Paint the QR text into the canvas (white when it does not encode): ECC L, the version qrcodegen picks
- * (alphanumeric mode for the upper-case texts), whole pixels per module, px = LQR_BOX / (modules + 8), so
+ * (alphanumeric mode for the upper-case texts), whole pixels per module, px = box / (modules + 8), so
  * at least a 4-module white quiet zone. The encoder buffers are wiped; the caller wipes the text.
  * Returns 1 when a QR was painted. */
-static int qr_paint(const char *text) {
+static int qr_paint(const char *text, int box) {
     uint8_t *bits = s_qr_buf->data + 8;   /* +8: the I1 palette */
     uint32_t stride = s_qr_buf->header.stride;
     int ok = text[0] && qrcodegen_encodeText(text, s_qr_tmp, s_qr_mod, qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, QR_VMAX,
                                              qrcodegen_Mask_AUTO, false);
     cali_wipe(bits, (size_t)stride * LQR_BOX);   /* the old QR: the secret in another shape */
     if (ok) {
-        int n = qrcodegen_getSize(s_qr_mod), px = LQR_BOX / (n + 8), off = (LQR_BOX - px * n) / 2;
+        /* `box` wide (the canvas is clipped to it), centred in the full height */
+        int n = qrcodegen_getSize(s_qr_mod), px = box / (n + 8), offx = (box - px * n) / 2, offy = (LQR_BOX - px * n) / 2;
         for (int y = 0; y < n * px; y++)
             for (int x = 0; x < n * px; x++)
                 if (qrcodegen_getModule(s_qr_mod, x / px, y / px))
-                    bits[(uint32_t)(off + y) * stride + (uint32_t)(off + x) / 8] |= (uint8_t)(0x80u >> ((off + x) % 8));
+                    bits[(uint32_t)(offy + y) * stride + (uint32_t)(offx + x) / 8] |= (uint8_t)(0x80u >> ((offx + x) % 8));
     }
     cali_wipe(s_qr_tmp, sizeof s_qr_tmp);
     cali_wipe(s_qr_mod, sizeof s_qr_mod);
@@ -675,7 +678,7 @@ static void lora_paint(const cali_display_view_t *v, uint64_t now_ms) {
     if (!v->show_lora) {
         if (s_lora_show) {
             lv_obj_set_hidden(s_lora, true);
-            qr_paint("");   /* the bitmap is the secret in another shape */
+            qr_paint("", LQR_BOX);   /* the bitmap is the secret in another shape */
             s_lora_show = 0;
             s_qr_sig = 0;
             s_qr_ok = 0;
@@ -690,19 +693,25 @@ static void lora_paint(const cali_display_view_t *v, uint64_t now_ms) {
         s_qr_poll = now_ms;
         if (v->show_lora == 3) {   /* the hub QR: lower-case URL and key hex, byte mode (237 chars fit version 10) */
             n = (int)cali_hub_qr(text, sizeof text);
+        } else if (v->show_lora == 4) {   /* the app QR: the plain URL, byte mode, no secret (ruling R36) */
+            n = snprintf(text, sizeof text, "%s", CALI_HUB_APP_URL);
         } else if (!cali_lora_port_setup_pending()) {
             n = v->show_lora == 2 ? cali_lora_port_setup_qr(text, sizeof text) : 0;
             /* the selector; also after a finished rotation (its transfer key erased): the repair QR */
             if (n <= 0) n = cali_lora_port_qr(text, sizeof text);
         }
-        if (n > 0 && v->show_lora != 3 && !qrcodegen_isAlphanumeric(text)) {   /* LoRa: never byte mode, the length only */
+        if (n > 0 && v->show_lora < 3 && !qrcodegen_isAlphanumeric(text)) {   /* LoRa: never byte mode, the length only */
             cali_log("display: lora qr: %d chars not alphanumeric, not shown", n);
             n = 0;
         }
         if (n <= 0) cali_wipe(text, sizeof text);
         sig = n > 0 ? fnv1a(text) : 0;
         if (sig != s_qr_sig || v->show_lora != s_lora_show) {
-            s_qr_ok = qr_paint(text);
+            int box = v->show_lora == 4 ? APP_QR_BOX : LQR_BOX;
+            lv_obj_set_width(s_lqr, box);   /* the app QR: the right part of the canvas gives way to the text */
+            lv_obj_set_width(s_lora_hint, W - box - 6);
+            lv_obj_set_x(s_lora_hint, box + 4);
+            s_qr_ok = qr_paint(text, box);
             if (n > 0 && !s_qr_ok) cali_log("display: lora qr: %d chars do not encode", n);   /* the length only */
             s_qr_sig = s_qr_ok ? sig : 0;
         }

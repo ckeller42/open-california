@@ -20,7 +20,7 @@
 enum {
     K_DEVICE, K_WIFI, K_CAMPER, K_RUNNING, K_SETUP, K_JOINING, K_RETRYING, K_WIFI_OFF, K_CONNECTED,
     K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_QR_JOIN_TITLE, K_QR_NEXT_TITLE, K_QR_WLAN, K_QR_PASS, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_BATT, K_CHARGING, K_HEATER_LOCKED, K_HEATER_ERROR,
-    K_LORA_SCAN, K_LORA_WAIT, K_LORA_JOINED, K_LORA_NOT_JOINED, K_LORA_CONFIRMED, K_LORA_NONE, K_HUB_LINE, K_COUNT
+    K_LORA_SCAN, K_LORA_WAIT, K_LORA_JOINED, K_LORA_NOT_JOINED, K_LORA_CONFIRMED, K_LORA_NONE, K_HUB_LINE, K_APP_STEPS, K_COUNT
 };
 static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_DEVICE] = {WEB_STR_DE_DEVICE, WEB_STR_EN_DEVICE},
@@ -57,6 +57,7 @@ static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_LORA_CONFIRMED] = {WEB_STR_DE_D_LORA_CONFIRMED, WEB_STR_EN_D_LORA_CONFIRMED},
     [K_LORA_NONE] = {WEB_STR_DE_D_LORA_NONE, WEB_STR_EN_D_LORA_NONE},
     [K_HUB_LINE] = {WEB_STR_DE_D_HUB_LINE, WEB_STR_EN_D_HUB_LINE},
+    [K_APP_STEPS] = {WEB_STR_DE_D_APP_STEPS, WEB_STR_EN_D_APP_STEPS},
 };
 
 static const char *tx(int key, int lang) { return lang == CALI_LANG_EN ? TXT[key].en : TXT[key].de; }
@@ -207,14 +208,16 @@ static uint8_t on_level(float x, const cali_display_cfg_t *c) {
 /* The LoRa screen's gestures (R_FW_LORA_SCREEN), from the press duration seen each tick: a press is new
  * when the duration starts or drops; one that starts on a dark screen is spent (the wake press); an
  * unspent press fires once at DISPLAY_LORA_PRESS_MS; an unspent press that ends shorter, or a tap
- * between two ticks, closes the screen. Each firing goes one state on (ruling R23): closed -> 1, the
- * selector (with the module) -> 3, the hub QR (with a hub config) -> 2, the LoRa setup QR (with the TTN
- * keys: the rotation, the only step after the opening that asks for a new transfer key); a state whose
- * condition is missing is skipped. On the hub QR a press held DISPLAY_HUB_REKEY_MS asks for a new data
- * key; one released between DISPLAY_LORA_PRESS_MS and that goes on to the next state. */
+ * between two ticks, closes the screen. Each firing goes one state on (rulings R23, R36): closed -> 1,
+ * the selector (with the module) -> 4, the "Get the app" QR (with a hub config) -> 3, the hub QR ->
+ * 2, the LoRa setup QR (with the TTN keys: the rotation, the only step after the opening that asks
+ * for a new transfer key); a state whose condition is missing is skipped. On the hub QR a press held
+ * DISPLAY_HUB_REKEY_MS asks for a new data key; one released between DISPLAY_LORA_PRESS_MS and that
+ * goes on to the next state. The app QR never makes a key. */
 static int lora_next(int show, const cali_display_in_t *in) {
-    if (show == 0) return in->lora_available ? 1 : in->hub_available ? 3 : 0;
-    if (show == 1) return in->hub_available ? 3 : in->lora_has_ttn_keys ? 2 : 1;
+    if (show == 0) return in->lora_available ? 1 : in->hub_available ? 4 : 0;
+    if (show == 1) return in->hub_available ? 4 : in->lora_has_ttn_keys ? 2 : 1;
+    if (show == 4) return 3;
     if (show == 3) return in->lora_available && in->lora_has_ttn_keys ? 2 : 3;
     return show;
 }
@@ -250,7 +253,7 @@ static void lora_screen(cali_display_model_t *m, uint64_t now_ms, const cali_dis
         }
     }
     m->press_ms = p;
-    if (m->show_lora && ((m->show_lora == 3 ? !in->hub_available : !in->lora_available) ||
+    if (m->show_lora && ((m->show_lora >= 3 ? !in->hub_available : !in->lora_available) ||
                          now_ms - m->lora_since >= DISPLAY_LORA_SHOW_MS)) {
         m->show_lora = 0;
         m->press_spent = 1;   /* a press held across the close never reopens it (nor makes a new key) */
@@ -267,6 +270,10 @@ static void lora_texts(const cali_display_in_t *in, int lang, cali_display_view_
     out->lora_hint = tx(in->lora_qr_ready ? K_LORA_SCAN : K_LORA_WAIT, lang);
     if (out->show_lora == 3) {
         cali_display_fit_text(out->lora_line, tx(K_HUB_LINE, lang));
+        return;
+    }
+    if (out->show_lora == 4) {   /* the app URL: no secret, always ready; the three steps beside it */
+        out->lora_hint = tx(K_APP_STEPS, lang);
         return;
     }
     if (in->lora_confirmed_age_s >= 0) {

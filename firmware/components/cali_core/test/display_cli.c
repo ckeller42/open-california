@@ -117,10 +117,12 @@ int main(int argc, char **argv) {
         putchar('|');
         put_text(v.qr_lines[1]);
         printf(" ;; footer=%s ;; bright=%u ;; state=%s ;; sensor=%s ;; motion=%d ;; show=%d ;; req=%d ;; "
-               "lhint=%s ;; lline=%s ;; rekey=%d\n", v.footer,
+               "lhint=", v.footer,
                (unsigned)v.brightness_pct, v.state == CALI_DISP_ON ? "on" : v.state == CALI_DISP_DIM ? "dim" : "off",
                v.sensor == CALI_SENSOR_OK ? "ok" : v.sensor == CALI_SENSOR_ABSENT ? "absent" : "error", (int)v.motion,
-               v.show_lora, v.lora_request, v.lora_hint, v.lora_line, v.hub_rekey);
+               v.show_lora, v.lora_request);
+        put_text(v.lora_hint);   /* the app QR's steps: one per line */
+        printf(" ;; lline=%s ;; rekey=%d\n", v.lora_line, v.hub_rekey);
     }
     return 0;
 }

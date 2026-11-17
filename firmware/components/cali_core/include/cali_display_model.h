@@ -50,7 +50,10 @@
  *    ``DISPLAY_LORA_PRESS_MS`` (3 s) on the lit screen shall open the LoRa screen: before the van has
  *    the TTN keys it asks the LoRa task for a new transfer key and shows the setup QR, after it shows
  *    the repair QR (``cali_lora_qr_text``); a further 3 s press while the repair QR shows asks for a
- *    new transfer key and shows the setup QR (rotation). A tap or ``DISPLAY_LORA_SHOW_MS`` (120 s)
+ *    new transfer key and shows the setup QR (rotation). With a hub config each 3 s press goes one
+ *    screen on: the repair QR (LoRa on), the "Get the app" QR (the remote app's URL
+ *    ``CALI_HUB_APP_URL``, byte mode, beside three numbered steps; a long press there never makes a
+ *    key), the hub QR (a 10 s press there makes a new data key), the setup QR (rotation). A tap or ``DISPLAY_LORA_SHOW_MS`` (120 s)
  *    closes it, and so does the module going away. The press that wakes a dark (dim or off) screen
  *    never counts and is still swallowed. While the screen is up the backlight is at 100 %; the QR
  *    (alphanumeric mode, error correction L, whole pixels per module, a 4-module quiet zone, black on
@@ -184,7 +187,7 @@ typedef struct {
     uint8_t lora_has_ttn_keys;  /**< The van has the TTN keys (the selector shows the repair QR). */
     uint8_t lora_joined;        /**< The module reports joined. */
     uint8_t lora_qr_ready;      /**< The QR text exists and no setup request is pending. */
-    uint8_t hub_available;      /**< A hub config and data key exist: the press cycle ends on the hub QR. */
+    uint8_t hub_available;      /**< A hub config and data key exist: the press cycle shows the app QR, then the hub QR. */
     int32_t lora_confirmed_age_s;  /**< Seconds since the last uplink confirmed by TX_DONE, -1 = none. */
     uint32_t pressed_ms;        /**< How long the current press has lasted, 0 = not pressed. */
 } cali_display_in_t;
@@ -204,7 +207,7 @@ typedef struct {
     int32_t prox;            /**< The last valid proximity reading, -1 = none. */
     int32_t motion;          /**< This tick's accel change in mg; -1 = none (no IMU, a failed read, the first read). */
     uint8_t brightness_pct;  /**< Backlight percent, 0 when off. */
-    int show_lora;           /**< The LoRa screen: 0 closed, 1 the QR selector (setup or repair QR), 2 the setup QR (rotation), 3 the hub QR (holds the data key). The cycle (ruling R23): 1 -> 3 -> 2. */
+    int show_lora;           /**< The LoRa screen: 0 closed, 1 the QR selector (setup or repair QR), 2 the setup QR (rotation), 3 the hub QR (holds the data key), 4 the "Get the app" QR (CALI_HUB_APP_URL, no secret). The cycle (rulings R23, R36): 1 -> 4 -> 3 -> 2. */
     int lora_request;        /**< 1 on the one tick the painter must call cali_lora_port_setup_request(). */
     int hub_rekey;           /**< 1 on the one tick the painter must call cali_hub_new_key(). */
     const char *lora_hint;   /**< Over the QR: "Preparing…" or the scan hint; "" while closed. */

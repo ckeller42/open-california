@@ -343,7 +343,8 @@ EXPECTED_DEVICE_TAIL = (
     '"ux":{"enabled":true},'
     '"experimental":{"sensors":false,"lora":false},'
     '"energy":{"boot":0,"solar_wh":0,"load_wh":0,"batt_net_wh":0,"load_a":null},'
-    '"hub":{"configured":false,"online":false,"last_pub_s":null,"error":null},'
+    '"hub":{"configured":false,"online":false,"last_pub_s":null,"error":null,'
+    '"app_url":"https://open-california.github.io/"},'
     '"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","reverted":false,"scan":[]}'
@@ -3716,6 +3717,7 @@ def test_api_hub_get_hides_the_passwords_and_post_stores(web_cli):
         "online": False,
         "last_pub_s": None,
         "error": None,
+        "app_url": "https://open-california.github.io/",  # ruling R35: read-only, GET /api/hub has none
     }
     for r in rs:
         assert b"secret" not in r.body

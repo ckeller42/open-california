@@ -23,6 +23,8 @@ extern "C" {
 #define CALI_HUB_CFG_KEY "hub_cfg"
 /** @brief KV key of the last accepted LoRa command counter (2 bytes, big-endian); reset to 0 with every new data key. */
 #define CALI_LORA_CMD_CTR_KEY "lora_cmd_ctr"
+/** @brief The remote app (PWA) on GitHub Pages: the display's "Get the app" QR and device.hub.app_url (ruling R35). */
+#define CALI_HUB_APP_URL "https://open-california.github.io/"
 /** @brief The frame version byte. */
 #define CALI_HUB_VER 1
 /** @brief dir 1: ESP to app. */
