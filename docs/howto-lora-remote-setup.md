@@ -88,6 +88,39 @@ and scan the new code. If the satellite shows its repair code instead, scan that
 already has the keys, and the app finishes the setup. If the app says that the van's daily downlink
 limit is reached, leave the app installed: the setup continues the next day.
 
+## The LoRa setup in one picture
+
+The steps of section 3, with the messages between the app, TTN and the satellite.
+
+```mermaid
+sequenceDiagram
+actor O as Owner
+participant P as Phone (remote app)
+participant T as TTN (eu1)
+participant E as Satellite + RAK3172
+O->>E: Satellite settings, LoRa switch on
+O->>P: Set up LoRa: cluster eu1, full-rights key, Check the key
+P->>T: check the key
+O->>E: press the screen 3 s
+E->>E: make AppKey (once) + new transfer key
+E-->>O: setup QR: DevEUI, AppKey, transfer key
+O->>P: scan the setup QR
+P->>T: register the device, make read key + command key
+P->>T: delete the full-rights key
+E->>T: join request (module gets the AppKey)
+T-->>E: join accept
+E->>T: first uplink
+T-->>P: van joined
+loop key fragments, FPort 12, sealed with the transfer key
+    P->>T: schedule downlink
+    T-->>E: downlink after an uplink
+end
+E->>T: confirm: all keys stored
+T-->>P: confirmation
+P-->>O: The van has the keys.
+
+```
+
 ## Add a second phone
 
 The second phone needs no TTN account and no full-rights key.

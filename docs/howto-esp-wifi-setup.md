@@ -89,6 +89,36 @@ back to the camper UI. It is only a way back onto WiFi; everything else is in th
 
 ![The satellite's WiFi recovery page: state, network list, password, Connect](https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/esp-recovery-page.png)
 
+### First-time setup in one picture
+
+The same steps as above, with the hotspot hand-over to your router.
+
+```mermaid
+sequenceDiagram
+actor O as Owner
+participant P as Phone
+participant E as Satellite
+participant R as Van / home router
+O->>P: scan the WiFi QR on the screen
+P->>E: join hotspot calictl-esp-XXXX
+E-->>P: captive portal, wizard #setup/welcome (192.168.4.1)
+O->>P: WiFi step: pick network, password, Connect
+P->>E: network + password
+E->>R: join (2.4 GHz)
+alt joined
+    R-->>E: DHCP address
+    E-->>O: screen: second QR http://#lt;ip#gt;/#setup
+    P->>R: back on own WiFi
+    O->>P: scan the second QR
+    P->>E: wizard resumes (http://calictl-esp.local)
+    Note over E: hotspot closes about 30 s later
+else wrong password / not found
+    E-->>P: reason, hotspot stays open, try again
+end
+O->>P: Victron, sensors, home screen, Done
+
+```
+
 ### The setup wizard's steps
 
 | Step | What it asks |

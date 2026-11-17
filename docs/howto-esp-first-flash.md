@@ -60,6 +60,27 @@ the **reset button** (about 3 seconds) until the **green LED** lights up, then l
 LED goes off, and the board is now in download mode. Connect again (browser) or run the command
 again. Afterwards press reset once more to start the new firmware.
 
+## The flash in one picture
+
+Who does what, from the download to the first screen.
+
+```mermaid
+sequenceDiagram
+actor O as Owner
+participant GH as GitHub release
+participant PC as Computer (Chrome / Edge)
+participant E as Satellite (CoreS3)
+O->>GH: download cali_fw_full.bin
+O->>PC: open esptool-js, Connect
+PC->>E: USB serial (303a:1001)
+O->>PC: address 0x0, file cali_fw_full.bin, Program
+PC->>E: write flash (about 1 min)
+O->>E: press reset once
+E->>E: boot, no saved WiFi
+E-->>O: screen: WiFi QR, calictl-esp-XXXX, hotspot password
+
+```
+
 ## 3. Next steps
 
 When the satellite starts, its screen shows the setup hotspot. Carry on with:

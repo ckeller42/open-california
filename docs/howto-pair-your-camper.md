@@ -60,6 +60,32 @@ can make that window run out. Before you open the wizard:
    the pairing is saved to the daemon and survives a reboot; no further action is needed. (The
    `CALICTL_ADDR=` line under **Advanced** only matters if you reflash the Pi.)
 
+## Pairing in one picture
+
+The steps above, with what the satellite and the unit say to each other.
+
+```mermaid
+sequenceDiagram
+actor O as Owner
+participant U as Camper unit
+participant P as Phone (web UI)
+participant E as Satellite
+O->>U: close the California On Tour app on the phone
+O->>U: Einstellungen, Bluetooth, Gerät verbinden
+U-->>O: Passcode: ---
+O->>P: wizard Pair step, Pair now
+P->>E: start pairing
+E->>U: BLE connect, pairing request
+U-->>O: 6-digit passcode
+O->>P: type the passcode, Send (within about 30 s)
+P->>E: passcode
+E->>U: passkey entry
+U-->>E: bonded
+E-->>P: ✓ Paired, unit address
+Note over E,U: bond is stored, survives a reboot
+
+```
+
 ## If something goes wrong
 
 If pairing fails, the wizard shows one of a small set of messages, plus a hint for what to do

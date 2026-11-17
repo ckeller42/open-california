@@ -280,6 +280,37 @@ The first steps cannot use the hub: a fresh satellite is reachable only on its o
    normal phone scanner app: it shows the app password and the key on the screen and in its history.
    **Check:** `npx wrangler secret list` names `HUB_KEY`, and the LoRa smoke test below passes.
 
+## The van setup in one picture
+
+Steps 2 to 4 of section 5, and the first command over the hub.
+
+```mermaid
+sequenceDiagram
+actor O as Owner
+participant P as Phone (remote app)
+participant E as Satellite
+participant B as EMQX broker
+O->>E: web UI in the van's WiFi, Remote hub card: wss URL, van name, van + app login
+E->>E: make the data key once (KV hub_key)
+E->>B: connect wss :8084 as van
+E->>B: publish oc/#lt;van#gt;/online, sealed oc/#lt;van#gt;/state (retained)
+E-->>O: card says Connected
+O->>P: install the app from GitHub Pages
+O->>E: press the screen 3 s (again until the hub QR shows)
+E-->>O: hub QR: OCH1*van*url*app user*app pass*key
+O->>P: Scan the van's code
+P->>B: connect wss as app, subscribe oc/#lt;van#gt;/#
+B-->>P: retained sealed state
+P->>P: open with the data key
+P-->>O: van shows WLAN, short age
+O->>P: switch heater or camping mode
+P->>B: sealed req
+B->>E: req
+E->>B: sealed res
+B-->>P: res, app shows the answer
+
+```
+
 ## Smoke test per link
 
 1. **Satellite → broker.** The Hub card says **Connected**. In the EMQX console (or the test client
@@ -384,6 +415,28 @@ A phone with the hub QR can read the van's WiFi data and send commands until the
 6. For LoRa, follow also [You lost a phone](howto-lora-remote-setup.md#you-lost-a-phone) (new TTN keys).
 
 The LoRa repair QR does **not** carry the hub data: every phone scans the hub QR.
+
+### Rekey in one picture
+
+The steps above, in order.
+
+```mermaid
+sequenceDiagram
+actor O as Owner
+participant B as EMQX console
+participant E as Satellite
+participant P as Kept phones
+participant W as Cloudflare Worker
+O->>B: change the app password
+O->>E: Hub card: new app password
+O->>E: show the hub QR, hold 10 s
+E->>E: new data key, lora_cmd_ctr = 0
+E-->>O: new hub QR
+O->>P: Scan the van's code on each kept phone
+O->>W: wrangler secret put HUB_KEY (zbarcam from the QR)
+Note over P,E: the lost phone now has neither the key nor the login
+
+```
 
 ### The free tier is used up
 
