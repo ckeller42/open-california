@@ -605,12 +605,35 @@ struct TimerButtons<Buttons: View>: View {
             label
             if typeSize.isAccessibilitySize {
                 // Stacked and full width: let a long label wrap inside its button rather than clip.
-                VStack(alignment: .leading, spacing: 8) { buttons() }.buttonStyle(.bordered)
+                VStack(alignment: .leading, spacing: 8) { buttons() }.buttonStyle(TimerButtonStyle())
             } else {
                 // Side by side on the full-width row: the labels fit on one line, so pin them to one.
-                HStack(spacing: 8) { buttons() }.buttonStyle(.bordered).lineLimit(1)
+                HStack(spacing: 8) { buttons() }.buttonStyle(TimerButtonStyle()).lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The timer buttons' style: an outlined pill whose label is the app's high-contrast action colour,
+/// on the card background. `.bordered`'s tinted fill under tinted text fails the control screens'
+/// contrast audit; text on the plain background (the same treatment as the pairing buttons) passes.
+private struct TimerButtonStyle: ButtonStyle {
+    private static let ink = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 0.55, green: 0.75, blue: 1, alpha: 1) : UIColor(red: 0, green: 0.35, blue: 0.78, alpha: 1)
+        })
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(Self.ink)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Self.ink, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+            .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }
