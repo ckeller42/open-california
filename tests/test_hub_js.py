@@ -122,18 +122,20 @@ def test_open_rejects_replay_and_wrong_direction():
 
 def test_stale_when_offline():
     """Ruling R26: live only with a sealed state whose hub_t is at most 90 s old; the online flag can only take
-    "live" away; a state without a clock is never live."""
+    "live" away. A state without a clock (the ESP has no SNTP time) ages from its receive time, except a retained one:
+    its receive time is the subscribe, so its age is unknown and it is never live."""
     r = js(
         f"""(async()=>{{ {SETUP}; const out=[], s=()=>{{const h=hubState(Date.now());return [h.src,h.online]}};
         await deliver("online","1"); await deliver("state",st(-5000));
         out.push(s(), hubState(Date.now()+86000).src, Math.round(hubState().ageMs/1000));
         await deliver("online","0"); out.push(s());
         await deliver("online","1"); await deliver("state",st(-91000)); out.push(hubState().src);   // older: not taken
-        await deliver("state",{{...S,hub_t:null}}); out.push(hubState().src, hubState().ageMs);   // no clock
+        await deliver("state",{{...S,hub_t:null}},true); out.push(hubState().src, hubState().ageMs);   // no clock, retained
+        await deliver("state",{{...S,hub_t:null}}); out.push(hubState().src, hubState(Date.now()+91000).src);   // fresh
         hubStop(); await deliver("state",st(-100000)); out.push(hubState().src);   // only the flag says online
         return out; }})()"""
     )
-    assert r == [["wifi", "1"], "lora", 5, ["lora", "0"], "wifi", "lora", None, "lora"]
+    assert r == [["wifi", "1"], "lora", 5, ["lora", "0"], "wifi", "lora", None, "wifi", "lora", "lora"]
 
 
 def test_reload_rejects_replays_and_keeps_what_was_shown():
@@ -178,6 +180,43 @@ def test_lora_fields_marked():
     assert r["ages"]["water"] == 60 and r["ages"]["cooler"] == 60 and r["ages"]["energy"] == 0
     assert r["ext"]["Kitchen"]["age_s"] == 70  # 10 s at the publish + the WiFi state's 60 s
     assert r["ext"]["Solar"]["pv_power"] == 87 and r["ext"]["Solar"]["age_s"] == 0  # LoRa port 2
+
+
+def test_empty_function_object_in_lora_mode():
+    """I1: the ESP writes `"<fn>":{}` for a frame it cannot decode (cali_snapshot_fn); in LoRa mode with no LoRa frame
+    for that function hubState must not throw, and the empty function keeps the WiFi age."""
+    r = js(
+        f"""(async()=>{{ {SETUP}; await deliver("online","0");
+        await deliver("state",{{...st(-60000),fn:{{...S.fn,roof:{{}}}}}});
+        const h=hubState(); return [h.src, h.state.fn.roof, h.state.device.ages_s.roof]; }})()"""
+    )
+    assert r == ["lora", {}, 60]
+
+
+def test_wrong_van_clock_does_not_lock_out_later_states():
+    """I2: a state whose hub_t is far ahead of the phone (a wrong unit clock, or a store from an older firmware) is
+    not trusted: it neither blocks the next, correct state nor counts as fresh; a stored one heals at the next state."""
+    r = js(
+        f"""(async()=>{{ {SETUP}; await deliver("online","1");
+        await deliver("state",{{...st(86400000),n:1}}); const a=[hubState().src, Math.round(hubState().ageMs/1000)];
+        const b=hubState(Date.now()+91000).src;   // aged from its receive time, not its future hub_t
+        await deliver("state",{{...st(-5000),n:2}}); const c=[hubSeen().state.n, hubState().src];
+        await deliver("state",{{...st(-20000),n:3}}); const d=hubSeen().state.n;   // a trusted older one: dropped
+        return [a,b,c,d]; }})()"""
+    )
+    assert r == [["wifi", 0], "lora", [2, "wifi"], 2]
+
+
+def test_no_network_time_on_the_van():
+    """I3: the ESP answers a command with 503 while it has no SNTP time; the app says so and does not use LoRa."""
+    r = js(
+        f"""(async()=>{{ {SETUP}; await deliver("online","1"); await deliver("state",st());
+        const answer=async()=>{{ while(!pubs.length) await new Promise(r=>setTimeout(r,1));
+          const q=await espOpen(Uint8Array.from(pubs.shift().b)); await deliver("res",{{id:q.id,s:503,b:"no_time"}}); }};
+        const [a]=await Promise.all([hubApi("/api/command",{{method:"POST",body:{json.dumps(HEATER_ON)}}}), answer()]);
+        return [a, HUB_NOTIME_MSG]; }})()"""
+    )
+    assert r[0] == {"ok": False, "note": r[1]}
 
 
 def test_rejoin_restarts_fcnt():

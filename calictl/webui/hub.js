@@ -19,6 +19,7 @@ const HUB_LORA_KEY = "oc.hub.lora";   // {ctr, devEui, phone}: the last LoRa com
 // (the daily downlink count is per DevEUI), this phone's 4 random bytes (hex) in every LoRa command (ruling R25)
 const HUB_SEEN_KEY = "oc.hub.seen";   // {ring, fcnt, state, lora}: what was shown (see hubSeen)
 const HUB_LIVE_MS = 90000;            // a WiFi state older than this (by its hub_t) is not live
+const HUB_AHEAD_MS = 300000;          // a hub_t further ahead of this phone's clock is not trusted (a wrong van clock)
 const HUB_CMD_WAIT_MS = 30000;        // no answer this long and the ESP not online: the command goes over LoRa
 const HUB_GIVEUP_MS = 65000;          // the ESP gives a pending command up after 60 s (CALI_HUB_RPC_PENDING_MS)
 const HUB_RING = 8;                   // CALI_HUB_RING: the ESP sessions remembered (replay guard)
@@ -28,6 +29,7 @@ const HUB_LORA_ONLY_MSG = "Over LoRa only the heater and camping mode can be swi
 const HUB_LORA_SENT_MSG = "Sent over LoRa.";
 const HUB_UNKNOWN_MSG = "Result unknown: the van may still carry out the command.";
 const HUB_CLOCK_MSG = "The van refused the command: set this phone's clock to the network time.";
+const HUB_NOTIME_MSG = "The van has no network time yet: try again in a minute.";
 const HUB_NOCONN_MSG = "No connection to the hub: try again in a moment.";
 /** @type {Record<string, number>} the LoRa command codes (cali_lora_cmd MAP) by "function what value" */
 const HUB_LORA_CODES = { "airheater power on": 1, "airheater power off": 2, "campingmode master on": 3, "campingmode master off": 4 };
@@ -210,10 +212,12 @@ async function hubMessageNow(cfg, sub, bytes, retained) {
   if (!j || typeof j !== "object") return;
   const seen = hubSeen();
   if (sub === "state") {
-    const old = seen.state && seen.state.hub_t;
-    if (typeof j.hub_t === "number" && typeof old === "number" && j.hub_t < old) return;   // older than the one shown
+    const now = Date.now(), t = hubT(j, now), old = hubT(seen.state, now);
+    if (t !== null && old !== null && t < old) return;   // older than the one shown (a future hub_t never blocks)
     seen.state = j;
-    seen.rx = Date.now();   // R28: a phone clock behind the van must not keep the state live
+    // R28: a phone clock behind the van must not keep the state live. Without a trusted hub_t the receive time is
+    // the age, but not for a retained frame: the broker can hand over an hours-old one at the subscribe.
+    seen.rx = t === null && retained ? 0 : now;
     hubSeenSave();
     const eui = j.device && j.device.lora && j.device.lora.dev_eui;
     const rec = remoteLoad(HUB_LORA_KEY) || {};
@@ -262,9 +266,19 @@ const LORA_FIELDS = (() => {
 const HUB_LORA_SET = new Set(LORA_FIELDS);
 
 /**
+ * The sealed wall clock of a state, or null when it has none or it is more than HUB_AHEAD_MS ahead of `now` (the
+ * ESP sends it only with SNTP time; a stored value from a wrong clock must not lock out the later states).
+ * @param {any} s @param {number} now @returns {number|null}
+ */
+function hubT(s, now) {
+  return s && typeof s.hub_t === "number" && s.hub_t <= now + HUB_AHEAD_MS ? s.hub_t : null;
+}
+
+/**
  * The van as the app shows it: the ESP's state while it is live (its age at most 90 s, and the online flag not
  * "0"), else that state with every signal a newer LoRa frame carries (LORA_FIELDS) put in, field by field. The
- * age is max(now - its sealed `hub_t`, now - when this phone took it) (R26, R28); null: the ESP had no clock. In
+ * age is max(now - its sealed `hub_t`, now - when this phone took it) (R26, R28); without a trusted `hub_t` (hubT) it
+ * is now - when this phone took it, and null for such a state that came retained. In
  * LoRa mode the body is marked `device.source = "lora"` with an age per function (semantics.js: `_meta.remote`):
  * the WiFi age for a function that still shows a WiFi value. `stale` lists every signal (`fn.<function>.<field>`,
  * `ext.<sensor>`) that shows its last WiFi value; a WiFi-only sensor's `age_s` grows by the WiFi age.
@@ -273,7 +287,8 @@ const HUB_LORA_SET = new Set(LORA_FIELDS);
  */
 function hubState(now = Date.now()) {
   const seen = hubSeen(), s = seen.state, lora = seen.lora;
-  const ageMs = s && typeof s.hub_t === "number" ? Math.max(0, now - s.hub_t, now - (seen.rx || 0)) : null;
+  const t = hubT(s, now), rx = seen.rx || 0;
+  const ageMs = !s ? null : t !== null ? Math.max(0, now - t, now - rx) : rx ? Math.max(0, now - rx) : null;
   if (hub.online !== "0" && ageMs !== null && ageMs <= HUB_LIVE_MS) {
     hub.stale = [];
     return { state: s, src: "wifi", ageMs, online: hub.online, stale: [] };
@@ -296,7 +311,7 @@ function hubState(now = Date.now()) {
     const old = Object.keys(w || {}).filter((k) => !(k in take && HUB_LORA_SET.has("fn." + name + "." + k)));
     for (const k of old) stale.push("fn." + name + "." + k);
     body.fn[name] = merged;
-    if (!old.length) ages[name] = ten(Math.max(0, (now - l.at) / 1000));
+    if (!old.length && l) ages[name] = ten(Math.max(0, (now - l.at) / 1000));
     else if (wifiS !== null) ages[name] = ten(wifiS);
   }
   // ext, by the same rule: a sensor of a type LoRa carries takes its newer values; every other one is WiFi-only
@@ -424,6 +439,7 @@ async function hubCommand(body) {
   if (!r) r = await hubWithin(p, HUB_GIVEUP_MS - HUB_CMD_WAIT_MS);
   if (!r || r.s === 504 || r.s === 0) return { ok: false, note: HUB_UNKNOWN_MSG };
   if (r.s === 408) return { ok: false, note: HUB_CLOCK_MSG };
+  if (r.s === 503) return { ok: false, note: HUB_NOTIME_MSG };
   return hubJson(r);
 }
 
