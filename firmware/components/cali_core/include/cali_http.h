@@ -135,7 +135,8 @@ int cali_http_init(const cali_net_t *net, uint16_t port, cali_http_handler_t han
 void cali_http_poll(uint64_t now_ms);
 
 /** @brief 1 while a response is being sent: its body may point into a handler's static buffer, so another
- *         cali_web_handle call (the hub, hub_esp.c) must wait. */
+ *         cali_web_handle call (the hub, hub_esp.c) must wait.
+ *  @return 1 while sending, else 0. */
 int cali_http_busy(void);
 
 /** @brief Closes the open connection (if any) and the listener. */

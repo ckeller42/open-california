@@ -146,7 +146,10 @@ typedef enum {
 /** @brief A command frame: the phone's random id, counter, command code, tag (ruling R25). */
 #define CALI_LORA_CMD_LEN 15
 
-/** @brief Sets the AES-GCM open for cali_lora_cmd (cali_core cannot link cali_lora). Call once at boot. */
+/**
+ * @brief Sets the AES-GCM open for cali_lora_cmd (cali_core cannot link cali_lora). Call once at boot.
+ * @param open The AES-128-GCM open function.
+ */
 void cali_lora_cmd_set_open(cali_hub_open_fn open);
 /**
  * @brief Opens and checks one command frame of FPort 20.

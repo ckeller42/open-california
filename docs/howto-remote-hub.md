@@ -57,8 +57,14 @@ page uses.
 - A computer with `git`, `node` and `npm`, the GitHub CLI `gh` (logged in) and `ssh-keygen`.
 - The satellite with the firmware that has the hub (a new board: [first
   flash](howto-esp-first-flash.md)), a phone, and the van's WiFi.
-- Choose a **van name** now: letters, digits, `_` and `-` only, no `*`. The examples use `van1`. It is
-  one topic level, `oc/van1/...`.
+- Choose a **van name** now: letters, digits, `_` and `-` only. The examples use `van1`. It is one
+  topic level, `oc/van1/...`.
+- **No `*` in any value that goes into the hub QR:** the van name, the broker URL, the app user and the
+  app password. The QR uses `*` as its separator and the satellite refuses such a value. The van
+  user and password are not in the QR, but keep `*` out of them as well. `openssl rand -hex 16`
+  makes safe passwords.
+- A place for secrets that you control: your password manager or a file only you can read. The
+  steps call it **your secret store**. (The owner's own is `~/.env`, managed with `chezmoi edit ~/.env`.)
 
 Do not paste a secret into a chat, a file in the repository or a shell command line. The steps below
 read secrets from a prompt or a pipe.
@@ -82,11 +88,10 @@ read secrets from a prompt or a pipe.
    default: **check in the console** (the Overview or the connection guide). You need this URL
    three times: in the satellite's Hub card, in the bridge's `BROKER_WSS` and (without the path) as
    the GitHub variable `OC_HUB_ORIGIN`.
-   **Check:** a WebSocket test client (the console's online test client, **check in the console**)
-   connects with the URL and a credential from step 6.
+   **Check:** you have the URL written down, with the address, port 8084 and the path.
 6. Create **three credentials** under **Access Control > Authentication** (**check in the
    console**). Make long random passwords (`openssl rand -hex 16`, copy them from your own
-   terminal into the console; keep them in `~/.env`, see [Secrets](#secrets)).
+   terminal into the console; keep them in your secret store, see [Secrets](#secrets)).
 
    | Credential | Used by | Needs |
    | --- | --- | --- |
@@ -110,6 +115,11 @@ read secrets from a prompt or a pipe.
    and the bridge publishes `oc/<van>/lora/*` retained. **Check in the console** that the deployment
    accepts retained messages: publish a retained test message as `van`, subscribe with a new client
    and see it arrive at once.
+9. Test the credentials with a WebSocket test client (the console's online test client, **check in the
+   console**, or any MQTT client): connect to the URL of step 5 as `app`.
+   **Check:** the connection is accepted. With a wrong password it is refused. The broker's certificate
+   chains to DigiCert Global Root G2, which the satellite's CA bundle trusts (checked with
+   `openssl s_client`).
 
 Optional alternative to the click path of steps 1 to 3: create the deployment with the EMQX Platform
 API (`POST {platform}/deployments`, with the platform's base URL from the EMQX API documentation and
@@ -127,45 +137,54 @@ The EMQX platform API key can automate the console steps. It belongs in `~/.env`
 
 ### 2. Cloudflare: the bridge Worker
 
-1. Create a free Cloudflare account (`https://dash.cloudflare.com`). **Check:** the dashboard opens.
-2. On the computer: `git clone https://github.com/ckeller42/open-california.git`, then
+1. Create a free Cloudflare account (`https://dash.cloudflare.com`).
+   **Check:** the dashboard opens.
+2. On the computer run `git clone https://github.com/ckeller42/open-california.git`, then
    `cd open-california/bridge` and `npm install`.
    **Check:** `npx wrangler --version` prints a version.
 3. Run `npx wrangler login`. A browser window opens: allow it.
    **Check:** `npx wrangler whoami` shows your account.
 4. Open `bridge/wrangler.toml` and set `VAN` to your van name and `BROKER_WSS` to the URL of step 1.5
-   (with `:8084/mqtt`). These are not secrets. Commit the change.
+   (with `:8084/mqtt`). These are not secrets.
    **Check:** `git diff` shows only these two values.
-5. Make the webhook secret (at least 16 characters) and keep it in `~/.env` (`chezmoi edit ~/.env`)
-   as, for example, `OC_WEBHOOK_SECRET`. A command that makes one: `openssl rand -hex 24`.
-6. Store the four secrets. Each command reads the value from the pipe or the prompt, so it is in no
-   file and no shell history:
+5. Run the bridge's tests from the repository root: `tools/ci.sh bridge`.
+   **Check:** it ends with all tests passed.
+6. Commit the change and push `main` (`git commit -am "bridge: van and broker"` and `git push origin
+   main`). If `main` is protected, open a pull request and merge it. The app's publish job
+   (step 4.5) accepts only a tag on a commit that is on `origin/main`.
+   **Check:** `git fetch && git status` says `main` is up to date with `origin/main`.
+7. Make the webhook secret (at least 16 characters): `openssl rand -hex 24`. Save it in your secret
+   store, for example as `OC_WEBHOOK_SECRET`. Never type it into a command line.
+   **Check:** the secret store holds a value of 48 characters.
+8. Store it in the Worker. The command reads the value from the pipe, so it is in no file and no
+   shell history (with `~/.env`: `cd bridge`, `. ~/.env`, then):
 
    ```sh
-   cd bridge
-   . ~/.env
    printf %s "$OC_WEBHOOK_SECRET" | npx wrangler secret put WEBHOOK_SECRET
-   npx wrangler secret put BROKER_USER      # type the bridge user at the prompt
-   npx wrangler secret put BROKER_PASS      # type the bridge password at the prompt
    ```
 
-   `HUB_KEY` comes in step 5.4 (the data key does not exist yet).
-   **Check:** `npx wrangler secret list` names `WEBHOOK_SECRET`, `BROKER_USER` and `BROKER_PASS`.
-   (Each `secret put` also deploys a new Worker version: **check in the console** that the first
-   `put` may ask to create the Worker.)
-7. Run `npx wrangler deploy`.
-   **Check:** it prints the Worker URL, `https://oc-bridge.<your-subdomain>.workers.dev`. Then
-   `curl -i https://oc-bridge.<your-subdomain>.workers.dev/ttn` answers `405` (the route exists, GET
-   is refused).
+   **Check:** `npx wrangler secret list` names `WEBHOOK_SECRET`. The first `secret put` may ask to
+   create the Worker: **check in the console**.
+9. Store the bridge user: `npx wrangler secret put BROKER_USER` and type the `bridge` user of step
+   1.6 at the prompt.
+   **Check:** `npx wrangler secret list` names `BROKER_USER`.
+10. Store the bridge password: `npx wrangler secret put BROKER_PASS` and type the `bridge` password at
+    the prompt.
+    **Check:** `npx wrangler secret list` names `BROKER_PASS`. The fourth secret, `HUB_KEY`, comes in
+    step 5.7: the data key does not exist yet.
+11. Run `npx wrangler deploy`.
+    **Check:** it prints the Worker URL, `https://oc-bridge.<your-subdomain>.workers.dev`. Then
+    `curl -i https://oc-bridge.<your-subdomain>.workers.dev/ttn` answers `405` (the route exists, GET
+    is refused).
 
 ### 3. TTN: the webhook
 
 1. In the TTN console open your application and choose **Integrations > Webhooks > Add webhook >
    Custom webhook** (**check in the console**).
-2. Give it an ID, for example `oc-bridge`. Format: **JSON**. Base URL: the Worker URL from step 2.7.
+2. Give it an ID, for example `oc-bridge`. Format: **JSON**. Base URL: the Worker URL from step 2.11.
 3. Under **Additional headers** add the header `X-OC-Secret` with the value of your webhook secret.
-   Copy it from your own terminal, for example `. ~/.env; printf %s "$OC_WEBHOOK_SECRET" | wl-copy`
-   (any clipboard tool).
+   Copy it from your secret store. (The owner's way: `. ~/.env; printf %s "$OC_WEBHOOK_SECRET" |
+   wl-copy`, any clipboard tool does.)
 4. Under **Enabled event types** turn on **Uplink message** with the path `/ttn`, and turn **everything
    else off**. The bridge reads uplink messages only. No TTN API key goes to the bridge: LoRa
    commands use the app's own command key.
@@ -202,7 +221,9 @@ The EMQX platform API key can automate the console steps. It belongs in `~/.env`
    ```
 
    **Check:** `gh variable list -R ckeller42/open-california` shows `OC_HUB_ORIGIN`.
-5. Tag a commit that is on `main` and push the tag (workflow `.github/workflows/remote-app.yml`):
+5. Push `main` first if it has commits that `origin/main` lacks (step 2.6 did this for the bridge
+   change): the workflow stops with "tag is not on main" for a tag on a commit that is not on
+   `origin/main`. Then tag that commit and push the tag (workflow `.github/workflows/remote-app.yml`):
 
    ```sh
    git tag remote-v1 && git push origin remote-v1
@@ -245,11 +266,10 @@ The first steps cannot use the hub: a fresh satellite is reachable only on its o
    computer's camera, so that only the key goes into the pipe:
 
    ```sh
-   zbarcam --raw --nodisplay | head -n 1 | cut -d'*' -f6 | tr -d '\r\n' | npx wrangler secret put HUB_KEY
+   zbarcam -1 --raw --nodisplay | cut -d'*' -f6 | tr -d '\r\n' | npx wrangler secret put HUB_KEY
    ```
 
-   `zbarcam` is in the package `zbar-tools`; check its options with `man zbarcam` (it must exit after
-   the first code). The value must be exactly 32 hex characters; the bridge answers 500 for anything
+   `zbarcam` is in the package `zbar-tools`; `-1` makes it exit after the first code. The value must be exactly 32 hex characters; the bridge answers 500 for anything
    else, a trailing newline included, which is why `tr` strips it. Do not read the QR text in a
    normal phone scanner app: it shows the app password and the key on the screen and in its history.
    **Check:** `npx wrangler secret list` names `HUB_KEY`, and the LoRa smoke test below passes.
@@ -321,11 +341,11 @@ Never write a value into this repository, a chat or a log. Names and places only
 ```sh
 git clone https://github.com/ckeller42/open-california.git && cd open-california
 # bridge (needs node and npm)
+tools/ci.sh bridge                       # the bridge's tests, before a deploy
 cd bridge && npm install && npx wrangler login
 npx wrangler secret list                 # the four secrets must be named
 npx wrangler deploy
 cd ..
-tools/ci.sh bridge                       # the bridge's tests, before a deploy
 # app (Pages): a tag on a commit that is on main
 git tag remote-v2 && git push origin remote-v2
 ```
