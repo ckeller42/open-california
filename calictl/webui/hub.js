@@ -288,7 +288,7 @@ function hubT(s, now) {
 function hubState(now = Date.now()) {
   const seen = hubSeen(), s = seen.state, lora = seen.lora;
   const t = hubT(s, now), rx = seen.rx || 0;
-  const ageMs = !s ? null : t !== null ? Math.max(0, now - t, now - rx) : rx ? Math.max(0, now - rx) : null;
+  const ageMs = !s ? null : t !== null ? Math.max(0, now - t, rx ? now - rx : 0) : rx ? Math.max(0, now - rx) : null;
   if (hub.online !== "0" && ageMs !== null && ageMs <= HUB_LIVE_MS) {
     hub.stale = [];
     return { state: s, src: "wifi", ageMs, online: hub.online, stale: [] };
@@ -439,7 +439,7 @@ async function hubCommand(body) {
   if (!r) r = await hubWithin(p, HUB_GIVEUP_MS - HUB_CMD_WAIT_MS);
   if (!r || r.s === 504 || r.s === 0) return { ok: false, note: HUB_UNKNOWN_MSG };
   if (r.s === 408) return { ok: false, note: HUB_CLOCK_MSG };
-  if (r.s === 503) return { ok: false, note: HUB_NOTIME_MSG };
+  if (r.s === 503 && r.b === "no_time") return { ok: false, note: HUB_NOTIME_MSG };   // 503 not_connected: app.js retries
   return hubJson(r);
 }
 

@@ -404,8 +404,11 @@ The LoRa repair QR does **not** carry the hub data: every phone scans the hub QR
 
 - LoRa frames carry no frame age (issue #508): values are marked by their uplink time at TTN, not by
   when the van measured them.
-- Replay protection after a satellite reboot rests on the 120-second time check, and only once the
-  satellite has valid SNTP time. Before that, an old captured command could run again.
+- Replay protection after a satellite reboot rests on the 120-second time check, so the satellite
+  runs commands over the hub only once it has valid SNTP time. Before that it answers them with
+  "The van has no network time yet"; reads still work. It ignores a retained request.
+- A LoRa command that the satellite cannot run within 120 seconds (its camper link does not come up)
+  is dropped. The app has already said **Sent over LoRa.**; only the console log shows it.
 - The LoRa repair QR (`OCR1`) carries no hub data: every phone scans the hub QR (`OCH1`).
 - TTN and Cloudflare can read LoRa uplink values (see above); the broker cannot.
 - Settings (WiFi, hub, pairing, firmware update) work only in the van's WiFi.

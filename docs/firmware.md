@@ -1855,7 +1855,8 @@ through it, so the app reaches the van from anywhere. Owner setup and operation:
 - **Sealing:** AES-128-GCM with a per-van data key made on the satellite (KV `hub_key`). Frame
   `ver | dir | nonce(12) | ciphertext | tag(16)`, nonce `dir | random(7) | counter(4)`, AD the first 14
   bytes. A replay ring per direction and a time check (`|now - t| <= 120 s` while SNTP time is valid)
-  guard requests.
+  guard requests. Without SNTP time only `GET` runs (anything else answers `503 no_time`), and a
+  retained request is dropped. `hub_t` in the state is SNTP time only (null otherwise).
 - **Allowlist:** over the hub only `GET /api/...` and `POST /api/command` reach the router; every
   other request answers `403 local_only`. Settings stay local.
 - **`/api/hub`:** `GET` (every mode) and `POST` (station only) of `{url, van, user, pass, app_user,
@@ -1865,7 +1866,8 @@ through it, so the app reaches the van from anywhere. Owner setup and operation:
   (`OCH1*<van>*<wss url>*<app user>*<app pass>*<key>`), LoRa setup QR. A 10 s press on the hub QR
   makes a new data key (every phone then scans the new QR, and the bridge's `HUB_KEY` secret changes).
 - **LoRa commands:** FPort 20, 15 bytes (phone id, counter, command, tag); see
-  [LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora).
+  [LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora). A command the camper link does not take yet
+  (not ready or busy) is offered again every 2 s for up to 120 s, then dropped with a log line.
 
 ## Battery (`R_FW_BATTERY`)
 

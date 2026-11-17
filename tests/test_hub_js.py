@@ -211,12 +211,16 @@ def test_no_network_time_on_the_van():
     """I3: the ESP answers a command with 503 while it has no SNTP time; the app says so and does not use LoRa."""
     r = js(
         f"""(async()=>{{ {SETUP}; await deliver("online","1"); await deliver("state",st());
-        const answer=async()=>{{ while(!pubs.length) await new Promise(r=>setTimeout(r,1));
-          const q=await espOpen(Uint8Array.from(pubs.shift().b)); await deliver("res",{{id:q.id,s:503,b:"no_time"}}); }};
-        const [a]=await Promise.all([hubApi("/api/command",{{method:"POST",body:{json.dumps(HEATER_ON)}}}), answer()]);
-        return [a, HUB_NOTIME_MSG]; }})()"""
+        const answer=async(b)=>{{ while(!pubs.length) await new Promise(r=>setTimeout(r,1));
+          const q=await espOpen(Uint8Array.from(pubs.shift().b)); await deliver("res",{{id:q.id,s:503,b}}); }};
+        const post=()=>hubApi("/api/command",{{method:"POST",body:{json.dumps(HEATER_ON)}}});
+        const [a]=await Promise.all([post(), answer("no_time")]);
+        const [b]=await Promise.all([post(), answer('{{"ok":false,"error":"not_connected"}}')]);
+        return [a, HUB_NOTIME_MSG, b]; }})()"""
     )
     assert r[0] == {"ok": False, "note": r[1]}
+    # the camper link's 503 not_connected passes through as JSON: app.js retries it
+    assert r[2] == {"ok": False, "error": "not_connected"}
 
 
 def test_rejoin_restarts_fcnt():
