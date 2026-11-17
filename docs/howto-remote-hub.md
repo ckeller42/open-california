@@ -149,9 +149,10 @@ The EMQX platform API key can automate the console steps. It belongs in your sec
 3. Run `npx wrangler login`. A browser window opens: allow it.
    **Check:** `npx wrangler whoami` shows your account.
 4. Open `bridge/wrangler.toml` and set `VAN` to your van name, `BROKER_WSS` to the URL of step 1.5
-   (with `:8084/mqtt`) and `DEV_ID` to the van's TTN device ID (the **End device ID** in the TTN
-   console, for example `oc-mock-01`). The bridge forwards only the uplinks of this device and ignores
-   every other device of the TTN application (answer `204`). These are not secrets.
+   (with `:8084/mqtt`) and replace the placeholder `SET-ME` of `DEV_ID` with the van's TTN device ID
+   (the **End device ID** of the van's device in the TTN console). The bridge forwards only the uplinks
+   of this device and ignores every other device of the TTN application (answer `204`). With the
+   placeholder left in, the bridge answers `500` to every webhook. These are not secrets.
    **Check:** `git diff` shows only these three values.
 5. Run the bridge's tests from the repository root: `tools/ci.sh bridge`.
    **Check:** it ends with all tests passed.
@@ -323,7 +324,7 @@ B-->>P: res, app shows the answer
       Simulate uplink**, **check in the console**), or wait for a real uplink.
    3. Expect a `POST /ttn` with status `204`, and a new retained message on `oc/<van>/lora/2`.
    `401`: the header value differs from `WEBHOOK_SECRET`. `500`: the secret is missing or shorter than
-   16 characters, `HUB_KEY` is not 32 hex, or `DEV_ID` is empty. `502`: the broker refused the
+   16 characters, `HUB_KEY` is not 32 hex, or `DEV_ID` is empty or still `SET-ME`. `502`: the broker refused the
    bridge's connection or did not answer in 5 seconds (`bridge` credential, `BROKER_WSS`). `400`: the
    body is not a TTN uplink. `204` but no new message on `oc/<van>/lora/2`: the bridge publishes with
    QoS 0, so the broker does not report a publish that its ACL refuses; check the topic permission of
@@ -338,7 +339,7 @@ B-->>P: res, app shows the answer
 4. **LoRa command.** Turn off the satellite's WiFi (or block the broker), switch camping mode in the
    app. After 30 seconds the app sends it over LoRa and says **Sent over LoRa.** The satellite acts
    after its next downlink window (class C, usually seconds). If its camper link rests, the satellite
-   wakes it and holds the command for up to 120 seconds; the console log then says
+   wakes it and holds the command for up to 120 seconds after its arrival; the console log then says
    `lora: command ... waits for the camper link`, and at the end `-> 5` (accepted) or `dropped`. Remember the budget of 8 per 24 hours:
    do not repeat this test needlessly.
 
@@ -464,8 +465,10 @@ Note over P,E: the lost phone now has neither the key nor the login
 - Replay protection after a satellite reboot rests on the 120-second time check, so the satellite
   runs commands over the hub only once it has valid SNTP time. Before that it answers them with
   "The van has no network time yet"; reads still work. It ignores a retained request.
-- A LoRa command that the satellite cannot run within 120 seconds (its camper link does not come up)
-  is dropped. The app has already said **Sent over LoRa.**; only the console log shows it.
+- A LoRa command that the satellite cannot run within 120 seconds of its arrival (its camper link
+  does not come up) is dropped. It is also dropped when LoRa is switched off or forgotten, when the
+  data key changes, or when a newer command from WiFi runs first. The app has already said
+  **Sent over LoRa.**; only the console log shows it.
 - The LoRa repair QR (`OCR1`) carries no hub data: every phone scans the hub QR (`OCH1`).
 - TTN and Cloudflare can read LoRa uplink values (see above); the broker cannot.
 - Settings (WiFi, hub, pairing, firmware update) work only in the van's WiFi.

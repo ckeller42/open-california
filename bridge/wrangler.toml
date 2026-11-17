@@ -7,4 +7,5 @@ compatibility_date = "2026-11-01"
 VAN = "van1"
 BROKER_WSS = "wss://hub.example:8884/mqtt"
 # The TTN device ID (end_device_ids.device_id) of this van: uplinks of any other device are ignored (204).
-DEV_ID = "oc-mock-01"
+# Set it before the first deploy: the placeholder answers 500 to every webhook (fail closed).
+DEV_ID = "SET-ME"

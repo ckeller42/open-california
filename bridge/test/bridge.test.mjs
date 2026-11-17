@@ -101,6 +101,10 @@ test("only_the_configured_device", async () => {
   const c = fake();
   assert.equal((await handle(req(body(2)), { ...ENV, DEV_ID: undefined }, c.connect.bind(c))).status, 500);   // fail closed
   assert.equal((await handle(req(body(2)), { ...ENV, DEV_ID: "" }, c.connect.bind(c))).status, 500);
+  // the shipped wrangler.toml placeholder fails closed, also for an uplink that names it
+  const toml = fs.readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+  const placeholder = /^DEV_ID = "([^"]*)"$/m.exec(toml)[1];
+  assert.equal((await handle(req(body(2, {}, placeholder)), { ...ENV, DEV_ID: placeholder }, c.connect.bind(c))).status, 500);
   assert.equal(c.urls.length, 0);
 });
 

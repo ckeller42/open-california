@@ -46,7 +46,8 @@ export async function handle(request, env, connect = wsConnect, ms = 5000) {
   const given = request.headers.get("X-OC-Secret");
   if (!given || !(await equal(given, env.WEBHOOK_SECRET))) return bad(401);
   if (!/^[0-9a-f]{32}$/i.test(env.HUB_KEY || "")) return bad(500);   // a typo must not seal with a wrong key
-  if (typeof env.DEV_ID !== "string" || !env.DEV_ID) return bad(500);   // without it every device of the app would pass
+  // without it every device of the app would pass; the wrangler.toml placeholder must be replaced first
+  if (typeof env.DEV_ID !== "string" || !env.DEV_ID || env.DEV_ID === "SET-ME") return bad(500);
   if (Number(request.headers.get("Content-Length")) > MAX_BODY) return bad(413);
   const raw = await request.arrayBuffer();
   if (raw.byteLength > MAX_BODY) return bad(413);
