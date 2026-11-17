@@ -40,9 +40,10 @@ export async function publish(connect, { url, user, pass, topic, payload, ms = 5
       ws.addEventListener("close", () => reject(new Error("mqtt: closed")));
       ws.addEventListener("error", () => reject(new Error("mqtt: socket error")));
     });
+    connack.catch(() => {});   // when send throws nobody awaits it, and close() fires the close listener later
     ws.send(connectPacket({ clientId: "oc-bridge-" + crypto.randomUUID().slice(0, 8), user, pass }));
     await connack;
     ws.send(publishPacket(topic, payload));
     ws.send(DISCONNECT);
-  } finally { clearTimeout(t); ws.close(); }   // a throwing send leaves the promise pending, never rejected later
+  } finally { clearTimeout(t); ws.close(); }   // the timer is cleared; a late rejection is swallowed above
 }

@@ -24,7 +24,7 @@ function fake(rc = 0, mode = "ok") {
       sent.push(Uint8Array.from(b));
       if (b[0] === 0x10 && mode === "close") queueMicrotask(() => ls.close({}));
       else if (b[0] === 0x10 && mode === "ok") queueMicrotask(() => ls.message({ data: Uint8Array.from([0x20, 2, 0, rc]).buffer })); },
-    close() { this.closed = true; },
+    close() { this.closed = true; queueMicrotask(() => ls.close && ls.close({})); },   // a real socket fires close asynchronously
   };
   return { ws, urls: [], connect(u) { this.urls.push(u); return Promise.resolve(ws); } };
 }
@@ -129,13 +129,16 @@ test("bad_hub_key_is_500", async () => {
 });
 
 test("no_connack_and_early_close_are_502", async () => {
+  const stray = []; const on = (e) => stray.push(e); process.on("unhandledRejection", on);
   for (const mode of ["silent", "close", "throw"]) {
     const c = fake(0, mode);
     assert.equal((await handle(req(body(2)), ENV, c.connect.bind(c), 20)).status, 502, mode);
     assert.ok(c.ws.closed, mode);
     await assert.rejects(publish(c.connect.bind(c), { url: "u", user: "u", pass: "p", topic: "t", payload: Uint8Array.of(1), ms: 20 }));
   }
-  await new Promise((r) => setTimeout(r, 60));   // a stray timer would fire an unhandled rejection here and fail the run
+  await new Promise((r) => setTimeout(r, 60));   // a stray timer would fire an unhandled rejection here
+  process.off("unhandledRejection", on);
+  assert.deepEqual(stray, []);
 });
 
 test("empty_uplink_is_published", async () => {
