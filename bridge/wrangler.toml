@@ -6,3 +6,5 @@ compatibility_date = "2026-11-01"
 [vars]
 VAN = "van1"
 BROKER_WSS = "wss://hub.example:8884/mqtt"
+# The TTN device ID (end_device_ids.device_id) of this van: uplinks of any other device are ignored (204).
+DEV_ID = "oc-mock-01"

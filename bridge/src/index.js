@@ -46,6 +46,7 @@ export async function handle(request, env, connect = wsConnect, ms = 5000) {
   const given = request.headers.get("X-OC-Secret");
   if (!given || !(await equal(given, env.WEBHOOK_SECRET))) return bad(401);
   if (!/^[0-9a-f]{32}$/i.test(env.HUB_KEY || "")) return bad(500);   // a typo must not seal with a wrong key
+  if (typeof env.DEV_ID !== "string" || !env.DEV_ID) return bad(500);   // without it every device of the app would pass
   if (Number(request.headers.get("Content-Length")) > MAX_BODY) return bad(413);
   const raw = await request.arrayBuffer();
   if (raw.byteLength > MAX_BODY) return bad(413);
@@ -58,6 +59,8 @@ export async function handle(request, env, connect = wsConnect, ms = 5000) {
   if (typeof j.received_at !== "string" || !Number.isInteger(cnt) || cnt < 0 || (u.frm_payload !== undefined && typeof u.frm_payload !== "string")) return bad(400);
   let bytes;
   try { bytes = Uint8Array.from(atob(u.frm_payload || ""), (c) => c.charCodeAt(0)); } catch { return bad(400); }
+  // only the van's own device: another device of the same TTN application must not appear as this van
+  if (!j.end_device_ids || j.end_device_ids.device_id !== env.DEV_ID) return bad(204);
   const text = JSON.stringify({ fcnt: cnt, t: j.received_at, hex: Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("") });
   try {
     await publish(connect, { url: env.BROKER_WSS, user: env.BROKER_USER, pass: env.BROKER_PASS,

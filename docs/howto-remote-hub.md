@@ -144,9 +144,11 @@ The EMQX platform API key can automate the console steps. It belongs in your sec
    **Check:** `npx wrangler --version` prints a version.
 3. Run `npx wrangler login`. A browser window opens: allow it.
    **Check:** `npx wrangler whoami` shows your account.
-4. Open `bridge/wrangler.toml` and set `VAN` to your van name and `BROKER_WSS` to the URL of step 1.5
-   (with `:8084/mqtt`). These are not secrets.
-   **Check:** `git diff` shows only these two values.
+4. Open `bridge/wrangler.toml` and set `VAN` to your van name, `BROKER_WSS` to the URL of step 1.5
+   (with `:8084/mqtt`) and `DEV_ID` to the van's TTN device ID (the **End device ID** in the TTN
+   console, for example `oc-mock-01`). The bridge forwards only the uplinks of this device and ignores
+   every other device of the TTN application (answer `204`). These are not secrets.
+   **Check:** `git diff` shows only these three values.
 5. Run the bridge's tests from the repository root: `tools/ci.sh bridge`.
    **Check:** it ends with all tests passed.
 6. Commit the change and push `main` (`git commit -am "bridge: van and broker"` and `git push origin
@@ -286,8 +288,12 @@ The first steps cannot use the hub: a fresh satellite is reachable only on its o
       Simulate uplink**, **check in the console**), or wait for a real uplink.
    3. Expect a `POST /ttn` with status `204`, and a new retained message on `oc/<van>/lora/2`.
    `401`: the header value differs from `WEBHOOK_SECRET`. `500`: the secret is missing or shorter than
-   16 characters, or `HUB_KEY` is not 32 hex. `502`: the broker refused the bridge or did not answer
-   in 5 seconds (credential, ACL, `BROKER_WSS`). `400`: the body is not a TTN uplink.
+   16 characters, `HUB_KEY` is not 32 hex, or `DEV_ID` is empty. `502`: the broker refused the
+   bridge's connection or did not answer in 5 seconds (`bridge` credential, `BROKER_WSS`). `400`: the
+   body is not a TTN uplink. `204` but no new message on `oc/<van>/lora/2`: the bridge publishes with
+   QoS 0, so the broker does not report a publish that its ACL refuses; check the topic permission of
+   the `bridge` credential (step 1.7). The same answer comes for an uplink of a device other than
+   `DEV_ID`.
    A check without TTN: `curl -i -X POST <Worker URL>/ttn -H "X-OC-Secret: $OC_WEBHOOK_SECRET" -d '{}'`
    (with the secret in `$OC_WEBHOOK_SECRET`, loaded from your secret store) answers `400`: the secret is right and the body is empty.
 3. **App → broker → satellite.** In the app, switch the **air heater** or **camping mode** while the
@@ -296,7 +302,9 @@ The first steps cannot use the hub: a fresh satellite is reachable only on its o
    hub" (broker or `app` credential).
 4. **LoRa command.** Turn off the satellite's WiFi (or block the broker), switch camping mode in the
    app. After 30 seconds the app sends it over LoRa and says **Sent over LoRa.** The satellite acts
-   after its next downlink window (class C, usually seconds). Remember the budget of 8 per 24 hours:
+   after its next downlink window (class C, usually seconds). If its camper link rests, the satellite
+   wakes it and holds the command for up to 120 seconds; the console log then says
+   `lora: command ... waits for the camper link`, and at the end `-> 5` (accepted) or `dropped`. Remember the budget of 8 per 24 hours:
    do not repeat this test needlessly.
 
 ## Bridge logs

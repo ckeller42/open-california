@@ -8,9 +8,9 @@ import { connectPacket, publish, publishPacket, remainingLength } from "../src/m
 
 const SECRET = "x".repeat(20);
 const KEY = "000102030405060708090a0b0c0d0e0f";
-const ENV = { WEBHOOK_SECRET: SECRET, HUB_KEY: KEY, BROKER_USER: "bridge", BROKER_PASS: "pw", VAN: "van1", BROKER_WSS: "wss://hub.example:8884/mqtt" };
+const ENV = { WEBHOOK_SECRET: SECRET, HUB_KEY: KEY, BROKER_USER: "bridge", BROKER_PASS: "pw", VAN: "van1", BROKER_WSS: "wss://hub.example:8884/mqtt", DEV_ID: "oc-mock-01" };
 const T = "2026-11-17T10:11:12.345678Z";
-const body = (port, extra = {}) => JSON.stringify({ received_at: T, uplink_message: { f_port: port, f_cnt: 42, frm_payload: "AQID/w==", ...extra } });
+const body = (port, extra = {}, dev = "oc-mock-01") => JSON.stringify({ end_device_ids: { device_id: dev }, received_at: T, uplink_message: { f_port: port, f_cnt: 42, frm_payload: "AQID/w==", ...extra } });
 const req = (b, headers = { "X-OC-Secret": SECRET }) => new Request("https://b.example/ttn", { method: "POST", headers, body: b });
 
 /** A fake broker socket: collects what is sent, answers CONNECT with CONNACK (return code `rc`). */
@@ -88,6 +88,19 @@ test("bounds_and_bad_input", async () => {
   assert.equal((await h(req(JSON.stringify({ uplink_message: { f_port: 2 } })))).status, 400);       // no received_at/payload
   assert.equal((await h(req(body(2, { frm_payload: "!!!" })))).status, 400);
   assert.equal((await h(new Request("https://b.example/ttn", { method: "GET" }))).status, 405);
+  assert.equal(c.urls.length, 0);
+});
+
+test("only_the_configured_device", async () => {
+  const none = JSON.parse(body(2)); delete none.end_device_ids;
+  for (const b of [body(2, {}, "oc-van-02"), body(2, {}, ""), body(2, {}, null), JSON.stringify(none)]) {
+    const c = fake();
+    assert.equal((await handle(req(b), ENV, c.connect.bind(c))).status, 204, b);
+    assert.equal(c.urls.length, 0, b);
+  }
+  const c = fake();
+  assert.equal((await handle(req(body(2)), { ...ENV, DEV_ID: undefined }, c.connect.bind(c))).status, 500);   // fail closed
+  assert.equal((await handle(req(body(2)), { ...ENV, DEV_ID: "" }, c.connect.bind(c))).status, 500);
   assert.equal(c.urls.length, 0);
 });
 
