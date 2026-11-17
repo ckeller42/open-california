@@ -567,7 +567,6 @@ static void lora_task(void *arg) {
     char fw[9] = "";
     memcpy(fw, esp_app_get_description()->version, sizeof fw - 1);   /* the first 8 characters */
     cali_lora_budget_init(&s_bud);
-    cali_lora_cmd_set_open(cali_aead_open_psa);
     cali_lora_tracker_init(&s_trk);
     for (;;) {
         (void)xQueueReceive(s_snap_q, &s_snap, pdMS_TO_TICKS(1000));   /* the newest snapshot, or the last one */

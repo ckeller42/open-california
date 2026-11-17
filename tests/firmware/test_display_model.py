@@ -832,3 +832,85 @@ def test_press_held_across_the_close_never_reopens(cli):
     ]
     v = run(cli, *opened, *back)  # the module goes away during the press and comes back while it is held
     assert v[-1]["show"] == "0" and {x["req"] for x in v[17:]} == {"0"}
+
+
+# ---- the hub QR: the long-press cycle's last state (remote hub) -----------------------------------
+
+HUB_ONLY = BASE + " lora=0 hub=1 auto=0 max=60"  # no LoRa module, a hub config
+
+
+def hold(base, start, until, now0):
+    """`held` on any base line."""
+    lines = [base + f" now={now0 + p} touch=1 press={p}" for p in range(start, until + 1, 200)]
+    if (until - start) % 200:
+        lines.append(base + f" now={now0 + until} touch=1 press={until}")
+    return lines
+
+
+def shows(v):
+    """The show values without repeats, in order."""
+    out = []
+    for x in v:
+        if not out or out[-1] != x["show"]:
+            out.append(x["show"])
+    return out
+
+
+def test_long_press_cycle_reaches_the_hub_qr(cli):
+    """Each further 3 s press goes one state on: selector, (rotation with TTN keys), hub QR; without
+    the LoRa module the first press opens the hub QR; without a hub config the cycle stops as before."""
+    b = LORA + " hub=1"
+    v = run(cli, "reset", b + " now=0", *hold(b, 200, 3000, 1000), b + " now=4200", *hold(b, 200, 3000, 5000))
+    assert shows(v) == ["0", "1", "3"] and v[-1]["bright"] == "100"
+    t = b + " ttn=1"
+    v = run(
+        cli,
+        "reset",
+        t + " now=0",
+        *hold(t, 200, 3000, 1000),
+        *hold(t, 200, 3000, 5000),
+        *hold(t, 200, 3000, 9000),
+    )
+    assert shows(v) == ["0", "1", "2", "3"]
+    v = run(cli, "reset", HUB_ONLY + " now=0", *hold(HUB_ONLY, 200, 3000, 1000))
+    assert shows(v) == ["0", "3"] and {x["rekey"] for x in v} == {"0"}
+    t = LORA + " ttn=1"
+    v = run(
+        cli,
+        "reset",
+        t + " now=0",
+        *hold(t, 200, 3000, 1000),
+        *hold(t, 200, 3000, 5000),
+        *hold(t, 200, 3000, 9000),
+    )
+    assert shows(v) == ["0", "1", "2"]
+
+
+def test_hub_qr_rekey_needs_a_new_10_s_press(cli):
+    """On the hub QR a new press held 10 s asks once for a new data key (and restarts the 120 s); the
+    press that opened it never does, however long it is held; a shorter press closes it, no new key."""
+    opened = ["reset", HUB_ONLY + " now=0", *hold(HUB_ONLY, 200, 3000, 1000), HUB_ONLY + " now=4200"]
+    v = run(cli, *opened, *hold(HUB_ONLY, 200, 10000, 5000), HUB_ONLY + " now=15400")
+    keyed = [i for i, x in enumerate(v) if x["rekey"] == "1"]
+    assert len(keyed) == 1 and v[keyed[0]]["show"] == "3" and v[-1]["show"] == "3"
+    v = run(
+        cli, *opened, *hold(HUB_ONLY, 200, 10000, 5000), HUB_ONLY + " now=134999", HUB_ONLY + " now=135000"
+    )
+    assert [x["show"] for x in v[-2:]] == ["3", "0"]  # 120 s from the new key (at 15000)
+    v = run(cli, "reset", HUB_ONLY + " now=0", *hold(HUB_ONLY, 200, 12000, 1000))
+    assert v[-1]["show"] == "3" and {x["rekey"] for x in v} == {"0"}
+    v = run(cli, *opened, *hold(HUB_ONLY, 200, 5000, 5000), HUB_ONLY + " now=10400")
+    assert v[-1]["show"] == "0" and {x["rekey"] for x in v} == {"0"}
+
+
+def test_hub_qr_closes_like_the_lora_qr(cli):
+    """The key must not stay on screen: a tap, 120 s, or the hub config going away closes it."""
+    opened = ["reset", HUB_ONLY + " now=0", *hold(HUB_ONLY, 200, 3000, 1000), HUB_ONLY + " now=4200"]
+    v = run(cli, *opened, HUB_ONLY + " now=5000 touch=1")
+    assert v[-1]["show"] == "0"
+    v = run(cli, *opened, HUB_ONLY + " now=123999", HUB_ONLY + " now=124000")
+    assert [x["show"] for x in v[-2:]] == ["3", "0"]
+    v = run(cli, *opened, BASE + " now=5000 lora=0 hub=0 auto=0 max=60")
+    assert v[-1]["show"] == "0"
+    v = run(cli, *opened, HUB_ONLY + " now=5000")
+    assert v[-1]["lhint"] != "" and v[-1]["lline"] != ""

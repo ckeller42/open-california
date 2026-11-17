@@ -166,6 +166,8 @@ typedef struct {
 #define DISPLAY_LORA_PRESS_MS 3000
 /** @brief The LoRa screen closes this many ms after it opened (or rotated). */
 #define DISPLAY_LORA_SHOW_MS 120000
+/** @brief On the hub QR (show_lora 3) a new press this long (ms) asks for a new hub data key. */
+#define DISPLAY_HUB_REKEY_MS 10000
 /** @brief The LoRa screen's backlight percent ("full brightness while shown"). */
 #define DISPLAY_LORA_BRIGHT_PCT 100
 
@@ -182,6 +184,7 @@ typedef struct {
     uint8_t lora_has_ttn_keys;  /**< The van has the TTN keys (the selector shows the repair QR). */
     uint8_t lora_joined;        /**< The module reports joined. */
     uint8_t lora_qr_ready;      /**< The QR text exists and no setup request is pending. */
+    uint8_t hub_available;      /**< A hub config and data key exist: the press cycle ends on the hub QR. */
     int32_t lora_confirmed_age_s;  /**< Seconds since the last uplink confirmed by TX_DONE, -1 = none. */
     uint32_t pressed_ms;        /**< How long the current press has lasted, 0 = not pressed. */
 } cali_display_in_t;
@@ -201,8 +204,9 @@ typedef struct {
     int32_t prox;            /**< The last valid proximity reading, -1 = none. */
     int32_t motion;          /**< This tick's accel change in mg; -1 = none (no IMU, a failed read, the first read). */
     uint8_t brightness_pct;  /**< Backlight percent, 0 when off. */
-    int show_lora;           /**< The LoRa screen: 0 closed, 1 the QR selector (setup or repair QR), 2 the setup QR (rotation). */
+    int show_lora;           /**< The LoRa screen: 0 closed, 1 the QR selector (setup or repair QR), 2 the setup QR (rotation), 3 the hub QR (holds the data key). */
     int lora_request;        /**< 1 on the one tick the painter must call cali_lora_port_setup_request(). */
+    int hub_rekey;           /**< 1 on the one tick the painter must call cali_hub_port_rekey(). */
     const char *lora_hint;   /**< Over the QR: "Preparing…" or the scan hint; "" while closed. */
     char lora_line[CALI_ROW_TEXT_MAX];   /**< The status line: joined or not, the last confirmed uplink; "" while closed. */
 } cali_display_view_t;

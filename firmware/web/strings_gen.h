@@ -77,6 +77,8 @@
 #define WEB_STR_DE_D_LORA_CONFIRMED "letzte Sendung bestätigt vor %s"
 #define WEB_STR_EN_D_LORA_NONE "no uplink confirmed yet"
 #define WEB_STR_DE_D_LORA_NONE "noch keine Sendung bestätigt"
+#define WEB_STR_EN_D_HUB_LINE "Remote hub · hold 10 s for a new key"
+#define WEB_STR_DE_D_HUB_LINE "Fern-Hub · 10 s halten für neuen Schlüssel"
 #define WEB_INDEX_HTML_LEN 7048u
 static const unsigned char WEB_INDEX_HTML[WEB_INDEX_HTML_LEN + 1] = {
     0x3c, 0x21, 0x64, 0x6f, 0x63, 0x74, 0x79, 0x70, 0x65, 0x20, 0x68, 0x74, 0x6d, 0x6c, 0x3e, 0x0a,

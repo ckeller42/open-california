@@ -104,11 +104,13 @@
 #include "cali_display_model.h"
 #if CONFIG_CALI_DISPLAY
 #include "cali_display.h"
+#include "cali_hub_esp.h"
 #include "cali_lora_esp.h"
 #include "cali_sdcard_esp.h"
 #endif
 #include "cali_energy.h"
 #include "cali_lora.h"
+#include "cali_lora_aead.h"
 #include "cali_net_esp.h"
 #include "cali_ota.h"
 #include "cali_ota_esp.h"
@@ -359,6 +361,9 @@ static void do_work(void) {
             cali_wifi_run_tick(now);
             cali_captive_dns_poll();
             cali_web_poll(now);
+#if CONFIG_CALI_DISPLAY
+            cali_hub_esp_tick(now);   /* the remote hub: requests in, state + answers out (after the web) */
+#endif
         }
 #if CONFIG_CALI_DISPLAY
         cali_display_tick(now);   /* repaints at most every DISPLAY_REFRESH_MS; never blocks on BLE */
@@ -649,10 +654,14 @@ void app_main(void) {
      * may be marked here; a state that was not pending — or could not be read — is never marked, so a
      * later successful read cannot confirm an image past the 60 s/web/BLE checks. */
     s_ota_confirmed = cali_ota_esp_verify_begin() != 1;
+    /* the one place the AES-GCM functions are wired: the hub frames and the LoRa FPort-20 commands */
+    cali_hub_set_aead(cali_aead_seal_psa, cali_aead_open_psa);
+    cali_lora_cmd_set_open(cali_aead_open_psa);
     wifi_init(ble);
 #if CONFIG_CALI_DISPLAY
     if (cali_display_init(ble) == 0) cali_sdcard_esp_start();   /* -1: no screen (and no SD); BLE/WiFi carry on */
     cali_lora_esp_start();   /* R_FW_LORA: idle, no pin touched, until exp_lora is on */
+    cali_hub_esp_start();    /* the remote hub: nothing runs without a hub config */
 #endif
 
     const esp_timer_create_args_t targs = {.callback = tick_cb, .name = "cali_tick"};

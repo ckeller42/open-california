@@ -435,3 +435,27 @@ def test_new_key_resets_the_lora_command_counter():
     """
     r = _run("lcr", "load 0", "lcr", "lcset", "reload 0", "lcr", "rekey 0", "lcr")
     assert r[0] == ["-"] and r[2] == ["0000"] and r[5] == ["0009"] and r[7] == ["0000"]
+
+
+def _rpcs(cli, req, setup=ONLINE):
+    """`rpcs <req>`: cali_hub_rpc_start, then cali_hub_rpc_poll once per driver tick; (ticks pending, res)."""
+    lines = [*setup, "rpcs " + json.dumps(req)]
+    out = subprocess.run(
+        [str(cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    res = [line[5:] for line in out if line.startswith("RPCS ")]
+    assert len(res) == 1, out
+    n, _, body = res[0].partition(" ")
+    return int(n), json.loads(body)
+
+
+def test_rpc_steps_return_to_the_owner_while_pending(rpc_cli):
+    """The owner task (the NimBLE host task on the ESP) must not block while a command is pending: the
+    stepwise API returns after each re-ask, and the answer equals the blocking one."""
+    req = {"id": 9, "m": "POST", "p": "/api/command", "b": CMD, "t": NOW}
+    ticks, res = _rpcs(rpc_cli, req, [*ONLINE, "ctl pending", "ctldone ok 3"])
+    assert ticks >= 2 and (res["id"], res["s"]) == (9, 200)
+    ticks, res = _rpcs(rpc_cli, {"id": 2, "m": "GET", "p": "/api/state", "b": None, "t": NOW})
+    assert ticks == 0 and res["s"] == 200
+    ticks, res = _rpcs(rpc_cli, {"id": 3, "m": "GET", "p": "/api/state", "b": None})
+    assert ticks == 0 and res["s"] == 400

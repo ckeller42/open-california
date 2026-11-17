@@ -55,7 +55,7 @@
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
  * @property {{ages: Record<string, number>, version: number|null}} [remote]  set only by adaptSatellite() for remote.js's body: each function's age in s, an unknown uplink version
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora_on?: boolean|null, lora?: ?SatLora, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora_on?: boolean|null, lora?: ?SatLora, hub?: ?{configured: boolean, online: boolean, last_pub_s: number|null}, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -2554,6 +2554,15 @@ function buildSat(v) {
     h("div", { id: "lora-on" }, ...LORA_ROWS.map(([id, label]) => h("div", { class: "row" }, h("span", { class: "lbl" }, T(label)), h("span", { class: "val", id: "lora-" + id }))),
       h("p", { class: "note" }, T("Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app.")), lacts),
     satMsg("lora-msg")));
+  const hubSave = satBtn(T("Save"), "primary", "hub-save");
+  hubSave.onclick = satHubSave;
+  root.append(satCard("hub", T("Remote hub"), h("p", { class: "note" }, T("The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then hold the satellite's screen for 3 seconds until the hub code shows and scan it with the remote app.")),
+    h("p", { id: "hub-status" }),
+    ...HUB_FIELDS.map(([id, label, type]) => h("div", null, h("label", { for: "hub-" + id }, T(label)),
+      h("input", { id: "hub-" + id, type: type, autocomplete: "off", autocapitalize: "none", spellcheck: "false",
+        placeholder: type === "password" ? T("unchanged") : null }))),
+    h("div", { class: "btnrow" }, hubSave), satMsg("hub-msg")));
+  satHubLoad();
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
   toggle("pw", "/api/pi_wake_setting", "Couldn't change the Pi wake", "enabled", "pw-msg");
   toggle("ux", "/api/ux_setting", "Couldn't change usage data", "enabled", "ux-msg");
@@ -2852,6 +2861,7 @@ function satUpdate() {
   satRow("lora", [T(s.lora_on ? "LoRa: on" : "LoRa: off")], !!s.lora_on, st);
   sq("lora").hidden = s.lora_on == null;   // a firmware without the switch: no switch that cannot work
   satRenderLora(s.lora || null, st);
+  satRenderHub(s.hub || null, st);
   sq("sens").hidden = !s.experimental;
   if (s.experimental && !sensOn) { sensOn = true; satSensPoll(); }
 }
@@ -3266,6 +3276,53 @@ function satRenderLora(l, st) {
   set("setup", T(LORA_WORDS[l.setup] || l.setup));
   set("eui", l.dev_eui || "—");
   sq("lora-forget").hidden = !st;   // station only (403 setup_mode over the hotspot)
+}
+
+/** The Hub card's inputs: [/api/hub key, label, input type]. */
+const HUB_FIELDS = [["url", "Broker address (wss://…)", "url"], ["van", "Van name", "text"], ["user", "Van user", "text"],
+  ["pass", "Van password", "password"], ["app_user", "App user", "text"], ["app_pass", "App password", "password"]];
+
+/** The Hub card's status line from device.hub (null: a firmware without the hub: no card). @param {any} hb @param {boolean} st */
+function satRenderHub(hb, st) {
+  sq("hub").hidden = !hb;
+  if (!hb) return;
+  sq("hub-status").textContent = !hb.configured ? T("Not set up")
+    : !hb.online ? T("Not connected")
+    : hb.last_pub_s === null ? T("Connected") : tf("Connected · state sent {n} s ago", { n: Math.round(/** @type {number} */ (ageNow(hb.last_pub_s))) });
+  sq("hub-save").hidden = !st;   // station only (403 setup_mode over the hotspot)
+}
+
+/** GET /api/hub once per screen build: the fields without the two passwords (never sent back). */
+async function satHubLoad() {
+  let r = null;
+  try { r = await satFetch("/api/hub"); } catch (e) { /* the fields stay empty */ }
+  if (!r || r.status !== 200 || !satDom) return;
+  for (const [id] of HUB_FIELDS) if (r.body[id] !== undefined) sqInput("hub-" + id).value = r.body[id];
+}
+
+/** POST /api/hub; an empty password field keeps the stored password. */
+async function satHubSave() {
+  const b = /** @type {HTMLButtonElement} */ (sq("hub-save")), msg = sq("hub-msg");
+  /** @type {Record<string, string>} */
+  const body = {};
+  for (const [id] of HUB_FIELDS) {
+    const v = sqInput("hub-" + id).value.trim();
+    if (v || !id.endsWith("pass")) body[id] = v;
+  }
+  msg.textContent = "";
+  b.disabled = true;
+  /** @type {any} */
+  let r = null;
+  try { r = await satFetch("/api/hub", body); } catch (e) { /* r stays null */ }
+  if (!satDom) return;
+  b.disabled = false;
+  if (r && r.body && r.body.ok) {
+    sqInput("hub-pass").value = ""; sqInput("hub-app_pass").value = "";
+    msg.textContent = T("Saved");
+  } else {
+    msg.textContent = T(r && r.status === 400 ? "Check the fields: no * in any field, the van name only letters, digits, - and _, the address starts with wss://" : "Couldn't save the hub settings");
+  }
+  await refreshState(true);
 }
 
 /** POST /api/lora {forget, confirm}; the next state has no device.lora, so the box goes. @param {() => void} close */

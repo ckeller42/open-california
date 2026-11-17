@@ -31,5 +31,6 @@
   "d_lora_joined": {"en": "joined", "de": "im Netz"},
   "d_lora_not_joined": {"en": "not joined", "de": "nicht im Netz"},
   "d_lora_confirmed": {"en": "last uplink confirmed %s ago", "de": "letzte Sendung bestätigt vor %s"},
-  "d_lora_none": {"en": "no uplink confirmed yet", "de": "noch keine Sendung bestätigt"}
+  "d_lora_none": {"en": "no uplink confirmed yet", "de": "noch keine Sendung bestätigt"},
+  "d_hub_line": {"en": "Remote hub · hold 10 s for a new key", "de": "Fern-Hub · 10 s halten für neuen Schlüssel"}
 }

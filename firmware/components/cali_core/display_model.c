@@ -20,7 +20,7 @@
 enum {
     K_DEVICE, K_WIFI, K_CAMPER, K_RUNNING, K_SETUP, K_JOINING, K_RETRYING, K_WIFI_OFF, K_CONNECTED,
     K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_QR_JOIN_TITLE, K_QR_NEXT_TITLE, K_QR_WLAN, K_QR_PASS, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_BATT, K_CHARGING, K_HEATER_LOCKED, K_HEATER_ERROR,
-    K_LORA_SCAN, K_LORA_WAIT, K_LORA_JOINED, K_LORA_NOT_JOINED, K_LORA_CONFIRMED, K_LORA_NONE, K_COUNT
+    K_LORA_SCAN, K_LORA_WAIT, K_LORA_JOINED, K_LORA_NOT_JOINED, K_LORA_CONFIRMED, K_LORA_NONE, K_HUB_LINE, K_COUNT
 };
 static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_DEVICE] = {WEB_STR_DE_DEVICE, WEB_STR_EN_DEVICE},
@@ -56,6 +56,7 @@ static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_LORA_NOT_JOINED] = {WEB_STR_DE_D_LORA_NOT_JOINED, WEB_STR_EN_D_LORA_NOT_JOINED},
     [K_LORA_CONFIRMED] = {WEB_STR_DE_D_LORA_CONFIRMED, WEB_STR_EN_D_LORA_CONFIRMED},
     [K_LORA_NONE] = {WEB_STR_DE_D_LORA_NONE, WEB_STR_EN_D_LORA_NONE},
+    [K_HUB_LINE] = {WEB_STR_DE_D_HUB_LINE, WEB_STR_EN_D_HUB_LINE},
 };
 
 static const char *tx(int key, int lang) { return lang == CALI_LANG_EN ? TXT[key].en : TXT[key].de; }
@@ -206,29 +207,39 @@ static uint8_t on_level(float x, const cali_display_cfg_t *c) {
 /* The LoRa screen's gestures (R_FW_LORA_SCREEN), from the press duration seen each tick: a press is new
  * when the duration starts or drops; one that starts on a dark screen is spent (the wake press); an
  * unspent press fires once at DISPLAY_LORA_PRESS_MS; an unspent press that ends shorter, or a tap
- * between two ticks, closes the screen. */
+ * between two ticks, closes the screen. Each firing goes one state on: closed -> 1 (with the module) ->
+ * 2 (with the TTN keys) -> 3, the hub QR (with a hub config); a state whose condition is missing is
+ * skipped. On the hub QR a press fires only at DISPLAY_HUB_REKEY_MS: a new data key. */
+static int lora_next(int show, const cali_display_in_t *in) {
+    if (show == 0 && in->lora_available) return 1;
+    if (show == 1 && in->lora_has_ttn_keys) return 2;
+    return show < 3 && in->hub_available ? 3 : show;
+}
+
 static void lora_screen(cali_display_model_t *m, uint64_t now_ms, const cali_display_in_t *in, cali_display_view_t *out) {
     uint32_t p = in->pressed_ms;
     int new_press = p && (!m->press_ms || p < m->press_ms);
     int ended = m->press_ms && (!p || new_press);
-    out->lora_request = 0;
+    out->lora_request = out->hub_rekey = 0;
     if (m->show_lora && ((ended && !m->press_spent) || (in->touched && !p && !m->press_ms))) m->show_lora = 0;
     if (new_press)   /* dim or off; the open LoRa screen is lit whatever the last tick was */
         m->press_spent = !m->show_lora && m->started && now_ms - m->last_wake_ms >= DISPLAY_DIM_AFTER_MS;
-    if (p >= DISPLAY_LORA_PRESS_MS && !m->press_spent) {
+    if (p >= (m->show_lora == 3 ? DISPLAY_HUB_REKEY_MS : DISPLAY_LORA_PRESS_MS) && !m->press_spent) {
+        int next = lora_next(m->show_lora, in);
         m->press_spent = 1;
-        if (!m->show_lora && in->lora_available) {   /* open: the selector; a new transfer key before the TTN keys */
-            m->show_lora = 1;
-            out->lora_request = !in->lora_has_ttn_keys;
+        if (m->show_lora == 3) {   /* a new hub data key: the QR changes, the 120 s start again */
+            out->hub_rekey = 1;
             m->lora_since = now_ms;
-        } else if (m->show_lora == 1 && in->lora_has_ttn_keys) {   /* rotation (spec 5.3) */
-            m->show_lora = 2;
-            out->lora_request = 1;
+        } else if (next != m->show_lora) {
+            /* open: a new transfer key before the TTN keys; 1 -> 2: rotation (spec 5.3) */
+            out->lora_request = next == 2 || (next == 1 && !in->lora_has_ttn_keys);
+            m->show_lora = next;
             m->lora_since = now_ms;
         }
     }
     m->press_ms = p;
-    if (m->show_lora && (!in->lora_available || now_ms - m->lora_since >= DISPLAY_LORA_SHOW_MS)) {
+    if (m->show_lora && ((m->show_lora == 3 ? !in->hub_available : !in->lora_available) ||
+                         now_ms - m->lora_since >= DISPLAY_LORA_SHOW_MS)) {
         m->show_lora = 0;
         m->press_spent = 1;   /* a press held across the close never reopens it (nor makes a new key) */
     }
@@ -242,6 +253,10 @@ static void lora_texts(const cali_display_in_t *in, int lang, cali_display_view_
     out->lora_line[0] = 0;
     if (!out->show_lora) return;
     out->lora_hint = tx(in->lora_qr_ready ? K_LORA_SCAN : K_LORA_WAIT, lang);
+    if (out->show_lora == 3) {
+        cali_display_fit_text(out->lora_line, tx(K_HUB_LINE, lang));
+        return;
+    }
     if (in->lora_confirmed_age_s >= 0) {
         fmt_uptime((uint64_t)in->lora_confirmed_age_s * 1000u, age);
         snprintf(last, sizeof last, tx(K_LORA_CONFIRMED, lang), age);

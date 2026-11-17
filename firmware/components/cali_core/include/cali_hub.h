@@ -123,6 +123,42 @@ size_t cali_hub_qr_text(char *out, size_t max, const cali_hub_cfg_t *cfg, const 
  */
 size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump)(void));
 
+/** @brief One API request over the hub, run in steps on the owner task (cali_hub_rpc_start/poll). */
+typedef struct {
+    char *buf;          /**< The request body + path (heap, PSRAM first); NULL = idle. */
+    char method[8];     /**< GET, POST or DELETE. */
+    uint32_t id;        /**< The request's "id", echoed in the answer. */
+    uint64_t t0;        /**< Uptime ms of the first ask (CALI_HUB_RPC_PENDING_MS counts from here). */
+    size_t body_len;
+    char *path;         /**< Inside `buf`. */
+    const char *query;  /**< Inside `buf`, or "". */
+} cali_hub_rpc_t;
+
+/**
+ * @brief cali_hub_rpc without the blocking loop: parses and asks the router once.
+ *
+ * The owner task on the ESP is the NimBLE host task: blocking it while a command is pending would hold
+ * back the BLE events that complete the command. So the hub asks once per tick instead.
+ * @return 1 when `res_json` holds the answer (`r` is idle again), 0 while the router answers PENDING
+ *         (call cali_hub_rpc_poll on a later tick; `r` holds the request).
+ */
+int cali_hub_rpc_start(cali_hub_rpc_t *r, const char *req_json, char *res_json, size_t max);
+/** @brief Re-asks a pending request once (504 after CALI_HUB_RPC_PENDING_MS). @return as cali_hub_rpc_start. */
+int cali_hub_rpc_poll(cali_hub_rpc_t *r, char *res_json, size_t max);
+
+/* ---- the port: the MQTT client on the ESP (cali_hub/hub_esp.c), hub_port_none.c elsewhere ---- */
+
+/** @brief The client's state for /api/state device.hub: connected, and the uptime s of the last state
+ *         publish (0 = none yet). Any task. */
+void cali_hub_port_status(int *online, uint32_t *last_pub_s);
+/** @brief /api/hub stored a new config: the owner tick (re)starts the client with it. Owner task. */
+void cali_hub_port_cfg_changed(void);
+/** @brief The hub QR text (cali_hub_qr_text with the live key). @return its length, 0 = no hub. Owner task. */
+size_t cali_hub_port_qr(char *out, size_t max);
+/** @brief A new data key (cali_hub_rekey) for the running client; the old app is locked out. Owner task.
+ *  @return 0 or -1. */
+int cali_hub_port_rekey(void);
+
 #ifdef __cplusplus
 }
 #endif

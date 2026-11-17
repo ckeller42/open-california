@@ -16,6 +16,8 @@
  *   rpc <json>       cali_hub_rpc(<json>) with a pump that advances the clock 10 ms and runs the ctldone countdown;
  *                    prints "RPC <res>" (the rest of the line, as is: no escapes)
  *   rpc0 <json>      the same with a NULL pump; prints the bare answer
+ *   rpcs <json>      cali_hub_rpc_start, then per driver tick (clock +10 ms, the ctldone countdown) one
+ *                    cali_hub_rpc_poll; prints "RPCS <ticks it stayed pending> <res>"
  *   sendmax <n>      tcp_send takes at most <n> bytes per poll (default unlimited)
  *   flip             toggle the cooler frame's Level 3 <-> 4
  *   flipping 0|1     1: flip after every poll while a response is being sent
@@ -461,6 +463,16 @@ int main(void) {
             static char res0[256];
             (void)cali_hub_rpc(line + 5, res0, sizeof res0, NULL);
             printf("%s\n", res0);
+        }
+        else if (strcmp(w, "rpcs") == 0) {
+            static char res[OUT_MAX];
+            cali_hub_rpc_t r;
+            int ticks = 0;
+            for (int done = cali_hub_rpc_start(&r, line + 5, res, sizeof res); !done; ticks++) {
+                rpc_pump();
+                done = cali_hub_rpc_poll(&r, res, sizeof res);
+            }
+            printf("RPCS %d %s\n", ticks, res);
         }
         else if (strcmp(w, "rpc") == 0) {
             static char res[OUT_MAX];

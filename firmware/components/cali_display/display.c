@@ -688,12 +688,14 @@ static void lora_paint(const cali_display_view_t *v, uint64_t now_ms) {
         int n = 0;
         uint32_t sig;
         s_qr_poll = now_ms;
-        if (!cali_lora_port_setup_pending()) {
+        if (v->show_lora == 3) {   /* the hub QR: lower-case URL and key hex, byte mode (237 chars fit version 10) */
+            n = (int)cali_hub_port_qr(text, sizeof text);
+        } else if (!cali_lora_port_setup_pending()) {
             n = v->show_lora == 2 ? cali_lora_port_setup_qr(text, sizeof text) : 0;
             /* the selector; also after a finished rotation (its transfer key erased): the repair QR */
             if (n <= 0) n = cali_lora_port_qr(text, sizeof text);
         }
-        if (n > 0 && !qrcodegen_isAlphanumeric(text)) {   /* never byte mode: the length only, nothing shown */
+        if (n > 0 && v->show_lora != 3 && !qrcodegen_isAlphanumeric(text)) {   /* LoRa: never byte mode, the length only */
             cali_log("display: lora qr: %d chars not alphanumeric, not shown", n);
             n = 0;
         }
@@ -734,7 +736,13 @@ static void lora_inputs(cali_display_in_t *in, uint64_t now_ms) {
     }
     in->lora_confirmed_age_s = -1;
     /* no QR buffer: no LoRa screen, so no press may open a setup (and rotate the transfer key) either */
-    if (!s_qr_buf || !cali_exp_lora() || !cali_lora_port_status(&ls) || ls.present != 1) return;
+    if (!s_qr_buf) return;
+    if (in->pressed_ms || s_lora_show) {   /* the hub QR exists (a config and a data key); the text is wiped */
+        char t[QR_TEXT_MAX];
+        in->hub_available = cali_hub_port_qr(t, sizeof t) > 0;
+        cali_wipe(t, sizeof t);
+    }
+    if (!cali_exp_lora() || !cali_lora_port_status(&ls) || ls.present != 1) return;
     in->lora_available = 1;
     in->lora_joined = ls.joined && !ls.at_unanswered;
     if (ls.last_confirmed_s) in->lora_confirmed_age_s = (int32_t)(now_ms / 1000 - ls.last_confirmed_s);
@@ -780,6 +788,7 @@ void cali_display_tick(uint64_t now_ms) {
     if (st.wifi_mode != CALI_WIFI_MODE_SETUP || cali_ap_wifi_qr(ap_qr, sizeof ap_qr) < 0) ap_qr[0] = 0;
     cali_display_model(&s_model, &st, now_ms, LANG, &in, cali_display_cfg(), ap_qr[0] ? ap_qr : NULL, &v);
     if (v.lora_request) cali_lora_port_setup_request();   /* before the poll: the QR waits for the new transfer key */
+    if (v.hub_rekey && cali_hub_port_rekey() != 0) cali_log("display: hub: new data key failed");
     __atomic_store_n(&s_awake, v.state == CALI_DISP_ON, __ATOMIC_RELAXED);
     __atomic_store_n(&s_scr, (int)v.state, __ATOMIC_RELAXED);
 

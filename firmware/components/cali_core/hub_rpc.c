@@ -172,13 +172,16 @@ static size_t err(char *out, size_t max, uint32_t id, int status, const char *ms
     return answer(out, max, id, status, msg, strlen(msg));
 }
 
-static size_t rpc_run(const char *req_json, char *res_json, size_t max, int (*pump)(void), char *body, char *path) {
-    char method[8];
+/* rpc_parse's "parsed: ask the router" (every other return is an error answer already in res_json) */
+#define RPC_ASK ((size_t)-1)
+
+static size_t rpc_parse(cali_hub_rpc_t *st, const char *req_json, char *res_json, size_t max) {
+    char *method = st->method, *body = st->buf, *path = st->buf + CALI_HUB_RPC_BODY_MAX;
     cur_t c = {req_json, req_json + strlen(req_json)};
     uint32_t id = 0;
     int64_t t = 0, v;
     unsigned seen = 0;
-    int have_id = 0, have_t = 0, have_m = 0, have_p = 0, have_b = 0, rc, too_long = 0;
+    int have_id = 0, have_t = 0, have_m = 0, have_p = 0, have_b = 0, too_long = 0;
     size_t len = 0;
     if (max) res_json[0] = 0;
     if (eat(&c, '{') != 0) return err(res_json, max, 0, 400, "bad_json");
@@ -211,7 +214,7 @@ static size_t rpc_run(const char *req_json, char *res_json, size_t max, int (*pu
             if (num(&c, &t) != 0) return err(res_json, max, id, 400, "bad_json");
             have_t = 1;
         } else if (strcmp(key, "m") == 0) {
-            r = str(&c, method, sizeof method, &kl);
+            r = str(&c, method, sizeof st->method, &kl);
             if (r != 0) return err(res_json, max, id, 400, "bad_json");
             have_m = 1;
         } else if (strcmp(key, "p") == 0) {
@@ -251,31 +254,61 @@ static size_t rpc_run(const char *req_json, char *res_json, size_t max, int (*pu
     }
     if (too_long) return err(res_json, max, id, 413, "too_long");
     {
-        cali_http_req_t rq = {method, path, "", body, len, 0, NULL};
-        cali_http_resp_t rs = {200, "text/plain", NULL, 0, NULL, NULL, NULL, NULL};
         char *q = strchr(path, '?');
-        uint64_t t0 = cali_uptime_ms();
-        if (q) *q = 0, rq.query = q + 1;
-        while ((rc = cali_web_handle(&rq, &rs, NULL)) == CALI_HTTP_PENDING) {
-            rq.resume = 1;
-            if (pump() != 0 || cali_uptime_ms() - t0 > CALI_HUB_RPC_PENDING_MS)
-                return err(res_json, max, id, 504, "timeout");
-        }
-        if (rc == 0) return err(res_json, max, id, 404, "");
-        len = answer(res_json, max, id, rs.status, rs.body ? rs.body : "", rs.body ? rs.body_len : 0);
-        return len ? len : err(res_json, max, id, 500, "too_big");
+        if (q) *q = 0;
+        st->id = id, st->body_len = len, st->path = path, st->query = q ? q + 1 : "";
+        return RPC_ASK;
     }
 }
 
+static void rpc_free(cali_hub_rpc_t *r) {
+    RPC_FREE(r->buf);
+    r->buf = NULL;
+}
+
+/* one ask of the router; 1 = answered (r freed), 0 = pending */
+static int rpc_ask(cali_hub_rpc_t *r, char *res_json, size_t max, int resume) {
+    cali_http_req_t rq = {r->method, r->path, r->query, r->buf, r->body_len, resume, NULL};
+    cali_http_resp_t rs = {200, "text/plain", NULL, 0, NULL, NULL, NULL, NULL};
+    int rc = cali_web_handle(&rq, &rs, NULL);
+    if (rc == CALI_HTTP_PENDING) return 0;
+    if (rc == 0) err(res_json, max, r->id, 404, "");
+    else if (!answer(res_json, max, r->id, rs.status, rs.body ? rs.body : "", rs.body ? rs.body_len : 0))
+        err(res_json, max, r->id, 500, "too_big");
+    rpc_free(r);
+    return 1;
+}
+
+int cali_hub_rpc_start(cali_hub_rpc_t *r, const char *req_json, char *res_json, size_t max) {
+    memset(r, 0, sizeof *r);
+    if (max) res_json[0] = 0;
+    r->buf = RPC_ALLOC(CALI_HUB_RPC_BODY_MAX + PATH_MAX_LEN);
+    if (!r->buf) return err(res_json, max, 0, 500, "no_memory"), 1;
+    if (rpc_parse(r, req_json, res_json, max) != RPC_ASK) return rpc_free(r), 1;
+    r->t0 = cali_uptime_ms();
+    return rpc_ask(r, res_json, max, 0);
+}
+
+int cali_hub_rpc_poll(cali_hub_rpc_t *r, char *res_json, size_t max) {
+    if (!r->buf) return 1;
+    if (cali_uptime_ms() - r->t0 > CALI_HUB_RPC_PENDING_MS) {
+        err(res_json, max, r->id, 504, "timeout");
+        return rpc_free(r), 1;
+    }
+    return rpc_ask(r, res_json, max, 1);
+}
+
 size_t cali_hub_rpc(const char *req_json, char *res_json, size_t max, int (*pump)(void)) {
-    size_t n;
-    char *buf;
+    cali_hub_rpc_t r;
     if (!max) return 0;
     res_json[0] = 0;
     if (!pump) return err(res_json, max, 0, 500, "no_pump"); /* without it a pending route would spin 60 s */
-    buf = RPC_ALLOC(CALI_HUB_RPC_BODY_MAX + PATH_MAX_LEN);
-    if (!buf) return err(res_json, max, 0, 500, "no_memory");
-    n = rpc_run(req_json, res_json, max, pump, buf, buf + CALI_HUB_RPC_BODY_MAX);
-    RPC_FREE(buf);
-    return n;
+    if (!cali_hub_rpc_start(&r, req_json, res_json, max))
+        do {
+            if (pump() != 0) {
+                rpc_free(&r);
+                return err(res_json, max, r.id, 504, "timeout");
+            }
+        } while (!cali_hub_rpc_poll(&r, res_json, max));
+    return strlen(res_json);
 }

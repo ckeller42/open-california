@@ -67,7 +67,7 @@ COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o
 	sensors.o json.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o ap_identity.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o thermostat_run.o pi_wake.o ble_exp.o ble_exp_run.o energy.o lora.o lora_setup.o lora_port_none.o
+CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o ap_identity.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o thermostat_run.o pi_wake.o ble_exp.o ble_exp_run.o energy.o lora.o lora_setup.o lora_port_none.o hub.o hub_port_none.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
@@ -192,7 +192,7 @@ captive_dns.o: $(COMPONENTS)/cali_core/captive_dns.c $(CORE_H)/cali_captive.h $(
 web.o: $(COMPONENTS)/cali_core/web.c $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h \
 		$(CORE_H)/cali_captive.h $(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CORE_H)/cali_status.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_session.h \
-		$(CORE_H)/cali_runner.h $(CORE_H)/cali_control.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
+		$(CORE_H)/cali_runner.h $(CORE_H)/cali_control.h $(CORE_H)/cali_hub.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
 		../web/app_bundle_gen.h $(CORE_H)/cali_ota.h $(CORE_H)/cali_time.h $(CORE_H)/cali_sdlog.h $(CORE_H)/cali_auto_camper.h $(CORE_H)/cali_pi_wake.h $(CORE_H)/cali_ble_exp.h \
 		$(CORE_H)/cali_display_model.h $(CORE_H)/cali_sensors.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
@@ -248,6 +248,10 @@ lora.o: $(COMPONENTS)/cali_core/lora.c $(CORE_H)/cali_lora.h $(CORE_H)/cali_lora
 lora_port_none.o: $(COMPONENTS)/cali_core/lora_port_none.c $(CORE_H)/cali_lora.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 lora_setup.o: $(COMPONENTS)/cali_core/lora_setup.c $(CORE_H)/cali_lora_setup.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+hub.o: $(COMPONENTS)/cali_core/hub.c $(CORE_H)/cali_hub.h $(CORE_H)/cali_lora_setup.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+hub_port_none.o: $(COMPONENTS)/cali_core/hub_port_none.c $(CORE_H)/cali_hub.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The boot counter + SNTP state + unit clock (R_FW_TIME): device.time. The host has no SNTP and no

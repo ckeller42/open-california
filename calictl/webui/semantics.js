@@ -486,6 +486,7 @@ function adaptSatellite(body, nowMs) {
       lora_on: dev.experimental && "lora" in dev.experimental ? !!dev.experimental.lora : null,
       setup: dev.setup || null,       // {pending}: a first-time setup begun on the hotspot (app.js: the wizard)
       lora: dev.lora || null,         // R_FW_LORA: present only while the LoRa switch is on
+      hub: dev.hub || null,           // the remote hub's MQTT client: {configured, online, last_pub_s}
     },
   };
   // = AutoCamper.snapshot()

@@ -187,3 +187,13 @@ CONFIG_MDNS_MEMORY_ALLOC_SPIRAM=y
 CONFIG_MDNS_ENABLE_CONSOLE_CLI=n
 CONFIG_MDNS_ENABLE_BROWSE=n
 CONFIG_MDNS_MULTIPLE_INSTANCE=n
+
+# The remote hub's MQTT client (cali_hub/hub_esp.c, espressif/mqtt): its buffers, outbox and task stack
+# in PSRAM (the internal heap is tight, see above). Event queue 4: hub_esp.c posts one MQTT_USER_EVENT
+# "kick" without waiting; with the default 1 that kick could fill the queue while the MQTT task's own
+# event post waits on it forever (portMAX_DELAY, same task).
+CONFIG_MQTT_USE_CUSTOM_CONFIG=y
+CONFIG_MQTT_EVENT_QUEUE_SIZE=4
+CONFIG_MQTT_BUFFERS_ON_EXTERNAL_MEMORY=y
+CONFIG_MQTT_OUTBOX_DATA_ON_EXTERNAL_MEMORY=y
+CONFIG_MQTT_TASK_STACK_ON_EXTERNAL_MEMORY=y

@@ -118,6 +118,8 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "ble_exp.c"),
             str(CORE / "ble_exp_run.c"),
             str(CORE / "hub_rpc.c"),
+            str(CORE / "hub.c"),
+            str(CORE / "hub_port_none.c"),
             str(CORE / "display_cfg.c"),
             str(CORE / "battery.c"),
             str(CORE / "sensors.c"),
@@ -340,6 +342,7 @@ EXPECTED_DEVICE_TAIL = (
     '"ux":{"enabled":true},'
     '"experimental":{"sensors":false,"lora":false},'
     '"energy":{"boot":0,"solar_wh":0,"load_wh":0,"batt_net_wh":0,"load_a":null},'
+    '"hub":{"configured":false,"online":false,"last_pub_s":null},'
     '"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","reverted":false,"scan":[]}'
@@ -3642,3 +3645,132 @@ def test_thermostat_bad_stored_config_falls_back_to_defaults(web_cli):
     """A stored ``th_cfg`` that is the wrong size or has a value out of range is dropped, not half used."""
     b, _ = th_get(web_cli, extra=["kvhex th_cfg 0102", "thinit"])
     assert (b["target"], b["cfg"]) == (2000, TH_DEFAULT_CFG)
+
+
+# ---- /api/hub: the remote hub's broker config (cali_hub_cfg_t, KV hub_cfg) -------------------------
+
+HUB_CFG = {
+    "url": "wss://h.example:8884/mqtt",
+    "van": "van-1",
+    "user": "vanuser",
+    "pass": "vanpass-secret",
+    "app_user": "appuser",
+    "app_pass": "apppass-secret",
+}
+HUB_NONE = {
+    "configured": False,
+    "van": "",
+    "url": "",
+    "user": "",
+    "app_user": "",
+    "online": False,
+    "last_pub_s": None,
+}
+
+
+def test_api_hub_get_hides_the_passwords_and_post_stores(web_cli):
+    """GET /api/hub never carries the two passwords; POST stores the config; device.hub reports it."""
+    rs, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("GET", "/api/hub"),
+            req("POST", "/api/hub", json.dumps(HUB_CFG)),
+            req("GET", "/api/hub"),
+            req("GET", "/api/state"),
+            req("GET", "/api/state?diag=1"),
+        ],
+    )
+    assert rs[0].json() == HUB_NONE
+    assert (rs[1].status, rs[1].json()) == (200, {"ok": True})
+    assert rs[2].json() == {
+        "configured": True,
+        "van": "van-1",
+        "url": "wss://h.example:8884/mqtt",
+        "user": "vanuser",
+        "app_user": "appuser",
+        "online": False,
+        "last_pub_s": None,
+    }
+    assert rs[3].json()["device"]["hub"] == {"configured": True, "online": False, "last_pub_s": None}
+    for r in rs:
+        assert b"secret" not in r.body
+
+
+def test_api_hub_post_without_passwords_keeps_the_stored_ones(web_cli):
+    """The card reloads with blank password fields: a POST that leaves them out keeps the stored ones,
+    but a first POST without them is 400."""
+    partial = {k: v for k, v in HUB_CFG.items() if "pass" not in k}
+    rs, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/hub", json.dumps(partial)),
+            req("POST", "/api/hub", json.dumps(HUB_CFG)),
+            req("POST", "/api/hub", json.dumps(dict(partial, van="van-2"))),
+            req("GET", "/api/hub"),
+        ],
+    )
+    assert (rs[0].status, rs[0].json()) == (400, {"ok": False, "error": "bad_value"})
+    assert [r.status for r in rs[1:3]] == [200, 200]
+    assert rs[3].json()["van"] == "van-2" and rs[3].json()["configured"] is True
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("van", ""),
+        ("van", "v" * 24),
+        ("van", "van/1"),
+        ("van", "van+"),
+        ("van", "van#"),
+        ("van", "van*1"),
+        ("url", "mqtts://h:8883"),
+        ("url", "wss://" + "h" * 90),
+        ("url", "wss://h*:8884/mqtt"),
+        ("user", ""),
+        ("user", "u" * 32),
+        ("pass", "p" * 48),
+        ("app_user", "a*b"),
+        ("app_pass", "x*y"),
+        ("app_pass", "p" * 48),
+    ],
+)
+def test_api_hub_post_validates(web_cli, field, value):
+    """Lengths fit cali_hub_cfg_t; no '*' (the QR's separator); van is a topic level (no / + #)."""
+    r, other = one(web_cli, "POST", "/api/hub", json.dumps(dict(HUB_CFG, **{field: value})), setup=STATION)
+    assert (r.status, r.json()) == (400, {"ok": False, "error": "bad_value"})
+
+
+@pytest.mark.parametrize("body", ["{}", '{"van":1}', "[]", '{"van":"a","nope":"b"}'])
+def test_api_hub_post_malformed_is_400(web_cli, body):
+    r, _ = one(web_cli, "POST", "/api/hub", body, setup=STATION)
+    assert r.status == 400
+
+
+def test_api_hub_post_is_station_only(web_cli):
+    r, _ = one(web_cli, "POST", "/api/hub", json.dumps(HUB_CFG), setup=["wifi setup_ap"])
+    assert (r.status, r.json()) == (403, {"ok": False, "error": "setup_mode"})
+    r, _ = one(web_cli, "GET", "/api/hub", setup=["wifi setup_ap"])
+    assert r.status == 200
+
+
+def test_api_hub_store_failure_is_500(web_cli):
+    r, _ = one(web_cli, "POST", "/api/hub", json.dumps(HUB_CFG), setup=[*STATION, "kvfail 1"])
+    assert (r.status, r.json()) == (500, {"ok": False, "error": "store"})
+
+
+def test_hub_state_publish_is_not_a_viewer(web_cli):
+    """The hub's 30 s state publish (``?hub=1``) neither ends a rest nor counts as input, or the BLE
+    link would never rest; a plain GET still is a viewer."""
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"rest 1",
+            b"viewerends 1",
+            req("GET", "/api/state?hub=1"),
+            req("GET", "/api/state"),
+        ],
+    )
+    assert [r.json()["device"]["link"]["rest"] for r in resps] == [True, False]
