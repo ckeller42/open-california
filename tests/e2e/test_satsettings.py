@@ -277,6 +277,7 @@ def test_boxes_in_order_and_camper_unit_links_to_device_status(station, locale, 
                 )
             ]
             + ["LoRa"]  # a name, the same in every language
+            + [tr("Remote hub", lang)]
         )
         expect(pg.locator("#pair-status")).to_have_text(tr("Paired ✓", lang))
         pg.locator("#pair").get_by_role("button", name=tr("Device status ›", lang)).click()
@@ -832,3 +833,12 @@ def test_both_screens_have_a_help_sheet(station, setup, locale, lang):
     assert all(texts)
     if lang == "de":
         assert "WLAN" in " ".join(texts[1])
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_the_hub_card_links_the_remote_app(station, locale, lang):
+    """Ruling R38: the Remote hub card names the remote app (device.hub.app_url) and how to use it."""
+    with _open(station, locale=locale, viewport=PHONE) as pg:
+        app = pg.locator("#hub-app")
+        expect(app).to_contain_text(tr("Install the remote app, then scan the van's code in it", lang))
+        expect(app.locator('a[href="https://open-california.github.io/"]')).to_be_visible()

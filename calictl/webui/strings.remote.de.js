@@ -57,6 +57,7 @@ Object.assign(window.STRINGS_DE, {
   "No connection to the hub: try again in a moment.": "Keine Verbindung zum Hub: Versuche es gleich noch einmal.",
   "Result unknown: the van may still carry out the command.": "Ergebnis unbekannt: Das Fahrzeug führt den Befehl vielleicht noch aus.",
   "The van refused the command: set this phone's clock to the network time.": "Das Fahrzeug hat den Befehl abgelehnt: Stelle die Uhr dieses Telefons auf die Netzzeit.",
+  "The van has no network time yet: try again in a minute.": "Das Fahrzeug hat noch keine Netzzeit: Versuche es in einer Minute noch einmal.",
   "Last WiFi values, {ago}": "Letzte WLAN-Werte, {ago}",
   "This phone cannot store the van's keys. Free some storage, leave private browsing and scan again.": "Dieses Telefon kann die Schlüssel des Fahrzeugs nicht speichern. Gib Speicher frei, verlasse den privaten Modus und scanne noch einmal.",
 });

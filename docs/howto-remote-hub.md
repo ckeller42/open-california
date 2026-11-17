@@ -299,24 +299,65 @@ The EMQX platform API key can automate the console steps. It belongs in your sec
 
 ### 5. The first van setup on the phone
 
-The first steps cannot use the hub: a fresh satellite is reachable only on its own hotspot.
+The first steps cannot use the hub: a fresh satellite is reachable only on its own hotspot. Steps 2
+to 4 are the setup wizard's optional **Remote** step (after *Sensors*); the same form is the
+**Remote hub** card in *Satellite settings*, if you skipped the step.
+
+```mermaid
+sequenceDiagram
+actor O as Owner
+participant P as Phone
+participant E as Satellite
+participant C as Computer
+rect rgb(235, 242, 250)
+Note over O,E: Satellite wizard (howto-esp-wifi-setup)
+O->>E: flash the firmware (computer, USB)
+O->>P: scan the hotspot QR, join calictl-esp-XXXX
+P->>E: WiFi step: the van's network, then the second QR
+O->>P: pair the camper unit, Victron, sensors
+O->>P: Remote step: Hub form, LoRa switch
+P->>E: POST /api/hub, POST /api/experimental
+E-->>P: Connected: link to the remote app
+end
+rect rgb(240, 248, 235)
+Note over O,E: The remote app
+O->>E: press the screen 3 s (app QR)
+O->>P: scan with the camera, install, add to the home screen
+O->>E: press again 3 s (hub QR)
+O->>P: in the app: Scan the van's code
+O->>P: in the app: Set up LoRa (LoRa on)
+end
+rect rgb(250, 243, 232)
+Note over O,C: The bridge
+O->>E: show the hub QR again
+C->>C: zbarcam, wrangler secret put HUB_KEY
+end
+```
 
 1. **Hotspot and WiFi.** Follow [How to put the ESP32 satellite on your
    WiFi](howto-esp-wifi-setup.md) until the satellite is on the van's WiFi and its page opens in
    that WiFi.
    **Check:** the satellite's page shows its status over the WiFi.
-2. **Hub card.** In the satellite's settings open the **Remote hub** card and fill in: broker address
-   (the `wss://<address>:8084/mqtt` URL), van name, van user, van password, app user and app
-   password (the `van` and `app` credentials of step 1.6). Save. The card works only in the van's
-   WiFi, not over the setup hotspot.
-   **Check:** the card's status says **Connected** (also `GET /api/state`: `device.hub` has
+2. **Remote step (or Hub card).** In the wizard's **Remote** step (or later in *Satellite settings*,
+   card **Remote hub**) fill in: broker address (the `wss://<address>:8084/mqtt` URL), van name, van
+   user, van password, app user and app password (the `van` and `app` credentials of step 1.6). Save.
+   With a LoRa module, switch on **This satellite has the LoRa module** in the same step. The form
+   works only in the van's WiFi, not over the setup hotspot.
+   **Check:** the status says **Connected** (also `GET /api/state`: `device.hub` has
    `"configured": true` and `"online": true`).
-3. **Install the app** on the phone as in the [LoRa how-to](howto-lora-remote-setup.md) (step 2), and
-   do all scans inside the installed app.
+3. **Install the app.** When the hub is connected, the Remote step shows the link to the app
+   (`device.hub.app_url`, `https://open-california.github.io/`) and how to install it. Or press the
+   satellite's screen for 3 seconds: with a hub config the **app QR** shows (the plain app URL, no
+   secret, with three numbered steps beside it). Scan it with the phone's camera, open the page and
+   add it to the home screen (iPhone: Safari → *Share* → *Add to Home Screen*; Android: Chrome → ⋮ →
+   *Install app* or *Add to Home screen*). Do all later scans inside the installed app: on iPhone a
+   home-screen app has its own storage, so a code read by Safari never reaches it.
+   **Check:** the app opens from its icon on the home screen.
 4. **Hub QR.** Press the satellite's screen for 3 seconds. Each further 3-second press goes one
-   screen on: the LoRa repair QR (with LoRa on) → **the hub QR** → the LoRa setup QR. (With LoRa off,
-   the first press shows the hub QR.) In the app menu choose **Scan the van's code** and scan the hub
-   QR. The screen closes after 120 seconds.
+   screen on: the LoRa repair QR (with LoRa on) → **the app QR** → **the hub QR** → the LoRa setup QR.
+   (With LoRa off, the first press shows the app QR.) The app QR and the hub QR show only with a hub
+   config. In the app menu choose **Scan the van's code** and scan the hub QR. Each screen closes
+   after 120 seconds or with a tap.
    **Check:** the app shows the van with **WLAN** and a short age.
 5. **LoRa and TTN.** Do the LoRa setup of the [LoRa how-to](howto-lora-remote-setup.md) (section 3,
    **Set up LoRa**, with the full-rights key of your TTN application). Do not press the satellite's
@@ -350,13 +391,15 @@ actor O as Owner
 participant P as Phone (remote app)
 participant E as Satellite
 participant B as EMQX broker
-O->>E: web UI in the van's WiFi, Remote hub card: wss URL, van name, van + app login
+O->>E: wizard Remote step in the van's WiFi: wss URL, van name, van + app login, LoRa switch
 E->>E: make the data key once (KV hub_key)
 E->>B: connect wss :8084 as van
 E->>B: publish oc/#lt;van#gt;/online, sealed oc/#lt;van#gt;/state (retained)
-E-->>O: card says Connected
-O->>P: install the app from GitHub Pages
-O->>E: press the screen 3 s (again until the hub QR shows)
+E-->>O: step says Connected, shows the app link
+O->>E: press the screen 3 s (after the LoRa repair QR: again)
+E-->>O: app QR: https://open-california.github.io/
+O->>P: scan it with the camera, install the app, add it to the home screen
+O->>E: press again 3 s
 E-->>O: hub QR: OCH1*van*url*app user*app pass*key
 O->>P: Scan the van's code
 P->>B: connect wss as app, subscribe oc/#lt;van#gt;/#
@@ -470,7 +513,7 @@ A phone with the hub QR can read the van's WiFi data and send commands until the
 1. Change the `app` password in the EMQX console and in the satellite's Hub card (the old password is
    in the lost phone).
 2. At the satellite, press the screen for 3 seconds and press again until the **hub QR** shows (the
-   screen after the LoRa repair QR).
+   screen after the app QR).
 3. **Hold the press on the hub QR for 10 seconds.** The satellite makes a **new data key**; the QR
    changes. Old phones stop working: the app says "Key changed: scan the hub QR".
 4. Scan the new hub QR on every phone you keep (**Scan the van's code**).

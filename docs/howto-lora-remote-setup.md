@@ -51,8 +51,9 @@ Open `https://open-california.github.io/` on your phone.
 ## 3. Set up the van
 
 LoRa is off on a new satellite, and the LoRa screen does not open while LoRa is off. Switch it on
-once before you start: on your home WiFi, open the satellite's page, choose **Satellite settings**
-and turn on the **LoRa** switch under **Advanced**. Switch LoRa on only on a satellite with the LoRa
+once before you start: in the setup wizard's **Remote** step turn on **This satellite has the LoRa
+module**, or later, on your home WiFi, open the satellite's page, choose **Satellite settings** and
+turn on the **LoRa** switch under **Advanced**. Switch LoRa on only on a satellite with the LoRa
 module; while LoRa is off, the satellite does not touch the module's pins. LoRa stays on after a
 restart.
 
@@ -98,7 +99,7 @@ actor O as Owner
 participant P as Phone (remote app)
 participant T as TTN (eu1)
 participant E as Satellite + RAK3172
-O->>E: Satellite settings, LoRa switch on
+O->>E: wizard Remote step (or Satellite settings): LoRa switch on
 O->>P: Set up LoRa: cluster eu1, full-rights key, Check the key
 P->>T: check the key
 O->>E: press the screen 3 s

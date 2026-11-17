@@ -292,3 +292,69 @@ def test_the_home_step_saves_the_apps_start_url(station_pending):
     with _page(station_pending, "/#setup/home", "en-US", allow=NO_MDNS) as pg:
         expect(pg.locator("#setup-home")).to_be_visible()
         assert pg.evaluate("location.pathname + location.hash") == "/app"
+
+
+# ---- the Remote step (ruling R39) and the home-screen icons (R40) -------------------------------
+
+HUB_FORM = {
+    "url": "wss://h.example:8084/mqtt",
+    "van": "van-1",
+    "user": "vanuser",
+    "pass": "vanpass",
+    "app_user": "appuser",
+    "app_pass": "apppass",
+}
+
+
+def test_the_remote_step_comes_after_sensors_and_can_be_skipped(station_pending):
+    with _page(station_pending, "/#setup/sensors", "en-US") as pg:
+        pg.get_by_role("button", name="Skip").click()
+        expect(pg).to_have_url(re.compile(r"#setup/remote$"))
+        expect(pg.locator("#setup-step")).to_contain_text("Step 6 of 8")
+        pg.get_by_role("button", name="Skip").click()
+        expect(pg.locator("#setup-home")).to_be_visible()
+    assert _posts(station_pending, "/api/hub") == []
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_the_remote_step_saves_the_hub_then_shows_the_app(station_pending, locale, lang):
+    """The Hub card's form saves through POST /api/hub; the app part (link, install steps, scan hint)
+    shows only once the hub is connected; the LoRa line only with LoRa on, set by the step's switch."""
+    station_pending.fixtures["station"]["/api/state"]["device"]["experimental"]["lora"] = False
+    with _page(station_pending, "/#setup/remote", locale) as pg:
+        app = pg.locator("#setup-app")
+        expect(pg.locator("#hub-status")).to_have_text(tr("Not set up", lang))
+        expect(app).to_be_hidden()
+        for k, v in HUB_FORM.items():
+            pg.fill("#hub-" + k, v)
+        pg.click("#hub-save")
+        expect(pg.locator("#hub-msg")).to_have_text(tr("Saved", lang))
+        expect(app).to_be_visible()
+        expect(app.locator('a[href="https://open-california.github.io/"]')).to_be_visible()
+        expect(app).to_contain_text(
+            tr("iPhone: open the link in Safari, tap Share, then Add to Home Screen.", lang)
+        )
+        expect(pg.locator("#setup-app-lora")).to_be_hidden()
+        pg.click("#lora-toggle")
+        expect(pg.locator("#setup-app-lora")).to_be_visible()
+        pg.get_by_role("button", name=tr("Next", lang), exact=True).click()
+        expect(pg.locator("#setup-home")).to_be_visible()
+    assert _posts(station_pending, "/api/hub") == [HUB_FORM]
+    assert _posts(station_pending, "/api/experimental") == [{"lora": True}]
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_the_home_step_names_the_icons(station_pending, configured):
+    """R40: the satellite's page always; the remote app's icon only with a hub config."""
+    station_pending.fixtures["station"]["/api/state"]["device"]["hub"]["configured"] = configured
+    with _page(station_pending, "/#setup/home", "en-US", allow=NO_MDNS) as pg:
+        expect(pg.locator("#setup-icon-local")).to_contain_text("works in the van's WiFi")
+        remote = pg.locator("#setup-icon-remote")
+        expect(remote).to_be_visible() if configured else expect(remote).to_be_hidden()
+
+
+def test_done_lists_the_remote_hub(station_pending):
+    with _page(station_pending, "/#setup/done", "en-US") as pg:
+        row = pg.locator("#setup-check").get_by_text("Remote hub").locator("..")
+        expect(pg.locator("#setup-check")).to_contain_text("Remote hub")
+        expect(row.get_by_role("button", name="Satellite settings ›")).to_be_visible()

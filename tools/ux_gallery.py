@@ -49,6 +49,10 @@ APP_BUNDLE_HEADER = os.path.join(ROOT, "firmware", "web", "app_bundle_gen.h")
 # The functions the station-mode fixture shows, decoded from the mock unit's seeded state (the page
 # shows every function the session holds; a few keep the figure readable).
 ESP_FUNCTIONS = ("cooler", "water")
+APP_URL = "https://open-california.github.io/"  # device.hub.app_url (firmware CALI_HUB_APP_URL)
+# GET /api/hub before a config (web.c: never the two passwords)
+HUB_GET = {"configured": False, "van": "", "url": "", "user": "", "app_user": "", "online": False,
+           "last_pub_s": None, "error": None}  # fmt: skip
 
 
 def _free_port():
@@ -340,7 +344,13 @@ def esp_fixtures():
             "ux": {"enabled": True},
             "experimental": {"sensors": False, "lora": False},
             "energy": {"boot": 17, "solar_wh": 812.4, "load_wh": 655.0, "batt_net_wh": 157.4, "load_a": 2.1},
-            "hub": {"configured": False, "online": False, "last_pub_s": None, "error": None},
+            "hub": {
+                "configured": False,
+                "online": False,
+                "last_pub_s": None,
+                "error": None,
+                "app_url": APP_URL,
+            },
             "water_held": False,
         },
     }
@@ -389,7 +399,13 @@ def esp_fixtures():
                     "ux": {"enabled": True},
                     "experimental": {"sensors": False, "lora": False},
                     "energy": {"boot": 1, "solar_wh": 0, "load_wh": 0, "batt_net_wh": 0, "load_a": None},
-                    "hub": {"configured": False, "online": False, "last_pub_s": None, "error": None},
+                    "hub": {
+                        "configured": False,
+                        "online": False,
+                        "last_pub_s": None,
+                        "error": None,
+                        "app_url": APP_URL,
+                    },
                     "water_held": False,
                 },
             },
@@ -403,10 +419,12 @@ def esp_fixtures():
                     {"ssid": "Neighbour-5G", "rssi": -83, "secure": True},
                 ],
             ),
+            "/api/hub": dict(HUB_GET),
         },
         "station": {
             "/api/state": station_state,
             "/api/wifi": dict(station_wifi, last_error=None, reverted=False, scan=[]),
+            "/api/hub": dict(HUB_GET),
         },
         "satellite": {  # + the experimental sensor track on: top-level ext (R_FW_SENSORS)
             "/api/state": dict(
@@ -420,6 +438,7 @@ def esp_fixtures():
             ),
             "/api/wifi": dict(station_wifi, last_error=None, reverted=False, scan=[]),
             "/api/thermostat": thermostat_fixture(),  # a firmware with the cabin thermostat, shipped disabled
+            "/api/hub": dict(HUB_GET),
         },
         "calictl": {
             "/api/state": calictl_state(_esp_fn(DEFAULT_SEED)),
@@ -524,6 +543,11 @@ def _experimental(dev, body):
                                       has_ttn_keys=False, dev_eui=None)  # fmt: skip
 
 
+def _hub(dev, body):
+    """POST /api/hub: the stub's broker answers at once, so the hub is configured and connected."""
+    dev.setdefault("hub", {}).update(configured=True, online=True, last_pub_s=0, error=None)
+
+
 # The satellite's settings endpoints (web.c) as the Satellite-settings screen posts them: what each
 # POST changes in device (/api/ota only starts work, the state moves on by itself).
 _SETTINGS = {
@@ -537,6 +561,7 @@ _SETTINGS = {
     "/api/ota": lambda dev, body: dev["ota"].update({k: v for k, v in body.items() if k == "channel"}),
     "/api/ble": _ble,
     "/api/lora": _lora_forget,
+    "/api/hub": _hub,
 }
 
 

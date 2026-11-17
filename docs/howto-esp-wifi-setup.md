@@ -71,7 +71,7 @@ only: it is in no document, in no log and not in `/api/state`.
    check that it is in range, then try again.*, or *Could not join the network — try again.* The
    satellite forgets the failed password and keeps its setup hotspot open, so you can simply try
    again.
-5. **Pair, Victron, sensors, home screen.** The remaining steps are in
+5. **Pair, Victron, sensors, remote, home screen.** The remaining steps are in
    [The setup wizard's steps](#the-setup-wizards-steps). About 30 seconds after the satellite joins
    your network it closes the setup hotspot.
 
@@ -115,7 +115,13 @@ alt joined
 else wrong password / not found
     E-->>P: reason, hotspot stays open, try again
 end
-O->>P: Victron, sensors, home screen, Done
+O->>P: Victron, sensors
+opt Remote step (optional)
+    O->>P: Hub form (broker values), LoRa switch
+    P->>E: POST /api/hub, POST /api/experimental
+    E-->>P: hub Connected: link to the remote app and its install steps
+end
+O->>P: home screen (the satellite's page), Done
 
 ```
 
@@ -123,13 +129,14 @@ O->>P: Victron, sensors, home screen, Done
 
 | Step | What it asks |
 |---|---|
-| **Welcome** | What the wizard does. |
+| **Welcome** | What the wizard does, and that at the end you can install the remote app. |
 | **WiFi** | Your home network and its password (above). |
 | **Pair** | Close the California On Tour app on your phone. On the camper unit open **Einstellungen → Bluetooth → Gerät verbinden**, then tap **Pair now** and type the passcode within about 30 seconds (a countdown shows). Can be skipped. |
 | **Victron** | Whether the van has Victron devices (yes or no). If yes, the key help says: in VictronConnect open the device, then ⋮ → *Product info* → *Instant readout details* → *Show* and copy the key. |
 | **Sensors** | Every Govee sensor the satellite hears, each with a name. |
-| **Home** | *Add to Home Screen* (see below), and a check whether `calictl-esp.local` opens on your phone. If not, the step suggests a fixed address (a DHCP reservation in your router). |
-| **Done** | A checklist. A row you skipped says *not set up* and links to *Satellite settings*. |
+| **Remote** | Optional, for control from anywhere ([How to set up the remote hub](howto-remote-hub.md)): the *Remote hub* form (broker address, van name, van and app login, the same as the card in *Satellite settings*) with its status, and the switch *This satellite has the LoRa module*. When the hub says *Connected*, the step shows the link to the remote app, how to install it (iPhone: Safari → *Share* → *Add to Home Screen*; Android: Chrome → ⋮ → *Install app*), and what to do in the app: *Scan the van's code*, then press the satellite's screen for 3 seconds (and, with LoRa on, *Set up LoRa*). Can be skipped. |
+| **Home** | *Add to Home Screen* (see below), and a check whether `calictl-esp.local` opens on your phone. If not, the step suggests a fixed address (a DHCP reservation in your router). It names the icons: the satellite's page is for settings and works in the van's WiFi; with the hub set up, the remote app is the second icon, for control from anywhere. |
+| **Done** | A checklist, with a *Remote hub* row. A row you skipped says *not set up* and links to *Satellite settings*. |
 
 ## Pair the satellite with your camper unit
 
