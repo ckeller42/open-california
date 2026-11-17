@@ -26,12 +26,14 @@
   "d_qr_pass": {"en": "Password %s", "de": "Passwort %s"},
   "d_batt": {"en": "Batt", "de": "Akku"},
   "d_charging": {"en": "charging", "de": "lädt"},
-  "d_lora_scan": {"en": "Scan with the Open California remote app", "de": "Mit der Open-California-Fern-App scannen"},
+  "d_lora_scan": {"en": "LoRa setup: scan in the app", "de": "LoRa-Einrichtung: in der App scannen"},
+  "d_lora_repair": {"en": "LoRa: scan in the app. Hold 3 s: new code", "de": "LoRa: in der App scannen. 3 s halten: neuer Code"},
   "d_lora_wait": {"en": "Preparing…", "de": "Wird vorbereitet…"},
   "d_lora_joined": {"en": "joined", "de": "im Netz"},
   "d_lora_not_joined": {"en": "not joined", "de": "nicht im Netz"},
   "d_lora_confirmed": {"en": "last uplink confirmed %s ago", "de": "letzte Sendung bestätigt vor %s"},
   "d_lora_none": {"en": "no uplink confirmed yet", "de": "noch keine Sendung bestätigt"},
-  "d_hub_line": {"en": "Remote hub · hold 10 s for a new key", "de": "Fern-Hub · 10 s halten für neuen Schlüssel"},
-  "d_app_steps": {"en": "1. Scan with the camera: get the app\n2. Add it to the home screen\n3. Press again: the van's code, scan it in the app", "de": "1. Mit der Kamera scannen: App holen\n2. Zum Home-Bildschirm hinzufügen\n3. Erneut drücken: Code des Fahrzeugs, in der App scannen"}
+  "d_hub_scan": {"en": "The van's code: scan in the app", "de": "Code des Fahrzeugs: in der App scannen"},
+  "d_next_lora": {"en": "Hold 3 s: LoRa", "de": "3 s halten: LoRa"},
+  "d_app_steps": {"en": "1. Scan with the camera: get the app\n2. Add it to the home screen\n3. Hold 3 s: the van's code", "de": "1. Mit der Kamera scannen: App holen\n2. Zum Home-Bildschirm hinzufügen\n3. 3 s halten: Code des Fahrzeugs"}
 }

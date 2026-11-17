@@ -797,7 +797,6 @@ void cali_display_tick(uint64_t now_ms) {
     if (st.wifi_mode != CALI_WIFI_MODE_SETUP || cali_ap_wifi_qr(ap_qr, sizeof ap_qr) < 0) ap_qr[0] = 0;
     cali_display_model(&s_model, &st, now_ms, LANG, &in, cali_display_cfg(), ap_qr[0] ? ap_qr : NULL, &v);
     if (v.lora_request) cali_lora_port_setup_request();   /* before the poll: the QR waits for the new transfer key */
-    if (v.hub_rekey && cali_hub_new_key() != 0) cali_log("display: hub: new data key failed");
     __atomic_store_n(&s_awake, v.state == CALI_DISP_ON, __ATOMIC_RELAXED);
     __atomic_store_n(&s_scr, (int)v.state, __ATOMIC_RELAXED);
 

@@ -61,7 +61,7 @@ def test_state_every_30_s_and_not_while_http_sends():
 
 
 def test_no_config_nothing_runs():
-    assert _run("online 1", "tick 1000", "tick 60000", "status") == ["STATUS 0 0 0"]
+    assert _run("online 1", "tick 1000", "tick 60000", "status") == ["STATUS 0 0 0 0"]
 
 
 def test_key_failure_retries_every_30_s_and_reports_it():
@@ -77,9 +77,13 @@ def test_key_failure_retries_every_30_s_and_reports_it():
         "tick 31000",
         "status",
     )
-    assert "START" not in out[: out.index("STATUS 0 0 1")]
-    assert [ln for ln in out if ln.startswith("STATUS")] == ["STATUS 0 0 1", "STATUS 0 0 1", "STATUS 0 0 0"]
-    assert out.index("START") > out.index("STATUS 0 0 1")
+    assert "START" not in out[: out.index("STATUS 0 0 1 0")]
+    assert [ln for ln in out if ln.startswith("STATUS")] == [
+        "STATUS 0 0 1 0",
+        "STATUS 0 0 1 0",
+        "STATUS 0 0 0 0",
+    ]
+    assert out.index("START") > out.index("STATUS 0 0 1 0")
 
 
 def test_a_new_key_republishes_under_it():
@@ -87,3 +91,31 @@ def test_a_new_key_republishes_under_it():
     assert _posts(out[out.index("MARK") :]) == ['POST state {"st":2}']  # the fake app took the new key
     # a LoRa command held under the old key does not run (cali_lora_cmds_drop)
     assert "DROP new data key" in out
+
+
+def test_the_status_says_why_it_is_not_connected():
+    """Ruling R45: the port's reason while the client runs offline; none once connected or without a
+    running client."""
+    out = _run(
+        "why 3",
+        "status",
+        "cfg",
+        "changed",
+        "online 0",
+        "tick 1000",
+        "status",
+        "online 1",
+        "tick 1100",
+        "status",
+    )
+    assert [ln for ln in out if ln.startswith("STATUS")] == [
+        "STATUS 0 0 0 0",
+        "STATUS 0 0 0 3",
+        "STATUS 1 1 0 0",
+    ]
+
+
+def test_a_new_key_before_the_first_tick_makes_one():
+    """The Hub card's New data key may come before the client's first tick: the key is made first."""
+    out = _run("cfg", "newkey", "mark")
+    assert "LOG hub: new data key" in out

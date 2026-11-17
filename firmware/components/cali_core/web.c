@@ -257,11 +257,18 @@ static void hub_status_members(cali_json_t *j, int configured) {
     else cali_json_null(j);
 }
 
-/* device.hub: the status, plus "app_url" (the remote app, read-only, also before a config: ruling R35) */
+/* device.hub: the status, "reason" (why it is not connected, null: connected or not known; ruling R45) and
+ * "app_url" (the remote app, read-only, also before a config: ruling R35) */
 static void hub_status_json(cali_json_t *j) {
+    static const char *const WHY[] = {NULL, "dns", "tls", "auth", "unreachable"};
     cali_hub_cfg_t c;
+    cali_hub_status_t st;
     cali_json_obj_begin(j);
     hub_status_members(j, hub_cfg(&c));
+    cali_hub_status(&st);
+    cali_json_key(j, "reason");
+    if (st.reason > 0 && st.reason < (int)N_OF(WHY)) cali_json_str(j, WHY[st.reason]);
+    else cali_json_null(j);
     cali_json_key(j, "app_url");
     cali_json_str(j, CALI_HUB_APP_URL);
     cali_json_obj_end(j);
@@ -1699,6 +1706,37 @@ static void api_hub(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_wipe(&old, sizeof old);
 }
 
+/* ---- POST /api/hub_key {"new_key":true}: the Hub card's New data key (ruling R42). Station only (403 setup_mode);
+ * 409 no_hub without a hub config; 500 store when the key cannot be made; every phone then scans the new hub QR. */
+static int hub_key_field(cursor_t *c, int i, void *ctx) {
+    (void)i;
+    return parse_bool(c, (int *)ctx);
+}
+
+static void api_hub_key(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static const char *const NAMES[] = {"new_key"};
+    static const char ERR_NO_HUB[] = "{\"ok\":false,\"error\":\"no_hub\"}";
+    cali_hub_cfg_t c;
+    int yes = 0, have;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+        return;
+    }
+    if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+        return;
+    }
+    if (parse_body(req->body, req->body_len, NAMES, 1, hub_key_field, &yes) != 1 || !yes) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+        return;
+    }
+    have = hub_cfg(&c);
+    cali_wipe(&c, sizeof c);
+    if (!have) SET_CONST(resp, 409, ERR_NO_HUB);
+    else if (cali_hub_new_key() != 0) SET_CONST(resp, 500, ERR_STORE);
+    else SET_CONST(resp, 200, OK_BODY);
+}
+
 /* ---- GET|POST /api/sensors: the Satellite settings Sensors box (R_FW_SENSORS), every mode, 404 while the flag is off ---- */
 
 enum { S_ADD = 1, S_REMOVE = 2, S_ID = 4, S_ALIAS = 8, S_KEY = 16 };
@@ -1852,6 +1890,10 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/hub") == 0) {
         api_hub(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/hub_key") == 0) {
+        api_hub_key(req, resp);
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the WiFi recovery page, in every mode */

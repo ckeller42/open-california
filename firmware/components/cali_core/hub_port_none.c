@@ -12,6 +12,8 @@ void cali_hub_port_stop(void) {}
 
 int cali_hub_port_online(void) { return 0; }
 
+int cali_hub_port_why(void) { return CALI_HUB_WHY_NONE; }
+
 size_t cali_hub_port_take(uint8_t *buf, size_t max) {
     (void)buf, (void)max;
     return 0;

@@ -344,7 +344,7 @@ EXPECTED_DEVICE_TAIL = (
     '"experimental":{"sensors":false,"lora":false},'
     '"energy":{"boot":0,"solar_wh":0,"load_wh":0,"batt_net_wh":0,"load_a":null},'
     '"hub":{"configured":false,"online":false,"last_pub_s":null,"error":null,'
-    '"app_url":"https://open-california.github.io/"},'
+    '"reason":null,"app_url":"https://open-california.github.io/"},'
     '"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","reverted":false,"scan":[]}'
@@ -3717,10 +3717,39 @@ def test_api_hub_get_hides_the_passwords_and_post_stores(web_cli):
         "online": False,
         "last_pub_s": None,
         "error": None,
+        "reason": None,  # ruling R45: why it is not connected (the host has no client)
         "app_url": "https://open-california.github.io/",  # ruling R35: read-only, GET /api/hub has none
     }
     for r in rs:
         assert b"secret" not in r.body
+
+
+def test_api_hub_key_makes_a_new_data_key(web_cli):
+    """Ruling R42: the Hub card's New data key. Station only, a hub config first, the body must say
+    {"new_key": true}; then the hub QR carries a new key."""
+    rs, _ = drive(
+        web_cli,
+        [
+            b"wifi setup_ap",
+            req("POST", "/api/hub_key", json.dumps({"new_key": True})),
+            *(s.encode() for s in STATION),
+            req("POST", "/api/hub_key", json.dumps({"new_key": True})),
+            req("POST", "/api/hub", json.dumps(HUB_CFG)),
+            req("POST", "/api/hub_key", "{}"),
+            req("POST", "/api/hub_key", json.dumps({"new_key": False})),
+            req("GET", "/api/hub_key"),
+            req("POST", "/api/hub_key", json.dumps({"new_key": True})),
+        ],
+    )
+    assert [(r.status, r.json().get("error")) for r in rs] == [
+        (403, "setup_mode"),
+        (409, "no_hub"),
+        (200, None),
+        (400, "bad_json"),
+        (400, "bad_json"),
+        (405, "method"),
+        (200, None),
+    ]
 
 
 def test_api_hub_post_without_passwords_keeps_the_stored_ones(web_cli):

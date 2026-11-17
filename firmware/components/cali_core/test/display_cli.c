@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
                v.sensor == CALI_SENSOR_OK ? "ok" : v.sensor == CALI_SENSOR_ABSENT ? "absent" : "error", (int)v.motion,
                v.show_lora, v.lora_request);
         put_text(v.lora_hint);   /* the app QR's steps: one per line */
-        printf(" ;; lline=%s ;; rekey=%d\n", v.lora_line, v.hub_rekey);
+        printf(" ;; lline=%s\n", v.lora_line);
     }
     return 0;
 }

@@ -20,7 +20,7 @@
 enum {
     K_DEVICE, K_WIFI, K_CAMPER, K_RUNNING, K_SETUP, K_JOINING, K_RETRYING, K_WIFI_OFF, K_CONNECTED,
     K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_QR_JOIN_TITLE, K_QR_NEXT_TITLE, K_QR_WLAN, K_QR_PASS, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_BATT, K_CHARGING, K_HEATER_LOCKED, K_HEATER_ERROR,
-    K_LORA_SCAN, K_LORA_WAIT, K_LORA_JOINED, K_LORA_NOT_JOINED, K_LORA_CONFIRMED, K_LORA_NONE, K_HUB_LINE, K_APP_STEPS, K_COUNT
+    K_LORA_SCAN, K_LORA_WAIT, K_LORA_JOINED, K_LORA_NOT_JOINED, K_LORA_CONFIRMED, K_LORA_NONE, K_HUB_SCAN, K_NEXT_LORA, K_LORA_REPAIR, K_APP_STEPS, K_COUNT
 };
 static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_DEVICE] = {WEB_STR_DE_DEVICE, WEB_STR_EN_DEVICE},
@@ -56,7 +56,9 @@ static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_LORA_NOT_JOINED] = {WEB_STR_DE_D_LORA_NOT_JOINED, WEB_STR_EN_D_LORA_NOT_JOINED},
     [K_LORA_CONFIRMED] = {WEB_STR_DE_D_LORA_CONFIRMED, WEB_STR_EN_D_LORA_CONFIRMED},
     [K_LORA_NONE] = {WEB_STR_DE_D_LORA_NONE, WEB_STR_EN_D_LORA_NONE},
-    [K_HUB_LINE] = {WEB_STR_DE_D_HUB_LINE, WEB_STR_EN_D_HUB_LINE},
+    [K_HUB_SCAN] = {WEB_STR_DE_D_HUB_SCAN, WEB_STR_EN_D_HUB_SCAN},
+    [K_NEXT_LORA] = {WEB_STR_DE_D_NEXT_LORA, WEB_STR_EN_D_NEXT_LORA},
+    [K_LORA_REPAIR] = {WEB_STR_DE_D_LORA_REPAIR, WEB_STR_EN_D_LORA_REPAIR},
     [K_APP_STEPS] = {WEB_STR_DE_D_APP_STEPS, WEB_STR_EN_D_APP_STEPS},
 };
 
@@ -208,24 +210,23 @@ static uint8_t on_level(float x, const cali_display_cfg_t *c) {
 /* The LoRa screen's gestures (R_FW_LORA_SCREEN), from the press duration seen each tick: a press is new
  * when the duration starts or drops; one that starts on a dark screen is spent (the wake press); an
  * unspent press fires once at DISPLAY_LORA_PRESS_MS; an unspent press that ends shorter, or a tap
- * between two ticks, closes the screen. Each firing goes one state on (rulings R23, R36): closed -> 1,
- * the selector (with the module) -> 4, the "Get the app" QR (with a hub config) -> 3, the hub QR ->
- * 2, the LoRa setup QR (with the TTN keys: the rotation, the only step after the opening that asks
- * for a new transfer key); a state whose condition is missing is skipped. On the hub QR a press held
- * DISPLAY_HUB_REKEY_MS asks for a new data key; one released between DISPLAY_LORA_PRESS_MS and that
- * goes on to the next state. The app QR never makes a key. */
+ * between two ticks, closes the screen. Each firing goes one screen on (ruling R41): closed -> the
+ * "Get the app" QR (4) -> the hub QR (3), both with a hub config -> the LoRa screen (1, LoRa on and
+ * the module answers: the setup QR before the TTN keys, the repair QR after) -> the setup QR (2, the
+ * rotation, with the TTN keys); a screen whose condition is missing is skipped, the last one stays.
+ * Only entering a LoRa setup QR asks for a new transfer key; no gesture makes a hub data key (R42). */
 static int lora_next(int show, const cali_display_in_t *in) {
-    if (show == 0) return in->lora_available ? 1 : in->hub_available ? 4 : 0;
-    if (show == 1) return in->hub_available ? 4 : in->lora_has_ttn_keys ? 2 : 1;
+    if (show == 0) return in->hub_available ? 4 : in->lora_available ? 1 : 0;
     if (show == 4) return 3;
-    if (show == 3) return in->lora_available && in->lora_has_ttn_keys ? 2 : 3;
+    if (show == 3) return in->lora_available ? 1 : 3;
+    if (show == 1) return in->lora_has_ttn_keys ? 2 : 1;
     return show;
 }
 
 static void lora_go(cali_display_model_t *m, int next, uint64_t now_ms, const cali_display_in_t *in,
                     cali_display_view_t *out) {
     if (next == m->show_lora) return;
-    /* open: a new transfer key before the TTN keys; -> 2: the rotation (spec 5.3); the hub QR: none */
+    /* the setup QR (before the TTN keys) or -> 2 (the rotation, spec 5.3): a new transfer key; app, hub QR: none */
     out->lora_request = next == 2 || (next == 1 && !in->lora_has_ttn_keys);
     m->show_lora = next;
     m->lora_since = now_ms;
@@ -235,28 +236,19 @@ static void lora_screen(cali_display_model_t *m, uint64_t now_ms, const cali_dis
     uint32_t p = in->pressed_ms;
     int new_press = p && (!m->press_ms || p < m->press_ms);
     int ended = m->press_ms && (!p || new_press);
-    out->lora_request = out->hub_rekey = 0;
-    if (m->show_lora == 3 && ended && !m->press_spent && m->press_ms >= DISPLAY_LORA_PRESS_MS) {
-        m->press_spent = 1;   /* released between 3 and 10 s: the next state (or stay), never a close */
-        lora_go(m, lora_next(3, in), now_ms, in, out);
-    }
+    out->lora_request = 0;
     if (m->show_lora && ((ended && !m->press_spent) || (in->touched && !p && !m->press_ms))) m->show_lora = 0;
     if (new_press)   /* dim or off; the open LoRa screen is lit whatever the last tick was */
         m->press_spent = !m->show_lora && m->started && now_ms - m->last_wake_ms >= DISPLAY_DIM_AFTER_MS;
-    if (p >= (m->show_lora == 3 ? DISPLAY_HUB_REKEY_MS : DISPLAY_LORA_PRESS_MS) && !m->press_spent) {
+    if (p >= DISPLAY_LORA_PRESS_MS && !m->press_spent) {
         m->press_spent = 1;
-        if (m->show_lora == 3) {   /* a new hub data key: the QR changes, the 120 s start again */
-            out->hub_rekey = 1;
-            m->lora_since = now_ms;
-        } else {
-            lora_go(m, lora_next(m->show_lora, in), now_ms, in, out);
-        }
+        lora_go(m, lora_next(m->show_lora, in), now_ms, in, out);
     }
     m->press_ms = p;
     if (m->show_lora && ((m->show_lora >= 3 ? !in->hub_available : !in->lora_available) ||
                          now_ms - m->lora_since >= DISPLAY_LORA_SHOW_MS)) {
         m->show_lora = 0;
-        m->press_spent = 1;   /* a press held across the close never reopens it (nor makes a new key) */
+        m->press_spent = 1;   /* a press held across the close never reopens it */
     }
     out->show_lora = m->show_lora;
 }
@@ -267,13 +259,17 @@ static void lora_texts(const cali_display_in_t *in, int lang, cali_display_view_
     out->lora_hint = "";
     out->lora_line[0] = 0;
     if (!out->show_lora) return;
-    out->lora_hint = tx(in->lora_qr_ready ? K_LORA_SCAN : K_LORA_WAIT, lang);
-    if (out->show_lora == 3) {
-        cali_display_fit_text(out->lora_line, tx(K_HUB_LINE, lang));
-        return;
-    }
     if (out->show_lora == 4) {   /* the app URL: no secret, always ready; the three steps beside it */
         out->lora_hint = tx(K_APP_STEPS, lang);
+        return;
+    }
+    /* what it is, and what the next 3 s hold shows (ruling R41) */
+    out->lora_hint = tx(!in->lora_qr_ready                                  ? K_LORA_WAIT
+                        : out->show_lora == 3                               ? K_HUB_SCAN
+                        : out->show_lora == 1 && in->lora_has_ttn_keys      ? K_LORA_REPAIR
+                                                                            : K_LORA_SCAN, lang);
+    if (out->show_lora == 3) {
+        if (in->lora_available) cali_display_fit_text(out->lora_line, tx(K_NEXT_LORA, lang));
         return;
     }
     if (in->lora_confirmed_age_s >= 0) {

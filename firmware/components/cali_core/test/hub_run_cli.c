@@ -24,7 +24,7 @@
 static uint8_t s_kv[4][2048];
 static size_t s_kv_len[4];
 static const char *const s_names[3] = {CALI_HUB_KEY_KEY, CALI_HUB_CFG_KEY, CALI_LORA_CMD_CTR_KEY};
-static int s_keyfail, s_online, s_busy, s_st;
+static int s_keyfail, s_online, s_busy, s_st, s_why;
 static uint64_t s_now;
 
 static int slot(const char *key) {
@@ -105,6 +105,7 @@ int cali_hub_port_start(const cali_hub_cfg_t *cfg) {
 }
 void cali_hub_port_stop(void) { puts("STOP"); }
 int cali_hub_port_online(void) { return s_online; }
+int cali_hub_port_why(void) { return s_why; }
 size_t cali_hub_port_take(uint8_t *buf, size_t max) {
     size_t n = s_slot_n;
     if (!n || n > max) return 0;
@@ -141,6 +142,8 @@ int main(void) {
             cali_hub_cfg_changed();
         } else if (sscanf(line, "online %d", &v) == 1) {
             s_online = v;
+        } else if (sscanf(line, "why %d", &v) == 1) {
+            s_why = v;
         } else if (sscanf(line, "busy %d", &v) == 1) {
             s_busy = v;
         } else if (sscanf(line, "keyfail %d", &v) == 1) {
@@ -163,7 +166,7 @@ int main(void) {
         } else if (!strcmp(line, "status")) {
             cali_hub_status_t st;
             cali_hub_status(&st);
-            printf("STATUS %d %d %d\n", st.online, st.last_pub_s != 0, st.key_error);
+            printf("STATUS %d %d %d %d\n", st.online, st.last_pub_s != 0, st.key_error, st.reason);
         }
         fflush(stdout);
     }

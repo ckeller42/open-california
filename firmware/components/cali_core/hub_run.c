@@ -117,6 +117,7 @@ void cali_hub_status(cali_hub_status_t *st) {
     st->online = s_started && cali_hub_port_online();
     st->last_pub_s = s_last_pub_s;
     st->key_error = s_key_err;
+    st->reason = s_started && !st->online ? cali_hub_port_why() : CALI_HUB_WHY_NONE;
 }
 
 size_t cali_hub_qr(char *out, size_t max) {
@@ -128,6 +129,7 @@ size_t cali_hub_qr(char *out, size_t max) {
 }
 
 int cali_hub_new_key(void) {
+    if (!s_key_ok) s_key_ok = cali_hub_key_load_or_make(&s_c) == 0;   /* before the first tick ran */
     if (!s_key_ok || cali_hub_rekey(&s_c) != 0) return -1;
     s_pub_due = 1; /* the state under the new key at once */
     cali_log("hub: new data key");

@@ -244,11 +244,21 @@ void cali_hub_cfg_changed(void);
 /** @brief Any task (the port, after a state frame went out): stamps last_pub_s. */
 void cali_hub_published(void);
 
+/** @brief Why the client is not connected (ruling R45): what the last failed attempt told the port. */
+enum {
+    CALI_HUB_WHY_NONE,        /**< Connected, not tried yet, or no reason known. */
+    CALI_HUB_WHY_DNS,         /**< The broker's host name did not resolve. */
+    CALI_HUB_WHY_TLS,         /**< The TLS handshake or the certificate check failed. */
+    CALI_HUB_WHY_AUTH,        /**< The broker refused the van's login. */
+    CALI_HUB_WHY_UNREACHABLE  /**< No connection to the broker (refused, timeout, the WebSocket upgrade). */
+};
+
 /** @brief The hub client's state for /api/state device.hub. */
 typedef struct {
     int online;          /**< The client runs and is connected. */
     uint32_t last_pub_s; /**< Uptime s of the last state publish, 0 = none yet. */
     int key_error;       /**< The data key cannot be stored (retried every CALI_HUB_PUB_MS). */
+    int reason;          /**< CALI_HUB_WHY_*: while the client runs and is not connected, else NONE. */
 } cali_hub_status_t;
 
 /**
@@ -262,7 +272,8 @@ void cali_hub_status(cali_hub_status_t *st);
  * @param max Size of `out`.
  */
 size_t cali_hub_qr(char *out, size_t max);
-/** @brief A new data key (cali_hub_rekey); the old app is locked out; the state goes out under it. Owner task.
+/** @brief A new data key (cali_hub_rekey; the Hub card's button, POST /api/hub_key, ruling R42); a key not
+ *  loaded yet is loaded or made first; the old app is locked out; the state goes out under it. Owner task.
  *  @return 0 or -1. */
 int cali_hub_new_key(void);
 
@@ -281,6 +292,11 @@ void cali_hub_port_stop(void);
  * @return 1 when connected, else 0.
  */
 int cali_hub_port_online(void);
+/**
+ * @brief Why the last connection attempt failed.
+ * @return CALI_HUB_WHY_*; CALI_HUB_WHY_NONE once connected.
+ */
+int cali_hub_port_why(void);
 /**
  * @brief Copies the next request frame into `buf`. @return its length, 0 = none (a longer one is dropped).
  * @param buf Receives the next request frame.

@@ -792,28 +792,29 @@ def test_long_press_on_repair_qr_rotates(cli):
     [
         ("qrok=0", 0, "Wird vorbereitet…", "nicht im Netz · noch keine Sendung bestätigt"),
         (
-            "qrok=1 joined=1 conf=180",
+            "qrok=1 joined=1 conf=180 ttn=1",
             1,
-            "Scan with the Open California remote app",
+            "LoRa: scan in the app. Hold 3 s: new code",
             "joined · last uplink confirmed 3 min ago",
         ),
         (
             "qrok=1 joined=1 conf=180",
             0,
-            "Mit der Open-California-Fern-App scannen",
+            "LoRa-Einrichtung: in der App scannen",
             "im Netz · letzte Sendung bestätigt vor 3 min",
         ),
         (
             "qrok=1 joined=0 conf=-1",
             1,
-            "Scan with the Open California remote app",
+            "LoRa setup: scan in the app",
             "not joined · no uplink confirmed yet",
         ),
     ],
 )
 def test_lora_screen_texts(cli, inp, lang, hint, line):
-    """The LoRa screen's texts: "Preparing…" until the QR text exists, then the scan hint; the status
-    line names only uplinks the module confirmed (TX_DONE), never a mere send."""
+    """The LoRa screen's texts: "Preparing…" until the QR text exists, then what it is (setup or repair
+    code; the repair code names the next hold); the status line names only uplinks the module confirmed
+    (TX_DONE), never a mere send."""
     v = run(cli, "reset", LORA + " now=0", *held(200, 3000, extra=f" {inp} lang={lang}"))
     assert v[-1]["show"] == "1"
     assert (v[-1]["lhint"], v[-1]["lline"]) == (hint, line)
@@ -856,10 +857,7 @@ def shows(v):
     return out
 
 
-APP_EN = (
-    "1. Scan with the camera: get the app\\n2. Add it to the home screen\\n"
-    "3. Press again: the van's code, scan it in the app"
-)
+APP_EN = "1. Scan with the camera: get the app\\n2. Add it to the home screen\\n3. Hold 3 s: the van's code"
 
 
 def presses(base, n, hold_ms=3000):
@@ -871,78 +869,71 @@ def presses(base, n, hold_ms=3000):
     return out
 
 
-def test_long_press_cycle_reaches_the_hub_qr(cli):
-    """Rulings R23, R36: each 3 s press goes one state on: the selector (repair QR), the "Get the app"
-    QR (4), the hub QR (3), then the LoRa setup QR (rotation: the setup request). Reaching the app or
-    hub QR never asks for a LoRa setup; without the module the first press opens the app QR; without
-    a hub config the cycle is as before (no app QR either)."""
-    t = LORA + " hub=1 ttn=1"
-    v = run(cli, "reset", *presses(t, 3))
-    assert shows(v) == ["0", "1", "4", "3"] and {x["req"] for x in v} == {"0"} and v[-1]["bright"] == "100"
-    # on the hub QR the 3 s step fires on the release (a press held on goes to the 10 s new key instead)
-    v = run(cli, "reset", *presses(t, 3), *hold(t, 200, 5000, 13000), t + " now=18200")
-    assert shows(v) == ["0", "1", "4", "3", "2"]
-    assert [x["show"] for x in v if x["req"] == "1"] == ["2"] and {x["rekey"] for x in v} == {"0"}
-    b = LORA + " hub=1"  # no TTN keys: the selector already is the setup QR (its request on opening)
-    v = run(cli, "reset", *presses(b, 3), *hold(b, 200, 5000, 13000), b + " now=18200")
-    assert shows(v) == ["0", "1", "4", "3"] and [x["show"] for x in v if x["req"] == "1"] == ["1"]
-    v = run(cli, "reset", *presses(HUB_ONLY, 2))
-    assert shows(v) == ["0", "4", "3"] and {x["rekey"] for x in v} == {"0"} and {x["req"] for x in v} == {"0"}
-    t = LORA + " ttn=1"
-    v = run(cli, "reset", *presses(t, 3))
-    assert shows(v) == ["0", "1", "2"]
+@pytest.mark.parametrize(
+    "inp,order",
+    [
+        (" lora=1 hub=1 ttn=1", ["0", "4", "3", "1", "2"]),  # app, hub, LoRa repair, rotation
+        (" lora=1 hub=1 ttn=0", ["0", "4", "3", "1"]),  # app, hub, LoRa setup (the last: it stays)
+        (" lora=0 hub=1", ["0", "4", "3"]),  # no LoRa: the hub QR is the last
+        (" lora=1 hub=0 ttn=1", ["0", "1", "2"]),  # no hub: as before the hub
+        (" lora=1 hub=0 ttn=0", ["0", "1"]),
+        (" lora=0 hub=0", ["0"]),  # nothing to show: a hold opens nothing
+    ],
+)
+def test_one_cycle_app_hub_lora(cli, inp, order):
+    """Ruling R41: each 3 s hold goes one screen on, in one order: app QR, hub QR (both with a hub
+    config), the LoRa screen (LoRa on), the rotation (TTN keys); a missing screen is skipped, the last
+    one stays. Only entering a LoRa setup QR asks for a transfer key."""
+    b = BASE + " auto=0 max=60" + inp
+    v = run(cli, "reset", *presses(b, 5))
+    assert shows(v) == order
+    setup = [x["show"] for x in v if x["req"] == "1"]
+    if "ttn=1" in inp:
+        assert setup == (["2"] if "2" in order else [])  # the rotation only
+    else:
+        assert setup == (["1"] if "1" in order else [])  # the setup QR on entering the LoRa screen
+    if len(order) > 1:
+        assert v[-1]["bright"] == "100"
 
 
-def test_app_qr_never_makes_a_key(cli):
-    """R36: a press held on (or started on) the app QR goes at most one state on, never to a new key."""
+def test_no_hold_makes_a_hub_key(cli):
+    """Ruling R42: a hold of any length on the app or hub QR goes at most one screen on; no view field
+    asks for a data key any more."""
     v = run(cli, "reset", HUB_ONLY + " now=0", *hold(HUB_ONLY, 200, 14000, 1000))
-    assert v[-1]["show"] == "4" and {x["rekey"] for x in v} == {"0"}
+    assert shows(v) == ["0", "4"] and "rekey" not in v[-1]
     v = run(cli, "reset", *presses(HUB_ONLY, 1), *hold(HUB_ONLY, 200, 14000, 5000))
-    assert shows(v) == ["0", "4", "3"] and {x["rekey"] for x in v} == {"0"}
+    assert shows(v) == ["0", "4", "3"]
+    v = run(cli, "reset", *presses(HUB_ONLY, 2), *hold(HUB_ONLY, 200, 14000, 9000))
+    assert shows(v) == ["0", "4", "3"] and v[-1]["show"] == "3"
 
 
-def test_app_qr_texts_and_close(cli):
-    """The app QR: the three steps as the hint, no status line; a tap, 120 s or the hub config going
-    away closes it."""
-    opened = ["reset", *presses(HUB_ONLY, 1)]  # the app QR from 4000
-    v = run(cli, *opened, HUB_ONLY + " now=5000 lang=1")
+def test_side_texts_name_the_screen_and_the_next_hold(cli):
+    """R41: the app QR shows its three steps (the last one the next hold); the hub QR says it is the
+    van's code and, with LoRa on, that the next hold shows LoRa."""
+    v = run(cli, "reset", *presses(HUB_ONLY, 1), HUB_ONLY + " now=5000 lang=1")
     assert (v[-1]["show"], v[-1]["lhint"], v[-1]["lline"]) == ("4", APP_EN, "")
-    v = run(cli, *opened, HUB_ONLY + " now=5000 touch=1")
-    assert v[-1]["show"] == "0"
-    v = run(cli, *opened, HUB_ONLY + " now=123999", HUB_ONLY + " now=124000")
-    assert [x["show"] for x in v[-2:]] == ["4", "0"]
-    v = run(cli, *opened, BASE + " now=5000 lora=0 hub=0 auto=0 max=60")
-    assert v[-1]["show"] == "0"
-
-
-def test_hub_qr_rekey_needs_a_new_10_s_press(cli):
-    """On the hub QR a new press held 10 s asks once for a new data key (and restarts the 120 s); the
-    press that opened it never does, however long it is held; a press under 3 s closes it, no new key;
-    3..10 s without a next state keeps it."""
-    opened = ["reset", *presses(HUB_ONLY, 2)]  # the hub QR from 8000
-    v = run(cli, *opened, *hold(HUB_ONLY, 200, 10000, 9000), HUB_ONLY + " now=19400")
-    keyed = [i for i, x in enumerate(v) if x["rekey"] == "1"]
-    assert len(keyed) == 1 and v[keyed[0]]["show"] == "3" and v[-1]["show"] == "3"
-    v = run(
-        cli, *opened, *hold(HUB_ONLY, 200, 10000, 9000), HUB_ONLY + " now=138999", HUB_ONLY + " now=139000"
+    v = run(cli, "reset", *presses(HUB_ONLY, 2), HUB_ONLY + " now=9000 lang=1 qrok=1")
+    assert (v[-1]["show"], v[-1]["lhint"], v[-1]["lline"]) == ("3", "The van's code: scan in the app", "")
+    t = LORA + " hub=1"
+    v = run(cli, "reset", *presses(t, 2), t + " now=9000 lang=0 qrok=1")
+    assert (v[-1]["show"], v[-1]["lhint"], v[-1]["lline"]) == (
+        "3",
+        "Code des Fahrzeugs: in der App scannen",
+        "3 s halten: LoRa",
     )
-    assert [x["show"] for x in v[-2:]] == ["3", "0"]  # 120 s from the new key (at 19000)
-    v = run(cli, "reset", *presses(HUB_ONLY, 1), *hold(HUB_ONLY, 200, 12000, 5000))
-    assert v[-1]["show"] == "3" and {x["rekey"] for x in v} == {"0"}
-    v = run(cli, *opened, *hold(HUB_ONLY, 200, 2000, 9000), HUB_ONLY + " now=11400")
-    assert v[-1]["show"] == "0" and {x["rekey"] for x in v} == {"0"}
-    v = run(cli, *opened, *hold(HUB_ONLY, 200, 5000, 9000), HUB_ONLY + " now=14400")
-    assert v[-1]["show"] == "3" and {x["rekey"] for x in v} == {"0"}
 
 
-def test_hub_qr_closes_like_the_lora_qr(cli):
-    """The key must not stay on screen: a tap, 120 s, or the hub config going away closes it."""
-    opened = ["reset", *presses(HUB_ONLY, 2)]  # the hub QR from 8000
-    v = run(cli, *opened, HUB_ONLY + " now=9000 touch=1")
+@pytest.mark.parametrize("n,show", [(1, "4"), (2, "3")])
+def test_app_and_hub_qr_close(cli, n, show):
+    """The key must not stay on screen: a short press, a tap, 120 s, or the hub config going away
+    closes the app and the hub QR."""
+    opened = ["reset", *presses(HUB_ONLY, n)]
+    since = 4000 * n  # the hold that opened it fired at now = 1000 + 4000 (n - 1) + 3000
+    v = run(cli, *opened, HUB_ONLY + f" now={since + 1000} touch=1")
     assert v[-1]["show"] == "0"
-    v = run(cli, *opened, HUB_ONLY + " now=127999", HUB_ONLY + " now=128000")
-    assert [x["show"] for x in v[-2:]] == ["3", "0"]
-    v = run(cli, *opened, BASE + " now=9000 lora=0 hub=0 auto=0 max=60")
+    v = run(cli, *opened, *hold(HUB_ONLY, 200, 2000, since + 1000), HUB_ONLY + f" now={since + 3400}")
     assert v[-1]["show"] == "0"
-    v = run(cli, *opened, HUB_ONLY + " now=9000")
-    assert v[-1]["lhint"] != "" and v[-1]["lline"] != ""
+    v = run(cli, *opened, HUB_ONLY + f" now={since + 119999}", HUB_ONLY + f" now={since + 120000}")
+    assert [x["show"] for x in v[-2:]] == [show, "0"]
+    v = run(cli, *opened, BASE + f" now={since + 1000} lora=0 hub=0 auto=0 max=60")
+    assert v[-1]["show"] == "0"

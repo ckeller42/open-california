@@ -26,6 +26,7 @@
 #include "cali_platform.h"
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
+#include "esp_tls_errors.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
 #include "freertos/queue.h"
@@ -51,7 +52,7 @@ typedef struct {
     esp_mqtt_client_handle_t h;
     QueueHandle_t req_q, out_q;
     char topic[T_N][40];
-    atomic_int online, kicked;
+    atomic_int online, kicked, why;   /* why: CALI_HUB_WHY_* of the last failed attempt */
     frame_t rx;   /* MQTT task: the request being reassembled */
 } client_t;
 
@@ -127,6 +128,20 @@ static void rx_data(client_t *c, const esp_mqtt_event_t *e) {
     c->rx.buf = NULL;
 }
 
+/* MQTT_EVENT_ERROR -> CALI_HUB_WHY_* (ruling R45): the login refused, the name not found, TLS, else no connection */
+static int why_of(const esp_mqtt_error_codes_t *e) {
+    if (!e) return CALI_HUB_WHY_UNREACHABLE;
+    if (e->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED)
+        return e->connect_return_code == MQTT_CONNECTION_REFUSE_BAD_USERNAME ||
+                       e->connect_return_code == MQTT_CONNECTION_REFUSE_NOT_AUTHORIZED
+                   ? CALI_HUB_WHY_AUTH
+                   : CALI_HUB_WHY_UNREACHABLE;
+    if (e->esp_tls_last_esp_err == ESP_ERR_ESP_TLS_CANNOT_RESOLVE_HOSTNAME) return CALI_HUB_WHY_DNS;
+    if (e->esp_tls_cert_verify_flags || e->esp_tls_last_esp_err == ESP_ERR_MBEDTLS_SSL_HANDSHAKE_FAILED)
+        return CALI_HUB_WHY_TLS;
+    return CALI_HUB_WHY_UNREACHABLE;
+}
+
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
     client_t *c = arg;
     esp_mqtt_event_handle_t e = data;
@@ -134,6 +149,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
     switch ((esp_mqtt_event_id_t)id) {
     case MQTT_EVENT_CONNECTED:
         atomic_store(&c->online, 1);
+        atomic_store(&c->why, CALI_HUB_WHY_NONE);
         esp_mqtt_client_publish(c->h, c->topic[T_ONLINE], "1", 1, 1, 1);
         esp_mqtt_client_subscribe(c->h, c->topic[T_REQ], 0);
         cali_log("hub: connected");
@@ -144,6 +160,11 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
     case MQTT_EVENT_DATA:
         rx_data(c, e);
         break;
+    case MQTT_EVENT_ERROR: {
+        int w = why_of(e->error_handle);
+        if (atomic_exchange(&c->why, w) != w) cali_log("hub: not connected (reason %d)", w);   /* no URL, no login */
+        break;
+    }
     case MQTT_USER_EVENT:
         publish_out(c);
         break;
@@ -236,6 +257,8 @@ void cali_hub_port_stop(void) {
 }
 
 int cali_hub_port_online(void) { return s_cur && atomic_load(&s_cur->online); }
+
+int cali_hub_port_why(void) { return s_cur ? atomic_load(&s_cur->why) : CALI_HUB_WHY_NONE; }
 
 size_t cali_hub_port_take(uint8_t *buf, size_t max) {
     frame_t f;

@@ -182,7 +182,9 @@
  *   - `energy`: cali_energy.h (R_FW_ENERGY_COUNTERS). `lora`: cali_lora.h (R_FW_LORA).
  *   - `hub`: the remote hub's MQTT client (cali_hub.h): a config is stored, the client is connected,
  *     seconds since the last sealed state publish (null: none yet), `error` "key" while the data key cannot be
- *     stored (retried every 30 s). `?hub=1` is that publish's own GET:
+ *     stored (retried every 30 s), `reason` why the running client is not connected ("dns", "tls", "auth",
+ *     "unreachable"; null: connected, not tried yet or not known; ruling R45) and `app_url` (the remote app,
+ *     CALI_HUB_APP_URL, also without a config; ruling R35). `?hub=1` is that publish's own GET:
  *     it is no viewer (no BLE mark), or the link would never rest. Its body starts with `hub_t` (the wall
  *     clock in unix ms, null without one: the app judges the sealed state's age from it) and `lora_ctr` (the last
  *     accepted LoRa command counter, null: none stored), rulings R25/R26.
@@ -192,6 +194,9 @@
  *     400 `bad_value` (a field empty or too long for cali_hub_cfg_t, a '*', url not `wss://`, van not
  *     [A-Za-z0-9_-]), 500 `store`; 200 `{"ok":true}` restarts the client with the new config. Over the hub (cali_hub_rpc) it is 403
  *     `local_only` (ruling R21).
+ *   - `POST /api/hub_key` `{"new_key":true}` (station only, else 403 `setup_mode`): a new hub data key
+ *     (cali_hub_new_key; the Hub card's New data key, ruling R42); 409 `no_hub` without a config, 400 `bad_json`,
+ *     500 `store`; 200 `{"ok":true}`. Every phone then scans the new hub QR. Over the hub: 403 `local_only`.
  *   - `water_held_age_ms`: present only while the water level is held AND the baseline was measured
  *     on this boot.
  *
