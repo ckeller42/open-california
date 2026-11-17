@@ -528,3 +528,89 @@ extension Command {
         Command(function: function, what: what, value: on ? "on" : "off")
     }
 }
+
+/// A row showing a configured `HH:MM` time with a wheel-picker sheet — the web UI's `kind: "time"`
+/// (the cooler and air-heater start timers). The time goes out only on OK, like the app's time
+/// drawer. An unknown time reads "—" and still offers a 44-pt tap target (HIG); the sheet then opens
+/// at a neutral default, but nothing is sent until the user confirms, so no value is invented.
+struct TimeRow: View {
+    /// The accessibility identifier, `<screen>.<control>`; the OK button is `<id>.ok`.
+    let id: String
+    let label: Text
+    /// The unit's configured time as `HH:MM`, or nil when it has not reported one.
+    let current: String?
+    /// Sends the chosen `HH:MM`.
+    let send: (String) -> Void
+    @State private var picking: Date?
+
+    var body: some View {
+        StackedRow(label: label) {
+            Button {
+                picking = Self.date(current ?? "07:00")
+            } label: {
+                Text(verbatim: current ?? "—").monospacedDigit()
+                    .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(label)
+            .accessibilityValue(Text(verbatim: current ?? "—"))
+            .accessibilityIdentifier(id)
+        }
+        .sheet(isPresented: Binding(get: { picking != nil }, set: { if !$0 { picking = nil } })) {
+            NavigationStack {
+                DatePicker(
+                    selection: Binding(get: { picking ?? .now }, set: { picking = $0 }),
+                    displayedComponents: .hourAndMinute
+                ) { label }
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { picking = nil } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("OK") {
+                            if let d = picking { send(Self.hhmm(d)) }
+                            picking = nil
+                        }
+                        .accessibilityIdentifier(id + ".ok")
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+    }
+
+    /// The wheel's time as `HH:MM` (the planner packs it as the hour and minute fields only).
+    static func hhmm(_ d: Date) -> String {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: d)
+        return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+    }
+    static func date(_ hhmm: String) -> Date {
+        let p = hhmm.split(separator: ":").compactMap { Int($0) }
+        return Calendar.current.date(bySettingHour: p.first ?? 0, minute: p.count > 1 ? p[1] : 0, second: 0, of: .now) ?? .now
+    }
+}
+
+/// A labelled group of momentary action buttons (the web UI's segmented timer group — the cooler and
+/// air-heater start/stop). The label sits above the buttons so they get the full row width (the German
+/// labels fit side by side without truncating); at accessibility text sizes the buttons stack into a
+/// column so the larger labels never clip.
+struct TimerButtons<Buttons: View>: View {
+    let label: Text
+    @ViewBuilder var buttons: () -> Buttons
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            label
+            if typeSize.isAccessibilitySize {
+                // Stacked and full width: let a long label wrap inside its button rather than clip.
+                VStack(alignment: .leading, spacing: 8) { buttons() }.buttonStyle(.bordered)
+            } else {
+                // Side by side on the full-width row: the labels fit on one line, so pin them to one.
+                HStack(spacing: 8) { buttons() }.buttonStyle(.bordered).lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
