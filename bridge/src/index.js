@@ -38,10 +38,14 @@ async function wsConnect(url) {
   return ws;
 }
 
-export async function handle(request, env, connect = wsConnect) {
+export async function handle(request, env, connect = wsConnect, ms = 5000) {
   if (new URL(request.url).pathname !== "/ttn") return bad(404);
   if (request.method !== "POST") return bad(405);
-  if (!(await equal(request.headers.get("X-OC-Secret") || "", env.WEBHOOK_SECRET || ""))) return bad(401);
+  // fail closed: a missing or weak secret must never turn the webhook into an open endpoint
+  if (typeof env.WEBHOOK_SECRET !== "string" || env.WEBHOOK_SECRET.length < 16) return bad(500);
+  const given = request.headers.get("X-OC-Secret");
+  if (!given || !(await equal(given, env.WEBHOOK_SECRET))) return bad(401);
+  if (!/^[0-9a-f]{32}$/i.test(env.HUB_KEY || "")) return bad(500);   // a typo must not seal with a wrong key
   if (Number(request.headers.get("Content-Length")) > MAX_BODY) return bad(413);
   const raw = await request.arrayBuffer();
   if (raw.byteLength > MAX_BODY) return bad(413);
@@ -51,13 +55,13 @@ export async function handle(request, env, connect = wsConnect) {
   if (!u || typeof u !== "object") return bad(400);
   if (!PORTS.has(u.f_port)) return bad(204);
   const cnt = u.f_cnt === undefined ? 0 : u.f_cnt;   // TTN leaves out a zero f_cnt
-  if (typeof j.received_at !== "string" || !Number.isInteger(cnt) || cnt < 0 || typeof u.frm_payload !== "string") return bad(400);
+  if (typeof j.received_at !== "string" || !Number.isInteger(cnt) || cnt < 0 || (u.frm_payload !== undefined && typeof u.frm_payload !== "string")) return bad(400);
   let bytes;
-  try { bytes = Uint8Array.from(atob(u.frm_payload), (c) => c.charCodeAt(0)); } catch { return bad(400); }
+  try { bytes = Uint8Array.from(atob(u.frm_payload || ""), (c) => c.charCodeAt(0)); } catch { return bad(400); }
   const text = JSON.stringify({ fcnt: cnt, t: j.received_at, hex: Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("") });
   try {
     await publish(connect, { url: env.BROKER_WSS, user: env.BROKER_USER, pass: env.BROKER_PASS,
-      topic: `oc/${env.VAN}/lora/${u.f_port}`, payload: await seal(env.HUB_KEY, text) });
+      topic: `oc/${env.VAN}/lora/${u.f_port}`, payload: await seal(env.HUB_KEY, text), ms });
   } catch { return bad(502); }   // TTN retries a failed webhook; no detail is logged (it could carry payload or secrets)
   return bad(204);
 }

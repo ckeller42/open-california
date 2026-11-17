@@ -4,21 +4,26 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { handle } from "../src/index.js";
-import { connectPacket, publishPacket, remainingLength } from "../src/mqtt.js";
+import { connectPacket, publish, publishPacket, remainingLength } from "../src/mqtt.js";
 
+const SECRET = "x".repeat(20);
 const KEY = "000102030405060708090a0b0c0d0e0f";
-const ENV = { WEBHOOK_SECRET: "s3cret", HUB_KEY: KEY, BROKER_USER: "bridge", BROKER_PASS: "pw", VAN: "van1", BROKER_WSS: "wss://hub.example:8884/mqtt" };
+const ENV = { WEBHOOK_SECRET: SECRET, HUB_KEY: KEY, BROKER_USER: "bridge", BROKER_PASS: "pw", VAN: "van1", BROKER_WSS: "wss://hub.example:8884/mqtt" };
 const T = "2026-11-17T10:11:12.345678Z";
 const body = (port, extra = {}) => JSON.stringify({ received_at: T, uplink_message: { f_port: port, f_cnt: 42, frm_payload: "AQID/w==", ...extra } });
-const req = (b, headers = { "X-OC-Secret": "s3cret" }) => new Request("https://b.example/ttn", { method: "POST", headers, body: b });
+const req = (b, headers = { "X-OC-Secret": SECRET }) => new Request("https://b.example/ttn", { method: "POST", headers, body: b });
 
 /** A fake broker socket: collects what is sent, answers CONNECT with CONNACK (return code `rc`). */
-function fake(rc = 0) {
+function fake(rc = 0, mode = "ok") {
   const sent = [], ls = {};
   const ws = {
     sent, closed: false,
     addEventListener: (n, f) => { ls[n] = f; },
-    send(b) { sent.push(Uint8Array.from(b)); if (b[0] === 0x10) queueMicrotask(() => ls.message({ data: Uint8Array.from([0x20, 2, 0, rc]).buffer })); },
+    send(b) {
+      if (mode === "throw") throw new Error("boom");
+      sent.push(Uint8Array.from(b));
+      if (b[0] === 0x10 && mode === "close") queueMicrotask(() => ls.close({}));
+      else if (b[0] === 0x10 && mode === "ok") queueMicrotask(() => ls.message({ data: Uint8Array.from([0x20, 2, 0, rc]).buffer })); },
     close() { this.closed = true; },
   };
   return { ws, urls: [], connect(u) { this.urls.push(u); return Promise.resolve(ws); } };
@@ -105,4 +110,38 @@ test("mqtt_remaining_length_over_127", () => {
   const p = publishPacket("a/b", new Uint8Array(200));
   assert.deepEqual([...p.slice(0, 3)], [0x31, 0xcd, 0x01]);   // 2+3+200 = 205 = 0xcd 0x01
   assert.equal(p.length, 3 + 205);
+});
+
+test("fails_closed_on_the_secret", async () => {
+  const c = fake(), h = (env, headers) => handle(req(body(2), headers), env, c.connect.bind(c));
+  assert.equal((await h({ ...ENV, WEBHOOK_SECRET: undefined }, {})).status, 500);
+  assert.equal((await h({ ...ENV, WEBHOOK_SECRET: "short" }, { "X-OC-Secret": "short" })).status, 500);
+  assert.equal((await h(ENV, { "X-OC-Secret": "" })).status, 401);
+  assert.equal(c.urls.length, 0);
+});
+
+test("bad_hub_key_is_500", async () => {
+  for (const k of [undefined, "zz" + KEY.slice(2), KEY.slice(2)]) {
+    const c = fake();
+    assert.equal((await handle(req(body(2)), { ...ENV, HUB_KEY: k }, c.connect.bind(c))).status, 500);
+    assert.equal(c.urls.length, 0);
+  }
+});
+
+test("no_connack_and_early_close_are_502", async () => {
+  for (const mode of ["silent", "close", "throw"]) {
+    const c = fake(0, mode);
+    assert.equal((await handle(req(body(2)), ENV, c.connect.bind(c), 20)).status, 502, mode);
+    assert.ok(c.ws.closed, mode);
+    await assert.rejects(publish(c.connect.bind(c), { url: "u", user: "u", pass: "p", topic: "t", payload: Uint8Array.of(1), ms: 20 }));
+  }
+  await new Promise((r) => setTimeout(r, 60));   // a stray timer would fire an unhandled rejection here and fail the run
+});
+
+test("empty_uplink_is_published", async () => {
+  const c = fake();
+  const u = JSON.parse(body(2)); delete u.uplink_message.frm_payload; delete u.uplink_message.f_cnt;
+  assert.equal((await handle(req(JSON.stringify(u)), ENV, c.connect.bind(c))).status, 204);
+  const pub = c.ws.sent[1], o = await open(pub.slice(4 + 14));
+  assert.deepEqual(JSON.parse(o.pt), { fcnt: 0, t: T, hex: "" });
 });

@@ -29,20 +29,20 @@ export const DISCONNECT = Uint8Array.of(0xe0, 0);
 /** Opens, publishes one retained message, closes. Throws when the broker refuses or does not answer in `ms`. */
 export async function publish(connect, { url, user, pass, topic, payload, ms = 5000 }) {
   const ws = await connect(url);
-  const connack = new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error("mqtt: no CONNACK")), ms);
-    ws.addEventListener("message", async (e) => {
-      const b = new Uint8Array(await new Response(e.data).arrayBuffer());
-      clearTimeout(t);
-      b[0] === 0x20 && b[3] === 0 ? resolve() : reject(new Error("mqtt: refused, code " + b[3]));
-    });
-    ws.addEventListener("close", () => { clearTimeout(t); reject(new Error("mqtt: closed")); });
-    ws.addEventListener("error", () => { clearTimeout(t); reject(new Error("mqtt: socket error")); });
-  });
+  let t;
   try {
+    const connack = new Promise((resolve, reject) => {
+      t = setTimeout(() => reject(new Error("mqtt: no CONNACK")), ms);
+      ws.addEventListener("message", async (e) => {
+        const b = new Uint8Array(await new Response(e.data).arrayBuffer());
+        b[0] === 0x20 && b[3] === 0 ? resolve() : reject(new Error("mqtt: refused, code " + b[3]));
+      });
+      ws.addEventListener("close", () => reject(new Error("mqtt: closed")));
+      ws.addEventListener("error", () => reject(new Error("mqtt: socket error")));
+    });
     ws.send(connectPacket({ clientId: "oc-bridge-" + crypto.randomUUID().slice(0, 8), user, pass }));
     await connack;
     ws.send(publishPacket(topic, payload));
     ws.send(DISCONNECT);
-  } finally { ws.close(); }
+  } finally { clearTimeout(t); ws.close(); }   // a throwing send leaves the promise pending, never rejected later
 }
