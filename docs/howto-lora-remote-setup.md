@@ -4,7 +4,8 @@ The satellite can send a few numbers (batteries, water, solar, the cooler) over 
 The Things Network. The **Open California remote app** reads them from there, so you see your van
 from anywhere, with no router, no Raspberry Pi and no Tailscale in the van. The remote app is a
 web page that you put on your phone's home screen. It talks only to The Things Network, never to
-your router, your Pi or the satellite. It cannot control anything: the data is display only.
+your router, your Pi or the satellite. Over LoRa alone, the app only shows the data; with the remote
+hub set up, it also sends a few commands (heater, camping mode), over LoRa too.
 
 To see the van over WiFi as well, and to switch the heater and camping mode from anywhere, set up the
 remote hub: [How to set up the remote hub](howto-remote-hub.md).
@@ -42,8 +43,8 @@ delete that key there. Do not use the app again before the key is gone.
 
 Open `https://open-california.github.io/` on your phone.
 
-- **iPhone or iPad:** use Safari. Tap **Share**, then **Add to Home Screen**. Close Safari and open
-  the app from the home screen. Do the setup in step 3 **inside the installed app**: the installed
+- **iPhone or iPad:** use Safari. Tap **Share**, then **Add to Home Screen**. The icon is called
+  **OC Remote**. Close Safari and open the app from the home screen. Do the setup in step 3 **inside the installed app**: the installed
   app has its own storage, separate from Safari, so keys that you set up in Safari are not there.
 - **Android:** use Chrome. Open the menu and tap **Install app** (or **Add to Home screen**), then
   open the app from the home screen.
@@ -51,8 +52,8 @@ Open `https://open-california.github.io/` on your phone.
 ## 3. Set up the van
 
 LoRa is off on a new satellite, and the LoRa screen does not open while LoRa is off. Switch it on
-once before you start: in the setup wizard's **Remote** step turn on **This satellite has the LoRa
-module**, or later, on your home WiFi, open the satellite's page, choose **Satellite settings** and
+once before you start: in the setup wizard's **Remote access** step, part **Over LoRa**, turn on
+**This satellite has the LoRa module** (it works without a remote hub), or later, on your home WiFi, open the satellite's page, choose **Satellite settings** and
 turn on the **LoRa** switch under **Advanced**. Switch LoRa on only on a satellite with the LoRa
 module; while LoRa is off, the satellite does not touch the module's pins. LoRa stays on after a
 restart.
@@ -63,14 +64,17 @@ Without a phone, connect the satellite to a computer with its USB-C cable, open 
 
 1. In the app, open the menu and choose **Set up LoRa**. Choose your cluster (`eu1`), paste the
    full-rights API key and tap **Check the key**. The app only checks the key in this step.
-2. On the satellite, **press the screen for 3 seconds**. The LoRa screen opens and shows the setup
-   code. The screen closes after two minutes, so do this step just before the next one.
-3. Scan the code on the satellite's screen with the phone's camera. Allow the camera when the
-   phone asks. Hold the phone so that the whole code is in the picture. After the scan, the app
+2. On the satellite, tap the screen once to light it (the touch that wakes a dark screen does not
+   count), then **hold the screen for 3 seconds**. The LoRa screen opens and shows the setup code.
+   With the remote hub set up, the app's code and the van's code come first: hold for 3 seconds
+   once for each of them; the LoRa code is the third screen. The screen closes after two minutes,
+   so do this step just before the next one.
+3. Scan the code **in the app**: it opens the camera itself (do not use the phone's Camera app; the
+   setup code carries keys). Allow the camera when the phone asks. Hold the phone so that the whole code is in the picture. After the scan, the app
    registers the van at The Things Network, makes the read key and the command key, and deletes
    the full-rights key.
-4. Wait. **Do not press the satellite's screen again until the app says The van has the keys.**
-   Each new open of the LoRa screen makes a new transfer key, and the keys that the app sent
+4. Wait. **Do not hold the satellite's screen again until the app says The van has the keys.**
+   Each new entry to the LoRa setup code makes a new transfer key, and the keys that the app sent
    before no longer fit.
    - The app shows that it waits for the van's first message. The first message from a new
      device can take several minutes. If the app waits more than ten minutes, check the antenna
@@ -84,8 +88,8 @@ Without a phone, connect the satellite to a computer with its USB-C cable, open 
    and shows how old it is. A LoRa message is far slower than WiFi: the numbers are minutes old, not seconds.
 
 If you close the app while it waits, open it again: it continues where it stopped. If the van
-could not read the keys, the app tells you. Then press the satellite's screen for 3 seconds again
-and scan the new code. If the satellite shows its repair code instead, scan that code: the van
+could not read the keys, the app tells you. Then hold the satellite's screen for 3 seconds again
+until the LoRa code shows, and scan the new code. If the satellite shows its repair code instead, scan that code: the van
 already has the keys, and the app finishes the setup. If the app says that the van's daily downlink
 limit is reached, leave the app installed: the setup continues the next day.
 
@@ -99,10 +103,10 @@ actor O as Owner
 participant P as Phone (remote app)
 participant T as TTN (eu1)
 participant E as Satellite + RAK3172
-O->>E: wizard Remote step (or Satellite settings): LoRa switch on
+O->>E: wizard Remote access, over LoRa (or Satellite settings) - LoRa switch on
 O->>P: Set up LoRa: cluster eu1, full-rights key, Check the key
 P->>T: check the key
-O->>E: press the screen 3 s
+O->>E: hold the screen 3 s until the LoRa code (with a hub - the third screen)
 E->>E: make AppKey (once) + new transfer key
 E-->>O: setup QR: DevEUI, AppKey, transfer key
 O->>P: scan the setup QR
@@ -127,7 +131,8 @@ P-->>O: The van has the keys.
 The second phone needs no TTN account and no full-rights key.
 
 1. Install the remote app on the second phone (step 2).
-2. Press the satellite's screen for 3 seconds. The LoRa screen shows a **repair code**.
+2. Hold the satellite's screen for 3 seconds until the LoRa code shows (with the remote hub set up,
+   it is the third screen). The LoRa screen shows a **repair code**.
 3. In the app, open the menu, choose **Scan the van's code** and scan the repair code. The phone
    receives the same read keys and shows the van.
 
@@ -144,11 +149,9 @@ full-rights API key and a visit to the van.
 2. In the same place, create a new API key with **Grant all current and future rights** (as in
    section 1).
 3. In the app on your phone, choose **Set up LoRa**, paste the new key and tap **Check the key**.
-4. On the satellite, press the screen for 3 seconds. The screen shows the repair code. Press the
-   screen for 3 seconds a second time. The satellite makes a new transfer key and shows a new
-   setup code. With the remote hub set up, the app code and the hub code come between them: press
-   for 3 seconds once for each of them. On the hub code, release the press after 3 seconds and before
-   10 seconds (a 10-second press makes a new hub data key). The satellite does not make the read key and the command key: the phone makes them.
+4. On the satellite, hold the screen for 3 seconds until the repair code shows (with the remote hub
+   set up, it is the third screen, after the app's code and the van's code). Hold the screen for 3
+   seconds once more. The satellite makes a new transfer key and shows a new setup code. The satellite does not make the read key and the command key: the phone makes them.
 5. Scan the setup code. The app makes a new read key and a new command key, deletes the full-rights
    key and sends the new keys to the van, as in step 3 of the setup.
 6. When the app says **The van has the keys.**, scan the new repair code on your other phones.

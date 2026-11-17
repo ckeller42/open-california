@@ -1826,21 +1826,22 @@ The status screen has one hidden second screen, for the LoRa setup ([LoRaWAN tel
 - **What it shows:** before the van has the TTN keys, the ESP makes a new transfer key (and the AppKey
   on the first open) and shows the **setup QR**; after, it shows the **repair QR**. Until the QR text
   exists, and while a new transfer key is still being made, it shows "Preparing…" instead of a QR, so an
-  old transfer key is never shown. Beside the QR: "Scan with the Open California remote app" and one
-  status line — joined or not, and how long ago the module confirmed the last uplink with `TX_DONE`
-  (never a send without that confirmation). German or English as the status rows.
-- **Rotation** (a lost phone or a leaked key): while the repair QR shows, press 3 s again. The ESP makes
-  a new transfer key (the AppKey stays) and shows the setup QR. With a hub config two screens come
-  first (below), so the rotation is the fourth press.
-- **The press cycle with a hub config** (`show_lora`): each 3 s press goes one screen on — the LoRa
-  selector (setup or repair QR, with LoRa on) → the **app QR** (4) → the **hub QR** (3) → the LoRa
-  setup QR (2, rotation, with LoRa on and the TTN keys). A screen whose condition is missing is
-  skipped: with LoRa off the first press shows the app QR. The app QR is the plain remote-app URL
-  (`CALI_HUB_APP_URL`, `https://open-california.github.io/`, no secret) in byte mode, in a 168 px box
-  so that the three steps fit beside it: "1. Scan with the camera: get the app", "2. Add it to the
-  home screen", "3. Press again: the van's code, scan it in the app". A long press on it goes at most
-  one screen on and never makes a key; only the hub QR has the 10 s rekey hold. Both close as the
-  LoRa QR does (a tap, 120 s, or the hub config going away).
+  old transfer key is never shown. Beside the QR: what it is ("LoRa setup: scan in the app", or for the
+  repair QR "LoRa: scan in the app. Hold 3 s: new code") and one status line — joined or not, and how
+  long ago the module confirmed the last uplink with `TX_DONE` (never a send without that
+  confirmation). German or English as the status rows.
+- **Rotation** (a lost phone or a leaked key): while the repair QR shows, hold 3 s again. The ESP makes
+  a new transfer key (the AppKey stays) and shows the setup QR.
+- **One cycle** (`show_lora`, ruling R41): each 3 s hold goes one screen on, always in this order —
+  the **app QR** (4) → the **hub QR** (3), both only with a hub config → the LoRa screen (1, with LoRa
+  on: setup or repair QR) → the rotation (2, with the TTN keys). A screen whose condition is missing
+  is skipped; the last one stays. Only entering a LoRa setup QR asks for a new transfer key, never the
+  app or hub QR. The app QR is the plain remote-app URL (`CALI_HUB_APP_URL`,
+  `https://open-california.github.io/`, no secret) in byte mode, in a 168 px box so that the three
+  steps fit beside it: "1. Scan with the camera: get the app", "2. Add it to the home screen", "3. Hold
+  3 s: the van's code". The hub QR's side text is "The van's code: scan in the app", with LoRa on
+  also "Hold 3 s: LoRa". No gesture makes a hub data key (ruling R42: the Hub card's **New data
+  key**). The app and hub QR close like the LoRa QR, and also when the hub config goes away.
 - **Close:** a tap, 120 s after it opened or rotated (`DISPLAY_LORA_SHOW_MS`), or the module going away.
   The backlight is at 100 % while it is up.
 - **The QR:** alphanumeric mode, error correction L, whole pixels per module (`240 / (modules + 8)`), at
@@ -1870,12 +1871,16 @@ through it, so the app reaches the van from anywhere. Owner setup and operation:
 - **Allowlist:** over the hub only `GET /api/...` and `POST /api/command` reach the router; every
   other request answers `403 local_only`. Settings stay local.
 - **`/api/hub`:** `GET` (every mode) and `POST` (station only) of `{url, van, user, pass, app_user,
-  app_pass}`, the Satellite settings Hub card and the setup wizard's Remote step; no GET ever returns a
-  password. `device.hub` in `/api/state`: `configured`, `online`, `last_pub_s`, `error`, and
-  `app_url` (the remote app's URL, `CALI_HUB_APP_URL`, also without a config).
-- **Display:** on the LoRa screen the long-press cycle is LoRa repair QR, **app QR** (the remote
-  app's URL), **hub QR** (`OCH1*<van>*<wss url>*<app user>*<app pass>*<key>`), LoRa setup QR. A 10 s press on the hub QR
-  makes a new data key (every phone then scans the new QR, and the bridge's `HUB_KEY` secret changes).
+  app_pass}`, the Satellite settings Hub card and the setup wizard's Remote access step; no GET ever
+  returns a password. `device.hub` in `/api/state`: `configured`, `online`, `last_pub_s`, `error`,
+  `reason` (why the running client is not connected, from esp-mqtt's last error: `dns`, `tls`,
+  `auth`, `unreachable`, else null; ruling R45) and `app_url` (the remote app's URL,
+  `CALI_HUB_APP_URL`, also without a config).
+- **New data key:** `POST /api/hub_key {"new_key":true}` (station only; the Hub card's **New data
+  key** button with an in-page confirmation, ruling R42) calls `cali_hub_new_key`. Every phone then
+  scans the new hub QR, and the bridge's `HUB_KEY` secret changes.
+- **Display:** on the LoRa screen the cycle is **app QR** (the remote app's URL), **hub QR**
+  (`OCH1*<van>*<wss url>*<app user>*<app pass>*<key>`), then the LoRa screen.
 - **LoRa commands:** FPort 20, 15 bytes (phone id, counter, command, tag); see
   [LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora). A command the camper link does not take yet
   (not ready or busy) is offered again every 2 s until 120 s after its arrival, then dropped with a

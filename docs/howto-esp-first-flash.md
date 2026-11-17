@@ -88,6 +88,10 @@ When the satellite starts, its screen shows the setup hotspot. Carry on with:
 1. [How to put the ESP32 satellite on your WiFi](howto-esp-wifi-setup.md)
 2. [How to pair your camper unit](howto-pair-your-camper.md) (the satellite has the same pairing
    wizard as the Pi — see "Pair the satellite with your camper unit" in the WiFi how-to)
+3. Optional, for control from anywhere: the wizard's **Remote access** step needs your own remote hub
+   (broker, bridge and app, set up first on a computer: [How to set up the remote
+   hub](howto-remote-hub.md)) or a LoRa module and a TTN account ([How to read your van from anywhere
+   with LoRa](howto-lora-remote-setup.md)).
 
 ## Updates afterwards
 

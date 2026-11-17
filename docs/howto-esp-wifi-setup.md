@@ -71,7 +71,7 @@ only: it is in no document, in no log and not in `/api/state`.
    check that it is in range, then try again.*, or *Could not join the network — try again.* The
    satellite forgets the failed password and keeps its setup hotspot open, so you can simply try
    again.
-5. **Pair, Victron, sensors, remote, home screen.** The remaining steps are in
+5. **Pair, Victron, sensors, remote access, home screen.** The remaining steps are in
    [The setup wizard's steps](#the-setup-wizards-steps). About 30 seconds after the satellite joins
    your network it closes the setup hotspot.
 
@@ -115,13 +115,20 @@ alt joined
 else wrong password / not found
     E-->>P: reason, hotspot stays open, try again
 end
-O->>P: Victron, sensors
-opt Remote step (optional)
-    O->>P: Hub form (broker values), LoRa switch
-    P->>E: POST /api/hub, POST /api/experimental
-    E-->>P: hub Connected: link to the remote app and its install steps
+O->>P: Pair (camper unit), Victron, sensors
+opt Remote access, over the internet (optional)
+    O->>P: Hub form (broker values)
+    P->>E: POST /api/hub
+    E-->>P: hub Connected - the remote app's link and install steps
+    O->>E: hold the screen 3 s - the app QR, install OC Remote
+    O->>E: hold 3 s again - the van's code, scan it in OC Remote
 end
-O->>P: home screen (the satellite's page), Done
+opt Remote access, over LoRa (optional)
+    O->>P: LoRa switch on
+    O->>E: hold 3 s until the LoRa code - Set up LoRa in OC Remote
+end
+O->>P: Home - add this page, icon OC Van
+O->>P: Done
 
 ```
 
@@ -129,14 +136,14 @@ O->>P: home screen (the satellite's page), Done
 
 | Step | What it asks |
 |---|---|
-| **Welcome** | What the wizard does, and that at the end you can install the remote app. |
+| **Welcome** | What the wizard does, and that the step *Remote access* after the sensors can set up control from anywhere. |
 | **WiFi** | Your home network and its password (above). |
 | **Pair** | Close the California On Tour app on your phone. On the camper unit open **Einstellungen → Bluetooth → Gerät verbinden**, then tap **Pair now** and type the passcode within about 30 seconds (a countdown shows). Can be skipped. |
 | **Victron** | Whether the van has Victron devices (yes or no). If yes, the key help says: in VictronConnect open the device, then ⋮ → *Product info* → *Instant readout details* → *Show* and copy the key. |
 | **Sensors** | Every Govee sensor the satellite hears, each with a name. |
-| **Remote** | Optional, for control from anywhere ([How to set up the remote hub](howto-remote-hub.md)): the *Remote hub* form (broker address, van name, van and app login, the same as the card in *Satellite settings*) with its status, and the switch *This satellite has the LoRa module*. When the hub says *Connected*, the step shows the link to the remote app, how to install it (iPhone: Safari → *Share* → *Add to Home Screen*; Android: Chrome → ⋮ → *Install app*), and what to do in the app: *Scan the van's code*, then press the satellite's screen for 3 seconds (the app code shows) and again for 3 seconds until the van's code shows (and, with LoRa on, *Set up LoRa*). Can be skipped. |
-| **Home** | *Add to Home Screen* (see below), and a check whether `calictl-esp.local` opens on your phone. If not, the step suggests a fixed address (a DHCP reservation in your router). It names the icons: the satellite's page is for settings and works in the van's WiFi; with the hub set up, the remote app is the second icon, for control from anywhere. |
-| **Done** | A checklist, with a *Remote hub* row. A row you skipped says *not set up* and links to *Satellite settings*. |
+| **Remote access** | Optional, for control from anywhere, in two independent parts. **Over the internet** ([How to set up the remote hub](howto-remote-hub.md#the-broker-emqx-cloud-serverless); it needs your own MQTT broker): the *Remote hub* form (broker address, van name, van and app login, the same as the card in *Satellite settings*) with its status. When the hub is not connected, the status says why and what to check. When it says *Connected*, the step shows the link to the remote app, how to install it (iPhone: Safari → *Share* → *Add to Home Screen*; Android: Chrome → ⋮ → *Install app*; the icon is called **OC Remote**), what to do in the app (⋮ → *Scan the van's code*, and on the satellite hold the screen 3 s for the app's code and 3 s again for *The van's code*), and to come back to Safari and tap *Next*. **Over LoRa** ([LoRa how-to](howto-lora-remote-setup.md)): the switch *This satellite has the LoRa module*; when it is on, the step says to choose *Set up LoRa* in the remote app, which needs a TTN account and a full-rights key. Each part can be skipped. |
+| **Home** | *Add to Home Screen* (see below), and a check whether `calictl-esp.local` opens on your phone. If not, the step suggests a fixed address (a DHCP reservation in your router). It names the icons: this page's icon is called **OC Van** (the satellite's settings, works in the van's WiFi); with the hub set up, **OC Remote** from the step before is for control from anywhere. |
+| **Done** | A checklist, with a *Remote hub* row. A row you skipped says *not set up* and links to *Satellite settings* (the *Remote hub* row: back to *Remote access*). |
 
 ## Pair the satellite with your camper unit
 
@@ -189,6 +196,7 @@ The {term}`satellite <Satellite>` serves the same app icon and web-app manifest 
 home screen like an app:
 
 - **iPhone / iPad (Safari):** open <http://calictl-esp.local>, tap *Share* → *Add to Home Screen*.
+  The icon is called **OC Van** (the remote app's icon is **OC Remote**).
   It opens full-screen, without the browser bar — over plain HTTP too.
 - **Android (Chrome):** *⋮* → *Add to Home screen* gives a shortcut with the icon, but over
   `http://` it opens in a browser tab: Chrome offers the real *Install app* only over HTTPS (a
