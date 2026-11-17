@@ -1,0 +1,8 @@
+# Secrets are NOT here: wrangler secret put WEBHOOK_SECRET | HUB_KEY | BROKER_USER | BROKER_PASS
+name = "oc-bridge"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+VAN = "van1"
+BROKER_WSS = "wss://hub.example:8884/mqtt"
