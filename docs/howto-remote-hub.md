@@ -23,8 +23,8 @@ Blue is the internet path: the satellite and the app exchange sealed frames thro
 
 ```mermaid
 flowchart LR
-    ESP["Satellite (ESP)"] <-->|"WiFi: sealed MQTT frames (wss)"| BROKER[("EMQX broker")]
-    APP["Remote app (phone)"] <-->|"sealed MQTT frames (wss)"| BROKER
+    ESP["Satellite (ESP)"] ---|"WiFi: sealed MQTT frames (wss), both ways"| BROKER[("EMQX broker")]
+    APP["Remote app (phone)"] ---|"sealed MQTT frames (wss), both ways"| BROKER
     ESP -->|"LoRa uplink"| TTN["The Things Network"]
     TTN -->|"webhook, X-OC-Secret"| BRIDGE["Cloudflare Worker (bridge)"]
     BRIDGE -->|"uplink sealed with the data key"| BROKER
@@ -115,7 +115,7 @@ O->>E: Serverless deployment, spend limit 0
 E-->>O: host, wss URL :8084/mqtt
 O->>E: logins van, app, bridge
 O->>S: keep the three passwords
-O->>E: topic permissions on oc/#lt;van#gt;/
+O->>E: topic permissions on oc/‹van›/
 O->>C: wrangler login
 O->>C: wrangler.toml: VAN, BROKER_WSS, DEV_ID
 O->>S: WEBHOOK_SECRET (openssl rand)
@@ -394,7 +394,7 @@ participant B as EMQX broker
 O->>E: wizard Remote step in the van's WiFi: wss URL, van name, van + app login, LoRa switch
 E->>E: make the data key once (KV hub_key)
 E->>B: connect wss :8084 as van
-E->>B: publish oc/#lt;van#gt;/online, sealed oc/#lt;van#gt;/state (retained)
+E->>B: publish oc/‹van›/online, sealed oc/‹van›/state (retained)
 E-->>O: step says Connected, shows the app link
 O->>E: press the screen 3 s (after the LoRa repair QR: again)
 E-->>O: app QR: https://open-california.github.io/
@@ -402,7 +402,7 @@ O->>P: scan it with the camera, install the app, add it to the home screen
 O->>E: press again 3 s
 E-->>O: hub QR: OCH1*van*url*app user*app pass*key
 O->>P: Scan the van's code
-P->>B: connect wss as app, subscribe oc/#lt;van#gt;/#
+P->>B: connect wss as app, subscribe oc/‹van›/#
 B-->>P: retained sealed state
 P->>P: open with the data key
 P-->>O: van shows WLAN, short age

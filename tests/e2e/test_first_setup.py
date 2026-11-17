@@ -1,5 +1,5 @@
 """Browser e2e of the guided first-time setup of a fresh satellite (``#setup/<step>``): welcome, WiFi,
-pair, Victron, sensors, home screen, done — over ``tools.ux_gallery.EspStub``, no firmware, BLE or
+pair, Victron, sensors, remote (hub, LoRa switch, the remote app), home screen, done — over ``tools.ux_gallery.EspStub``, no firmware, BLE or
 radio. WiFi cannot be skipped; every later step can. A reload on the station address resumes at the
 first unfinished step (``setupStep``). Every test fails on an uncaught JS / console error.
 """
@@ -311,6 +311,10 @@ def test_the_remote_step_comes_after_sensors_and_can_be_skipped(station_pending)
         pg.get_by_role("button", name="Skip").click()
         expect(pg).to_have_url(re.compile(r"#setup/remote$"))
         expect(pg.locator("#setup-step")).to_contain_text("Step 6 of 8")
+        pg.go_back()
+        expect(pg).to_have_url(re.compile(r"#setup/sensors$"))
+        pg.go_forward()
+        expect(pg).to_have_url(re.compile(r"#setup/remote$"))
         pg.get_by_role("button", name="Skip").click()
         expect(pg.locator("#setup-home")).to_be_visible()
     assert _posts(station_pending, "/api/hub") == []
@@ -321,10 +325,12 @@ def test_the_remote_step_saves_the_hub_then_shows_the_app(station_pending, local
     """The Hub card's form saves through POST /api/hub; the app part (link, install steps, scan hint)
     shows only once the hub is connected; the LoRa line only with LoRa on, set by the step's switch."""
     station_pending.fixtures["station"]["/api/state"]["device"]["experimental"]["lora"] = False
+    station_pending.fixtures["station"]["/api/hub"]["van"] = "old-van"  # to see the GET land before typing
     with _page(station_pending, "/#setup/remote", locale) as pg:
         app = pg.locator("#setup-app")
         expect(pg.locator("#hub-status")).to_have_text(tr("Not set up", lang))
         expect(app).to_be_hidden()
+        expect(pg.locator("#hub-van")).to_have_value("old-van")  # the form's GET /api/hub is in
         for k, v in HUB_FORM.items():
             pg.fill("#hub-" + k, v)
         pg.click("#hub-save")

@@ -107,7 +107,7 @@ P->>E: network + password
 E->>R: join (2.4 GHz)
 alt joined
     R-->>E: DHCP address
-    E-->>O: screen: second QR http://#lt;ip#gt;/#setup
+    E-->>O: screen: second QR http://‹ip›/#setup
     P->>R: back on own WiFi
     O->>P: scan the second QR
     P->>E: wizard resumes (http://calictl-esp.local)
@@ -134,7 +134,7 @@ O->>P: home screen (the satellite's page), Done
 | **Pair** | Close the California On Tour app on your phone. On the camper unit open **Einstellungen → Bluetooth → Gerät verbinden**, then tap **Pair now** and type the passcode within about 30 seconds (a countdown shows). Can be skipped. |
 | **Victron** | Whether the van has Victron devices (yes or no). If yes, the key help says: in VictronConnect open the device, then ⋮ → *Product info* → *Instant readout details* → *Show* and copy the key. |
 | **Sensors** | Every Govee sensor the satellite hears, each with a name. |
-| **Remote** | Optional, for control from anywhere ([How to set up the remote hub](howto-remote-hub.md)): the *Remote hub* form (broker address, van name, van and app login, the same as the card in *Satellite settings*) with its status, and the switch *This satellite has the LoRa module*. When the hub says *Connected*, the step shows the link to the remote app, how to install it (iPhone: Safari → *Share* → *Add to Home Screen*; Android: Chrome → ⋮ → *Install app*), and what to do in the app: *Scan the van's code*, then press the satellite's screen for 3 seconds (and, with LoRa on, *Set up LoRa*). Can be skipped. |
+| **Remote** | Optional, for control from anywhere ([How to set up the remote hub](howto-remote-hub.md)): the *Remote hub* form (broker address, van name, van and app login, the same as the card in *Satellite settings*) with its status, and the switch *This satellite has the LoRa module*. When the hub says *Connected*, the step shows the link to the remote app, how to install it (iPhone: Safari → *Share* → *Add to Home Screen*; Android: Chrome → ⋮ → *Install app*), and what to do in the app: *Scan the van's code*, then press the satellite's screen for 3 seconds (the app code shows) and again for 3 seconds until the van's code shows (and, with LoRa on, *Set up LoRa*). Can be skipped. |
 | **Home** | *Add to Home Screen* (see below), and a check whether `calictl-esp.local` opens on your phone. If not, the step suggests a fixed address (a DHCP reservation in your router). It names the icons: the satellite's page is for settings and works in the van's WiFi; with the hub set up, the remote app is the second icon, for control from anywhere. |
 | **Done** | A checklist, with a *Remote hub* row. A row you skipped says *not set up* and links to *Satellite settings*. |
 

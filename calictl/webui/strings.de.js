@@ -726,7 +726,7 @@ window.STRINGS_DE = {
   "Couldn't forget LoRa": "LoRa konnte nicht vergessen werden",
   // --- Satellite settings: the Remote hub card (POST /api/hub) ---
   "Remote hub": "Fern-Hub",
-  "The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then hold the satellite's screen for 3 seconds until the hub code shows and scan it with the remote app.": "Der Satellit sendet seinen Zustand an deinen MQTT-Broker und nimmt darüber Befehle der Fern-App an. Danach den Bildschirm des Satelliten 3 Sekunden gedrückt halten, bis der Hub-Code erscheint, und ihn mit der Fern-App scannen.",
+  "The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then press the satellite's screen for 3 seconds, and again for 3 seconds until the hub code shows, and scan it with the remote app.": "Der Satellit sendet seinen Zustand an deinen MQTT-Broker und nimmt darüber Befehle der Fern-App an. Danach den Bildschirm des Satelliten 3 Sekunden gedrückt halten, und erneut 3 Sekunden, bis der Hub-Code erscheint, und ihn mit der Fern-App scannen.",
   "Broker address (wss://…)": "Broker-Adresse (wss://…)",
   "Van name": "Name des Vans",
   "Van user": "Benutzer des Vans",
@@ -747,7 +747,7 @@ window.STRINGS_DE = {
   "The remote app": "Die Fern-App",
   "iPhone: open the link in Safari, tap Share, then Add to Home Screen.": "iPhone: Öffne den Link in Safari, tippe auf Teilen, dann auf Zum Home-Bildschirm.",
   "Android: open the link in Chrome, tap ⋮, then Install app (or Add to Home screen).": "Android: Öffne den Link in Chrome, tippe auf ⋮, dann auf App installieren (oder Zum Startbildschirm hinzufügen).",
-  "In the app: choose Scan the van's code, then press the satellite's screen for 3 seconds and scan its code.": "In der App: Wähle Code des Fahrzeugs scannen, dann drücke den Bildschirm des Satelliten 3 Sekunden lang und scanne seinen Code.",
+  "In the app: choose Scan the van's code. Press the satellite's screen for 3 seconds (the app code shows), then again for 3 seconds until the van's code shows, and scan it.": "In der App: Wähle Code des Fahrzeugs scannen. Drücke den Bildschirm des Satelliten 3 Sekunden lang (der App-Code erscheint), dann erneut 3 Sekunden, bis der Code des Fahrzeugs erscheint, und scanne ihn.",
   "Then choose Set up LoRa in the app.": "Wähle dann in der App LoRa einrichten.",
   "This icon is the satellite's page: settings, works in the van's WiFi.": "Dieses Symbol ist die Seite des Satelliten: Einstellungen, funktioniert im WLAN des Fahrzeugs.",
   "The remote app is the second icon: control from anywhere.": "Die Fern-App ist das zweite Symbol: Steuerung von überall.",

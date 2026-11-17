@@ -681,7 +681,7 @@ angeben* (`WAKEUP_UNKNOWN`, which calictl answers too).
 card's *Satellite settings ›* opens the **Satellite settings** screen (satellite only,
 `#satsettings`): WiFi (current network, *Change network…*), Camper unit, Restore camping, Screen,
 Firmware update, Advanced (Send usage data, Sensors). Over the setup hotspot, and in station mode while `device.setup.pending` is true, the app
-lands on the **setup wizard** (`#setup/<step>`: welcome, wifi, pair, victron, sensors, home, done; over the
+lands on the **setup wizard** (`#setup/<step>`: welcome, wifi, pair, victron, sensors, remote, home, done; over the
 hotspot only welcome and wifi exist, WiFi cannot be skipped). The **WiFi setup** screen (`#wifisetup`: the join form,
 the pairing entry, the hotspot explained once) stays reachable; once the satellite runs in station mode it shows Home, unless the join was made
 there (it keeps the result and the `http://calictl-esp.local` link). Every screen is in the URL hash

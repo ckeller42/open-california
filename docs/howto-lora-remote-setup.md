@@ -146,7 +146,9 @@ full-rights API key and a visit to the van.
 3. In the app on your phone, choose **Set up LoRa**, paste the new key and tap **Check the key**.
 4. On the satellite, press the screen for 3 seconds. The screen shows the repair code. Press the
    screen for 3 seconds a second time. The satellite makes a new transfer key and shows a new
-   setup code. The satellite does not make the read key and the command key: the phone makes them.
+   setup code. With the remote hub set up, the app code and the hub code come between them: press
+   for 3 seconds once for each of them. On the hub code, release the press after 3 seconds and before
+   10 seconds (a 10-second press makes a new hub data key). The satellite does not make the read key and the command key: the phone makes them.
 5. Scan the setup code. The app makes a new read key and a new command key, deletes the full-rights
    key and sends the new keys to the van, as in step 3 of the setup.
 6. When the app says **The van has the keys.**, scan the new repair code on your other phones.

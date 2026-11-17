@@ -2560,7 +2560,7 @@ function buildSat(v) {
     h("div", { id: "lora-on" }, ...LORA_ROWS.map(([id, label]) => h("div", { class: "row" }, h("span", { class: "lbl" }, T(label)), h("span", { class: "val", id: "lora-" + id }))),
       h("p", { class: "note" }, T("Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app.")), lacts),
     satMsg("lora-msg")));
-  root.append(satCard("hub", T("Remote hub"), h("p", { class: "note" }, T("The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then hold the satellite's screen for 3 seconds until the hub code shows and scan it with the remote app.")),
+  root.append(satCard("hub", T("Remote hub"), h("p", { class: "note" }, T("The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then press the satellite's screen for 3 seconds, and again for 3 seconds until the hub code shows, and scan it with the remote app.")),
     h("p", { id: "hub-app" }, T("Install the remote app, then scan the van's code in it") + ": ", appLink()), ...hubForm()));
   satHubLoad();
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
@@ -2722,7 +2722,7 @@ function buildSetup() {
         h("h2", null, T("The remote app")), h("p", null, appLink()),
         p(T("iPhone: open the link in Safari, tap Share, then Add to Home Screen."), "setup-app-ios"),
         p(T("Android: open the link in Chrome, tap ⋮, then Install app (or Add to Home screen)."), "setup-app-android"),
-        p(T("In the app: choose Scan the van's code, then press the satellite's screen for 3 seconds and scan its code."), "setup-app-scan"),
+        p(T("In the app: choose Scan the van's code. Press the satellite's screen for 3 seconds (the app code shows), then again for 3 seconds until the van's code shows, and scan it."), "setup-app-scan"),
         p(T("Then choose Set up LoRa in the app."), "setup-app-lora")),
       setupBtns(setupNext("Next", "home", "primary", "setup-remote-next"), setupSkip("home", undefined, "setup-remote-skip")));
     sq("lora-toggle").onclick = () => satToggle("/api/experimental", "lora", "Couldn't change the switch", "lora", "lora-msg");
