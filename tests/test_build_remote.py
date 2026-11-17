@@ -98,7 +98,10 @@ def test_remote_build_contents(site):
     assert 'url.pathname.startsWith("/api/")' in sw and "url.origin !== location.origin" in sw
     assert f'const CACHE = "{build_remote.CACHE}"' in sw and "oc-shell-v1" not in sw
     manifest = json.loads((site / "manifest.webmanifest").read_text(encoding="utf-8"))
-    assert manifest["name"] == "Open California remote"
+    assert manifest["name"] == manifest["short_name"] == "OC Remote"  # ruling R44
+    assert '<meta name="apple-mobile-web-app-title" content="OC Remote">' in (site / "index.html").read_text(
+        encoding="utf-8"
+    )
     assert manifest["id"] == manifest["start_url"] == manifest["scope"] == "/"
     # the local app's files stay what they were
     local = (ROOT / "calictl" / "webui" / "index.html").read_text(encoding="utf-8")

@@ -194,6 +194,7 @@ def test_remote_never_calls_same_origin_api(site, ttn, error_gated_page):
         expect(items.first).to_be_visible()
         names = items.all_inner_texts()
         assert {"Set up LoRa", "Scan the van's code", "Remove this van"} <= set(names), names
+        assert names.index("Scan the van's code") < names.index("Set up LoRa")  # the van's code first (R43)
         assert "Device status" not in names and "Settings: only in the van's WiFi" not in names
         pg.keyboard.press("Escape")
         assert secret not in pg.content()
@@ -366,3 +367,12 @@ def test_another_van_starts_its_own_energy_history(site, ttn, error_gated_page):
                              return JSON.parse(localStorage.getItem('oc.remote.energy')).length; }"""
         )
         assert n == 0
+
+
+def test_a_phone_without_a_van_is_sent_to_the_vans_code(site, error_gated_page):
+    """Review finding 16: the first open without any van names "Scan the van's code" (every phone needs
+    it), not the LoRa setup (a TTN account)."""
+    with error_gated_page(site, init_script="window.OC_REMOTE = true;", service_workers="block") as pg:
+        expect(
+            pg.get_by_text("No van on this phone yet: open ⋮ and choose Scan the van's code.")
+        ).to_be_visible()

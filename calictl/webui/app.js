@@ -55,7 +55,7 @@
  * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
  * @property {{ages: Record<string, number>, version: number|null}} [remote]  set only by adaptSatellite() for remote.js's body: each function's age in s, an unknown uplink version
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora_on?: boolean|null, lora?: ?SatLora, hub?: ?{configured: boolean, online: boolean, last_pub_s: number|null, error?: string|null, app_url?: string}, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?SatWifi, link_up: boolean, link_ready: boolean, link_rest?: boolean, rest_next_s?: number|null, link_redial?: boolean, sd?: ?SatSd, res?: ?SatRes, battery?: ?SatBattery, time?: ?SatTime, ota?: ?SatOta, display?: ?SatDisplay, auto_camper?: ?{enabled: boolean, state: string}, pi_wake?: ?SatPiWake, ble?: ?{mode: string, idle_min?: number, rest_poll_min?: number}, experimental?: boolean, lora_on?: boolean|null, lora?: ?SatLora, hub?: ?{configured: boolean, online: boolean, last_pub_s: number|null, error?: string|null, reason?: string|null, app_url?: string}, setup?: ?{pending: boolean}}} [sat]  satellite-only device rows (adaptSatellite passthrough) for Device status + Satellite settings
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -347,8 +347,9 @@ menuEl.onclick = (ev) => {
   // The in-app Device-status screen, on both flavors (the satellite's settings open from it). The remote app
   // (R_UI_REMOTE_APP) has its setup screens there instead.
   if (REMOTE) {
-    groups[0].push(menuItem(T("Set up LoRa"), () => remoteOpen("remotesetup")),
-      menuItem(T("Scan the van's code"), () => remoteOpen("remotescan")), menuItem(T("Remove this van"), () => remoteOpen("remoteremove")));
+    // the van's code first: the one step every phone needs; LoRa setup (a TTN account) second
+    groups[0].push(menuItem(T("Scan the van's code"), () => remoteOpen("remotescan")),
+      menuItem(T("Set up LoRa"), () => remoteOpen("remotesetup")), menuItem(T("Remove this van"), () => remoteOpen("remoteremove")));
     if (hubCfg()) { const n = menuItem(T(HUB_LOCAL_MSG), closeMenu); n.disabled = true; groups[0].push(n); }   // hub.js
   } else groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));   // also before the first answer (M1)
   if (HELP[view]) groups[1].push(menuItem(/** @type {string} */ (t("Help")), openHelp));   // per-screen help (#314)
@@ -1260,7 +1261,7 @@ function paintLink() {
   } else if (s === "lora") {
     const version = m && m.remote ? m.remote.version : null;
     if (version != null) tmpl = "The van sends data in a newer format — please update the app.";
-    else if (remoteProblem === "setup") tmpl = "LoRa is not set up on this phone.";
+    else if (remoteProblem === "setup") tmpl = "No van on this phone yet: open ⋮ and choose Scan the van's code.";
     else if (remoteProblem === "key") tmpl = HUB_KEY_MSG;
     else if (remoteProblem === "ttn") tmpl = clock ? "The Things Stack does not answer. Last data {clock} ({ago})."
       : "The Things Stack does not answer.";
@@ -2558,10 +2559,14 @@ function buildSat(v) {
   root.append(satCard("lora", "LoRa", h("p", { class: "note" }, T("Only for a satellite with a LoRa module (RAK3172). Off: the LoRa pins stay untouched.")),
     satSwitchRow("lora"),
     h("div", { id: "lora-on" }, ...LORA_ROWS.map(([id, label]) => h("div", { class: "row" }, h("span", { class: "lbl" }, T(label)), h("span", { class: "val", id: "lora-" + id }))),
-      h("p", { class: "note" }, T("Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app.")), lacts),
+      h("p", { class: "note" }, T("Set up: hold the satellite's screen 3 s until the LoRa code shows (with a remote hub: the third screen), and scan it in the remote app (OC Remote).")), lacts),
     satMsg("lora-msg")));
-  root.append(satCard("hub", T("Remote hub"), h("p", { class: "note" }, T("The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then press the satellite's screen for 3 seconds, and again for 3 seconds until the hub code shows, and scan it with the remote app.")),
-    h("p", { id: "hub-app" }, T("Install the remote app, then scan the van's code in it") + ": ", appLink()), ...hubForm()));
+  const newKey = satBtn(T("New data key"), "danger", "hub-newkey");
+  const hkacts = h("div", { class: "btnrow", id: "hub-keyacts" }, newKey);
+  newKey.onclick = () => satAsk(hkacts, [h("span", null, T("Make a new data key? Every phone must scan the van's code again, and the bridge needs the new key (HUB_KEY)."))],
+    T("New data key"), "danger", satHubNewKey, "hub-msg");
+  root.append(satCard("hub", T("Remote hub"), h("p", { class: "note" }, T("The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then hold the satellite's screen 3 s for the app's code, and 3 s again for “The van's code”, and scan that one in the remote app.")),
+    h("p", { id: "hub-app" }, T("Install the remote app, then scan the van's code in it") + ": ", appLink()), ...hubForm(), hkacts));
   satHubLoad();
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
   toggle("pw", "/api/pi_wake_setting", "Couldn't change the Pi wake", "enabled", "pw-msg");
@@ -2674,7 +2679,7 @@ function buildSetup() {
   const p = (text, id) => h("p", { id: id }, text);
   if (step === "welcome") {
     card.append(p(T("This page sets up your satellite in about 5 minutes. You need the camper unit's screen and, if you have Victron devices, VictronConnect on this phone."), "setup-welcome"),
-      p(T("At the end you can install the remote app, to control the van from anywhere.")),
+      p(T("After the sensors, the step Remote access sets up control from anywhere: the remote app over your own remote hub, or LoRa. Both are optional.")),
       setupBtns(setupNext("Next", "wifi", "primary")));
   } else if (step === "wifi") {
     card.append(p(T("No router in the van? Use your phone's hotspot. iPhone: Settings → Personal Hotspot → Maximize Compatibility on.")));
@@ -2712,29 +2717,39 @@ function buildSetup() {
     card.append(p(T("Which temperature sensors do you have? Every Govee sensor the satellite hears is listed; give each one a name (for example innen, dach).")),
       setupBtns(search), setupSens("govee"), setupBtns(setupNext("Next", "remote", "primary"), setupSkip("remote")));
   } else if (step === "remote") {
-    // R39: optional; the Hub card's form, the LoRa switch, then (hub connected) how to get the remote app
-    const docs = h("a", { href: DOCS_URL + "howto-remote-hub.html", target: "_blank", rel: "noopener" }, T("Remote hub how-to"));
-    card.append(p(T("Optional: control the van from anywhere with the remote app, through your own MQTT broker.")),
-      h("p", { class: "note" }, T("Where the broker values come from") + ": ", docs),
+    // R43 "Remote access": two independent parts, each optional. Over the internet: the Hub card's form, then
+    // (hub connected) the remote app. Over LoRa: the switch, then the LoRa setup in the app.
+    const docs = h("a", { href: DOCS_URL + "howto-remote-hub.html#the-broker-emqx-cloud-serverless", target: "_blank", rel: "noopener" }, T("Remote hub how-to"));
+    const loraDocs = h("a", { href: DOCS_URL + "howto-lora-remote-setup.html#the-things-network-console", target: "_blank", rel: "noopener" }, T("LoRa how-to"));
+    card.append(h("h2", null, T("Remote access")), p(T("See and switch the van when you are away. Two ways, each optional: skip what you do not have; Satellite settings has both later.")),
+      h("h2", null, T("Over the internet (remote hub)")),
+      h("p", { class: "note" }, T("Needs your own MQTT broker. Where its values come from") + ": ", docs),
       h("div", { id: "hub" }, ...hubForm()),
-      h("div", { id: "lora" }, satSwitchRow("lora"), satMsg("lora-msg")),
+      h("p", { class: "note", id: "setup-hub-wait", hidden: "" }, T("The app part shows here when the hub is connected.")),
       h("div", { id: "setup-app", hidden: "" },
         h("h2", null, T("The remote app")), h("p", null, appLink()),
-        p(T("iPhone: open the link in Safari, tap Share, then Add to Home Screen."), "setup-app-ios"),
-        p(T("Android: open the link in Chrome, tap ⋮, then Install app (or Add to Home screen)."), "setup-app-android"),
-        p(T("In the app: choose Scan the van's code. Press the satellite's screen for 3 seconds (the app code shows), then again for 3 seconds until the van's code shows, and scan it."), "setup-app-scan"),
-        p(T("Then choose Set up LoRa in the app."), "setup-app-lora")),
+        p(T("iPhone: open the link in Safari, tap Share, then Add to Home Screen. The icon is called OC Remote."), "setup-app-ios"),
+        p(T("Android: open the link in Chrome, tap ⋮, then Install app (or Add to Home screen). The icon is called OC Remote."), "setup-app-android"),
+        p(T("In the app, open ⋮ and choose Scan the van's code. On the satellite, hold the screen 3 s (the app's code shows), then hold it 3 s again until “The van's code” shows, and scan that one in the app."), "setup-app-scan"),
+        p(T("Then come back here (Safari) and tap Next."), "setup-app-back")),
+      h("h2", null, T("Over LoRa")),
+      h("p", { class: "note" }, T("Only for a satellite with the LoRa module (RAK3172). Works without a remote hub.")),
+      h("div", { id: "lora" }, satSwitchRow("lora"), satMsg("lora-msg")),
+      h("div", { id: "setup-app-lora", hidden: "" },
+        h("p", null, T("Then, in the remote app"), " (", appLink(), "), ", T("open ⋮ and choose Set up LoRa. It needs a TTN account and a full-rights key"), ": ", loraDocs, "."),
+        p(T("On the satellite, hold the screen 3 s until the LoRa code shows (with the remote hub it is the third screen)."))),
       setupBtns(setupNext("Next", "home", "primary", "setup-remote-next"), setupSkip("home", undefined, "setup-remote-skip")));
     sq("lora-toggle").onclick = () => satToggle("/api/experimental", "lora", "Couldn't change the switch", "lora", "lora-msg");
     satHubLoad();
   } else if (step === "home") {
     const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua), android = /Android/.test(ua);
     const m = STATE._meta, w = m && m.sat && m.sat.wifi, ip = w && w.ip;
-    card.append(h("div", { id: "setup-home" }, ios || !android ? p(T("Tap Share, then Add to Home Screen.")) : null,
+    card.append(h("div", { id: "setup-home" },
+      h("p", { id: "setup-icon-remote", hidden: "" }, T("OC Remote, the app from the last step, is for control from anywhere.")),
+      p(T("Now add this page too. Its icon is called OC Van: the satellite's settings, works in the van's WiFi."), "setup-icon-local"),
+      ios || !android ? p(T("Tap Share, then Add to Home Screen.")) : null,
       android || !ios ? p(T("Tap ⋮, then Add to Home screen.")) : null,
       ip ? h("p", null, T("Address") + ": ", satLink("http://" + ip + "/")) : null,
-      p(T("This icon is the satellite's page: settings, works in the van's WiFi."), "setup-icon-local"),
-      h("p", { id: "setup-icon-remote", hidden: "" }, T("The remote app is the second icon: control from anywhere.")),
       h("p", { id: "setup-mdns", "aria-live": "polite" })), setupBtns(setupNext("Next", "done", "primary")));
     // "Add to Home Screen" saves this URL: the app's start URL (the manifest's), not #setup/home
     try { history.replaceState(history.state, "", "/app"); } catch (e) { /* no history API */ }
@@ -2774,6 +2789,7 @@ function setupUpdate(m, s) {
     satRow("lora", [T("This satellite has the LoRa module")], !!s.lora_on, st);
     sq("lora").hidden = s.lora_on == null;
     sq("setup-app").hidden = !(hb && hb.online);   // the app needs the hub: after it is connected
+    sq("setup-hub-wait").hidden = !(hb && hb.configured && !hb.online);
     sq("setup-app-lora").hidden = !s.lora_on;
   }
   if (step === "home") sq("setup-icon-remote").hidden = !(hb && hb.configured);
@@ -2839,16 +2855,20 @@ async function setupCheck() {
   const m = STATE._meta, w = m && m.sat && m.sat.wifi, hb = m && m.sat && m.sat.hub;
   const n = (/** @type {string} */ pre) => sens ? sens.configured.filter((c) => c.type.startsWith(pre)).length : 0;
   const nv = n("victron"), ng = n("govee");
-  /** @param {string} label @param {string|null} ok the done text; null: not set up */
-  const row = (label, ok) => {
+  /** @param {string} label @param {string|null} ok the done text; null: not set up @param {string} [step] a wizard step to go back to (else Satellite settings) */
+  const row = (label, ok, step) => {
     const r = sumRow(T(label), ok || T("not set up"));
-    if (!ok) { const b = satBtn(T("Satellite settings ›")); b.onclick = () => { setupLeft(); goto("satsettings"); }; r.append(b); }
+    if (!ok) {
+      const b = satBtn(T(step ? "Set up ›" : "Satellite settings ›"));
+      b.onclick = step ? () => goto("setup", step) : () => { setupLeft(); goto("satsettings"); };
+      r.append(b);
+    }
     return r;
   };
   sq("setup-check").replaceChildren(row("WiFi", w && w.ssid ? w.ssid + " ✓" : null),
     row("Camper unit", m && m.paired ? T("Paired ✓") : null),
     row("Victron", nv ? nv + " ✓" : null), row("Sensors", ng ? ng + " ✓" : null),
-    ...(hb ? [row("Remote hub", hb.configured ? T("Set up ✓") : null)] : []));
+    ...(hb ? [row("Remote hub", hb.configured ? T("Set up ✓") : null, "remote")] : []));
 }
 
 /** Fill the open satellite screen from STATE (every poll; never rebuilds). */
@@ -3326,15 +3346,25 @@ function hubForm() {
 /** The remote app's link (device.hub.app_url, filled by satRenderHub; ruling R35). */
 const appLink = () => h("a", { class: "app-url", target: "_blank", rel: "noopener" });
 
+/** @type {Record<string, string>} device.hub.reason -> the status line with its hint (ruling R45) */
+const HUB_WHY = {
+  dns: "Not connected: the broker address was not found. Check the broker address.",
+  tls: "Not connected: the secure connection failed. Check the broker address (wss://…:8084/mqtt).",
+  auth: "Not connected: the broker refused the login. Check the van user and the van password.",
+  unreachable: "Not connected: the broker does not answer. Check the broker address and the van's internet.",
+};
+
 /** The Hub card's status line from device.hub (null: a firmware without the hub: no card). @param {any} hb @param {boolean} st */
 function satRenderHub(hb, st) {
   sq("hub").hidden = !hb;
   if (!hb) return;
   sq("hub-status").textContent = !hb.configured ? T("Not set up")
     : hb.error === "key" ? T("The data key cannot be stored (retried every 30 s)")
-    : !hb.online ? T("Not connected")
+    : !hb.online ? T(HUB_WHY[hb.reason] || "Not connected yet")
     : hb.last_pub_s === null ? T("Connected") : tf("Connected · state sent {n} s ago", { n: Math.round(/** @type {number} */ (ageNow(hb.last_pub_s))) });
   sq("hub-save").hidden = !st;   // station only (403 setup_mode over the hotspot)
+  const nk = /** @type {NonNullable<typeof satDom>} */ (satDom).root.querySelector("#hub-keyacts");   // the card only
+  if (nk) /** @type {HTMLElement} */ (nk).hidden = !st || !hb.configured;
   for (const a of /** @type {NonNullable<typeof satDom>} */ (satDom).root.querySelectorAll("a.app-url")) {
     if (hb.app_url && a.getAttribute("href") !== hb.app_url) { a.setAttribute("href", hb.app_url); a.textContent = hb.app_url; }
   }
@@ -3346,6 +3376,17 @@ async function satHubLoad() {
   try { r = await satFetch("/api/hub"); } catch (e) { /* the fields stay empty */ }
   if (!r || r.status !== 200 || !satDom) return;
   for (const [id] of HUB_FIELDS) if (r.body[id] !== undefined) sqInput("hub-" + id).value = r.body[id];
+}
+
+/** POST /api/hub_key {new_key: true} (ruling R42): the satellite makes a new data key. @param {() => void} close */
+async function satHubNewKey(close) {
+  const msg = sq("hub-msg");
+  msg.textContent = "";
+  let ok = false;
+  try { ok = !!(await satFetch("/api/hub_key", { new_key: true })).body.ok; } catch (e) { /* ok stays false */ }
+  close();
+  msg.textContent = T(ok ? "New data key made: scan the van's code again on every phone." : "Couldn't make a new data key");
+  await refreshState(true);
 }
 
 /** POST /api/hub; an empty password field keeps the stored password. */

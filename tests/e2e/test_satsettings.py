@@ -842,3 +842,26 @@ def test_the_hub_card_links_the_remote_app(station, locale, lang):
         app = pg.locator("#hub-app")
         expect(app).to_contain_text(tr("Install the remote app, then scan the van's code in it", lang))
         expect(app.locator('a[href="https://open-california.github.io/"]')).to_be_visible()
+
+
+def test_the_hub_card_makes_a_new_data_key_after_asking(station):
+    """Ruling R42: the rekey is the Hub card's button with an in-page confirmation; Cancel posts nothing."""
+    station.fixtures["station"]["/api/state"]["device"]["hub"].update(configured=True, online=True)
+    with _open(station, locale="en-US", viewport=PHONE) as pg:
+        acts = pg.locator("#hub-keyacts")
+        acts.get_by_role("button", name="New data key").click()
+        expect(acts).to_contain_text("Every phone must scan the van's code again")
+        acts.get_by_role("button", name="Cancel").click()
+        assert _posts(station, "/api/hub_key") == []
+        acts.get_by_role("button", name="New data key").click()
+        acts.get_by_role("button", name="New data key").click()
+        expect(pg.locator("#hub-msg")).to_have_text(
+            "New data key made: scan the van's code again on every phone."
+        )
+    assert _posts(station, "/api/hub_key") == [{"new_key": True}]
+
+
+def test_no_new_data_key_button_without_a_hub(station):
+    with _open(station, locale="en-US", viewport=PHONE) as pg:
+        expect(pg.locator("#hub-status")).to_have_text("Not set up")
+        expect(pg.locator("#hub-newkey")).to_be_hidden()

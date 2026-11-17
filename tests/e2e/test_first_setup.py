@@ -294,7 +294,7 @@ def test_the_home_step_saves_the_apps_start_url(station_pending):
         assert pg.evaluate("location.pathname + location.hash") == "/app"
 
 
-# ---- the Remote step (ruling R39) and the home-screen icons (R40) -------------------------------
+# ---- the Remote access step (rulings R39, R43), the home-screen names (R40, R44), the hub reason (R45) --
 
 HUB_FORM = {
     "url": "wss://h.example:8084/mqtt",
@@ -306,11 +306,16 @@ HUB_FORM = {
 }
 
 
+def _hub(stub, **over):
+    stub.fixtures["station"]["/api/state"]["device"]["hub"].update(over)
+
+
 def test_the_remote_step_comes_after_sensors_and_can_be_skipped(station_pending):
     with _page(station_pending, "/#setup/sensors", "en-US") as pg:
         pg.get_by_role("button", name="Skip").click()
         expect(pg).to_have_url(re.compile(r"#setup/remote$"))
         expect(pg.locator("#setup-step")).to_contain_text("Step 6 of 8")
+        expect(pg.locator("#setup-step h2").first).to_have_text("Remote access")
         pg.go_back()
         expect(pg).to_have_url(re.compile(r"#setup/sensors$"))
         pg.go_forward()
@@ -322,8 +327,8 @@ def test_the_remote_step_comes_after_sensors_and_can_be_skipped(station_pending)
 
 @pytest.mark.parametrize("locale,lang", LOCALES)
 def test_the_remote_step_saves_the_hub_then_shows_the_app(station_pending, locale, lang):
-    """The Hub card's form saves through POST /api/hub; the app part (link, install steps, scan hint)
-    shows only once the hub is connected; the LoRa line only with LoRa on, set by the step's switch."""
+    """The Hub card's form saves through POST /api/hub; the app part (link, install steps, scan hint,
+    come back) shows only once the hub is connected."""
     station_pending.fixtures["station"]["/api/state"]["device"]["experimental"]["lora"] = False
     station_pending.fixtures["station"]["/api/hub"]["van"] = "old-van"  # to see the GET land before typing
     with _page(station_pending, "/#setup/remote", locale) as pg:
@@ -337,30 +342,71 @@ def test_the_remote_step_saves_the_hub_then_shows_the_app(station_pending, local
         expect(pg.locator("#hub-msg")).to_have_text(tr("Saved", lang))
         expect(app).to_be_visible()
         expect(app.locator('a[href="https://open-california.github.io/"]')).to_be_visible()
-        expect(app).to_contain_text(
-            tr("iPhone: open the link in Safari, tap Share, then Add to Home Screen.", lang)
-        )
-        expect(pg.locator("#setup-app-lora")).to_be_hidden()
-        pg.click("#lora-toggle")
-        expect(pg.locator("#setup-app-lora")).to_be_visible()
+        for text in (
+            "iPhone: open the link in Safari, tap Share, then Add to Home Screen. The icon is called OC Remote.",
+            "Then come back here (Safari) and tap Next.",
+        ):
+            expect(app).to_contain_text(tr(text, lang))
         pg.get_by_role("button", name=tr("Next", lang), exact=True).click()
         expect(pg.locator("#setup-home")).to_be_visible()
     assert _posts(station_pending, "/api/hub") == [HUB_FORM]
+
+
+def test_the_lora_part_works_without_a_hub(station_pending):
+    """R43: the LoRa part is independent: its switch and its next step show without any hub."""
+    station_pending.fixtures["station"]["/api/state"]["device"]["experimental"]["lora"] = False
+    with _page(station_pending, "/#setup/remote", "en-US") as pg:
+        lora = pg.locator("#setup-app-lora")
+        expect(lora).to_be_hidden()
+        pg.click("#lora-toggle")
+        expect(lora).to_be_visible()
+        expect(lora).to_contain_text("It needs a TTN account and a full-rights key")
+        expect(
+            lora.locator('a[href*="howto-lora-remote-setup.html#the-things-network-console"]')
+        ).to_be_visible()
+        expect(pg.locator("#setup-app")).to_be_hidden()
     assert _posts(station_pending, "/api/experimental") == [{"lora": True}]
+    assert _posts(station_pending, "/api/hub") == []
+
+
+@pytest.mark.parametrize(
+    "reason,text",
+    [
+        ("auth", "Not connected: the broker refused the login. Check the van user and the van password."),
+        ("dns", "Not connected: the broker address was not found. Check the broker address."),
+        (None, "Not connected yet"),
+    ],
+)
+def test_a_configured_hub_that_is_not_connected_says_why(station_pending, reason, text):
+    """R45 and review finding 7: configured but offline keeps the app part hidden and names the reason."""
+    _hub(station_pending, configured=True, online=False, reason=reason)
+    with _page(station_pending, "/#setup/remote", "en-US") as pg:
+        expect(pg.locator("#hub-status")).to_have_text(text)
+        expect(pg.locator("#setup-hub-wait")).to_be_visible()
+        expect(pg.locator("#setup-app")).to_be_hidden()
 
 
 @pytest.mark.parametrize("configured", [False, True])
 def test_the_home_step_names_the_icons(station_pending, configured):
-    """R40: the satellite's page always; the remote app's icon only with a hub config."""
-    station_pending.fixtures["station"]["/api/state"]["device"]["hub"]["configured"] = configured
+    """R44: OC Van (this page) always; OC Remote (from the Remote access step) only with a hub config."""
+    _hub(station_pending, configured=configured)
     with _page(station_pending, "/#setup/home", "en-US", allow=NO_MDNS) as pg:
-        expect(pg.locator("#setup-icon-local")).to_contain_text("works in the van's WiFi")
+        expect(pg.locator("#setup-icon-local")).to_contain_text("Its icon is called OC Van")
         remote = pg.locator("#setup-icon-remote")
         expect(remote).to_be_visible() if configured else expect(remote).to_be_hidden()
+        if configured:
+            expect(remote).to_contain_text("OC Remote")
 
 
 def test_done_lists_the_remote_hub(station_pending):
+    """Not set up: the row goes back to the Remote access step (its install help), not to settings."""
     with _page(station_pending, "/#setup/done", "en-US") as pg:
         row = pg.locator("#setup-check").get_by_text("Remote hub").locator("..")
-        expect(pg.locator("#setup-check")).to_contain_text("Remote hub")
-        expect(row.get_by_role("button", name="Satellite settings ›")).to_be_visible()
+        row.get_by_role("button", name="Set up ›").click()
+        expect(pg).to_have_url(re.compile(r"#setup/remote$"))
+
+
+def test_done_says_the_remote_hub_is_set_up(station_pending):
+    _hub(station_pending, configured=True, online=True)
+    with _page(station_pending, "/#setup/done", "en-US") as pg:
+        expect(pg.locator("#setup-check").get_by_text("Remote hub").locator("..")).to_contain_text("Set up ✓")

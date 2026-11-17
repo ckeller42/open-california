@@ -103,6 +103,11 @@ def build(out: Path, hub_origin: str | None = None) -> None:
     )
     tag = '<script src="/%s"></script>\n'
     html = _replace_once(html, tag % "strings.de.js", tag % "remote-flag.js" + tag % "strings.de.js")
+    html = _replace_once(  # the iPhone's home-screen name (ruling R44)
+        html,
+        '<meta name="apple-mobile-web-app-title" content="OC Van">',
+        '<meta name="apple-mobile-web-app-title" content="OC Remote">',
+    )
     html = _replace_once(
         html, '<script src="/app.js">', "".join(tag % n for n in REMOTE_SCRIPTS) + '<script src="/app.js">'
     )
@@ -111,8 +116,8 @@ def build(out: Path, hub_origin: str | None = None) -> None:
     manifest = json.loads((WEBUI / "manifest.webmanifest").read_text(encoding="utf-8"))
     manifest.update(
         {
-            "name": "Open California remote",
-            "short_name": "OC remote",
+            "name": "OC Remote",  # ruling R44: the home-screen name, distinct from the van's "OC Van"
+            "short_name": "OC Remote",
             "description": "Open California for a van with LoRa: reads the van from The Things Network",
             "id": "/",
             "start_url": "/",

@@ -349,6 +349,7 @@ def esp_fixtures():
                 "online": False,
                 "last_pub_s": None,
                 "error": None,
+                "reason": None,
                 "app_url": APP_URL,
             },
             "water_held": False,
@@ -404,6 +405,7 @@ def esp_fixtures():
                         "online": False,
                         "last_pub_s": None,
                         "error": None,
+                        "reason": None,
                         "app_url": APP_URL,
                     },
                     "water_held": False,
@@ -545,7 +547,7 @@ def _experimental(dev, body):
 
 def _hub(dev, body):
     """POST /api/hub: the stub's broker answers at once, so the hub is configured and connected."""
-    dev.setdefault("hub", {}).update(configured=True, online=True, last_pub_s=0, error=None)
+    dev.setdefault("hub", {}).update(configured=True, online=True, last_pub_s=0, error=None, reason=None)
 
 
 # The satellite's settings endpoints (web.c) as the Satellite-settings screen posts them: what each
@@ -562,6 +564,7 @@ _SETTINGS = {
     "/api/ble": _ble,
     "/api/lora": _lora_forget,
     "/api/hub": _hub,
+    "/api/hub_key": lambda dev, body: None,  # a new data key: nothing in device changes
 }
 
 
