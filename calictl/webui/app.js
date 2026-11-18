@@ -1261,7 +1261,7 @@ function paintLink() {
   } else if (s === "lora") {
     const version = m && m.remote ? m.remote.version : null;
     if (version != null) tmpl = "The van sends data in a newer format — please update the app.";
-    else if (remoteProblem === "setup") tmpl = "No van on this phone yet: open ⋮ and choose Scan the van's code (with LoRa only: Set up LoRa, needs a TTN account).";
+    else if (remoteProblem === "setup") tmpl = "No van on this phone yet: scan the van's code (with LoRa only: set up LoRa, needs a TTN account).";
     else if (remoteProblem === "key") tmpl = HUB_KEY_MSG;
     else if (remoteProblem === "ttn") tmpl = clock ? "The Things Stack does not answer. Last data {clock} ({ago})."
       : "The Things Stack does not answer.";
@@ -2245,7 +2245,8 @@ function render() {
     b.textContent = tf("⚠ Implausible reading(s): {list} — possible decode drift.", { list: anc.join("; ") });
     app.appendChild(b);
   }
-  if (view === "home") renderDashboard();
+  if (view === "home" && REMOTE && !hubCfg() && !remoteCfg()) renderNoVan();   // no van: no tiles with made-up values
+  else if (view === "home") renderDashboard();
   else if (view === "devicestatus") renderDeviceStatus();
   else if (view === "satdiag") renderSatDiag();
   else if (SAT_VIEWS.includes(view)) renderSat();
@@ -3764,6 +3765,20 @@ function unpairedBanner() {
   go.onclick = () => openPairingWizard();   // calictl and the satellite both run the wizard
   b.append(go);
   app.appendChild(b);
+}
+
+/** Remote mode, no van on this phone: the two ways in as buttons (the #conn card says why), no dashboard. */
+function renderNoVan() {
+  const row = document.createElement("div");
+  row.className = "btnrow";
+  for (const [label, v, cls] of [["Scan the van's code", "remotescan", "btn primary"], ["Set up LoRa", "remotesetup", "btn"]]) {
+    const b = document.createElement("button");
+    b.className = cls;
+    b.textContent = /** @type {string} */ (t(label));
+    b.onclick = () => remoteOpen(v);
+    row.appendChild(b);
+  }
+  app.appendChild(row);
 }
 
 function renderDashboard() {

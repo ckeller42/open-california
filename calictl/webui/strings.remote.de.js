@@ -26,7 +26,7 @@ Object.assign(window.STRINGS_DE, {
   "This is the LoRa setup code: open ⋮ and choose Set up LoRa (needs a TTN account).": "Das ist der LoRa-Einrichtungscode: Öffne ⋮ und wähle LoRa einrichten (braucht ein TTN-Konto).",
   "This is the app's code: on the satellite, hold the screen 3 s again for the van's code.": "Das ist der Code der App: Halte am Satelliten den Bildschirm noch einmal 3 s für den Code des Fahrzeugs.",
   "On the satellite, tap the screen once to light it, then hold it 3 s, and again, until “The van's code” shows (without a remote hub: the LoRa code), then scan it here.": "Tippe am Satelliten einmal auf den Bildschirm, damit er leuchtet, halte ihn dann 3 s, und noch einmal, bis „Code des Fahrzeugs“ erscheint (ohne Fern-Hub: der LoRa-Code), und scanne ihn hier.",
-  "No van on this phone yet: open ⋮ and choose Scan the van's code (with LoRa only: Set up LoRa, needs a TTN account).": "Noch kein Fahrzeug auf diesem Telefon: Öffne ⋮ und wähle Code des Fahrzeugs scannen (nur mit LoRa: LoRa einrichten, braucht ein TTN-Konto).",
+  "No van on this phone yet: scan the van's code (with LoRa only: set up LoRa, needs a TTN account).": "Noch kein Fahrzeug auf diesem Telefon: Scanne den Code des Fahrzeugs (nur mit LoRa: Richte LoRa ein, braucht ein TTN-Konto).",
   "This phone no longer shows the van.": "Dieses Telefon zeigt das Fahrzeug nicht mehr an.",
   "No code found in the photo.": "Im Foto wurde kein Code gefunden.",
   "Take a photo of the code": "Code fotografieren",
