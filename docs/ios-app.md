@@ -54,7 +54,8 @@ Lighting: all lights, the favourites, and a brightness slider per lamp.
 :alt: The air-heater screen
 :width: 260px
 
-Air heater: the status, immediate heating, and the run time and level the unit will use.
+Air heater: the status, immediate heating, the run time and level the unit will use, and the
+departure timer (a start time, armed and stopped from here).
 ```
 
 ```{figure} https://raw.githubusercontent.com/ckeller42/open-california/screenshots/docs/screenshots/ios/setup.png
@@ -172,6 +173,13 @@ The app shows the unit's status (batteries, energy, water, temperatures, vehicle
 camping mode (master, lights, rear USB), lighting (on/off, zones, favourites, the wake-up light and
 the sliding-door light), the cooler, the air heater and the energy mode, plus a device-status
 screen. It shows the same verified fields, with the same labels and units, as the web UI.
+
+The cooler and air-heater timers match the web UI's controls. The cooler, while the box is on,
+takes the automatic quiet-mode schedule (a start and an end hour); while the box is off, it takes a
+cooling start time and a start/cancel pair. The air heater takes a departure start time (locked
+while the timer is armed) and a start/stop pair; arming asks the fuel-burner question first. The
+cooler's timer controls each carry the "not verified on the van" prompt. The gates only mirror the
+server's `command_precondition`, which is the control that actually refuses.
 
 The wake-up light card sends the whole config with each change, as the VW app does. The time goes
 out only when the user taps OK in the time sheet, so turning the wheel sends nothing. While the

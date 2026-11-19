@@ -93,6 +93,12 @@ struct CommandMappingTests {
         #expect(CoolerView.level(3) == Command(function: "cooler", what: "level", value: "3"))
         #expect(CoolerView.modes.map(\.key) == ["normal", "quiet", "timer_quiet"])
         #expect(CoolerView.mode("quiet") == Command(function: "cooler", what: "mode", value: "quiet"))
+        // Timers: the quiet-mode schedule (hours 0–23) and the cooling start timer.
+        #expect(CoolerView.nightOn(7) == Command(function: "cooler", what: "night_on", value: "7"))
+        #expect(CoolerView.nightOff(22) == Command(function: "cooler", what: "night_off", value: "22"))
+        #expect(CoolerView.timerSet("07:30") == Command(function: "cooler", what: "timer_set", value: "07:30"))
+        #expect(CoolerView.timerStart == Command(function: "cooler", what: "timer_start", value: nil))
+        #expect(CoolerView.timerCancel == Command(function: "cooler", what: "timer_cancel", value: nil))
         #expect(EnergyModeView.modes.map(\.key) == ["normal", "max_charge", "eco"])
         #expect(EnergyModeView.mode("max_charge") == Command(function: "energy", what: "mode", value: "max_charge"))
     }
@@ -116,6 +122,10 @@ struct CommandMappingTests {
         #expect(AirHeaterView.level(10) == Command(function: "airheater", what: "level", value: "10"))
         #expect(AirHeaterView.runtime(60) == Command(function: "airheater", what: "runtime", value: "60"))
         #expect(Array(AirHeaterView.runtimes) == Array(stride(from: 10, through: 120, by: 10)))
+        // Timers: the departure timer — set the start time, arm it, stop it.
+        #expect(AirHeaterView.timer("06:15") == Command(function: "airheater", what: "timer", value: "06:15"))
+        #expect(AirHeaterView.timerStart == Command(function: "airheater", what: "timer_start", value: nil))
+        #expect(AirHeaterView.timerCancel == Command(function: "airheater", what: "timer_cancel", value: nil))
 
         let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appending(path: "App")
         let files = try #require(FileManager.default.enumerator(at: app, includingPropertiesForKeys: nil))
