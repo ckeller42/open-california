@@ -304,6 +304,18 @@ to 5 happen in the setup wizard's optional **Remote access** step (after *Sensor
 are independent: **Over the internet** (the Hub form, then the remote app) and **Over LoRa** (the LoRa
 switch). If you skipped the step, the same form is the **Remote hub** card in *Satellite settings*.
 
+**Fill the Hub form from a file** instead of typing the passwords on the phone. On the computer that
+holds the values (`OC_HUB_*` in `~/.env`), make the file and put it where the phone can open it, for
+example in iCloud Drive:
+
+```bash
+python3 -m tools.make_hub_file --url wss://<address>:8084/mqtt > oc-hub.json
+```
+
+In the Hub form, tap **Load from file**, select `oc-hub.json`, check the fields, then tap **Save**. The
+file holds the van password in plain text: delete it after the form is saved. The file is read only by
+the page on the phone; nothing is sent before **Save**.
+
 On the satellite's screen, each **3-second hold** shows the next screen, always in this order: the
 **app QR** (the app's address) → **the van's code** (the hub QR) → the **LoRa code** (with LoRa on:
 the setup code before the TTN keys, the repair code after). The app QR and the van's code show only

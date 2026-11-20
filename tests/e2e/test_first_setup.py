@@ -4,6 +4,7 @@ radio. WiFi cannot be skipped; every later step can. A reload on the station add
 first unfinished step (``setupStep``). Every test fails on an uncaught JS / console error.
 """
 
+import json
 import re
 
 import pytest
@@ -349,6 +350,28 @@ def test_the_remote_step_saves_the_hub_then_shows_the_app(station_pending, local
             expect(app).to_contain_text(tr(text, lang))
         pg.get_by_role("button", name=tr("Next", lang), exact=True).click()
         expect(pg.locator("#setup-home")).to_be_visible()
+    assert _posts(station_pending, "/api/hub") == [HUB_FORM]
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_load_from_file_fills_the_hub_form_and_save_posts_it(station_pending, locale, lang):
+    """#555: an oc-hub.json (tools/make_hub_file.py) fills the six fields; nothing is sent before Save.
+    Another file is refused with a reason and leaves the fields as they were."""
+    with _page(station_pending, "/#setup/remote", locale) as pg:
+        expect(pg.locator("#hub-status")).to_have_text(tr("Not set up", lang))
+        pg.set_input_files("#hub-file", files=[{"name": "x.json", "mimeType": "application/json",
+                                                "buffer": json.dumps({"url": "wss://x"}).encode()}])
+        expect(pg.locator("#hub-msg")).to_have_text(tr("Not a hub setup file (oc-hub.json)", lang))
+        expect(pg.locator("#hub-url")).to_have_value("")
+        pg.set_input_files("#hub-file", files=[{"name": "oc-hub.json", "mimeType": "application/json",
+                                                "buffer": json.dumps({"format": "oc-hub/1", **HUB_FORM}).encode()}])
+        expect(pg.locator("#hub-msg")).to_have_text(
+            tr("Loaded: tap Save, then delete the file (it holds the van password).", lang))
+        for k, v in HUB_FORM.items():
+            expect(pg.locator("#hub-" + k)).to_have_value(v)
+        assert _posts(station_pending, "/api/hub") == []
+        pg.click("#hub-save")
+        expect(pg.locator("#hub-msg")).to_have_text(tr("Saved", lang))
     assert _posts(station_pending, "/api/hub") == [HUB_FORM]
 
 

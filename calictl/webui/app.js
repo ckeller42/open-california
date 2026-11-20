@@ -3337,11 +3337,26 @@ const HUB_FIELDS = [["url", "Broker address (wss://…)", "url"], ["van", "Van n
 function hubForm() {
   const save = satBtn(T("Save"), "primary", "hub-save");
   save.onclick = satHubSave;
+  const file = h("input", { id: "hub-file", type: "file", accept: ".json", hidden: "" });
+  file.onchange = satHubFile;
   return [h("p", { id: "hub-status" }),
     ...HUB_FIELDS.map(([id, label, type]) => h("div", null, h("label", { for: "hub-" + id }, T(label)),
       h("input", { id: "hub-" + id, type: type, autocomplete: "off", autocapitalize: "none", spellcheck: "false",
         placeholder: type === "password" ? T("unchanged") : null }))),
-    h("div", { class: "btnrow" }, save), satMsg("hub-msg")];
+    h("div", { class: "btnrow" }, save, h("label", { class: "btn", for: "hub-file" }, T("Load from file"))),
+    file, satMsg("hub-msg")];
+}
+
+/** #555: oc-hub.json (tools/make_hub_file.py) fills the form; Save sends it. */
+async function satHubFile() {
+  const inp = sqInput("hub-file"), f = inp.files && inp.files[0];
+  inp.value = "";
+  /** @type {any} */
+  let d = null;
+  try { d = f && JSON.parse(await f.text()); } catch (e) { }
+  if (!f || !satDom) return;
+  sq("hub-msg").textContent = T(d && d.format === "oc-hub/1" ? "Loaded: tap Save, then delete the file (it holds the van password)." : "Not a hub setup file (oc-hub.json)");
+  if (d && d.format === "oc-hub/1") for (const [id] of HUB_FIELDS) if (typeof d[id] === "string") sqInput("hub-" + id).value = d[id];
 }
 
 /** The remote app's link (device.hub.app_url, filled by satRenderHub; ruling R35). */
