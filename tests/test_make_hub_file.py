@@ -14,6 +14,11 @@ def test_the_file_has_the_api_hub_keys_and_the_format():
                  "app_user": "val-app_user", "app_pass": "val-app_pass"}
 
 
+def test_lora_adds_the_switch():
+    assert build(URL, ENVV, lora=True)["lora"] is True
+    assert "lora" not in build(URL, ENVV)
+
+
 @pytest.mark.parametrize("url,env,why", [
     ("https://h.example", ENVV, "wss://"),
     (URL, {**ENVV, "OC_HUB_APP_PASS": ""}, "OC_HUB_APP_PASS"),

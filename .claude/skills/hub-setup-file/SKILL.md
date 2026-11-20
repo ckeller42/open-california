@@ -7,7 +7,8 @@ description: Use when the owner wants the satellite's remote-hub settings (broke
 
 The wizard's Remote access step and the **Remote hub** card have a **Load from file** button. It reads
 `oc-hub.json` on the phone, fills the six fields, and the owner taps **Save** (`POST /api/hub`).
-The format is `tools/make_hub_file.py` (`"format": "oc-hub/1"` + the `/api/hub` keys).
+The format is `tools/make_hub_file.py` (`"format": "oc-hub/1"` + the `/api/hub` keys; `--lora` adds
+`"lora": true`: Save also turns the LoRa switch on).
 
 ## Make it
 
@@ -19,7 +20,7 @@ Pipe it straight to where it is needed, so the passwords never touch the local d
 
 ```bash
 set -a; . ~/.env; set +a
-python3 -m tools.make_hub_file --url "$URL" \
+python3 -m tools.make_hub_file --url "$URL" --lora \
   | ssh wuerfel 'umask 077; cat > ~/Library/Mobile\ Documents/com~apple~CloudDocs/Downloads/oc-hub.json'
 ```
 

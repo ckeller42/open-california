@@ -3357,7 +3357,10 @@ async function satHubFile() {
   if (!f || !satDom) return;
   sq("hub-msg").textContent = T(d && d.format === "oc-hub/1" ? "Loaded: tap Save, then delete the file (it holds the van password)." : "Not a hub setup file (oc-hub.json)");
   if (d && d.format === "oc-hub/1") for (const [id] of HUB_FIELDS) if (typeof d[id] === "string") sqInput("hub-" + id).value = d[id];
+  hubFileLora = !!(d && d.format === "oc-hub/1" && d.lora === true);
 }
+/** The loaded oc-hub.json asks for LoRa on: Save also turns the LoRa switch on. */
+let hubFileLora = false;
 
 /** The remote app's link (device.hub.app_url, filled by satRenderHub; ruling R35). */
 const appLink = () => h("a", { class: "app-url", target: "_blank", rel: "noopener" });
@@ -3424,6 +3427,10 @@ async function satHubSave() {
   if (r && r.body && r.body.ok) {
     sqInput("hub-pass").value = ""; sqInput("hub-app_pass").value = "";
     msg.textContent = T("Saved");
+    if (hubFileLora) {
+      hubFileLora = false;
+      try { if (!(await satFetch("/api/experimental", { lora: true })).body.ok) throw 0; } catch (e) { msg.textContent = T("Couldn't change the switch"); }
+    }
   } else {
     msg.textContent = T(r && r.status === 400 ? "Check the fields: no * in any field, the van name only letters, digits, - and _, the address starts with wss://" : "Couldn't save the hub settings");
   }

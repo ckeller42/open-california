@@ -373,6 +373,21 @@ def test_load_from_file_fills_the_hub_form_and_save_posts_it(station_pending, lo
         pg.click("#hub-save")
         expect(pg.locator("#hub-msg")).to_have_text(tr("Saved", lang))
     assert _posts(station_pending, "/api/hub") == [HUB_FORM]
+    assert _posts(station_pending, "/api/experimental") == []
+
+
+def test_a_hub_file_with_lora_turns_the_lora_switch_on_at_save(station_pending):
+    station_pending.fixtures["station"]["/api/state"]["device"]["experimental"]["lora"] = False
+    with _page(station_pending, "/#setup/remote", "en-US") as pg:
+        expect(pg.locator("#hub-status")).to_have_text("Not set up")
+        pg.set_input_files("#hub-file", files=[{"name": "oc-hub.json", "mimeType": "application/json",
+                                                "buffer": json.dumps({"format": "oc-hub/1", "lora": True, **HUB_FORM}).encode()}])
+        expect(pg.locator("#hub-url")).to_have_value(HUB_FORM["url"])
+        assert _posts(station_pending, "/api/experimental") == []
+        pg.click("#hub-save")
+        expect(pg.locator("#hub-msg")).to_have_text("Saved")
+    assert _posts(station_pending, "/api/hub") == [HUB_FORM]
+    assert _posts(station_pending, "/api/experimental") == [{"lora": True}]
 
 
 def test_the_lora_part_works_without_a_hub(station_pending):

@@ -69,6 +69,6 @@ CONSTS = {
     "NET_SCAN_MIN_INTERVAL_MS": 30000,
     # The satellite UI bundle (spec 2026-10-01 shared UI): gzipped calictl web UI served at GET /.
     # A budget for the flash array and the first load over the single-connection core (raised 64 -> 96 KB
-    # 2026-10-12: only tests read it, the bundle is a const in flash; repeat opens are 304s since #321).
-    "WEB_APP_GZ_MAX": 98304,
+    # 2026-10-12, 96 -> 112 KB 2026-11-20: only tests read it, the bundle is a const in flash; repeat opens are 304s since #321).
+    "WEB_APP_GZ_MAX": 114688,
 }

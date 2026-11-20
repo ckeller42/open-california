@@ -309,12 +309,13 @@ holds the values (`OC_HUB_*` in `~/.env`), make the file and put it where the ph
 example in iCloud Drive:
 
 ```bash
-python3 -m tools.make_hub_file --url wss://<address>:8084/mqtt > oc-hub.json
+python3 -m tools.make_hub_file --url wss://<address>:8084/mqtt [--lora] > oc-hub.json
 ```
 
 In the Hub form, tap **Load from file**, select `oc-hub.json`, check the fields, then tap **Save**. The
 file holds the van password in plain text: delete it after the form is saved. The file is read only by
-the page on the phone; nothing is sent before **Save**.
+the page on the phone; nothing is sent before **Save**. With `--lora`, **Save** also turns the LoRa
+switch on (the LoRa keys are made on the satellite; the TTN part stays in the app).
 
 On the satellite's screen, each **3-second hold** shows the next screen, always in this order: the
 **app QR** (the app's address) → **the van's code** (the hub QR) → the **LoRa code** (with LoRa on:

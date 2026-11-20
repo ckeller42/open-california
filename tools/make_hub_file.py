@@ -23,7 +23,7 @@ ENV = {"van": "OC_HUB_VAN", "user": "OC_HUB_VAN_USER", "pass": "OC_HUB_VAN_PASS"
        "app_user": "OC_HUB_APP_USER", "app_pass": "OC_HUB_APP_PASS"}
 
 
-def build(url: str, env: dict) -> dict:
+def build(url: str, env: dict, lora: bool = False) -> dict:
     """The file's object; raises ValueError for a missing value or one the firmware refuses."""
     if not url.startswith("wss://"):
         raise ValueError("the broker address must start with wss://")
@@ -34,15 +34,18 @@ def build(url: str, env: dict) -> dict:
         out[key] = env[var]
     if any("*" in v for v in out.values()):  # the hub QR's separator (firmware answers 400)
         raise ValueError("no value may contain *")
+    if lora:  # Save also turns the satellite's LoRa switch on (its keys are made on the board)
+        out["lora"] = True
     return out
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--url", default=os.environ.get("OC_HUB_URL", ""), help="wss://…:8084/mqtt")
+    ap.add_argument("--lora", action="store_true", help="Save also turns the LoRa switch on")
     a = ap.parse_args()
     try:
-        print(json.dumps(build(a.url, dict(os.environ)), indent=2))
+        print(json.dumps(build(a.url, dict(os.environ), a.lora), indent=2))
     except ValueError as e:
         print(f"make_hub_file: {e}", file=sys.stderr)
         return 1

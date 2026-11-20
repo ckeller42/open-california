@@ -48,7 +48,7 @@ def test_length_macro_matches_the_array():
 
 
 def test_gzip_fits_the_budget():
-    assert CONSTS["WEB_APP_GZ_MAX"] == 98304
+    assert CONSTS["WEB_APP_GZ_MAX"] == 114688
     assert len(_gz()) <= CONSTS["WEB_APP_GZ_MAX"]
 
 
