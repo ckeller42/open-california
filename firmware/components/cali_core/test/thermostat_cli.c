@@ -51,13 +51,13 @@ static const char *why(void) {
 }
 
 static void cfg_read(cali_thermo_cfg_t *c) {
-    int32_t *f[19] = {&c->period_ms,    &c->kp,          &c->ki,          &c->ka,          &c->u_out_max,
+    int32_t *f[21] = {&c->period_ms,    &c->kp,          &c->ki,          &c->ka,          &c->u_out_max,
                       &c->hyst,         &c->min_dwell_ms, &c->band_hi,    &c->hot_hold_ms, &c->overheat,
                       &c->min_level,    &c->stale_after_ms, &c->heater_stale_ms, &c->batt_min_dv,
                       &c->batt_hold_ms, &c->verify_ms,   &c->runtime_min, &c->night_wait_ms,
-                      &c->night_confirm_ms};
+                      &c->night_confirm_ms, &c->band_lo, &c->cool_rate};
     int k;
-    for (k = 0; k < 19; k++) *f[k] = i32();
+    for (k = 0; k < 21; k++) *f[k] = i32();
 }
 
 static int heater_read(cali_thermo_heater_t *h) {
@@ -148,11 +148,12 @@ static void state_print(const cali_thermo_state_t *st) {
 
 static void defaults(void) {
     cali_thermo_cfg_t c = CALI_THERMO_DEFAULTS;
-    printf("%ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld\n", (long)c.period_ms, (long)c.kp,
+    printf("%ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld\n", (long)c.period_ms, (long)c.kp,
            (long)c.ki, (long)c.ka, (long)c.u_out_max, (long)c.hyst, (long)c.min_dwell_ms, (long)c.band_hi,
            (long)c.hot_hold_ms, (long)c.overheat, (long)c.min_level, (long)c.stale_after_ms,
            (long)c.heater_stale_ms, (long)c.batt_min_dv, (long)c.batt_hold_ms, (long)c.verify_ms,
-           (long)c.runtime_min, (long)c.night_wait_ms, (long)c.night_confirm_ms);
+           (long)c.runtime_min, (long)c.night_wait_ms, (long)c.night_confirm_ms, (long)c.band_lo,
+           (long)c.cool_rate);
 }
 
 int main(int argc, char **argv) {

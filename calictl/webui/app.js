@@ -4527,6 +4527,7 @@ const THERMO_REASON = {
   ADOPT_CONTINUOUS: "Taking over continuous heating",
   LEVEL_UP: "Level raised",
   LEVEL_DOWN: "Level lowered",
+  COOLING_MAX: "Getting colder — highest level",
   HOLD: "Holding the level",
   TARGET_EXCEEDED_AT_MIN_LEVEL: "Warmer than the target at the lowest level",
   OVERHEAT: "Too warm — heater stopped",

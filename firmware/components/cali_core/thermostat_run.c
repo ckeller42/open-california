@@ -306,7 +306,7 @@ static void step(uint64_t now) {
     X(hyst, 0, I32) X(min_dwell_ms, 1, I32) X(band_hi, 1, I32) X(hot_hold_ms, 1, I32)            \
     X(overheat, 1, I32) X(min_level, 1, 10) X(stale_after_ms, 1, I32) X(heater_stale_ms, 1, I32) \
     X(batt_min_dv, 100, 150) X(batt_hold_ms, 1, I32) X(verify_ms, 1, I32) X(runtime_min, 10, 120)    \
-    X(night_wait_ms, 1, I32) X(night_confirm_ms, 1, I32)
+    X(night_wait_ms, 1, I32) X(night_confirm_ms, 1, I32) X(band_lo, 0, I32) X(cool_rate, 1, I32)
 #define X(m, lo, hi) #m,
 const char *const cali_thermo_cfg_keys[CALI_THERMO_CFG_N] = {CFG_TABLE(X)};
 #undef X
@@ -340,7 +340,7 @@ typedef struct {
     uint8_t ver, pad[3];
     cali_thermo_run_cfg_t c;
 } th_blob_t;
-#define TH_BLOB_VER 2
+#define TH_BLOB_VER 3
 /* Version 1 (no night_wait_ms, night_confirm_ms, night): loaded with those at their defaults, so the
  * settings of an older firmware survive the update. */
 #define TH_V1_CFG_N 17   /* period_ms .. runtime_min: a prefix of cali_thermo_cfg_t */
@@ -352,6 +352,16 @@ typedef struct {
     int outside_on;
 } th_blob_v1_t;
 typedef char th_blob_v1_size[sizeof(th_blob_v1_t) == 132 ? 1 : -1];   /* the layout on the van */
+/* Version 2 (no band_lo, cool_rate): loaded with those at their defaults. */
+#define TH_V2_CFG_N 19   /* period_ms .. night_confirm_ms: a prefix of cali_thermo_cfg_t */
+typedef struct {
+    uint8_t ver, pad[3];
+    int32_t s[TH_V2_CFG_N];
+    int32_t target;
+    char ref[CALI_THERMO_ALIAS_LEN], backup[CALI_THERMO_ALIAS_LEN], out[CALI_THERMO_ALIAS_LEN];
+    int outside_on, night;
+} th_blob_v2_t;
+typedef char th_blob_v2_size[sizeof(th_blob_v2_t) == 144 ? 1 : -1];   /* the layout on the van */
 
 static int cfg_valid(const cali_thermo_run_cfg_t *c) {
     cali_thermo_cfg_t s = c->s;
@@ -387,19 +397,36 @@ static int cfg_from_v1(const void *raw, size_t len, cali_thermo_run_cfg_t *c) {
     return 0;
 }
 
+/* a stored version-2 record into *c (the rest at the defaults already there); 0 when it is one */
+static int cfg_from_v2(const void *raw, size_t len, cali_thermo_run_cfg_t *c) {
+    th_blob_v2_t v;
+    if (len != sizeof v) return -1;
+    memcpy(&v, raw, sizeof v);
+    if (v.ver != 2) return -1;
+    memcpy(&c->s, v.s, sizeof v.s);
+    c->target = v.target;
+    memcpy(c->ref, v.ref, sizeof c->ref);
+    memcpy(c->backup, v.backup, sizeof c->backup);
+    memcpy(c->out, v.out, sizeof c->out);
+    c->outside_on = v.outside_on;
+    c->night = v.night;
+    return 0;
+}
+
 void cali_thermo_run_init(void) {
     uint8_t b;
     size_t n = 1;
     th_blob_t blob;
     size_t bn = sizeof blob;
-    cali_thermo_run_cfg_t v1;
+    cali_thermo_run_cfg_t old;   /* an older record, converted */
     s_on = cali_kv_get(CALI_THERMO_ON_KEY, &b, &n) == CALI_KV_OK && n == 1 && b != 0;   /* missing = off */
     static const cali_thermo_run_cfg_t DEFAULTS = {.s = CALI_THERMO_DEFAULTS, .target = CALI_THERMO_TARGET_DEFAULT};
     C = DEFAULTS;
-    v1 = DEFAULTS;
+    old = DEFAULTS;
     if (cali_kv_get(CALI_THERMO_CFG_KEY, &blob, &bn) == CALI_KV_OK) {
         if (bn == sizeof blob && blob.ver == TH_BLOB_VER && cfg_valid(&blob.c)) C = blob.c;
-        else if (cfg_from_v1(&blob, bn, &v1) == 0 && cfg_valid(&v1)) C = v1;
+        else if (cfg_from_v1(&blob, bn, &old) == 0 && cfg_valid(&old)) C = old;
+        else if (cfg_from_v2(&blob, bn, &old) == 0 && cfg_valid(&old)) C = old;
     }
     s_rev = 0;
     cali_thermo_init(&S);

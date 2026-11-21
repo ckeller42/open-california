@@ -45,6 +45,8 @@ ODD = {
     "min_level": 3,
     "verify_ms": 7000,
     "runtime_min": 30,
+    "band_lo": 45,
+    "cool_rate": 7,
 }
 CFGS = [D, ODD]
 
@@ -1029,6 +1031,22 @@ def coverage():
             tags.add("neg_half_p")
         res = orig(t_ref, t_out, target, dt_ms, ctl, cfg, cur_level, now_ms)
         u = res[1]["u"]
+        if res[2] == "COOLING_MAX":
+            tags.add(
+                "cooling_max_in_dwell"
+                if now_ms - ctl["last_change_ms"] < cfg["min_dwell_ms"]
+                else "cooling_max"
+            )
+        want = min(max(th._rdiv(u, 1000), cfg["min_level"]), 10)
+        if (
+            res[2] == "HOLD"
+            and cur_level is not None
+            and want < cur_level
+            and t_ref < target - cfg["band_lo"]
+            and abs(u - cur_level * 1000) >= 500 + cfg["hyst"]
+            and now_ms - ctl["last_change_ms"] >= cfg["min_dwell_ms"]
+        ):
+            tags.add("hold_below_target")
         if res[2] not in ("OVERHEAT", "TARGET_EXCEEDED_AT_MIN_LEVEL") and abs(u) % 1000 == 500:
             tags.add("neg_half_level" if u < 0 else "pos_half_level")
         return res
