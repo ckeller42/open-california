@@ -79,10 +79,11 @@ TEXT = {
 }
 
 
-def qr_png(text):
-    """The QR as the van draws it (alphanumeric, error correction L, 4-module quiet zone), as PNG bytes."""
+def qr_png(text, mode="alphanumeric"):
+    """The QR as the van draws it (alphanumeric, error correction L, 4-module quiet zone), as PNG bytes. ``mode=None``
+    lets segno pick (a text with lower case, as the hub QR's URL and passwords)."""
     buf = io.BytesIO()
-    segno.make(text, error="l", mode="alphanumeric", micro=False).save(buf, kind="png", scale=6, border=4)
+    segno.make(text, error="l", mode=mode, micro=False).save(buf, kind="png", scale=6, border=4)
     return buf.getvalue()
 
 

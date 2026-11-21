@@ -46,6 +46,8 @@ sys.path.insert(0, str(E2E))
 from conftest import _error_gated_page  # noqa: E402
 from fake_ttn import FakeTtn  # noqa: E402
 
+from tests.e2e.test_remote_setup import qr_png  # noqa: E402
+
 KEY = bytes(range(16))
 EUI = "70B3D57ED0000001"
 VAN = "van1"
@@ -352,3 +354,65 @@ def test_key_changed(world):
         head = bytes([1, 1, 1]) + other.sess + (1).to_bytes(4, "big")  # a fresh frame under another key
         broker.publish("oc/%s/state" % VAN, head + AESGCM(b"\xff" * 16).encrypt(head[2:], b"{}", head))
         expect(pg.get_by_text("Key changed: scan the van's code again")).to_be_visible()
+
+
+def _esp_answers(broker, esp, log):
+    """The fake ESP: logs every request it opens and answers it as applied."""
+
+    def on_publish(topic, payload):
+        if topic == "oc/%s/req" % VAN:
+            q = open_req(payload)
+            log.append(q)
+            broker.publish(
+                "oc/%s/res" % VAN, esp.seal(1, {"id": q["id"], "s": 200, "b": '{"ok":true,"applied":true}'})
+            )
+
+    broker.on_publish = on_publish
+
+
+def test_scanning_the_hub_qr_connects_to_the_van(world):
+    """Coverage row 18: an empty phone scans the van's hub QR (OCH1, a PNG photo through the real scanner input on
+    "Scan the van's code"), stores the broker and key from it, logs in with the QR's app user and shows the van live.
+    No configuration is injected."""
+    broker, _, url, _ = world
+    esp = Sealer()
+    broker.publish("oc/%s/online" % VAN, b"1", retain=True)
+    broker.publish("oc/%s/state" % VAN, esp.seal(1, raw_state()), retain=True)
+    qr = "OCH1*%s*ws://127.0.0.1:%d*qr-user*qr-pass*%s" % (VAN, broker.port, KEY.hex().upper())
+    with _error_gated_page(url + "#remotescan", service_workers="block") as pg:
+        expect(pg.locator("#title")).to_have_text("Scan the van's code")
+        assert broker.logins == []
+        pg.locator("#rs-file").set_input_files(
+            files=[{"name": "qr.png", "mimeType": "image/png", "buffer": qr_png(qr, mode=None)}]
+        )
+        expect(pg.locator("#status")).to_have_text("WLAN · just now")
+        expect(_tile(pg, "Cooler")).to_be_visible()
+        assert broker.logins[0][0][-2:] == ["qr-user", "qr-pass"]
+        assert json.loads(pg.evaluate("localStorage.getItem('oc.hub.cfg')"))["key"] == KEY.hex()
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_camping_mode_over_the_hub(world, on):
+    """Coverage row 19: the camping-mode switch sends its command over the hub: the satellite side opens one
+    POST /api/command {"function": "campingmode", "what": "master", "value": on|off}."""
+    broker, _, url, init = world
+    esp, reqs = Sealer(), []
+    broker.publish("oc/%s/online" % VAN, b"1", retain=True)
+    st = raw_state()
+    st["fn"]["campingmode"]["State"] = 0 if on else 1
+    broker.publish("oc/%s/state" % VAN, esp.seal(1, st), retain=True)
+    _esp_answers(broker, esp, reqs)
+    with _error_gated_page(
+        url, init_script=init, service_workers="block", allow_errors=("Executing inline",)
+    ) as pg:
+        expect(pg.locator("#status")).to_have_text("WLAN · just now")
+        _tile(pg, "Camping mode").click()
+        sw = pg.get_by_role("switch", name="Camping mode")
+        expect(sw).to_have_attribute("aria-checked", "false" if on else "true")
+        sw.click()
+        expect(pg.get_by_text("✓ Applied")).to_be_visible()
+    cmds = [q for q in reqs if q["p"] == "/api/command"]
+    assert [
+        (q["m"], json.loads(q["b"])["function"], json.loads(q["b"])["what"], json.loads(q["b"])["value"])
+        for q in cmds
+    ] == [("POST", "campingmode", "master", "on" if on else "off")]
