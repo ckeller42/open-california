@@ -1997,10 +1997,10 @@ async function pairingAction(action, value, confirmFlag) {
   } catch (e) { /* res stays null */ }
   pairingBusy = false;
   if (res && res.state) PAIRING = res;              // a real snapshot -> adopt it
-  if (PAIRING && PAIRING.state === "waiting_passkey") pairingCodeSeen = true;
   // never a raw error enum: known request errors get their own text, anything else the generic one.
   // A row in the card, not a toast: it stays until the next request.
   else pairingReqError = PAIRING_REQUEST_ERROR_MSG[(res && res.error) || ""] || "Pairing request failed";
+  if (PAIRING && PAIRING.state === "waiting_passkey") pairingCodeSeen = true;
   render();
 }
 

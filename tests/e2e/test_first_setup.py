@@ -296,10 +296,22 @@ def test_a_timeout_after_the_code_says_so_and_new_code_restarts(station_pending)
         expect(pg.locator("#pairing-passkey")).to_be_visible()
         pg.click("#pairing-newcode")
         expect(pg.locator("#pairing-passkey")).to_be_visible()
+        # every POST answered with a snapshot: no request error (a misplaced else once showed one)
+        expect(pg.locator("#pairing-card")).not_to_contain_text("Pairing request failed")
         assert [b["action"] for b in station_pending.pairing_posts] == ["start", "cancel", "start"]
         station_pending.fixtures["station"]["/api/pairing"].update(state="error", error="timeout")
         expect(pg.locator("#pairing-card")).to_contain_text("The code was not entered in time.")
         expect(pg.locator("#pairing-card")).not_to_contain_text("No vehicle found")
+
+
+def test_a_good_code_pairs_without_a_request_error(station_pending):
+    """The run on the test board: "✓ Paired" came with "Pairing request failed" (an else bound to the wrong if)."""
+    with _page(station_pending, "/#setup/pair", "en-US") as pg:
+        pg.get_by_role("button", name="Pair now", exact=True).click()
+        pg.fill("#pairing-passkey", station_pending.pairing_passkey)
+        pg.get_by_role("button", name="Send").click()
+        expect(pg.locator("#pairing-card")).to_contain_text("✓ Paired")
+        expect(pg.locator("#pairing-card")).not_to_contain_text("Pairing request failed")
 
 
 def test_a_timeout_before_any_code_still_says_no_vehicle(station_pending):
