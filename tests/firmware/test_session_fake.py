@@ -1427,6 +1427,15 @@ def test_wifi_off_until_booted(fake):
     ]
 
 
+def test_status_line_names_the_hub_stop_stack_margin(fake):
+    """Coverage row 31 (bench gate: STOP_STACK margin > 512 B): once a hub_stop task ran, the console ``status``
+    STATE line carries its lowest stack high-water mark in bytes (``hub_stop_stack_min``, from the board's hub
+    port); before that the member is absent and the line stays as it was."""
+    out = run(fake, "> status", "stopstack 1700", "> status")
+    assert out[0] == 'STATE {"state":"idle","attempts":0,"error":null,"address":null}'
+    assert json.loads(out[1][len("STATE ") :])["hub_stop_stack_min"] == 1700
+
+
 def test_wifi_boot_without_creds_opens_setup_and_scans(fake):
     out = run(fake, "wifi_boot", "NET_AP_STARTED", "NET_SCAN_DONE minsel other", "> wifi status", "> status")
     assert out == [

@@ -60,6 +60,7 @@ typedef struct {
 static client_t *s_cur;       /* owner task: the running client, NULL = none */
 static client_t *s_old;       /* owner task: a stopped client whose hub_stop task could not be created yet */
 static atomic_int s_stopping; /* hub_stop tasks that still own an old client */
+static atomic_uint s_stop_min; /* the lowest stack high-water mark (bytes) a hub_stop task left, 0 = none yet */
 
 static void hand_over(void);
 
@@ -178,8 +179,13 @@ static void stop_task(void *arg) {
     esp_mqtt_client_destroy(c->h);   /* stops its MQTT task first: the handler is done with c after this */
     client_free(c);
     atomic_fetch_sub(&s_stopping, 1);
+    unsigned hwm = (unsigned)uxTaskGetStackHighWaterMark(NULL), old = atomic_load(&s_stop_min);   /* IDF: bytes */
+    while ((!old || hwm < old) && !atomic_compare_exchange_weak(&s_stop_min, &old, hwm)) {}
     vTaskDelete(NULL);
 }
+
+/* Overrides console.c's weak 0: the console STATE line's "hub_stop_stack_min" (bench gate: STOP_STACK margin). */
+unsigned cali_hub_stop_stack_min(void) { return atomic_load(&s_stop_min); }
 
 /* ---- the port (owner task) ---- */
 
