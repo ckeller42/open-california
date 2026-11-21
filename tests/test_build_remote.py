@@ -44,6 +44,9 @@ REMOTE_ONLY = (
     "vendor/qr-scanner/qr-scanner.umd.min.js",
     "vendor/qr-scanner/qr-scanner-worker.min.js",
     "vendor/qr-scanner/LICENSE",
+    "hub.js",
+    "vendor/mqtt/mqtt.min.js",
+    "vendor/mqtt/LICENSE.md",
 )
 
 
@@ -80,6 +83,8 @@ def test_remote_build_contents(site):
         "ttn.js",
         "lora_decode.js",
         "remote.js",
+        "vendor/mqtt/mqtt.min.js",
+        "hub.js",
         "app.js",
     ]
     assert "style=" not in html and "<style" not in html
@@ -93,12 +98,32 @@ def test_remote_build_contents(site):
     assert 'url.pathname.startsWith("/api/")' in sw and "url.origin !== location.origin" in sw
     assert f'const CACHE = "{build_remote.CACHE}"' in sw and "oc-shell-v1" not in sw
     manifest = json.loads((site / "manifest.webmanifest").read_text(encoding="utf-8"))
-    assert manifest["name"] == "Open California remote"
+    assert manifest["name"] == manifest["short_name"] == "OC Remote"  # ruling R44
+    html = (site / "index.html").read_text(encoding="utf-8")
+    assert '<meta name="apple-mobile-web-app-title" content="OC Remote">' in html
+    assert "<title>OC Remote</title>" in html  # G6: the tab and task switcher too, distinct from "OC Van"
     assert manifest["id"] == manifest["start_url"] == manifest["scope"] == "/"
     # the local app's files stay what they were
     local = (ROOT / "calictl" / "webui" / "index.html").read_text(encoding="utf-8")
     assert "OC_REMOTE" not in local and "Content-Security-Policy" not in local
     assert not (site / "jsconfig.json").exists()
+
+
+def test_hub_origin_joins_connect_src(tmp_path):
+    """``--hub-origin`` adds the broker's wss:// origin to connect-src (and --check needs the same); anything else
+    is refused."""
+    out = tmp_path / "site"
+    assert build_remote.main(["--out", str(out), "--hub-origin", "wss://hub.example.org:8884"]) == 0
+    html = (out / "index.html").read_text(encoding="utf-8")
+    want = CSP.replace("thethings.industries;", "thethings.industries wss://hub.example.org:8884;")
+    assert '<meta http-equiv="Content-Security-Policy" content="%s">' % want in html
+    assert (
+        build_remote.main(["--out", str(out), "--check", "--hub-origin", "wss://hub.example.org:8884"]) == 0
+    )
+    assert build_remote.main(["--out", str(out), "--check"]) == 1
+    for bad in ("https://hub.example.org", "ws://hub.example.org", "wss://h/x", "wss://h; script-src *"):
+        with pytest.raises(SystemExit):
+            build_remote.build(tmp_path / "bad", bad)
 
 
 def test_only_tracked_files_are_published(tmp_path):

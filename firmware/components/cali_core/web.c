@@ -22,7 +22,9 @@
 #include "cali_runner.h"
 #include "cali_sdlog.h"
 #include "cali_energy.h"
+#include "cali_hub.h"
 #include "cali_lora.h"
+#include "cali_lora_setup.h"   /* cali_wipe */
 #include "cali_sensors.h"
 #include "cali_session.h"
 #include "cali_time.h"
@@ -234,21 +236,77 @@ static void res_json(cali_json_t *j) {
     cali_json_obj_end(j);
 }
 
+/* ---- the remote hub (cali_hub.h): device.hub and GET|POST /api/hub ---- */
+
+static int hub_cfg(cali_hub_cfg_t *c) { return cali_hub_cfg_load(c) == 0; }
+
+/* "configured","online","last_pub_s" (seconds since the last state publish, null = none yet),
+ * "error" ("key": the data key cannot be stored, retried every 30 s; else null) */
+static void hub_status_members(cali_json_t *j, int configured) {
+    cali_hub_status_t st;
+    cali_hub_status(&st);
+    cali_json_key(j, "configured");
+    cali_json_bool(j, configured);
+    cali_json_key(j, "online");
+    cali_json_bool(j, st.online);
+    cali_json_key(j, "last_pub_s");
+    if (st.last_pub_s) cali_json_int(j, (long long)(cali_uptime_ms() / 1000u - st.last_pub_s));
+    else cali_json_null(j);
+    cali_json_key(j, "error");
+    if (st.key_error) cali_json_str(j, "key");
+    else cali_json_null(j);
+}
+
+/* device.hub: the status, "reason" (why it is not connected, null: connected or not known; ruling R45) and
+ * "app_url" (the remote app, read-only, also before a config: ruling R35) */
+static void hub_status_json(cali_json_t *j) {
+    static const char *const WHY[] = {NULL, "dns", "tls", "auth", "unreachable"};
+    cali_hub_cfg_t c;
+    cali_hub_status_t st;
+    cali_json_obj_begin(j);
+    hub_status_members(j, hub_cfg(&c));
+    cali_hub_status(&st);
+    cali_json_key(j, "reason");
+    if (st.reason > 0 && st.reason < (int)N_OF(WHY)) cali_json_str(j, WHY[st.reason]);
+    else cali_json_null(j);
+    cali_json_key(j, "app_url");
+    cali_json_str(j, CALI_HUB_APP_URL);
+    cali_json_obj_end(j);
+    cali_wipe(&c, sizeof c);
+}
+
 static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_json_t j;
     cali_status_t st;
-    cali_ble_exp_activity(cali_uptime_ms());   /* a viewer: the experiment holds (R_FW_BLE_EXP) */
-    /* a viewer keeps the redial (R_FW_BLE_VIEWER_KEEP); before the status, so this same reply already
-     * reports a rest it ended. "?seen=1": the page's own poll after a load, a return to the page or a
-     * user action = input too */
-    if (strstr(req->query, "seen=1")) cali_session_input(cali_uptime_ms());
-    else cali_session_viewer(cali_uptime_ms());
+    /* a viewer: the experiment holds (R_FW_BLE_EXP) and the redial stays (R_FW_BLE_VIEWER_KEEP); before the
+     * status, so this same reply already reports a rest it ended. "?seen=1": the page's own poll after a
+     * load, a return to the page or a user action = input too. "?hub=1": the hub's 30 s state publish
+     * (hub_esp.c) is nobody looking: no mark, or the BLE link would never rest. */
+    if (!strstr(req->query, "hub=1")) {
+        cali_ble_exp_activity(cali_uptime_ms());
+        if (strstr(req->query, "seen=1")) cali_session_input(cali_uptime_ms());
+        else cali_session_viewer(cali_uptime_ms());
+    }
     cali_status_get(&st, s_t, cali_uptime_ms());
     /* "?diag=1": also the diagnostics the page never shows (R_FW_STATE_DIAG); left out by default, so
      * the 2 s poll carries only what the page shows */
     int diag = strstr(req->query, "diag=1") != NULL;
 
     cali_json_begin(&j, s_json, sizeof s_json);
+    if (strstr(req->query, "hub=1")) {
+        /* the hub publish (rulings R25/R26): its wall clock, so the app can judge the sealed state's age, and the
+         * last accepted LoRa command counter (one per data key), so a phone sends max(its own, this) + 1. SNTP time
+         * only: the unit clock can be hours off, and the app keeps the newest hub_t it saw */
+        int64_t now_ms;
+        uint8_t ctr[2];
+        size_t cl = sizeof ctr;
+        cali_json_key(&j, "hub_t");
+        if (cali_time_ts(&now_ms) == CALI_TSRC_NTP) cali_json_int(&j, (long long)now_ms);
+        else cali_json_null(&j);
+        cali_json_key(&j, "lora_ctr");
+        if (cali_kv_get(CALI_LORA_CMD_CTR_KEY, ctr, &cl) == CALI_KV_OK && cl == sizeof ctr) cali_json_int(&j, ctr[0] << 8 | ctr[1]);
+        else cali_json_null(&j);
+    }
     if (diag) {
         cali_json_key(&j, "t");
         cali_json_int(&j, (long long)st.uptime_ms);
@@ -347,6 +405,8 @@ static void api_state(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_json_obj_end(&j);
     cali_json_key(&j, "energy");   /* Wh since boot + the house load (R_FW_ENERGY_COUNTERS) */
     cali_energy_json(&j);
+    cali_json_key(&j, "hub");   /* the remote hub's MQTT client (cali_hub.h) */
+    hub_status_json(&j);
     if (cali_exp_lora()) {   /* the LoRa link (R_FW_LORA): absent while the switch is off */
         cali_json_key(&j, "lora");
         cali_lora_json(&j);
@@ -662,6 +722,13 @@ static int parse_command(const char *body, size_t body_len, cmd_t *cmd) {
 static char s_cmd_fn[24];
 static int s_cmd = CALI_CTL_OK;
 static const char *s_cmd_reason;   /* the done callback's refusal text (static), else NULL */
+/* Ruling R19: the slot is held from the submit until its requester's resume collected the answer (two
+ * channels resume against it: HTTP and the hub RPC). A requester that never resumes holds it at most
+ * CALI_HUB_RPC_PENDING_MS after the submit (the longer of the two channels' waits). The hub's t0 is taken just
+ * before its submit and both sides compare elapsed >= CALI_HUB_RPC_PENDING_MS (ruling R24), so the slot is never
+ * free while the hub may still resume. */
+static int s_cmd_held;
+static uint64_t s_cmd_at;
 
 static void cmd_done(int result, const char *reason) {
     s_cmd = result;
@@ -718,12 +785,18 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
     if (req->resume) {   /* the core re-asks while we wait for the sequencer */
         if (s_cmd == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
         cmd_answer(resp, s_cmd, s_cmd_reason);
+        s_cmd_held = 0;   /* collected */
         return 1;
     }
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {   /* never over the setup hotspot (ruling B) */
         SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (s_cmd == CALI_CTL_PENDING ||
+               (s_cmd_held && cali_uptime_ms() - s_cmd_at < CALI_HUB_RPC_PENDING_MS)) {
+        /* rulings R18/R19: one slot for two channels (HTTP and the hub RPC): a second command never
+         * touches s_cmd/s_cmd_fn/s_cmd_reason before the first requester collected its own result */
+        SET_CONST(resp, 409, ERR_BUSY);
     } else if (parse_command(req->body, req->body_len, &cmd) != 0) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
     } else if (!cmd.fn[0] || !cmd.what[0]) {
@@ -738,7 +811,11 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
         s_cmd_reason = NULL;
         rc = cali_ctl_submit(cmd.fn, cmd.what, cmd.value, cmd.has_local_now ? (int64_t)cmd.local_now : -1,
                              cmd_done, &reason, "web");
-        if (rc == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
+        if (rc == CALI_CTL_PENDING) {
+            s_cmd_held = 1, s_cmd_at = cali_uptime_ms();
+            cali_lora_cmds_drop("a newer WiFi command runs");   /* a held LoRa command must not undo it later */
+            return CALI_HTTP_PENDING;
+        }
         s_cmd = rc;
         cmd_answer(resp, rc, reason);
     }
@@ -1537,6 +1614,129 @@ static void api_lora(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
+/* ---- GET|POST /api/hub: the Satellite settings Hub card. GET in every mode, never the two passwords;
+ * POST station only: {"url","van","user","app_user"} required, "pass"/"app_pass" optional (left out: the
+ * stored one stays, the card cannot show it). Every field fits cali_hub_cfg_t and holds no '*' (the hub
+ * QR's separator); url is the broker's wss:// URL (the ESP and the app both connect to it); van is one
+ * MQTT topic level: [A-Za-z0-9_-] only. ---- */
+static const char *const K_HUB[] = {"url", "van", "user", "pass", "app_user", "app_pass"};
+enum { H_URL, H_VAN, H_USER, H_PASS, H_APP_USER, H_APP_PASS, H_N };
+
+typedef struct {
+    cali_hub_cfg_t c;
+    size_t len[H_N];   /* the whole decoded lengths */
+} hub_req_t;
+
+static char *hub_slot(cali_hub_cfg_t *c, int i, size_t *cap) {
+    char *const f[H_N] = {c->url, c->van, c->user, c->pass, c->app_user, c->app_pass};
+    const size_t n[H_N] = {sizeof c->url, sizeof c->van, sizeof c->user, sizeof c->pass, sizeof c->app_user,
+                           sizeof c->app_pass};
+    *cap = n[i];
+    return f[i];
+}
+
+static int hub_field(cursor_t *c, int i, void *ctx) {
+    hub_req_t *r = ctx;
+    size_t cap;
+    char *dst = hub_slot(&r->c, i, &cap);
+    return parse_str(c, dst, cap, &r->len[i]);
+}
+
+static int hub_valid(hub_req_t *r) {
+    for (int i = 0; i < H_N; i++) {
+        size_t cap;
+        const char *v = hub_slot(&r->c, i, &cap);
+        if (r->len[i] < 1 || r->len[i] >= cap || strchr(v, '*')) return 0;
+    }
+    for (const char *p = r->c.van; *p; p++)
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_' || *p == '-'))
+            return 0;
+    return strncmp(r->c.url, "wss://", 6) == 0;
+}
+
+static void api_hub(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static hub_req_t r;   /* static: the host task stack; holds the passwords, wiped before return */
+    static cali_hub_cfg_t old;
+    int seen;
+    if (strcmp(req->method, "GET") == 0) {
+        cali_json_t j;
+        int have = hub_cfg(&old);
+        cali_json_begin(&j, s_json, sizeof s_json);
+        cali_json_key(&j, "van");
+        cali_json_str(&j, old.van);
+        cali_json_key(&j, "url");
+        cali_json_str(&j, old.url);
+        cali_json_key(&j, "user");
+        cali_json_str(&j, old.user);
+        cali_json_key(&j, "app_user");
+        cali_json_str(&j, old.app_user);
+        hub_status_members(&j, have);
+        cali_wipe(&old, sizeof old);
+        finish_json(&j, resp);
+        return;
+    }
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+        return;
+    }
+    if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+        return;
+    }
+    memset(&r, 0, sizeof r);
+    seen = parse_body(req->body, req->body_len, K_HUB, H_N, hub_field, &r);
+    if (seen < 0 || (seen & (1 << H_URL | 1 << H_VAN | 1 << H_USER | 1 << H_APP_USER)) !=
+                        (1 << H_URL | 1 << H_VAN | 1 << H_USER | 1 << H_APP_USER)) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else {
+        (void)hub_cfg(&old);   /* missing: all zero, so a left-out password is empty and rejected */
+        if (!(seen & 1 << H_PASS)) memcpy(r.c.pass, old.pass, sizeof r.c.pass), r.len[H_PASS] = strlen(old.pass);
+        if (!(seen & 1 << H_APP_PASS))
+            memcpy(r.c.app_pass, old.app_pass, sizeof r.c.app_pass), r.len[H_APP_PASS] = strlen(old.app_pass);
+        if (!hub_valid(&r)) {
+            SET_CONST(resp, 400, ERR_BAD_VALUE);
+        } else if (cali_hub_cfg_save(&r.c) != 0) {
+            SET_CONST(resp, 500, ERR_STORE);
+        } else {
+            cali_hub_cfg_changed();
+            SET_CONST(resp, 200, OK_BODY);
+        }
+    }
+    cali_wipe(&r, sizeof r);
+    cali_wipe(&old, sizeof old);
+}
+
+/* ---- POST /api/hub_key {"new_key":true}: the Hub card's New data key (ruling R42). Station only (403 setup_mode);
+ * 409 no_hub without a hub config; 500 store when the key cannot be made; every phone then scans the new hub QR. */
+static int hub_key_field(cursor_t *c, int i, void *ctx) {
+    (void)i;
+    return parse_bool(c, (int *)ctx);
+}
+
+static void api_hub_key(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static const char *const NAMES[] = {"new_key"};
+    static const char ERR_NO_HUB[] = "{\"ok\":false,\"error\":\"no_hub\"}";
+    cali_hub_cfg_t c;
+    int yes = 0, have;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+        return;
+    }
+    if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+        return;
+    }
+    if (parse_body(req->body, req->body_len, NAMES, 1, hub_key_field, &yes) != 1 || !yes) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+        return;
+    }
+    have = hub_cfg(&c);
+    cali_wipe(&c, sizeof c);
+    if (!have) SET_CONST(resp, 409, ERR_NO_HUB);
+    else if (cali_hub_new_key() != 0) SET_CONST(resp, 500, ERR_STORE);
+    else SET_CONST(resp, 200, OK_BODY);
+}
+
 /* ---- GET|POST /api/sensors: the Satellite settings Sensors box (R_FW_SENSORS), every mode, 404 while the flag is off ---- */
 
 enum { S_ADD = 1, S_REMOVE = 2, S_ID = 4, S_ALIAS = 8, S_KEY = 16 };
@@ -1686,6 +1886,14 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/lora") == 0) {
         api_lora(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/hub") == 0) {
+        api_hub(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/hub_key") == 0) {
+        api_hub_key(req, resp);
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the WiFi recovery page, in every mode */

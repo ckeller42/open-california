@@ -13,6 +13,7 @@
 
 #include "bsp/esp-bsp.h"
 #include "cali_display.h"
+#include "cali_display_model.h"   /* cali_shot_mask */
 #include "cali_platform.h"
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
@@ -92,6 +93,7 @@ static void shot(void) {
 #endif
     lv_draw_buf_t d;
     lv_result_t res;
+    int mask, mx1 = 0, my1 = 0, mx2 = -1, my2 = -1;
     size_t n;
     uint8_t *snap = heap_caps_aligned_alloc(LV_DRAW_BUF_ALIGN, SHOT_BYTES, MALLOC_CAP_SPIRAM);
     uint8_t *rle = heap_caps_malloc(RLE_BYTES, MALLOC_CAP_SPIRAM);
@@ -104,7 +106,9 @@ static void shot(void) {
         cali_log("display: screenshot failed (busy)");
         goto out;
     }
-    if (cali_display_lora_shown()) {   /* under the lock the painter shows it with: the QR holds keys (R_FW_LORA_SCREEN) */
+    /* under the lock the painter shows it with: a QR that holds keys is masked grey (ruling R46) */
+    mask = cali_display_qr_mask_area(&mx1, &my1, &mx2, &my2);
+    if (mask < 0) {   /* a secret QR, its rectangle unknown: no frame at all */
         bsp_display_unlock();
         cali_log("display: screenshot failed (lora screen)");
         goto out;
@@ -115,6 +119,12 @@ static void shot(void) {
         cali_log("display: screenshot failed (snapshot)");
         goto out;
     }
+    if (mask && cali_shot_mask(d.data, (int)d.header.w, (int)d.header.h, (int)d.header.stride, mx1, my1, mx2, my2,
+                               CALI_SHOT_MASK_RGB565) <= 0) {   /* nothing masked: never send it */
+        cali_log("display: screenshot failed (lora screen)");
+        goto out;
+    }
+    if (mask) cali_log("display: screenshot (QR masked)");
     n = rle_encode(&d, rle);
     printf("[SHOT %u %u RLE16 %u]\n", (unsigned)d.header.w, (unsigned)d.header.h, (unsigned)n);
     b64_print(rle, n);

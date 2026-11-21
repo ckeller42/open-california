@@ -130,6 +130,7 @@ static const char *const SCR_NAMES[] = {"on", "dim", "off"};
 #define QR_TEXT_MAX 400
 #define QR_POLL_MS 1000
 #define LORA_COL_X (LQR_BOX + 4)
+#define APP_QR_BOX 168   /* the app QR (show_lora 4): a short URL, so a narrower code and a wider text column for its 3 steps */
 
 LV_FONT_DECLARE(font_latin1_16);
 LV_FONT_DECLARE(font_latin1_24);
@@ -181,6 +182,7 @@ static struct touch_ctx s_touch_ctx;                      /* LVGL task writes, o
 static portMUX_TYPE s_touch_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint32_t s_press_start;          /* LVGL task -> owner task, __atomic: uptime ms (| 1) of the delivered press, 0 = none */
 static uint32_t s_press_seen;           /* LVGL task -> owner task, __atomic: uptime ms (| 1) of its last read that saw the touch */
+static uint32_t s_inject_until;         /* owner task -> LVGL task, __atomic: uptime ms the console's "touch" press lasts to */
 static int s_lora_shown;                /* owner task -> shot.c, __atomic: the LoRa screen is up */
 /* the LoRa screen, owner task only (under the LVGL lock) */
 static lv_obj_t *s_lora, *s_lqr, *s_lora_hint, *s_lora_line;
@@ -289,6 +291,7 @@ static void build(void) {
         memset(s_qr_buf->data + 8, 0, (size_t)s_qr_buf->header.stride * LQR_BOX);   /* +8: the palette */
         s_lqr = lv_canvas_create(s_lora);
         lv_canvas_set_draw_buf(s_lqr, s_qr_buf);
+        lv_image_set_inner_align(s_lqr, LV_IMAGE_ALIGN_TOP_LEFT);   /* a narrower width clips the right, not both sides */
         lv_obj_set_pos(s_lqr, 0, 0);
     } else {
         cali_log("display: lora qr buffer allocation failed: no LoRa screen");   /* lora_inputs: no setup either */
@@ -337,6 +340,18 @@ static void paint_qr(const cali_display_view_t *v) {
 int cali_display_ready(void) { return s_ok; }
 
 int cali_display_lora_shown(void) { return __atomic_load_n(&s_lora_shown, __ATOMIC_RELAXED); }
+
+int cali_display_qr_mask_area(int *x1, int *y1, int *x2, int *y2) {
+    lv_area_t a;
+    if (!__atomic_load_n(&s_lora_shown, __ATOMIC_RELAXED)) return 0;
+    if (s_lora_show == 4) return 0;   /* the app QR: a plain URL, no secret (ruling R46) */
+    if (!s_lqr) return -1;            /* any other state: fail closed */
+    lv_obj_update_layout(s_lqr);      /* the width the painter just set (the app QR's box) is applied */
+    lv_obj_get_coords(s_lqr, &a);
+    if (a.x2 < a.x1 || a.y2 < a.y1) return -1;
+    *x1 = a.x1, *y1 = a.y1, *x2 = a.x2, *y2 = a.y2;
+    return 1;
+}
 
 #if CONFIG_LV_USE_GESTURE_RECOGNITION
 #error "touch_read replaces esp_lvgl_port's read, which also feeds LVGL's gesture recognizers"
@@ -393,6 +408,11 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
             data->point.y = p[0].y;
         }
     }
+    /* the console's "touch tap|hold" (cali_display_touch_line): a good read that sees a finger, as a real one */
+    if ((int32_t)(__atomic_load_n(&s_inject_until, __ATOMIC_RELAXED) - (uint32_t)cali_uptime_ms()) > 0) {
+        e = ESP_OK;
+        data->state = LV_INDEV_STATE_PRESSED;
+    }
     pressed = data->state == LV_INDEV_STATE_PRESSED;
     if (pressed) __atomic_store_n(&s_touched, 1, __ATOMIC_RELAXED);
     if (!cali_display_touch_gate(&s_swallow, pressed, __atomic_load_n(&s_awake, __ATOMIC_RELAXED), e == ESP_OK)) {
@@ -405,6 +425,22 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
     /* only a good read that reports no touch ends the press: a failed read (#346 NACKs) is "released"
      * for LVGL but must not restart the 3 s count or close the LoRa screen mid-press */
     if (!pressed && e == ESP_OK) __atomic_store_n(&s_press_start, 0, __ATOMIC_RELAXED);
+}
+
+/* USB-console test aid (cali_display_touch_cmd): "touch tap" / "touch hold <ms>" press the screen in touch_read for
+ * that long, the same read a finger gives (a wake tap is swallowed; a 3 s hold cycles the app, hub and LoRa QR
+ * screens). The USB console already is physical access (it can flash the board), so no new attack surface. */
+int cali_display_touch_line(const char *line) {
+    uint32_t ms = 0;
+    int r = cali_display_touch_cmd(line, &ms);
+    if (!r) return 0;
+    if (r < 0) cali_log("display: usage: touch tap | touch hold <1-%u ms>", (unsigned)CALI_DISPLAY_HOLD_MAX_MS);
+    else if (!s_ok) cali_log("display: touch: no screen");
+    else {
+        __atomic_store_n(&s_inject_until, (uint32_t)cali_uptime_ms() + ms, __ATOMIC_RELAXED);
+        cali_log("display: touch %u ms", (unsigned)ms);
+    }
+    return 1;
 }
 
 static void bus_mark(int dev) {   /* owner task: an I2C transfer on dev just finished */
@@ -639,21 +675,22 @@ static void touch_errors_evt(uint64_t now_ms) {
 }
 
 /* Paint the QR text into the canvas (white when it does not encode): ECC L, the version qrcodegen picks
- * (alphanumeric mode for the upper-case texts), whole pixels per module, px = LQR_BOX / (modules + 8), so
+ * (alphanumeric mode for the upper-case texts), whole pixels per module, px = box / (modules + 8), so
  * at least a 4-module white quiet zone. The encoder buffers are wiped; the caller wipes the text.
  * Returns 1 when a QR was painted. */
-static int qr_paint(const char *text) {
+static int qr_paint(const char *text, int box) {
     uint8_t *bits = s_qr_buf->data + 8;   /* +8: the I1 palette */
     uint32_t stride = s_qr_buf->header.stride;
     int ok = text[0] && qrcodegen_encodeText(text, s_qr_tmp, s_qr_mod, qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, QR_VMAX,
                                              qrcodegen_Mask_AUTO, false);
     cali_wipe(bits, (size_t)stride * LQR_BOX);   /* the old QR: the secret in another shape */
     if (ok) {
-        int n = qrcodegen_getSize(s_qr_mod), px = LQR_BOX / (n + 8), off = (LQR_BOX - px * n) / 2;
+        /* `box` wide (the canvas is clipped to it), centred in the full height */
+        int n = qrcodegen_getSize(s_qr_mod), px = box / (n + 8), offx = (box - px * n) / 2, offy = (LQR_BOX - px * n) / 2;
         for (int y = 0; y < n * px; y++)
             for (int x = 0; x < n * px; x++)
                 if (qrcodegen_getModule(s_qr_mod, x / px, y / px))
-                    bits[(uint32_t)(off + y) * stride + (uint32_t)(off + x) / 8] |= (uint8_t)(0x80u >> ((off + x) % 8));
+                    bits[(uint32_t)(offy + y) * stride + (uint32_t)(offx + x) / 8] |= (uint8_t)(0x80u >> ((offx + x) % 8));
     }
     cali_wipe(s_qr_tmp, sizeof s_qr_tmp);
     cali_wipe(s_qr_mod, sizeof s_qr_mod);
@@ -675,7 +712,7 @@ static void lora_paint(const cali_display_view_t *v, uint64_t now_ms) {
     if (!v->show_lora) {
         if (s_lora_show) {
             lv_obj_set_hidden(s_lora, true);
-            qr_paint("");   /* the bitmap is the secret in another shape */
+            qr_paint("", LQR_BOX);   /* the bitmap is the secret in another shape */
             s_lora_show = 0;
             s_qr_sig = 0;
             s_qr_ok = 0;
@@ -688,19 +725,27 @@ static void lora_paint(const cali_display_view_t *v, uint64_t now_ms) {
         int n = 0;
         uint32_t sig;
         s_qr_poll = now_ms;
-        if (!cali_lora_port_setup_pending()) {
+        if (v->show_lora == 3) {   /* the hub QR: lower-case URL and key hex, byte mode (237 chars fit version 10) */
+            n = (int)cali_hub_qr(text, sizeof text);
+        } else if (v->show_lora == 4) {   /* the app QR: the plain URL, byte mode, no secret (ruling R36) */
+            n = snprintf(text, sizeof text, "%s", CALI_HUB_APP_URL);
+        } else if (!cali_lora_port_setup_pending()) {
             n = v->show_lora == 2 ? cali_lora_port_setup_qr(text, sizeof text) : 0;
             /* the selector; also after a finished rotation (its transfer key erased): the repair QR */
             if (n <= 0) n = cali_lora_port_qr(text, sizeof text);
         }
-        if (n > 0 && !qrcodegen_isAlphanumeric(text)) {   /* never byte mode: the length only, nothing shown */
+        if (n > 0 && v->show_lora < 3 && !qrcodegen_isAlphanumeric(text)) {   /* LoRa: never byte mode, the length only */
             cali_log("display: lora qr: %d chars not alphanumeric, not shown", n);
             n = 0;
         }
         if (n <= 0) cali_wipe(text, sizeof text);
         sig = n > 0 ? fnv1a(text) : 0;
         if (sig != s_qr_sig || v->show_lora != s_lora_show) {
-            s_qr_ok = qr_paint(text);
+            int box = v->show_lora == 4 ? APP_QR_BOX : LQR_BOX;
+            lv_obj_set_width(s_lqr, box);   /* the app QR: the right part of the canvas gives way to the text */
+            lv_obj_set_width(s_lora_hint, W - box - 6);
+            lv_obj_set_x(s_lora_hint, box + 4);
+            s_qr_ok = qr_paint(text, box);
             if (n > 0 && !s_qr_ok) cali_log("display: lora qr: %d chars do not encode", n);   /* the length only */
             s_qr_sig = s_qr_ok ? sig : 0;
         }
@@ -734,7 +779,13 @@ static void lora_inputs(cali_display_in_t *in, uint64_t now_ms) {
     }
     in->lora_confirmed_age_s = -1;
     /* no QR buffer: no LoRa screen, so no press may open a setup (and rotate the transfer key) either */
-    if (!s_qr_buf || !cali_exp_lora() || !cali_lora_port_status(&ls) || ls.present != 1) return;
+    if (!s_qr_buf) return;
+    if (in->pressed_ms || s_lora_show) {   /* the hub QR exists (a config and a data key); the text is wiped */
+        char t[QR_TEXT_MAX];
+        in->hub_available = cali_hub_qr(t, sizeof t) > 0;
+        cali_wipe(t, sizeof t);
+    }
+    if (!cali_exp_lora() || !cali_lora_port_status(&ls) || ls.present != 1) return;
     in->lora_available = 1;
     in->lora_joined = ls.joined && !ls.at_unanswered;
     if (ls.last_confirmed_s) in->lora_confirmed_age_s = (int32_t)(now_ms / 1000 - ls.last_confirmed_s);

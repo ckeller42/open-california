@@ -173,6 +173,7 @@ webcheck() {   # hard gate: the web UIs are un-built JS, so this is their only s
   rm -rf "$_d"
   echo "web UI typecheck: OK"
 }
+bridge() { node --test "bridge/test/*.test.mjs"; }   # the Cloudflare Worker (TTN -> hub); node 24 wants a glob, not a dir
 dev() {
   "$PY" -m pip install -r requirements-dev.txt
   # The retired .githooks/ hook set core.hooksPath; pre-commit refuses to install while it is set.
@@ -185,7 +186,7 @@ dev() {
 }
 
 case "${1:-ci}" in
-  ci)            lint; test_suite; audit; echo "local CI: OK";;
+  ci)            lint; test_suite; audit; bridge; echo "local CI: OK";;
   test)          test_suite;;
   cov)           cov;;
   firmware)      firmware;;
@@ -202,6 +203,7 @@ case "${1:-ci}" in
   screenshots)   screenshots;;
   import-clean)  import_clean;;
   vendor-check)  vendor_check;;
+  bridge)        bridge;;
   dev)           dev;;
-  *) echo "usage: tools/ci.sh [ci|test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|linux|docs|screenshots|import-clean|vendor-check|dev]"; exit 2;;
+  *) echo "usage: tools/ci.sh [ci|test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|linux|docs|screenshots|import-clean|vendor-check|bridge|dev]"; exit 2;;
 esac

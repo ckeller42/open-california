@@ -360,7 +360,7 @@ only through the `cali_net_t` socket/WiFi table in `include/cali_net.h`):
 | `snapshot.c` | The `fn` object shared by the console's `SNAP` and `/api/state`. |
 | `status.c` (`include/cali_status.h`) | `cali_status_get()`: one `cali_status_t` snapshot (pairing state + bonded address, link up, last-`SNAP` age, WiFi mode/SSID/IP/RSSI/last failure, uptime, fw). `/api/state`'s `device` block and the screen both read it, so they cannot disagree. |
 | `display_model.c` (`include/cali_display_model.h`) | The pure status-display model: a `cali_status_t` in, three rows (colour + EN/DE text), the footer mode and the brightness out — no LVGL, no clock (`R_FW_STATUS_DISPLAY`). |
-| `components/cali_display/` (board build only) | The CoreS3 painter: the `espressif/m5stack_core_s3` board package + LVGL, ticked every `DISPLAY_REFRESH_MS` from the main loop, plus the `screenshot` console command (`shot.c`). Excluded from the host and QEMU builds (`CONFIG_CALI_DISPLAY`). |
+| `components/cali_display/` (board build only) | The CoreS3 painter: the `espressif/m5stack_core_s3` board package + LVGL, ticked every `DISPLAY_REFRESH_MS` from the main loop, plus the `screenshot` console command (`shot.c`) and the test aid `touch tap` / `touch hold <1-10000 ms>` (a press fed into the touch read, as a finger; the USB console is physical access already). Excluded from the host and QEMU builds (`CONFIG_CALI_DISPLAY`). |
 
 Platforms: `components/platform/host/net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi,
 `cali_net_host.h`) and `components/platform/esp/net_esp.c` (esp_wifi + esp_netif + lwIP sockets +
@@ -546,7 +546,8 @@ replies for a client that sends `Accept-Encoding: gzip` (`Vary: Accept-Encoding`
 | `POST /api/lora` | `{"forget":true,"confirm":true}` (exactly these two keys, in any order; no other body, no key upload: keys come by QR and downlink): Satellite settings' "Forget LoRa" (`R_FW_LORA_SETUP`) -> `cali_lora_forget()` switches `exp_lora` off, then erases `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys` -> 200 `{"ok":true}`; `device.lora` is gone from the next `GET /api/state`. 400 `confirm_required` (`confirm` missing or false), 400 `bad_json` (any other shape, also `forget` false), 403 `setup_mode` (station mode only), 404 `disabled` while `exp_lora` is off, 500 `store`. |
 | `GET /api/ble` | 200 the `device.ble` object `{"mode","probing","exp","idle_min","rest_poll_min","unit_adv_seen_ms_ago"}` (`R_FW_BLE_EXP`, `R_FW_BLE_IDLE`, `R_FW_BLE_REST`, [BLE modes](#ble-modes-r_fw_ble_mode)). |
 | `POST /api/ble` | any of `{"mode":"hold"\|"quiet"\|"off"}`, `{"probe":true}`, `{"exp_min":1..720,"from"?:0..23,"to"?:0..23}` (the night experiment; window default 22-06 Berlin time), `{"exp_min":0}` (stop it, back to `hold`), `{"idle_min":0..60}` (the idle policy, stored in NVS: `R_FW_BLE_IDLE`), `{"warm_ms":0..5000}` (the read pass's heartbeat warm-up, not stored: `R_FW_BLE_WARM`), `{"rest_poll_min":0..240}` (the power-save rest's probe interval, stored in NVS: `R_FW_BLE_REST`), `{"connect":true}` (leave the rest and reconnect after the 7 s cooldown: `R_FW_BLE_REST`); keys combinable, each once -> 200 the new `device.ble`. Station mode only (403 `setup_mode`), 400 `bad_json` (an unknown or repeated key, a wrong type, none of `mode`/`probe`/`exp_min`/`idle_min`/`warm_ms`/`rest_poll_min`/`connect`), 400 `bad_value` (another mode, a number out of range), 409 `no_time` (`exp_min` without a wall clock: no SNTP and no unit clock; nothing applied), 409 `busy` (a probe already runs or no bond), 409 `not_paired` (`connect` without a bond), 500 `store` (`idle_min` or `rest_poll_min` not stored). |
-| other method on `/api/state`, `/api/wifi`, `/api/command`, `/api/ota`, `/api/auto_camper`, `/api/thermostat` (GET/POST only), `/api/pi_wake`, `/api/pi_halt`, `/api/ble` (GET/POST only), `/api/pi_wake_setting`, `/api/display`, `/api/ux`, `/api/ux_setting`, `/api/experimental`, `/api/sensors`, `/api/lora` or `/api/pairing` | 405 `{"ok":false,"error":"method"}` |
+| `GET /api/hub` / `POST /api/hub` | The Satellite settings' Remote hub card (cali_hub.h). GET (every mode): 200 `{"van","url","user","app_user","configured","online","last_pub_s","error"}` (`error`: `"key"` while the data key cannot be stored, else null), never the two passwords. POST (station only, else 403 `setup_mode`): `{"url","van","user","app_user"[,"pass"][,"app_pass"]}`, a left-out password keeps the stored one -> stores KV `hub_cfg`, restarts the MQTT client, 200 `{"ok":true}`. Through the hub (`cali_hub_rpc`) only `GET /api/*` and `POST /api/command` pass; this and every other write answer 403 `{"error":"local_only"}` (ruling R21). 400 `bad_json` (another shape), 400 `bad_value` (a field empty or too long, a `*`, `url` not `wss://`, `van` not `[A-Za-z0-9_-]`), 500 `store`. |
+| other method on `/api/state`, `/api/wifi`, `/api/command`, `/api/ota`, `/api/auto_camper`, `/api/thermostat` (GET/POST only), `/api/pi_wake`, `/api/pi_halt`, `/api/ble` (GET/POST only), `/api/pi_wake_setting`, `/api/display`, `/api/ux`, `/api/ux_setting`, `/api/experimental`, `/api/sensors`, `/api/lora`, `/api/hub` (GET/POST only) or `/api/pairing` | 405 `{"ok":false,"error":"method"}` |
 | an OS captive-portal probe path (setup mode) | 302 `Location: http://192.168.4.1/` — `/generate_204`, `/gen_204` (Android), `/hotspot-detect.html`, `/library/test/success.html` (Apple), `/connecttest.txt`, `/ncsi.txt` (Windows), `/canonical.html`, `/success.txt` (Firefox) |
 | any other path | setup mode: 302 `Location: /`; station mode: 404 |
 
@@ -680,7 +681,7 @@ angeben* (`WAKEUP_UNKNOWN`, which calictl answers too).
 card's *Satellite settings ›* opens the **Satellite settings** screen (satellite only,
 `#satsettings`): WiFi (current network, *Change network…*), Camper unit, Restore camping, Screen,
 Firmware update, Advanced (Send usage data, Sensors). Over the setup hotspot, and in station mode while `device.setup.pending` is true, the app
-lands on the **setup wizard** (`#setup/<step>`: welcome, wifi, pair, victron, sensors, home, done; over the
+lands on the **setup wizard** (`#setup/<step>`: welcome, wifi, pair, victron, sensors, remote, home, done; over the
 hotspot only welcome and wifi exist, WiFi cannot be skipped). The **WiFi setup** screen (`#wifisetup`: the join form,
 the pairing entry, the hotspot explained once) stays reachable; once the satellite runs in station mode it shows Home, unless the join was made
 there (it keeps the result and the `http://calictl-esp.local` link). Every screen is in the URL hash
@@ -1831,11 +1832,22 @@ The status screen has one hidden second screen, for the LoRa setup ([LoRaWAN tel
 - **What it shows:** before the van has the TTN keys, the ESP makes a new transfer key (and the AppKey
   on the first open) and shows the **setup QR**; after, it shows the **repair QR**. Until the QR text
   exists, and while a new transfer key is still being made, it shows "Preparing…" instead of a QR, so an
-  old transfer key is never shown. Beside the QR: "Scan with the Open California remote app" and one
-  status line — joined or not, and how long ago the module confirmed the last uplink with `TX_DONE`
-  (never a send without that confirmation). German or English as the status rows.
-- **Rotation** (a lost phone or a leaked key): while the repair QR shows, press 3 s again. The ESP makes
+  old transfer key is never shown. Beside the QR: what it is ("LoRa setup: scan in the app", or for the
+  repair QR "LoRa: scan in the app. Hold 3 s: new code") and one status line — joined or not, and how
+  long ago the module confirmed the last uplink with `TX_DONE` (never a send without that
+  confirmation). German or English as the status rows.
+- **Rotation** (a lost phone or a leaked key): while the repair QR shows, hold 3 s again. The ESP makes
   a new transfer key (the AppKey stays) and shows the setup QR.
+- **One cycle** (`show_lora`, ruling R41): each 3 s hold goes one screen on, always in this order —
+  the **app QR** (4) → the **hub QR** (3), both only with a hub config → the LoRa screen (1, with LoRa
+  on: setup or repair QR) → the rotation (2, with the TTN keys). A screen whose condition is missing
+  is skipped; the last one stays. Only entering a LoRa setup QR asks for a new transfer key, never the
+  app or hub QR. The app QR is the plain remote-app URL (`CALI_HUB_APP_URL`,
+  `https://open-california.github.io/`, no secret) in byte mode, in a 168 px box so that the three
+  steps fit beside it: "1. Scan with the camera: get the app", "2. Add it to the home screen", "3. Hold
+  3 s: the van's code". The hub QR's side text is "The van's code: scan in the app", with LoRa on
+  also "Hold 3 s: LoRa". No gesture makes a hub data key (ruling R42: the Hub card's **New data
+  key**). The app and hub QR close like the LoRa QR, and also when the hub config goes away.
 - **Close:** a tap, 120 s after it opened or rotated (`DISPLAY_LORA_SHOW_MS`), or the module going away.
   The backlight is at 100 % while it is up.
 - **The QR:** alphanumeric mode, error correction L, whole pixels per module (`240 / (modules + 8)`), at
@@ -1844,8 +1856,47 @@ The status screen has one hidden second screen, for the LoRa setup ([LoRaWAN tel
   LVGL 9.6.0 encodes in byte mode at error correction M and keeps a copy of the text on the heap.
 - **Keys stay off the wire:** the QR text exists only for the paint (polled once a second, repainted
   only when it changes, wiped at once; a 32-bit hash tells a change). The bitmap is cleared when the
-  screen closes. While it is up, the console `screenshot` sends no frame
-  (`LOG display: screenshot failed (lora screen)`), and no log line carries any part of the text.
+  screen closes. The console `screenshot` works while it is up (ruling R46): the app QR (no secret)
+  is sent as it is; for the repair, LoRa setup and hub QR, the QR canvas's screen rectangle (quiet zone
+  included, read from LVGL under the same lock as the snapshot) is painted solid grey in the PSRAM copy
+  before encoding (`cali_shot_mask`), with `LOG display: screenshot (QR masked)`, so no module of the
+  code leaves the device; the side texts stay for the layout check. Fail closed: when the rectangle
+  cannot be read or the mask writes nothing, no frame is sent
+  (`LOG display: screenshot failed (lora screen)`). No log line carries any part of the text.
+
+## Remote hub (`cali_hub`)
+
+The satellite can publish its state to an MQTT broker and take API requests from the remote app
+through it, so the app reaches the van from anywhere. Owner setup and operation:
+[How to set up the remote hub](howto-remote-hub.md).
+
+- **Client:** `cali_hub/hub_esp.c` (esp-mqtt over `wss://`, the CA bundle checks the broker; the same
+  URL as the app). Topics `oc/<van>/online` (last will `0`, retained `1` on connect), `oc/<van>/state`
+  (sealed `/api/state?hub=1`, retained, every 30 s), `oc/<van>/req` (in), `oc/<van>/res`. Nothing
+  runs without a hub config.
+- **Sealing:** AES-128-GCM with a per-van data key made on the satellite (KV `hub_key`). Frame
+  `ver | dir | nonce(12) | ciphertext | tag(16)`, nonce `dir | random(7) | counter(4)`, AD the first 14
+  bytes. A replay ring per direction and a time check (`|now - t| <= 120 s` while SNTP time is valid)
+  guard requests. Without SNTP time only `GET` runs (anything else answers `503 no_time`), and a
+  retained request is dropped. `hub_t` in the state is SNTP time only (null otherwise).
+- **Allowlist:** over the hub only `GET /api/...` and `POST /api/command` reach the router; every
+  other request answers `403 local_only`. Settings stay local.
+- **`/api/hub`:** `GET` (every mode) and `POST` (station only) of `{url, van, user, pass, app_user,
+  app_pass}`, the Satellite settings Hub card and the setup wizard's Remote access step; no GET ever
+  returns a password. `device.hub` in `/api/state`: `configured`, `online`, `last_pub_s`, `error`,
+  `reason` (why the running client is not connected, from esp-mqtt's last error: `dns`, `tls`,
+  `auth`, `unreachable`, else null; ruling R45) and `app_url` (the remote app's URL,
+  `CALI_HUB_APP_URL`, also without a config).
+- **New data key:** `POST /api/hub_key {"new_key":true}` (station only; the Hub card's **New data
+  key** button with an in-page confirmation, ruling R42) calls `cali_hub_new_key`. Every phone then
+  scans the new hub QR, and the bridge's `HUB_KEY` secret changes.
+- **Display:** on the LoRa screen the cycle is **app QR** (the remote app's URL), **hub QR**
+  (`OCH1*<van>*<wss url>*<app user>*<app pass>*<key>`), then the LoRa screen.
+- **LoRa commands:** FPort 20, 15 bytes (phone id, counter, command, tag); see
+  [LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora). A command the camper link does not take yet
+  (not ready or busy) is offered again every 2 s until 120 s after its arrival, then dropped with a
+  log line. LoRa off (or `lora forget`), a new data key and an accepted newer WiFi command drop every
+  held LoRa command.
 
 ## Battery (`R_FW_BATTERY`)
 
@@ -2658,8 +2709,8 @@ collected here. `firmware/README.md` has the human-readable version of the same 
   closes it, the rotation press, nothing without the module, the texts in EN + DE) and
   `T_FW_LORA_SETUP_QR` (`tests/firmware/test_lora.py`: the setup QR text also after the TTN keys
   arrived, none and a zeroed buffer without a transfer key or on a store error). The LVGL view (the
-  press clock in the touch read, the QR canvas, the poll, the screenshot refusal) is compiled, not yet
-  run on the board.
+  press clock in the touch read, the QR canvas, the poll, the screenshot mask) is compiled, not yet
+  run on the board; the mask's rectangle fill is `test_shot_mask_fills_the_rectangle_clipped_to_the_frame`.
 - **`R_FW_SENSORS`** — verified by `T_FW_SENSORS_CORE` (`tests/firmware/test_sensors.py`: both Govee
   layouts, the seen table (16 rows, unknown manufacturer ids ignored, boot-local ids), add / rename /
   remove rules, the list surviving a reboot, the `ext` record and its once-a-minute limit, the

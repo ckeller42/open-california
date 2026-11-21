@@ -13,7 +13,9 @@ into a temporary directory and exits 1 when ``--out`` does not hold exactly thos
 extra or different), so CI can detect a stale or hand-edited build. The build is deterministic.
 
 The page's Content-Security-Policy meta allows scripts only from the site itself, so there is no inline
-script: the remote flag is the file ``remote-flag.js``.
+script: the remote flag is the file ``remote-flag.js``. ``--hub-origin wss://<broker host>[:<port>]`` adds the
+remote hub's MQTT broker to ``connect-src`` (``hub.js``); without it the page can reach The Things Stack only. The
+same value must be given to ``--check``.
 
 """
 
@@ -21,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -45,7 +48,22 @@ REMOTE_SCRIPTS = (
     "ttn.js",
     "lora_decode.js",
     "remote.js",
+    "vendor/mqtt/mqtt.min.js",
+    "hub.js",
 )
+#: A broker origin ``--hub-origin`` accepts: ``wss://`` (the tests' fake broker: ``ws://127.0.0.1:<port>``).
+HUB_ORIGIN_RE = re.compile(r"wss://[a-z0-9.-]+(:\d{1,5})?|ws://127\.0\.0\.1:\d{1,5}")
+
+
+def csp(hub_origin: str | None = None) -> str:
+    """The page's policy; ``hub_origin`` (checked against HUB_ORIGIN_RE) joins ``connect-src``."""
+    if hub_origin is None:
+        return CSP
+    if not HUB_ORIGIN_RE.fullmatch(hub_origin):
+        raise SystemExit("build_remote: --hub-origin must be wss://<host>[:<port>], got %r" % hub_origin)
+    return CSP.replace("https://*.thethings.industries;", "https://*.thethings.industries %s;" % hub_origin)
+
+
 #: Files of calictl/webui the site does not serve: its own three (rewritten below) and the editor/icon sources.
 SKIP = {"index.html", "manifest.webmanifest", "sw.js", "jsconfig.json", "icon-master.png"}
 
@@ -65,8 +83,9 @@ def sources() -> list[Path]:
     return [r for r in rels if r.parts[0] not in SKIP and not any(p.startswith(".") for p in r.parts)]
 
 
-def build(out: Path) -> None:
-    """Write the site into ``out`` (emptied first)."""
+def build(out: Path, hub_origin: str | None = None) -> None:
+    """Write the site into ``out`` (emptied first); ``hub_origin``: see csp()."""
+    policy = csp(hub_origin)
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
@@ -80,10 +99,16 @@ def build(out: Path) -> None:
     html = _replace_once(
         html,
         '<meta charset="utf-8">\n',
-        '<meta charset="utf-8">\n<meta http-equiv="Content-Security-Policy" content="%s">\n' % CSP,
+        '<meta charset="utf-8">\n<meta http-equiv="Content-Security-Policy" content="%s">\n' % policy,
     )
     tag = '<script src="/%s"></script>\n'
     html = _replace_once(html, tag % "strings.de.js", tag % "remote-flag.js" + tag % "strings.de.js")
+    html = _replace_once(html, "<title>OC Van</title>", "<title>OC Remote</title>")  # the tab / task switcher
+    html = _replace_once(  # the iPhone's home-screen name (ruling R44)
+        html,
+        '<meta name="apple-mobile-web-app-title" content="OC Van">',
+        '<meta name="apple-mobile-web-app-title" content="OC Remote">',
+    )
     html = _replace_once(
         html, '<script src="/app.js">', "".join(tag % n for n in REMOTE_SCRIPTS) + '<script src="/app.js">'
     )
@@ -92,8 +117,8 @@ def build(out: Path) -> None:
     manifest = json.loads((WEBUI / "manifest.webmanifest").read_text(encoding="utf-8"))
     manifest.update(
         {
-            "name": "Open California remote",
-            "short_name": "OC remote",
+            "name": "OC Remote",  # ruling R44: the home-screen name, distinct from the van's "OC Van"
+            "short_name": "OC Remote",
             "description": "Open California for a van with LoRa: reads the van from The Things Network",
             "id": "/",
             "start_url": "/",
@@ -113,10 +138,10 @@ def _files(root: Path) -> dict[str, bytes]:
     return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
 
 
-def check(out: Path) -> list[str]:
+def check(out: Path, hub_origin: str | None = None) -> list[str]:
     """The differences between ``out`` and a fresh build (empty: identical)."""
     with tempfile.TemporaryDirectory() as tmp:
-        build(Path(tmp) / "site")
+        build(Path(tmp) / "site", hub_origin)
         want = _files(Path(tmp) / "site")
     have = _files(out) if out.is_dir() else {}
     return (
@@ -132,12 +157,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--check", action="store_true", help="write nothing; exit 1 when --out differs from a fresh build"
     )
+    ap.add_argument(
+        "--hub-origin", help="the remote hub's broker, wss://<host>[:<port>], added to connect-src"
+    )
     a = ap.parse_args(argv)
     if a.check:
-        diff = check(a.out)
+        diff = check(a.out, a.hub_origin)
         print("\n".join(diff) or "remote build is up to date")
         return 1 if diff else 0
-    build(a.out)
+    build(a.out, a.hub_origin)
     print("remote app written to %s" % a.out)
     return 0
 

@@ -40,6 +40,7 @@ from tests.e2e.test_remote_app import CLUSTER, port2, port4, site, ttn  # noqa: 
 
 segno = pytest.importorskip("segno")
 AESGCM = pytest.importorskip("cryptography.hazmat.primitives.ciphers.aead").AESGCM
+expect = pytest.importorskip("playwright.sync_api").expect
 
 DEV_EUI = bytes([0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x0A, 0xBC, 0xDE]).hex().upper()
 DEV = "van-0abcde"  # van- + the last 6 hex of the DevEUI, lower case
@@ -79,10 +80,11 @@ TEXT = {
 }
 
 
-def qr_png(text):
-    """The QR as the van draws it (alphanumeric, error correction L, 4-module quiet zone), as PNG bytes."""
+def qr_png(text, mode="alphanumeric"):
+    """The QR as the van draws it (alphanumeric, error correction L, 4-module quiet zone), as PNG bytes. ``mode=None``
+    lets segno pick (a text with lower case, as the hub QR's URL and passwords)."""
     buf = io.BytesIO()
-    segno.make(text, error="l", mode="alphanumeric", micro=False).save(buf, kind="png", scale=6, border=4)
+    segno.make(text, error="l", mode=mode, micro=False).save(buf, kind="png", scale=6, border=4)
     return buf.getvalue()
 
 
@@ -665,3 +667,205 @@ def test_a_status_0_of_other_keys_is_not_a_failure(site, ttn, error_gated_page):
         assert pg.get_by_text(tx["rescan"]).count() == 0
         _confirm(pg, ttn, b"\x00" + hashlib.sha256(_plain(frags)).digest()[:4])
         pg.get_by_text(tx["done"]).wait_for()
+
+
+@pytest.mark.parametrize(
+    "text,msg",
+    [
+        (setup_qr(), "This is the LoRa setup code: open ⋮ and choose Set up LoRa (needs a TTN account)."),
+        (
+            "HTTPS://OPEN-CALIFORNIA.GITHUB.IO/",  # upper case: qr_png encodes in alphanumeric mode
+            "This is the app's code: on the satellite, hold the screen 3 s again for the van's code.",
+        ),
+    ],
+)
+def test_scan_the_vans_code_names_the_other_codes(site, ttn, error_gated_page, text, msg):  # noqa: F811
+    """Re-review N4 and finding 3: the van's-code scanner names a LoRa setup code (a LoRa-only first time:
+    Set up LoRa, needs TTN) and the display's app QR instead of only "This is not the van's code."."""
+    with _page(error_gated_page, site, ttn) as pg:
+        _menu(pg, "Scan the van's code")
+        _photo(pg, text)
+        pg.locator("#rs-msg").get_by_text(msg).wait_for()
+
+
+def _hub_file(pg, d):
+    pg.locator("#rs-hubfile").set_input_files(
+        files=[{"name": "oc-hub.json", "mimeType": "application/json", "buffer": json.dumps(d).encode()}]
+    )
+
+
+def test_setup_key_from_the_hub_file(site, ttn, error_gated_page):  # noqa: F811
+    """#555: "Load from file" reads oc-hub.json's ttn {cluster, key} and checks the key at once; the key never
+    reaches the DOM or storage, and the setup goes on to the scan."""
+    _, secret = ttn.make_key("all")
+    with _page(error_gated_page, site, ttn) as pg:
+        _menu(pg, "Set up LoRa")
+        _hub_file(pg, {"format": "oc-hub/1", "van": "van1", "ttn": {"cluster": CLUSTER, "key": secret}})
+        pg.get_by_text(TEXT["en-US"]["scanhint"]).first.wait_for()
+        _no_key_anywhere(pg, secret)
+
+
+@pytest.mark.parametrize(
+    "d",
+    [
+        {"format": "oc-hub/1", "van": "van1"},  # a hub-only file
+        {"format": "other", "ttn": {"cluster": CLUSTER, "key": "NNSXS.A.B"}},
+        {"format": "oc-hub/1", "ttn": {"cluster": CLUSTER}},
+    ],
+)
+def test_a_file_without_lora_settings_is_refused(site, ttn, error_gated_page, d):  # noqa: F811
+    with _page(error_gated_page, site, ttn) as pg:
+        _menu(pg, "Set up LoRa")
+        _hub_file(pg, d)
+        pg.get_by_text("No LoRa settings in this file (oc-hub.json with ttn)").wait_for()
+        assert pg.locator("#rs-key").is_visible()
+    assert not ttn.calls
+
+
+def test_load_from_file_looks_like_a_button(site, ttn, error_gated_page):  # noqa: F811
+    """The file input's label sits next to "Check the key" with the button look, not a form label's."""
+    with _page(error_gated_page, site, ttn) as pg:
+        _menu(pg, "Set up LoRa")
+        lbl = pg.locator('label[for="rs-hubfile"]')
+        st = lbl.evaluate(
+            "e => { const s = getComputedStyle(e); return [s.display, s.marginTop, s.borderTopStyle] }"
+        )
+        assert st == ["flex", "0px", "solid"]
+
+
+# A fake camera scanner (headless Chromium has no camera): the vendored QrScanner assigns window.QrScanner after
+# this runs, so a setter keeps the real one only for scanImage (the photo path). window.__qs is the last scanner,
+# its .cb the decode callback; window.__qsFrames = false: the stream never delivers a frame (videoWidth stays 0).
+FAKE_QS = """(() => {
+  let real = null;
+  class FakeQs {
+    constructor(video, cb) { this.video = video; this.cb = cb; this.destroyed = false; window.__qs = this;
+      window.__qsMade = (window.__qsMade || 0) + 1; }
+    start() {
+      if (window.__qsFrames !== false) Object.defineProperty(this.video, "videoWidth", { value: 640, configurable: true });
+      return Promise.resolve();
+    }
+    destroy() { this.destroyed = true; }
+    static scanImage(...a) { return real.scanImage(...a); }
+  }
+  Object.defineProperty(window, "QrScanner", { configurable: true, get: () => FakeQs, set: (v) => { real = v; } });
+})();"""
+
+
+def _decode(pg, text):
+    """The camera decodes ``text`` (the fake scanner's callback)."""
+    pg.evaluate("(t) => window.__qs.cb({ data: t })", text)
+
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_camera_scans_on_past_a_wrong_code_and_stops_on_the_setup_code(site, ttn, error_gated_page, locale):  # noqa: F811
+    """S1 + S3: the camera keeps scanning after a code this screen does not take (the app's code, shown first on
+    the satellite) and shows the hint; the same code again within 3 s is not acted on; the setup code is taken and
+    the camera stops. The aiming hint shows under the camera view."""
+    de = locale == "de-DE"
+    wrong = "Das ist nicht der Einrichtungscode des Fahrzeugs." if de else "This is not the van's setup code."
+    aim = (
+        "Halte das Handy etwa 10 cm vor den Bildschirm des Satelliten."
+        if de
+        else "Hold the phone about 10 cm in front of the satellite's screen."
+    )
+    tx = TEXT[locale]
+    with error_gated_page(
+        site, init_script=_empty_app(ttn) + FAKE_QS, service_workers="block", locale=locale
+    ) as pg:
+        pg.clock.install()
+        _, secret = ttn.make_key("all")
+        _menu(pg, tx["setup"])
+        pg.locator("#rs-key").fill(secret)
+        pg.get_by_role("button", name=tx["check"]).click()
+        pg.get_by_text(tx["scanhint"]).first.wait_for()
+        expect(pg.locator("#rs-aim")).to_be_hidden()
+        pg.locator("#rs-camera").click()
+        expect(pg.locator("#rs-aim")).to_have_text(aim)
+        _decode(pg, "https://open-california.github.io/")
+        expect(pg.locator("#rs-msg")).to_have_text(wrong)
+        pg.evaluate(
+            "document.querySelector('#rs-msg').textContent = 'x'"
+        )  # acted on again: the hint comes back
+        _decode(pg, "https://open-california.github.io/")
+        pg.clock.fast_forward(1000)
+        expect(pg.locator("#rs-msg")).to_have_text("x")  # the same code within 3 s: ignored
+        assert pg.evaluate("window.__qs.destroyed") is False  # still scanning
+        pg.clock.fast_forward(5000)  # past the 4 s frame check: the stream has frames, the camera stays on
+        assert pg.evaluate("window.__qs.destroyed") is False
+        _decode(pg, setup_qr())
+        pg.get_by_text(tx["join"]).wait_for()
+        assert pg.evaluate("window.__qs.destroyed") is True
+
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_a_camera_without_frames_says_so_and_the_button_works_again(site, ttn, error_gated_page, locale):  # noqa: F811
+    """S2: start() resolves but no frame comes (the first use on Android). After 6 s the screen says so but keeps
+    the scanner (iOS can be slow); the hint goes when frames arrive, and a new tap clears it at once (it once stayed
+    over a running camera on an iPhone) and starts a new scanner."""
+    msg = (
+        "Die Kamera ist nicht gestartet. Tippe noch einmal auf Kamera verwenden, oder fotografiere den Code."
+        if locale == "de-DE"
+        else "The camera did not start. Tap Use the camera again, or take a photo of the code."
+    )
+    with error_gated_page(
+        site,
+        init_script=_empty_app(ttn) + FAKE_QS + "window.__qsFrames = false;",
+        service_workers="block",
+        locale=locale,
+    ) as pg:
+        pg.clock.install()
+        _menu(pg, TEXT[locale]["scan"])
+        pg.locator("#rs-camera").click()
+        expect(pg.locator("#rs-msg")).to_have_text("")
+        pg.clock.fast_forward(4500)
+        expect(pg.locator("#rs-msg")).to_have_text("")  # not yet: iOS may need longer
+        pg.clock.fast_forward(2000)
+        expect(pg.locator("#rs-msg")).to_have_text(msg)
+        assert pg.evaluate("window.__qs.destroyed") is False  # the scanner stays
+        pg.evaluate(
+            "document.querySelector('video').dispatchEvent(new Event('loadeddata'))"
+        )  # frames arrive late
+        expect(pg.locator("#rs-msg")).to_have_text("")
+        pg.clock.fast_forward(6500)
+        expect(pg.locator("#rs-msg")).to_have_text("")  # the first scanner's check ran once only
+        pg.evaluate("window.__qsFrames = false")
+        pg.locator("#rs-camera").click()
+        pg.clock.fast_forward(6500)
+        expect(pg.locator("#rs-msg")).to_have_text(msg)
+        pg.evaluate("window.__qsFrames = true")
+        pg.locator("#rs-camera").click()
+        expect(pg.locator("#rs-msg")).to_have_text("")  # a new tap clears the old hint at once
+        assert pg.evaluate("window.__qsMade") == 3
+
+
+# The stream's own size, as a phone camera delivers it (1600 x 1200): a canvas stream on the video element.
+FAKE_QS_BIG_STREAM = FAKE_QS.replace(
+    "return Promise.resolve();",
+    "const c = document.createElement('canvas'); c.width = 1600; c.height = 1200;"
+    " c.getContext('2d').fillRect(0, 0, 1600, 1200); this.video.srcObject = c.captureStream();"
+    " return this.video.play().catch(() => {});",
+)
+
+
+def test_the_camera_view_never_widens_the_page(site, ttn, error_gated_page):  # noqa: F811
+    """On an iPhone the 1000+ px camera stream made the page wider than the screen, and Safari zoomed the whole
+    page out (tiny header and buttons). The view fits the card and the page keeps the screen's width."""
+    with error_gated_page(
+        site,
+        init_script=_empty_app(ttn) + FAKE_QS_BIG_STREAM,
+        service_workers="block",
+        viewport={"width": 390, "height": 844},
+    ) as pg:
+        _menu(pg, TEXT["en-US"]["scan"])
+        pg.locator("#rs-camera").click()
+        pg.wait_for_function(
+            "() => document.querySelector('video').readyState >= 2"
+        )  # the 1600 px stream plays
+        dims = pg.evaluate(
+            "() => [document.documentElement.scrollWidth, window.innerWidth,"
+            " document.querySelector('video').getBoundingClientRect().width,"
+            " document.querySelector('video').getBoundingClientRect().height]"
+        )
+        assert dims[0] <= dims[1], dims  # no horizontal overflow
+        assert dims[2] <= dims[1] and dims[3] <= 0.56 * 844, dims  # fits the width, leaves room below

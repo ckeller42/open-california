@@ -2000,6 +2000,26 @@ def test_home_is_titled_with_the_app_name_not_vehicle(base_url, error_gated_page
         expect(pg.locator("#title")).to_have_text("Vehicle" if locale == "en-US" else "Fahrzeug")
 
 
+@pytest.mark.parametrize("touch", [True, False])
+def test_the_focused_title_has_no_ring_on_a_touch_screen(base_url, error_gated_page, touch):
+    """I1: navigation focuses the title (screen readers follow it). iOS Safari draws the focus ring for that
+    script focus after a tap; on a touch screen the title has none. Without touch the rule is :focus-visible."""
+    kw = {"has_touch": True, "is_mobile": True, "viewport": {"width": 390, "height": 844}} if touch else {}
+    with error_gated_page(base_url, **kw) as pg:
+        expect(pg.locator(".tilegrid")).to_be_visible()
+        pg.locator(".tile").last.click()
+        expect(pg.locator("#title")).to_be_focused()
+        if touch:
+            assert pg.evaluate("matchMedia('(hover: none) and (pointer: coarse)').matches")
+            assert pg.locator("#title").evaluate("e => getComputedStyle(e).outlineStyle") == "none"
+        else:
+            pg.keyboard.press(
+                "Tab"
+            )  # a keyboard user: the next script focus is :focus-visible, the ring shows
+            pg.evaluate("document.getElementById('title').focus()")
+            assert pg.locator("#title").evaluate("e => getComputedStyle(e).outlineStyle") != "none"
+
+
 def test_browser_back_walks_the_screens_and_restores_the_scroll(base_url, error_gated_page):
     """H1 + M3: every screen is a history entry (its URL ``#<screen>``): browser back (the iOS edge swipe)
     returns to the screen before, with its scroll position; ‹ does the same; a forward screen
@@ -2108,7 +2128,11 @@ def test_heater_start_confirm_only_on_a_real_start(fresh_url, error_gated_page):
         power.click()
         _poll(pg, fresh_url, lambda st: st["airheater"]["normal"] is True, "heater on")
         assert (
-            len(msgs) == 1 and "fuel-burning" in msgs[0] and "{w}" not in msgs[0] and "power" not in msgs[0]
+            len(msgs) == 1
+            and "burns fuel" in msgs[0]
+            and "{w}" not in msgs[0]
+            and "power" not in msgs[0]
+            and "verified" not in msgs[0]  # G5: plain words, no "not live-verified" scare
         )
         expect(power).to_have_attribute("aria-checked", "true", timeout=15000)
         power.click()

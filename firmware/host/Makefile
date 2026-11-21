@@ -67,7 +67,7 @@ COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o
 	sensors.o json.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o ap_identity.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o thermostat_run.o pi_wake.o ble_exp.o ble_exp_run.o energy.o lora.o lora_setup.o lora_port_none.o
+CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o ap_identity.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o thermostat.o thermostat_run.o pi_wake.o ble_exp.o ble_exp_run.o energy.o lora.o lora_setup.o lora_port_none.o hub.o hub_rpc.o hub_run.o hub_port_none.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
@@ -76,7 +76,7 @@ LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
 all: cali-host store-cli
 
 clean:
-	rm -f $(NIMBLE_ALL_OBJ) *.o cali-host cali-host-jw store-cli lora_aead_cli
+	rm -f $(NIMBLE_ALL_OBJ) *.o cali-host cali-host-jw store-cli lora_aead_cli lora_cmd_cli hub_cli hub_run_cli
 	-$(MAKE) -C $(MBEDTLS_ROOT)/library clean >/dev/null
 
 $(MBEDTLS_LIBS) &:
@@ -192,7 +192,7 @@ captive_dns.o: $(COMPONENTS)/cali_core/captive_dns.c $(CORE_H)/cali_captive.h $(
 web.o: $(COMPONENTS)/cali_core/web.c $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h \
 		$(CORE_H)/cali_captive.h $(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CORE_H)/cali_status.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_session.h \
-		$(CORE_H)/cali_runner.h $(CORE_H)/cali_control.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
+		$(CORE_H)/cali_runner.h $(CORE_H)/cali_control.h $(CORE_H)/cali_hub.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
 		../web/app_bundle_gen.h $(CORE_H)/cali_ota.h $(CORE_H)/cali_time.h $(CORE_H)/cali_sdlog.h $(CORE_H)/cali_auto_camper.h $(CORE_H)/cali_pi_wake.h $(CORE_H)/cali_ble_exp.h \
 		$(CORE_H)/cali_display_model.h $(CORE_H)/cali_sensors.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
@@ -248,6 +248,14 @@ lora.o: $(COMPONENTS)/cali_core/lora.c $(CORE_H)/cali_lora.h $(CORE_H)/cali_lora
 lora_port_none.o: $(COMPONENTS)/cali_core/lora_port_none.c $(CORE_H)/cali_lora.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 lora_setup.o: $(COMPONENTS)/cali_core/lora_setup.c $(CORE_H)/cali_lora_setup.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+hub.o: $(COMPONENTS)/cali_core/hub.c $(CORE_H)/cali_hub.h $(CORE_H)/cali_lora_setup.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+hub_port_none.o: $(COMPONENTS)/cali_core/hub_port_none.c $(CORE_H)/cali_hub.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+hub_rpc.o: $(COMPONENTS)/cali_core/hub_rpc.c $(CORE_H)/cali_hub.h $(CORE_H)/cali_http.h $(CORE_H)/cali_web.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+hub_run.o: $(COMPONENTS)/cali_core/hub_run.c $(CORE_H)/cali_hub.h $(CORE_H)/cali_http.h $(CORE_H)/cali_web.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The boot counter + SNTP state + unit clock (R_FW_TIME): device.time. The host has no SNTP and no
@@ -338,3 +346,25 @@ lora_aead_cli: $(COMPONENTS)/cali_core/lora_setup.c $(COMPONENTS)/cali_core/test
 	$(CC) -m32 -std=c99 -Wall -Wextra -Werror -D_GNU_SOURCE $(LORA_AEAD_INC) -I$(COMPONENTS)/cali_core/test \
 		-o $@ $(COMPONENTS)/cali_core/lora_setup.c $(COMPONENTS)/cali_core/test/lora_aead_cli.c \
 		$(COMPONENTS)/cali_lora/lora_aead.c $(MBEDTLS_LIBS)
+
+# Host driver for cali_lora_cmd (tests/firmware/test_lora_cmd.py): lora.c with the real PSA AES-GCM.
+LORA_CMD_SRC := $(COMPONENTS)/cali_core/lora.c $(COMPONENTS)/cali_core/lora_setup.c $(COMPONENTS)/cali_core/json.c \
+	$(COMPONENTS)/cali_core/test/lora_cmd_cli.c $(COMPONENTS)/cali_lora/lora_aead.c
+lora_cmd_cli: $(LORA_CMD_SRC) $(COMPONENTS)/cali_core/test/lora_cli.c $(CORE_H)/cali_lora.h $(MBEDTLS_LIBS)
+	$(CC) -m32 -std=c99 -Wall -Wextra -Werror -D_GNU_SOURCE $(LORA_AEAD_INC) -I$(COMPONENTS)/cali_core/test \
+		-I$(COMPONENTS)/platform/include -I$(CSRC) -o $@ $(LORA_CMD_SRC) $(MBEDTLS_LIBS) -lm
+
+# Host driver for the remote-hub frames (tests/firmware/test_hub.py): hub.c with the real PSA AES-GCM.
+HUB_SRC := $(COMPONENTS)/cali_core/hub.c $(COMPONENTS)/cali_core/lora_setup.c $(COMPONENTS)/cali_core/test/hub_cli.c \
+	$(COMPONENTS)/cali_lora/lora_aead.c
+hub_cli: $(HUB_SRC) $(CORE_H)/cali_hub.h $(COMPONENTS)/cali_lora/include/cali_lora_aead.h $(MBEDTLS_LIBS)
+	$(CC) -m32 -std=c99 -Wall -Wextra -Werror -D_GNU_SOURCE $(LORA_AEAD_INC) -I$(COMPONENTS)/platform/include \
+		-o $@ $(HUB_SRC) $(MBEDTLS_LIBS)
+
+# Host driver for the hub client's owner tick (tests/firmware/test_hub_run.py): hub_run.c over a fake port and
+# a fake router, with hub.c, hub_rpc.c and the real PSA AES-GCM.
+HUB_RUN_SRC := $(COMPONENTS)/cali_core/hub_run.c $(COMPONENTS)/cali_core/hub.c $(COMPONENTS)/cali_core/hub_rpc.c \
+	$(COMPONENTS)/cali_core/lora_setup.c $(COMPONENTS)/cali_core/test/hub_run_cli.c $(COMPONENTS)/cali_lora/lora_aead.c
+hub_run_cli: $(HUB_RUN_SRC) $(CORE_H)/cali_hub.h $(CORE_H)/cali_http.h $(MBEDTLS_LIBS)
+	$(CC) -m32 -std=c99 -Wall -Wextra -Werror -D_GNU_SOURCE $(LORA_AEAD_INC) -I$(COMPONENTS)/platform/include \
+		-I$(CSRC) -o $@ $(HUB_RUN_SRC) $(MBEDTLS_LIBS)

@@ -45,7 +45,7 @@
 #define CONFIRM_TRIES 5      /* sends without +EVT:TX_DONE before a confirmation is dropped */
 #define TASK_STACK 8192   /* PR #492 ran with 6144; the PSA AES-GCM open under send() needs more */
 
-static QueueHandle_t s_snap_q, s_status_q, s_event_q;
+static QueueHandle_t s_snap_q, s_status_q, s_event_q, s_cmd_q;
 static SemaphoreHandle_t s_mu;
 static cali_lora_status_t s_st = {.present = -1, .sf = 12};    /* the task's own */
 static cali_lora_status_t s_pub = {.present = -1, .sf = 12};   /* the published copy (s_mu) */
@@ -80,6 +80,23 @@ static void publish(void) {
     xSemaphoreTake(s_mu, portMAX_DELAY);
     s_pub = s_st;
     xSemaphoreGive(s_mu);
+}
+
+typedef struct {
+    const char *fn, *what, *value;
+    uint64_t at;   /* arrival: the owner task's wait bound counts from it */
+} cmd_msg_t;
+
+void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value) {
+    cmd_msg_t m = {fn, what, value, cali_uptime_ms()};
+    if (!s_cmd_q || xQueueSend(s_cmd_q, &m, 0) != pdTRUE) cali_log("lora: command queue full: dropped");
+}
+
+int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value, uint64_t *at_ms) {
+    cmd_msg_t m;
+    if (!s_cmd_q || xQueueReceive(s_cmd_q, &m, 0) != pdTRUE) return 0;
+    *fn = m.fn, *what = m.what, *value = m.value, *at_ms = m.at;
+    return 1;
 }
 
 void cali_lora_port_post(const cali_lora_snap_t *s) {
@@ -273,11 +290,31 @@ static void xfer_rx(const cali_rak_event_t *e) {
     }
 }
 
+/* One sealed command of FPort 20. The data key is loaded (never made here) and wiped after use. */
+static void cmd_rx(const cali_rak_event_t *e) {
+    uint8_t key[16];
+    size_t kl = sizeof key;
+    const char *fn, *what, *value;
+    if (cali_kv_get(CALI_HUB_KEY_KEY, key, &kl) != CALI_KV_OK || kl != sizeof key) {
+        cali_log("lora: command without a data key: dropped");
+        cali_wipe(key, sizeof key);
+        return;
+    }
+    int r = cali_lora_cmd(e->payload, e->payload_len, key, &fn, &what, &value);
+    cali_wipe(key, sizeof key);
+    if (r != 0) {
+        cali_log("lora: command rejected (%u bytes)", e->payload_len);
+        return;
+    }
+    cali_lora_port_cmd_post(fn, what, value);   /* the owner task submits it (cali_lora_tick) */
+}
+
 static void handle_event(const cali_rak_event_t *e) {
     if (e->kind == CALI_RAK_RX) {
         /* every downlink (ADR, link check, a command, a transfer fragment) costs one of the day's downlinks */
         (void)cali_lora_downlink_take(&s_bud, (uint32_t)(cali_uptime_ms() / 1000));
         if (e->port == CALI_LORA_XFER_PORT) xfer_rx(e);
+        else if (e->port == CALI_LORA_PORT_CMD) cmd_rx(e);
     } else if (e->kind == CALI_RAK_JOINED) {
         s_st.joined = true;
     } else if (e->kind == CALI_RAK_TX_DONE && !s_in_send) {
@@ -622,7 +659,8 @@ void cali_lora_esp_start(void) {
     s_snap_q = xQueueCreateWithCaps(1, sizeof(cali_lora_snap_t), MALLOC_CAP_SPIRAM);
     s_status_q = xQueueCreateWithCaps(8, sizeof(cali_rak_event_t), MALLOC_CAP_SPIRAM);
     s_event_q = xQueueCreateWithCaps(16, sizeof(cali_rak_event_t), MALLOC_CAP_SPIRAM);
-    if (!s_mu || !s_snap_q || !s_status_q || !s_event_q ||
+    s_cmd_q = xQueueCreate(2, sizeof(cmd_msg_t));
+    if (!s_mu || !s_cmd_q || !s_snap_q || !s_status_q || !s_event_q ||
         xTaskCreate(lora_task, "cali_lora", TASK_STACK, NULL, 3, NULL) != pdPASS) {
         cali_log("lora: no LoRa task (out of memory)");
         s_mu = NULL;

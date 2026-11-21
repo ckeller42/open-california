@@ -13,6 +13,14 @@
  *   req <text>       one connection sending <text> (escapes \r \n \0 \\) as one fragment; polls the
  *                    core every 10 ms until it closes the connection, then prints
  *                    "RESP <n>\n<the n response bytes>\n"
+ *   rpc <json>       cali_hub_rpc(<json>) with a pump that advances the clock 10 ms and runs the ctldone countdown;
+ *                    prints "RPC <res>" (the rest of the line, as is: no escapes)
+ *   rpc0 <json>      the same with a NULL pump; prints the bare answer
+ *   rpcs <json>      cali_hub_rpc_start, then per driver tick (clock +10 ms, the ctldone countdown) one
+ *                    cali_hub_rpc_poll; prints "RPCS <ticks it stayed pending> <res>"
+ *   rpcbegin <json>  cali_hub_rpc_start only (the request stays pending across later lines); prints
+ *                    "RPCB <1 answered|0 pending>"; "rpcpoll" then re-asks it at the current clock, and after each pump
+ *                    again, until it answers ("RPCS <pumps> <res>")
  *   sendmax <n>      tcp_send takes at most <n> bytes per poll (default unlimited)
  *   flip             toggle the cooler frame's Level 3 <-> 4
  *   flipping 0|1     1: flip after every poll while a response is being sent
@@ -48,6 +56,8 @@
  *   pwinit           cali_pw_init (the Pi-wake toggle from the kv store, as at boot)
  *   ign <-1|0|1>     cali_pw_step(<ignition>, the clock): the Pi wake's edge rule (R_FW_PI_WAKE)
  *   ntp <epoch_ms>   SNTP synced at this (fixed) wall clock: cali_time_ts answers it (R_FW_BLE_EXP)
+ *   unitclock <hex>  cali_time_on_vehicle(<the 1004 frame>): the unit's clock, without SNTP
+ *   loracmd          a held LoRa command (airheater power on) in the port's queue (lora_port_none.c)
  *   bxtick           cali_ble_exp_tick(the clock): one step of the BLE experiment
  *   bxinit           cali_ble_exp_init (the idle policy from the kv store, as at boot: R_FW_BLE_IDLE)
  *   pwtick           cali_pw_tick(the clock): ends a pulse that is due (the session is never ready here,
@@ -85,6 +95,7 @@
 
 #include "cali_auto_camper.h"
 #include "cali_control.h"
+#include "cali_hub.h"
 #include "cali_ota.h"
 #include "cali_pi_wake.h"
 #include "cali_ble_exp.h"
@@ -105,7 +116,7 @@
 #define LFD 3
 #define CFD 7
 #define LINE_MAX 8192
-#define OUT_MAX (98304 + 4096)   /* a WEB_APP_GZ_MAX bundle + its response head */
+#define OUT_MAX (114688 + 4096)   /* a WEB_APP_GZ_MAX bundle + its response head */
 #define N_OF(a) (sizeof (a) / sizeof *(a))
 
 /* ---- the scripted socket ---- */
@@ -396,6 +407,21 @@ static void flip(void) { s_cooler[1] = s_cooler[1] == 0x03 ? 0x04 : 0x03; }
 
 static int s_flipping;
 
+/* one poll's worth of the sequencer: the ctldone countdown */
+static void ctl_tick(void) {
+    if (s_done_after > 0 && --s_done_after == 0 && s_ctl_done) {
+        cali_ctl_done_t d = s_ctl_done;
+        s_ctl_done = NULL;
+        d(s_done_rc, s_done_reason[0] ? s_done_reason : NULL);
+    }
+}
+
+static int rpc_pump(void) {
+    s_now += 10;
+    ctl_tick();
+    return 0;
+}
+
 static void request(const char *text) {
     s_req_len = unescape(text, s_req, sizeof s_req);
     s_req_off = 0;
@@ -406,11 +432,7 @@ static void request(const char *text) {
         s_now += 10;
         cali_web_poll(s_now);
         cali_sdlog_page_serve();   /* the SD task's side of /api/log (a no-op unless requested) */
-        if (s_done_after > 0 && --s_done_after == 0 && s_ctl_done) {
-            cali_ctl_done_t d = s_ctl_done;
-            s_ctl_done = NULL;
-            d(s_done_rc, s_done_reason[0] ? s_done_reason : NULL);
-        }
+        ctl_tick();
         if (!s_pending && !s_open) break;
         if (s_flipping) flip();
     }
@@ -442,7 +464,42 @@ int main(void) {
         int n = sscanf(line, "%63s %63s %63s %63s %63s", w, a1, a2, a3, a4);
         if (n < 1) continue;
         v = strtol(a1, NULL, 10);
-        if (strcmp(w, "sendmax") == 0) s_send_max = v;
+        if (strcmp(w, "rpc0") == 0) {   /* the same without a pump */
+            static char res0[256];
+            (void)cali_hub_rpc(line + 5, res0, sizeof res0, NULL);
+            printf("%s\n", res0);
+        }
+        else if (strcmp(w, "rpcbegin") == 0 || strcmp(w, "rpcpoll") == 0) {
+            static char res[OUT_MAX];
+            static cali_hub_rpc_t r;
+            int ticks = 0;
+            if (w[3] == 'b') {
+                printf("RPCB %d\n", cali_hub_rpc_start(&r, line + 9, res, sizeof res));
+                continue;
+            }
+            while (!cali_hub_rpc_poll(&r, res, sizeof res)) {   /* the first re-ask at the current clock */
+                rpc_pump();
+                ticks++;
+            }
+            printf("RPCS %d %s\n", ticks, res);
+        }
+        else if (strcmp(w, "rpcs") == 0) {
+            static char res[OUT_MAX];
+            cali_hub_rpc_t r;
+            int ticks = 0;
+            for (int done = cali_hub_rpc_start(&r, line + 5, res, sizeof res); !done; ticks++) {
+                rpc_pump();
+                done = cali_hub_rpc_poll(&r, res, sizeof res);
+            }
+            printf("RPCS %d %s\n", ticks, res);
+        }
+        else if (strcmp(w, "rpc") == 0) {
+            static char res[OUT_MAX];
+            line[strcspn(line, "\n")] = 0;
+            (void)cali_hub_rpc(line + 4, res, sizeof res, rpc_pump);
+            printf("RPC %s\n", res);
+        }
+        else if (strcmp(w, "sendmax") == 0) s_send_max = v;
         else if (strcmp(w, "flip") == 0) flip();
         else if (strcmp(w, "flipping") == 0) s_flipping = (int)v;
         else if (strcmp(w, "nofn") == 0) s_nofn = 1;
@@ -498,6 +555,16 @@ int main(void) {
             s_epoch_ms = (int64_t)ms;
             cali_time_source(fake_epoch);
             cali_time_synced();
+        }
+        else if (strcmp(w, "loracmd") == 0) cali_lora_port_cmd_post("airheater", "power", "on");
+        else if (strcmp(w, "unitclock") == 0) {
+            uint8_t f[16];
+            size_t n = 0;
+            for (const char *h = a1; h[0] && h[1] && n < sizeof f; h += 2) {
+                char b[3] = {h[0], h[1], 0};
+                f[n++] = (uint8_t)strtoul(b, NULL, 16);
+            }
+            cali_time_on_vehicle(f, n);
         }
         else if (strcmp(w, "phhalt") == 0) printf("PHHALT %d\n", cali_ph_halt("manual"));
         else if (strcmp(w, "battlow") == 0)

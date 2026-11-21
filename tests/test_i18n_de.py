@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "calictl" / "webui" / "app.js"
 REMOTE = ROOT / "calictl" / "webui" / "remote.js"  # the remote app's screens (R_UI_REMOTE_APP)
 DE = ROOT / "calictl" / "webui" / "strings.de.js"
+HUB = ROOT / "calictl" / "webui" / "hub.js"  # the remote hub client: its sentences are HUB_*_MSG constants
 REMOTE_DE = ROOT / "calictl" / "webui" / "strings.remote.de.js"  # the remote app only, merged into STRINGS_DE
 
 
@@ -54,6 +55,7 @@ APP_REMOTE_ONLY = {
     "LoRa · {ago}",
     "LoRa — display only",
     "Values via LoRa, {ago}",
+    "Last WiFi values, {ago}",
     "Set up LoRa",
     "Scan the van's code",
     "Remove this van",
@@ -70,7 +72,11 @@ def test_every_simple_t_key_has_a_german_translation():
     app = _lits(APP)
     missing = sorted(k for k in app - APP_REMOTE_ONLY if k not in local)
     assert not missing, "app.js t()/tf() keys with no strings.de.js entry: " + repr(missing)
-    missing = sorted(k for k in (app & APP_REMOTE_ONLY) | _lits(REMOTE) if k not in both)
+    hub = set(re.findall(r'^const HUB_\w+_MSG = "([^"]+)";', HUB.read_text(encoding="utf-8"), re.M)) | _lits(
+        HUB
+    )
+    assert len(hub) >= 7
+    missing = sorted(k for k in (app & APP_REMOTE_ONLY) | _lits(REMOTE) | hub if k not in both)
     assert not missing, "remote t()/tf() keys with no German entry: " + repr(missing)
     assert APP_REMOTE_ONLY <= app, "APP_REMOTE_ONLY names a key app.js no longer uses"
 

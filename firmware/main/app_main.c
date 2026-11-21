@@ -109,6 +109,7 @@
 #endif
 #include "cali_energy.h"
 #include "cali_lora.h"
+#include "cali_lora_aead.h"
 #include "cali_net_esp.h"
 #include "cali_ota.h"
 #include "cali_ota_esp.h"
@@ -359,6 +360,9 @@ static void do_work(void) {
             cali_wifi_run_tick(now);
             cali_captive_dns_poll();
             cali_web_poll(now);
+#if CONFIG_CALI_DISPLAY   /* ruling R24: only with the cali_hub port (QEMU: no client, no key, no buffers) */
+            cali_hub_tick(now);   /* the remote hub (hub_run.c): requests in, state + answers out, after the web */
+#endif
         }
 #if CONFIG_CALI_DISPLAY
         cali_display_tick(now);   /* repaints at most every DISPLAY_REFRESH_MS; never blocks on BLE */
@@ -388,7 +392,7 @@ static void do_work(void) {
         if (!kvprobe_line(line))
 #endif
 #if CONFIG_CALI_DISPLAY
-            if (!cali_display_shot_line(line))
+            if (!cali_display_shot_line(line) && !cali_display_touch_line(line))
 #endif
                 if (!cali_ota_esp_console_line(line))
                     cali_console_line(line);
@@ -649,6 +653,9 @@ void app_main(void) {
      * may be marked here; a state that was not pending — or could not be read — is never marked, so a
      * later successful read cannot confirm an image past the 60 s/web/BLE checks. */
     s_ota_confirmed = cali_ota_esp_verify_begin() != 1;
+    /* the one place the AES-GCM functions are wired: the hub frames and the LoRa FPort-20 commands */
+    cali_hub_set_aead(cali_aead_seal_psa, cali_aead_open_psa);
+    cali_lora_cmd_set_open(cali_aead_open_psa);
     wifi_init(ble);
 #if CONFIG_CALI_DISPLAY
     if (cali_display_init(ble) == 0) cali_sdcard_esp_start();   /* -1: no screen (and no SD); BLE/WiFi carry on */

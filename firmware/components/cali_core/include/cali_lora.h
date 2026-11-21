@@ -59,6 +59,7 @@
 #include <stdint.h>
 
 #include "cali_energy.h"
+#include "cali_hub.h"
 #include "cali_json.h"
 #include "cali_sensors.h"
 #include "codec.h"
@@ -139,6 +140,35 @@ typedef enum {
     CALI_RAK_RX,           /**< `+EVT:RX_...`: a downlink */
     CALI_RAK_VALUE,        /**< the value line of `AT+X=?` */
 } cali_rak_kind_t;
+
+/** @brief FPort of a sealed command from the app (phone(4) | ctr(2 BE) | cmd(1) | tag(8)). */
+#define CALI_LORA_PORT_CMD 20
+/** @brief A command frame: the phone's random id, counter, command code, tag (ruling R25). */
+#define CALI_LORA_CMD_LEN 15
+
+/**
+ * @brief Sets the AES-GCM open for cali_lora_cmd (cali_core cannot link cali_lora). Call once at boot.
+ * @param open The AES-128-GCM open function.
+ */
+void cali_lora_cmd_set_open(cali_hub_open_fn open);
+/**
+ * @brief Opens and checks one command frame of FPort 20.
+ *
+ * Nonce 0x04 | phone(4) | 0x00 x5 | ctr(2), AD = phone | ctr: each phone has its own 4 random bytes, so two
+ * phones with the one key never share a nonce. The counter is global (one per data key, all phones): it must be
+ * above the one in KV; it is stored before this returns, so the caller executes only after the replay guard has
+ * moved. The last accepted counter is the top-level `lora_ctr` of the hub's state publish (GET /api/state?hub=1):
+ * a phone sends max(own, that) + 1.
+ * @param p      The frame.
+ * @param n      Its length; anything but CALI_LORA_CMD_LEN is rejected.
+ * @param key    The 16-byte data key.
+ * @param fn     Out: control function ("airheater" or "campingmode").
+ * @param what   Out: command name.
+ * @param value  Out: "on" or "off".
+ * @return 0, or -1 for a bad length, tag, old counter, unknown code or a counter that cannot be stored.
+ */
+int cali_lora_cmd(const uint8_t *p, size_t n, const uint8_t key[16], const char **fn, const char **what,
+                  const char **value);
 
 /** @brief A parsed line. */
 typedef struct {
@@ -476,11 +506,30 @@ int cali_exp_lora(void);
  */
 int cali_exp_lora_set(int on);
 
+/** How long a LoRa command waits for the camper link (ms). Waking a resting link takes the 7 s unit cooldown, up to
+ * 20 s to connect and 15 s to encrypt, then the read pass: about 45 s per attempt; 120 s covers a second attempt
+ * after a failed one, counted from the command's arrival (the port stamps it). Then the command is dropped and
+ * logged (its counter stays spent: fail closed). */
+#define CALI_LORA_CMD_WAIT_MS 120000u
+/** How often a waiting LoRa command is offered again (ms); the WiFi path (app.js) retries at the same pace. */
+#define CALI_LORA_CMD_RETRY_MS 2000u
+
 /**
- * @brief The owner-task tick: every CALI_LORA_SNAP_MS a snapshot to the task, and its status back.
+ * @brief The owner-task tick: posted LoRa commands to cali_ctl_submit, and every CALI_LORA_SNAP_MS a snapshot to the
+ *        task and its status back. A command the link does not take yet (CALI_CTL_NOT_READY or CALI_CTL_BUSY) is
+ *        held and offered again every CALI_LORA_CMD_RETRY_MS until CALI_LORA_CMD_WAIT_MS after its arrival, then
+ *        dropped with a log line; later commands wait behind it. The final result is logged. With the switch
+ *        `exp_lora` off (also after cali_lora_forget) every held and queued command is dropped (cali_lora_cmds_drop).
  * @param now_ms Uptime.
  */
 void cali_lora_tick(uint64_t now_ms);
+/**
+ * @brief Drop the held LoRa command and every queued one, with one log line when there was any. Owner task only.
+ *        Called when the switch is off, after a new data key (cali_hub_new_key) and when a newer command from
+ *        WiFi (HTTP or the hub) was accepted: the newer intent wins.
+ * @param why The reason, for the log line.
+ */
+void cali_lora_cmds_drop(const char *why);
 /**
  * @brief Write `device.lora` from the last status (only call while the switch is on).
  * @param j The writer.
@@ -495,6 +544,23 @@ int cali_lora_console(const char *args);
 
 /* ---- the port: lora_esp.c (cali_lora) on the device, lora_port_none.c on the host ---- */
 
+/**
+ * @brief The LoRa task hands a decoded command to the owner task (a 2-deep queue; full = dropped). The
+ *        strings are static (cali_lora_cmd), so only the pointers are copied.
+ * @param fn Control function.
+ * @param what Command name.
+ * @param value Value text.
+ */
+void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value);
+/**
+ * @brief The owner task takes the next posted command (cali_lora_tick runs it through cali_ctl_submit).
+ * @param fn Out: control function.
+ * @param what Out: command name.
+ * @param value Out: value text.
+ * @param at_ms Out: cali_uptime_ms() when it was posted (its arrival).
+ * @return 1 when one was waiting, else 0.
+ */
+int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value, uint64_t *at_ms);
 /**
  * @brief Hand a snapshot to the LoRa task (it keeps the newest).
  * @param s The snapshot.

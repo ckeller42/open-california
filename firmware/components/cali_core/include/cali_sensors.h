@@ -98,9 +98,11 @@ void cali_sensors_state_json(cali_json_t *j, uint64_t now_ms);
 /**
  * @brief Write the members of `GET /api/sensors` into the open object.
  *
- * Members: `"configured":[{id,type,alias,last_seen_s,value,has_key}]`, `"seen":[{id,type,model,rssi}]`
+ * Members: `"configured":[{id,type,alias,last_seen_s,value,has_key}]`, `"seen":[{id,type,model,rssi,value}]`
  * and `"scan":"ok"|"paused"`. `value` is the fields object while the last reading is less than 10
- * minutes old, else null. Seen rows older than 10 minutes are left out.
+ * minutes old, else null. A seen row's `value` is its last advert decoded (null for a type that
+ * needs a key), so the owner can tell the sensors apart before adding one. Seen rows older than 10
+ * minutes are left out.
  *
  * @param j       The JSON writer.
  * @param now_ms  Uptime in ms.

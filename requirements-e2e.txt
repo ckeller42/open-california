@@ -3,3 +3,4 @@ pytest
 pyyaml
 segno            # tests/e2e/test_remote_setup.py: the van's QR codes as images
 cryptography     # tests/e2e/test_remote_setup.py: decrypts the key-transfer downlinks as the ESP does
+websockets==17.4   # tests/e2e/test_remote_hub.py: the in-test MQTT-over-WebSocket broker

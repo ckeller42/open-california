@@ -1,0 +1,11 @@
+# Secrets are NOT here: wrangler secret put WEBHOOK_SECRET | HUB_KEY | BROKER_USER | BROKER_PASS
+name = "oc-bridge"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+VAN = "van1"
+BROKER_WSS = "wss://hub.example:8884/mqtt"
+# The TTN device ID (end_device_ids.device_id) of this van: uplinks of any other device are ignored (204).
+# Set it before the first deploy: the placeholder answers 500 to every webhook (fail closed).
+DEV_ID = "SET-ME"

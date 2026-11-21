@@ -87,6 +87,11 @@ __attribute__((weak)) void cali_heap_stats(unsigned *free_bytes, unsigned *large
     *largest = 0;
 }
 
+/* The lowest stack high-water mark (bytes) a hub_stop task left (hub_esp.c's STOP_STACK; bench gate: a
+ * margin > 512 B). The board's hub port overrides this; 0 = no hub stop ran yet (or no hub port): STATE omits
+ * the member. */
+__attribute__((weak)) unsigned cali_hub_stop_stack_min(void) { return 0; }
+
 /* The STATE line; with_wifi adds the "wifi" member (console "status" once the WiFi runtime runs). */
 static void state_line(const cali_pair_state_t *s, const char *address, int with_wifi) {
     unsigned hfree, hlfb;
@@ -99,6 +104,11 @@ static void state_line(const cali_pair_state_t *s, const char *address, int with
         cali_json_int(&j, (long long)hfree);
         cali_json_key(&j, "heap_int_lfb");
         cali_json_int(&j, (long long)hlfb);
+    }
+    unsigned stop_min = cali_hub_stop_stack_min();
+    if (stop_min) {
+        cali_json_key(&j, "hub_stop_stack_min");
+        cali_json_int(&j, (long long)stop_min);
     }
     if (with_wifi) {
         const char *ssid = cali_wifi_run_ssid();

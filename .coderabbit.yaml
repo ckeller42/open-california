@@ -1,0 +1,200 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit for open-california. This file layers over the organization UI settings; it keeps the
+# CHILL profile and adds this repository's hard rules (AGENTS.md) and security invariants per path.
+# A change that breaks a rule named here is a finding, not a nit. Keep the rules in step with AGENTS.md.
+language: en-US
+reviews:
+  profile: chill
+  auto_review:
+    drafts: false
+  # Generated or vendored: CI checks them against their generators (gen_c_dict --check, build_remote --check).
+  path_filters:
+    - "!calictl/webui/vendor/**"
+    - "!firmware/web/*_gen.h"
+    - "!firmware/web/index_gen.html"
+    - "!csrc/codec_dict.h"
+    - "!csrc/codec_chars.h"
+    - "!ios/CaliKit/Sources/CaliCore/Resources/semantics*.js"
+    - "!ios/Camper.xcodeproj/**"
+    - "!firmware/dependencies.lock"
+  path_instructions:
+    - path: "**"
+      instructions: |
+        Repository-wide rules. Flag:
+        - A committed APK, decompiled app source, VW manual, VW icon (ui/assets/), app screenshot (real
+          phone or emulator: those go only to the private RE repo), a real BLE MAC address, a VIN, or any
+          secret, token, password or key. VW material is cited, never copied.
+        - A value shown with a unit that is not verified (SoC is a 0-15 level, temperatures are raw levels).
+        - A generated file changed without its generator input, or the reverse (tools/gen_c_dict.py,
+          gen_codec_vectors, gen_control_vectors, gen_semantics_vectors, build_remote: run in the same PR).
+
+    - path: "calictl/**/*.py"
+      instructions: |
+        Runtime package. Flag:
+        - A top-level import of anything outside the standard library (bleak, influxdb_client, yaml must be
+          imported lazily inside functions; the tests run without them).
+        - A second BLE connection from the daemon path, BLE access outside serve.py's asyncio.Lock, or that
+          lock created outside the running loop.
+        - A control frame that is not full-packet: every field must be sent, unchanged fields as the
+          leave-unchanged sentinel. The codec is MSB-first.
+        - A new control.BUILDERS entry without its evidence row in docs/business-logic/control-and-actuation.md §5.
+        - A write to the unit's V3 characteristics 1603 or F002 (this van is CommunicationVersion 2).
+        - A state readback treated as proof of a lighting write (it is a write-through echo; 1502 Mode 4 is the proof).
+        - A new or changed public function without an RST docstring (:param:, :returns:), or a requirement
+          without a sphinx-needs `.. req::` with `:id: R_<NAME>`.
+        - Secrets (from /etc/buspi/*.env) logged, or a web endpoint that writes without the existing guards.
+
+    - path: "protocol/*.yaml"
+      instructions: |
+        Source of truth for the bit layout and the signal catalog. Flag: a dictionary field with no catalog
+        decision (surface with a name, or omit with a reason); the hand-added `vehicle` (char 1004) entry
+        removed (extract_protocol does not emit it); a decompile cite without its app version (5.0.8.3028
+        unless marked 5.4.0).
+
+    - path: "calictl/webui/**/*.js"
+      instructions: |
+        One web UI for buspi, the satellite and (as the remote app) GitHub Pages; un-built JS with
+        tsc --checkJs at 0 errors. Flag:
+        - Code that would add a tsc error: an undeclared identifier, a missing JSDoc type where tsc needs one.
+        - A user-visible text not in EN and DE (strings.de.js, literal t() keys), or a label that does not use
+          the unit's own vocabulary (Sofortheizen, Dauerbetrieb, Flüstermodus ...). No "not installed" rows.
+        - A change to semantics.js / semantics_tables.js or the bundle without `python3 -m tools.gen_c_dict`
+          output in the same PR (firmware bundle, iOS copies).
+        Security (the remote app keeps the hub data key, the broker app login and TTN API keys in
+        localStorage). Flag:
+        - Any secret (hub data key, app password, TTN API key, transfer key, AppKey, hotspot password) that
+          reaches console.*, an Error message, a URL (query or fragment), a fetch body to an origin that is not
+          the key's own service, or the DOM, except the existing screens that show it on purpose.
+        - innerHTML, outerHTML, insertAdjacentHTML or document.write with data from the network (/api/state,
+          MQTT, TTN), a scanned QR, a loaded file or localStorage. Use h() / textContent.
+        - eval, new Function, string arguments to setTimeout/setInterval, inline event handlers or inline
+          script: the CSP is script-src 'self' and must stay so.
+        - AES-GCM without a fresh crypto.getRandomValues IV per message, IV reuse under one key, Math.random
+          for keys, IVs or tokens, or a decrypt failure that falls back to plaintext instead of rejecting.
+        - fetch / WebSocket / MQTT to an origin not in the CSP connect-src; any new third-party origin, CDN,
+          font or analytics.
+        - Input from a QR (OCH1*, the LoRa setup QR), oc-hub.json or TTN used without checking format,
+          length and characters first.
+        - Remote mode: a settings write sent over the hub (the satellite answers 403 local_only; only
+          POST /api/command may go over the hub), or a command sent without the hub seal.
+
+    - path: "calictl/webui/sw.js"
+      instructions: |
+        Service worker: cache only same-origin GET of the app shell. Flag caching of /api/* responses or of
+        any response that carries a key, cross-origin requests, push or background sync.
+
+    - path: "calictl/webui/index.html"
+      instructions: |
+        Flag inline scripts, inline event handlers, external scripts or styles, and any meta CSP weaker than
+        the one tools/build_remote.py writes.
+
+    - path: "tools/build_remote.py"
+      instructions: |
+        Builds the published remote app and its CSP. Flag: 'unsafe-inline', 'unsafe-eval', a wildcard source
+        other than the TTN hosts, http: or ws: sources (only ws://127.0.0.1 for tests), a looser HUB_ORIGIN_RE
+        (it must stay wss://<host>[:<port>], no path, no extra CSP token), publishing a file git does not
+        track, or dropping .nojekyll.
+
+    - path: "tools/**/*.py"
+      instructions: |
+        Tooling may use PyYAML. Flag: a tool that greps the decompile keyed on R8 member or class names
+        instead of code shape (names change every app build); a guard (check_vendor_material,
+        check_import_clean, --check modes) weakened; a secret read from argv or printed.
+
+    - path: "tools/make_hub_file.py"
+      instructions: |
+        Writes oc-hub.json, which holds the van password. Flag a value taken from argv or printed to stderr
+        or a log; values come from the environment only.
+
+    - path: "firmware/**/*.{c,h}"
+      instructions: |
+        ESP32-S3 satellite (ESP-IDF, C). Flag:
+        - A buffer write, copy or format without a length bound; sprintf/strcpy/strcat; an unchecked return
+          value of an allocation or an esp_err_t that matters.
+        - Data from BLE, HTTP, MQTT or LoRa used before its length and range are checked.
+        - A secret (hotspot password, WiFi password, hub key, broker passwords, LoRa AppKey, transfer key) in
+          ESP_LOG*, a printf, /api/state or an HTTP error body.
+        - cali_core logic that drifts from its Python twin (control, semantics, freshness) without the
+          parity vectors regenerated (tools/gen_control_vectors, gen_codec_vectors).
+        - A blocking call or a large stack buffer in a task with a small stack, and heap use that could
+          push internal heap below the hub + LoRa budget (about 100 KB free).
+        - A hand edit of a generated header (csrc/*_consts.h, firmware/web/*_gen.h).
+
+    - path: "{firmware/components/cali_hub/**,firmware/components/cali_core/hub_rpc.c,firmware/components/cali_core/include/cali_hub.h}"
+      instructions: |
+        Satellite side of the remote hub. Flag: a settings write accepted over the hub (must answer
+        403 local_only), a request that is not sealed or replays an old counter accepted, a non-GET accepted
+        before SNTP time (must answer 503 no_time), and a retained request executed after a reboot.
+
+    - path: "firmware/components/cali_ota/**"
+      instructions: |
+        OTA. Flag an image installed without the existing source and integrity checks, a downgrade path that
+        is not explicit, or a rollback path removed.
+
+    - path: "firmware/components/cali_lora/**"
+      instructions: |
+        LoRaWAN (RAK3172 over AT). Flag: a downlink command accepted without its seal and counter check, the
+        AppKey or transfer key logged, and an AT response parsed without a length bound.
+
+    - path: "bridge/**"
+      instructions: |
+        Cloudflare Worker that forwards TTN uplinks to the broker. Flag: X-OC-Secret checked without a
+        constant-time compare, an uplink accepted for an end_device_ids other than DEV_ID, a payload, header
+        or secret written to console, a fail-open path when a secret or setting is missing, and anything
+        published to the broker that is not sealed with HUB_KEY.
+
+    - path: "ios/**"
+      instructions: |
+        iPhone app. Flag: a hand edit of the semantics.js copies in CaliKit Resources (gen_c_dict writes
+        them), a write to the V3 characteristics 1603 or F002, and a secret in a log or UserDefaults that
+        belongs in the Keychain.
+
+    - path: "tests/**/*.py"
+      instructions: |
+        The suite must stay green and every test must assert something. Flag: an async predicate in
+        wait_for_function (it never waits; tests/test_e2e_patterns.py), an e2e test that hides uncaught JS
+        errors, a test of a requirement without a `.. test::` docstring with `:id: T_<NAME>` and
+        `:links: R_<NAME>`, a skipped or xfail test without a reason, and sleeps where a wait for a condition
+        would do.
+
+    - path: "docs/**/*.md"
+      instructions: |
+        MyST Markdown built with sphinx -W. Flag: `;`, `&`, bare `<` or `>` or a label `:` inside a mermaid
+        fence (it renders in the browser, so the build does not catch it), new jargon without a
+        docs/glossary.md entry and a {term} link on first use, a requirement without a sphinx-needs id, and a
+        secret value or a real MAC address or VIN in an example.
+
+    - path: ".github/workflows/**"
+      instructions: |
+        Flag: a `uses:` not pinned to a full commit SHA with a `# vX.Y.Z` comment; checkout without
+        persist-credentials: false (only screenshots.yml pushes); a job without timeout-minutes; write
+        permissions at workflow level instead of on the one job that needs them; a renamed job key in ci.yml
+        or a `name:` on the test matrix (branch protection matches those strings); ${{ }} of untrusted input
+        (github.event.*, head_ref, PR titles) inside run:; pull_request_target; secrets outside env:.
+        remote-app.yml must keep environment: remote-app, the tag-on-main check, the GitHub host key check and
+        the deletion of the deploy key file.
+
+    - path: "{install.sh,tools/**/*.sh,calictl/deploy/**}"
+      instructions: |
+        Flag: unquoted variables, curl | sh of an unpinned source, sudo where it is not needed, a systemd unit
+        that loses its hardening options, and a secret written to a world-readable file (buspi secrets are
+        root 0600 in /etc/buspi).
+  tools:
+    gitleaks:
+      enabled: true
+    actionlint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    osvScanner:
+      enabled: true
+    semgrep:
+      enabled: true
+    ruff:
+      enabled: true
+    markdownlint:
+      enabled: true
+    swiftlint:
+      enabled: true
+chat:
+  auto_reply: true

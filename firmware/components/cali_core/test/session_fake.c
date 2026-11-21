@@ -35,6 +35,7 @@
  *     acowe 0|1            what cali_ac_owed() answers (a camping restore owed; the rest stays away)
  *     hold 0|1             cali_session_hold (the thermostat outside OFF)
  *     heaterms <ms>        cali_session_set_heater_ms
+ *     stopstack <bytes>    what cali_hub_stop_stack_min() answers (default 0; the console STATE line)
  *     frameat <hex char>   print "FRAMEAT <cali_session_frame_ms()>"
  *     diaghook             from now on, print "DIAG {<body>}" per diagnostics record (cali_diag_sink)
  *     variant <fn> <car_variant>  print "HAS <fn> <car_variant> <cali_variant_has()>"
@@ -89,6 +90,8 @@ static cali_tsink_t s_sink;
 static void *s_ctx;
 static char s_fail[32];
 static int s_bond;
+static unsigned s_stop_min;   /* "stopstack": what cali_hub_stop_stack_min() answers */
+unsigned cali_hub_stop_stack_min(void) { return s_stop_min; }
 static char s_ident[32] = FAKE_IDENTITY;
 static int s_sync_written = -1;   /* "syncwritten <status>": the next write() completes inside the call */
 
@@ -493,6 +496,7 @@ int main(void) {
         else if (strcmp(word, "connect") == 0) printf("CONNECT %d\n", cali_session_connect());
         else if (strcmp(word, "hold") == 0) cali_session_hold(n1);
         else if (strcmp(word, "heaterms") == 0) cali_session_set_heater_ms((uint32_t)n1);
+        else if (strcmp(word, "stopstack") == 0) s_stop_min = (unsigned)n1;
         else if (strcmp(word, "frameat") == 0) {
             unsigned c = (unsigned)strtoul(a1, NULL, 16);
             for (size_t i = 0; i < CODEC_NCHARS; i++)

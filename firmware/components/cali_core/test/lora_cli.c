@@ -9,7 +9,11 @@
  *            qr <exp_on> <present> <eui|-> [max] (prints "QR <text>", "QR -" when none and the buffer is
  *            zeroed, "QR dirty" when none and bytes stay) | sqr ... (the same for cali_lora_setup_qr_text) | ttnok <hex> |
  *            notk (cali_lora_confirm_no_tk as hex)
+ * Command:   cmd <key hex> <frame hex> (cali_lora_cmd; CALI_LORA_REAL_AEAD = PSA open, else all fail)
  * Switch:    console <args> | exp | tick <now_ms> (prints "POST <enabled>" when a snapshot went to the port)
+ * Commands:  cmdpost <fn> <what> <value> [at_ms] (the LoRa task's post; arrival stamp, default 0) |
+ *            cmddrop <why> (cali_lora_cmds_drop) | submitrc <n> (what cali_ctl_submit answers from now on;
+ *            default CALI_CTL_PENDING; each call prints "SUBMIT <fn> <what> <value> <src>")
  * Driven by tests/firmware/test_lora.py. Fakes: session frames, sensors, counters, clock, NVS, log. */
 #include <math.h>
 #include <stdarg.h>
@@ -18,7 +22,11 @@
 #include <string.h>
 
 #include "cali_lora.h"
+#include "cali_control.h"
 #include "cali_platform.h"
+#ifdef CALI_LORA_REAL_AEAD
+#include "cali_lora_aead.h"
+#endif
 
 static uint8_t s_frames[CODEC_NCHARS][CODEC_FRAME_MAX];
 static size_t s_len[CODEC_NCHARS];
@@ -57,6 +65,28 @@ int cali_sensors_first(const char *type, cali_sensor_reading_t *out) {
 const cali_energy_ctr_t *cali_energy_counters(void) { return &s_ctr; }
 uint32_t cali_time_boot(void) { return s_boot; }
 uint64_t cali_uptime_ms(void) { return 0; }
+#define CMDQ_N 2
+static const char *s_cq[CMDQ_N][3];
+static uint64_t s_cq_at[CMDQ_N];
+static uint64_t s_post_at;   /* the arrival stamp of the next cmdpost */
+static int s_cq_n;
+static int s_submit_rc = CALI_CTL_PENDING;   /* "submitrc <n>": what the fake cali_ctl_submit answers */
+void cali_lora_port_cmd_post(const char *fn, const char *what, const char *value) {
+    if (s_cq_n < CMDQ_N) s_cq_at[s_cq_n] = s_post_at, s_cq[s_cq_n][0] = fn, s_cq[s_cq_n][1] = what, s_cq[s_cq_n++][2] = value;
+}
+int cali_lora_port_cmd_take(const char **fn, const char **what, const char **value, uint64_t *at_ms) {
+    if (!s_cq_n) return 0;
+    *fn = s_cq[0][0], *what = s_cq[0][1], *value = s_cq[0][2], *at_ms = s_cq_at[0];
+    memmove(s_cq_at, s_cq_at + 1, sizeof s_cq_at[0] * (size_t)(s_cq_n - 1));
+    memmove(s_cq, s_cq + 1, sizeof s_cq[0] * (size_t)--s_cq_n);
+    return 1;
+}
+int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now, cali_ctl_done_t done,
+                    const char **reason, const char *src) {
+    (void)local_now, (void)done, (void)reason;
+    printf("SUBMIT %s %s %s %s\n", fn, what, value, src);
+    return s_submit_rc;
+}
 int cali_kv_get(const char *key, void *buf, size_t *len) {
     int i = s_kv_find(key);
     if (!strcmp(key, s_corrupt)) return CALI_KV_CORRUPT;
@@ -122,8 +152,11 @@ int main(void) {
     static cali_lora_tracker_t trk;
     static cali_lora_budget_t bud;
     uint32_t picked = 0;
+#ifdef CALI_LORA_REAL_AEAD
+    cali_lora_cmd_set_open(cali_aead_open_psa);
+#endif
     while (fgets(line, sizeof line, stdin)) {
-        char cmd[16], a[800], b[64];
+        char cmd[16], a[800], b[64], rest2[800];
         unsigned u1, u2, u3, u4;
         unsigned long long ull;
         line[strcspn(line, "\r\n")] = 0;
@@ -230,6 +263,25 @@ int main(void) {
         } else if (!strcmp(cmd, "kvset") && sscanf(rest, "%63s %799s", b, a) == 2) {
             uint8_t v[CALI_LORA_TTN_MAX];
             cali_kv_set(b, v, unhex(a, v, sizeof v));
+        } else if (!strcmp(cmd, "cmd") && sscanf(rest, "%63s %799s", b, rest2) == 2) {
+            uint8_t k[16], fr[64];
+            const char *fn, *what, *val;
+            unhex(b, k, 16);
+            size_t fl = unhex(rest2, fr, sizeof fr);
+            if (cali_lora_cmd(fr, fl, k, &fn, &what, &val)) puts("-1");
+            else printf("0 %s %s %s\n", fn, what, val);
+        } else if (!strcmp(cmd, "cmddrop")) {
+            cali_lora_cmds_drop(rest);
+        } else if (!strcmp(cmd, "submitrc") && sscanf(rest, "%u", &u1) == 1) {
+            s_submit_rc = (int)u1;
+        } else if (!strcmp(cmd, "cmdpost") && sscanf(rest, "%63s %63s %63s", b, a, rest2) == 3) {
+            static char sf[8][800], sw[8][800], sv[8][800];   /* the queue keeps pointers */
+            static int si;
+            snprintf(sf[si % 8], 800, "%s", b), snprintf(sw[si % 8], 800, "%s", a), snprintf(sv[si % 8], 800, "%s", rest2);
+            unsigned long long at = 0;
+            s_post_at = sscanf(rest, "%*s %*s %*s %llu", &at) == 1 ? at : 0;
+            cali_lora_port_cmd_post(sf[si % 8], sw[si % 8], sv[si % 8]);
+            si++;
         } else if (!strcmp(cmd, "kvcorrupt")) {
             s_corrupt[0] = 0;
             sscanf(rest, "%15s", s_corrupt);

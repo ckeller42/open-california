@@ -277,6 +277,7 @@ def test_boxes_in_order_and_camper_unit_links_to_device_status(station, locale, 
                 )
             ]
             + ["LoRa"]  # a name, the same in every language
+            + [tr("Remote hub", lang)]
         )
         expect(pg.locator("#pair-status")).to_have_text(tr("Paired ✓", lang))
         pg.locator("#pair").get_by_role("button", name=tr("Device status ›", lang)).click()
@@ -832,3 +833,96 @@ def test_both_screens_have_a_help_sheet(station, setup, locale, lang):
     assert all(texts)
     if lang == "de":
         assert "WLAN" in " ".join(texts[1])
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_the_hub_card_links_the_remote_app(station, locale, lang):
+    """Ruling R38: the Remote hub card names the remote app (device.hub.app_url) and how to use it."""
+    with _open(station, locale=locale, viewport=PHONE) as pg:
+        app = pg.locator("#hub-app")
+        expect(app).to_contain_text(tr("Install the remote app, then scan the van's code in it", lang))
+        expect(app.locator('a[href="https://open-california.github.io/"]')).to_be_visible()
+        hub = pg.locator("#hub")  # S3: how close to hold the phone, next to the hold sequence
+        expect(hub).to_contain_text(
+            tr("Hold the phone about 10 cm in front of the satellite's screen.", lang)
+        )
+
+
+def test_the_hub_card_makes_a_new_data_key_after_asking(station):
+    """Ruling R42: the rekey is the Hub card's button with an in-page confirmation; Cancel posts nothing."""
+    station.fixtures["station"]["/api/state"]["device"]["hub"].update(configured=True, online=True)
+    with _open(station, locale="en-US", viewport=PHONE) as pg:
+        acts = pg.locator("#hub-keyacts")
+        acts.get_by_role("button", name="New data key").click()
+        expect(acts).to_contain_text("Every phone must scan the van's code again")
+        acts.get_by_role("button", name="Cancel").click()
+        assert _posts(station, "/api/hub_key") == []
+        acts.get_by_role("button", name="New data key").click()
+        acts.get_by_role("button", name="New data key").click()
+        expect(pg.locator("#hub-msg")).to_have_text(
+            "New data key made: scan the van's code again on every phone."
+        )
+    assert _posts(station, "/api/hub_key") == [{"new_key": True}]
+
+
+def test_no_new_data_key_button_without_a_hub(station):
+    with _open(station, locale="en-US", viewport=PHONE) as pg:
+        expect(pg.locator("#hub-status")).to_have_text("Not set up")
+        expect(pg.locator("#hub-newkey")).to_be_hidden()
+
+
+def test_password_fields_say_unchanged_only_with_a_stored_hub(station):
+    """A new satellite has no hub password: its fields stay blank. With a hub set up, an empty field keeps the
+    stored password, and the placeholder says so."""
+    with _open(station, viewport=PHONE) as pg:
+        expect(pg.locator("#hub-url")).to_be_visible()
+        pg.wait_for_timeout(500)
+        assert pg.locator("#hub-app_pass").get_attribute("placeholder") in (None, "")
+    station.fixtures["station"]["/api/hub"].update(
+        configured=True, url="wss://h.example:8084/mqtt", van="van1"
+    )
+    with _open(station, viewport=PHONE) as pg:
+        expect(pg.locator("#hub-pass")).to_have_attribute("placeholder", "unchanged")
+        expect(pg.locator("#hub-app_pass")).to_have_attribute("placeholder", "unchanged")
+
+
+HUB_FORM = {
+    "url": "wss://h.example:8084/mqtt",
+    "van": "van-1",
+    "user": "vanuser",
+    "pass": "vanpass",
+    "app_user": "appuser",
+    "app_pass": "apppass",
+}
+
+
+def _hub_file(pg, body, name="oc-hub.json"):
+    pg.set_input_files(
+        "#hub-file",
+        files=[{"name": name, "mimeType": "application/json", "buffer": json.dumps(body).encode()}],
+    )
+
+
+@pytest.mark.parametrize("lora", [False, True])
+def test_the_hub_card_loads_a_hub_file_and_save_posts_it(station, lora):
+    """Coverage row 14: "Load from file" on the Satellite-settings Hub card (not the wizard). Another file is
+    refused and leaves the fields empty; an oc-hub.json fills the six fields; nothing is posted before Save;
+    Save posts /api/hub, and a file with ``"lora": true`` also posts /api/experimental {"lora": true}."""
+    station.fixtures["station"]["/api/state"]["device"]["experimental"]["lora"] = False
+    with _open(station, locale="en-US", viewport=PHONE) as pg:
+        expect(pg.locator("#hub-status")).to_have_text("Not set up")
+        _hub_file(pg, {"url": "wss://x"}, name="x.json")
+        expect(pg.locator("#hub-msg")).to_have_text("Not a hub setup file (oc-hub.json)")
+        expect(pg.locator("#hub-url")).to_have_value("")
+        _hub_file(pg, {"format": "oc-hub/1", **HUB_FORM, **({"lora": True} if lora else {})})
+        for k, v in HUB_FORM.items():
+            expect(pg.locator("#hub-" + k)).to_have_value(v)
+        if lora:
+            expect(pg.locator("#hub-msg")).to_contain_text("LoRa goes on too")
+        pg.wait_for_timeout(300)
+        assert _posts(station, "/api/hub") == []
+        assert _posts(station, "/api/experimental") == []
+        pg.click("#hub-save")
+        expect(pg.locator("#hub-msg")).to_have_text("Saved")
+    assert _posts(station, "/api/hub") == [HUB_FORM]
+    assert _posts(station, "/api/experimental") == ([{"lora": True}] if lora else [])

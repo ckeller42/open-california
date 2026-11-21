@@ -210,6 +210,9 @@ def test_satellite_app_opens_offline():
     stub = ux_gallery.EspStub("satellite")
     with stub, _page() as pg:
         pg.goto(stub.base + "/app")
+        assert (
+            pg.title() == "OC Van"
+        )  # G6: the tab / task switcher names this app, not the remote one (OC Remote)
         cached = _installed(pg)
         assert {"/", "/manifest.webmanifest", "/apple-touch-icon.png"} <= cached, cached
         stub.__exit__(None, None, None)

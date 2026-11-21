@@ -153,6 +153,7 @@
  *            "lora":{"module","joined","at_unanswered","sf","last_s","airtime_ms_24h",
  *                    "airtime_charged_ms_24h","unconfirmed_sends","downlinks_24h","uplinks","note"}
  *                   [only while exp_lora is on],
+ *            "hub":{"configured":<bool>,"online":<bool>,"last_pub_s":<int|null>,"error":"key"|null},
  *            "water_held":<bool>,
  *            "water_held_age_ms":<int>},
  *  "ext":{"<alias>":{"type":"<id>",<field>:<num|null>,…,"age_s":<int|null>},…}}
@@ -179,6 +180,23 @@
  *   - `experimental`: the sensor track switch (NVS exp_sensors, default off; R_FW_EXPERIMENTAL) and
  *     the LoRa switch (NVS exp_lora, default off; R_FW_LORA).
  *   - `energy`: cali_energy.h (R_FW_ENERGY_COUNTERS). `lora`: cali_lora.h (R_FW_LORA).
+ *   - `hub`: the remote hub's MQTT client (cali_hub.h): a config is stored, the client is connected,
+ *     seconds since the last sealed state publish (null: none yet), `error` "key" while the data key cannot be
+ *     stored (retried every 30 s), `reason` why the running client is not connected ("dns", "tls", "auth",
+ *     "unreachable"; null: connected, not tried yet or not known; ruling R45) and `app_url` (the remote app,
+ *     CALI_HUB_APP_URL, also without a config; ruling R35). `?hub=1` is that publish's own GET:
+ *     it is no viewer (no BLE mark), or the link would never rest. Its body starts with `hub_t` (the wall
+ *     clock in unix ms, null without one: the app judges the sealed state's age from it) and `lora_ctr` (the last
+ *     accepted LoRa command counter, null: none stored), rulings R25/R26.
+ *   - `GET /api/hub`: 200 `{"van","url","user","app_user","configured","online","last_pub_s","error"}`, never the
+ *     two passwords; every mode. `POST /api/hub` `{"url","van","user","app_user"[,"pass"][,"app_pass"]}`
+ *     (station only, else 403 `setup_mode`): a left-out password keeps the stored one; 400 `bad_json`,
+ *     400 `bad_value` (a field empty or too long for cali_hub_cfg_t, a '*', url not `wss://`, van not
+ *     [A-Za-z0-9_-]), 500 `store`; 200 `{"ok":true}` restarts the client with the new config. Over the hub (cali_hub_rpc) it is 403
+ *     `local_only` (ruling R21).
+ *   - `POST /api/hub_key` `{"new_key":true}` (station only, else 403 `setup_mode`): a new hub data key
+ *     (cali_hub_new_key; the Hub card's New data key, ruling R42); 409 `no_hub` without a config, 400 `bad_json`,
+ *     500 `store`; 200 `{"ok":true}`. Every phone then scans the new hub QR. Over the hub: 403 `local_only`.
  *   - `water_held_age_ms`: present only while the water level is held AND the baseline was measured
  *     on this boot.
  *
@@ -284,7 +302,7 @@
  *   `{"ok":true,"lora":<bool>}`. Errors: 403 `setup_mode`, 400 `bad_json`, 500 `store`, 405.
  * - `GET|POST /api/sensors` (R_FW_SENSORS, cali_sensors.h): every WiFi mode. Both answer 404
  *   `{"ok":false,"error":"disabled"}` while exp_sensors is off (checked first). GET answers 200
- *   `{"configured":[{id,type,alias,last_seen_s,value|null,has_key}],"seen":[{id,type,model,rssi}],
+ *   `{"configured":[{id,type,alias,last_seen_s,value|null,has_key}],"seen":[{id,type,model,rssi,value|null}],
  *   "scan":"ok"|"paused"}` and calls cali_sensors_kick. POST takes exactly one of
  *   `{"add":<id>,"alias"?:"…","key"?:"<32 hex>"}`, `{"remove":<id>}` or `{"id":<id>,"alias":"…"}`
  *   (any order, each key once; id 0..65535) and answers 200 with the GET body. Errors: 400

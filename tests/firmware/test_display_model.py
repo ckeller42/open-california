@@ -537,6 +537,31 @@ def test_failed_touch_read_keeps_the_wake_swallow(cli):
     assert [ln.split("=")[1] for ln in run_raw(cli, "gate=111", "gate=010", "gate=111")] == ["1", "0", "1"]
 
 
+@pytest.mark.parametrize(
+    "line,want",
+    [
+        ("touch tap", "touch=1 ms=100"),
+        ("touch hold 1", "touch=1 ms=1"),
+        ("touch hold 3000", "touch=1 ms=3000"),
+        ("touch hold 10000", "touch=1 ms=10000"),
+        ("touch hold 0", "touch=-1 ms=0"),
+        ("touch hold 10001", "touch=-1 ms=0"),
+        ("touch hold 0000001", "touch=-1 ms=0"),
+        ("touch hold 3s", "touch=-1 ms=0"),
+        ("touch hold -5", "touch=-1 ms=0"),
+        ("touch hold", "touch=-1 ms=0"),
+        ("touch", "touch=-1 ms=0"),
+        ("touch press", "touch=-1 ms=0"),
+        ("touchy", "touch=0 ms=0"),
+        ("status", "touch=0 ms=0"),
+    ],
+)
+def test_console_touch_aid_parses_tap_and_hold(cli, line, want):
+    """The USB-console test aid ``touch tap`` / ``touch hold <ms>`` (1..10000): the press length the display feeds
+    into its touch read; a bad argument is refused (-1), any other line is not a touch line (0)."""
+    assert run_raw(cli, "touchcmd=" + line) == [want]
+
+
 def bright_at(cli, *lux, **cfg):
     extra = "".join(" %s=%s" % kv for kv in cfg.items())
     return [
@@ -792,28 +817,29 @@ def test_long_press_on_repair_qr_rotates(cli):
     [
         ("qrok=0", 0, "Wird vorbereitet…", "nicht im Netz · noch keine Sendung bestätigt"),
         (
-            "qrok=1 joined=1 conf=180",
+            "qrok=1 joined=1 conf=180 ttn=1",
             1,
-            "Scan with the Open California remote app",
+            "LoRa: scan in the app. Hold 3 s: new code",
             "joined · last uplink confirmed 3 min ago",
         ),
         (
             "qrok=1 joined=1 conf=180",
             0,
-            "Mit der Open-California-Fern-App scannen",
+            "LoRa-Einrichtung: in der App scannen",
             "im Netz · letzte Sendung bestätigt vor 3 min",
         ),
         (
             "qrok=1 joined=0 conf=-1",
             1,
-            "Scan with the Open California remote app",
+            "LoRa setup: scan in the app",
             "not joined · no uplink confirmed yet",
         ),
     ],
 )
 def test_lora_screen_texts(cli, inp, lang, hint, line):
-    """The LoRa screen's texts: "Preparing…" until the QR text exists, then the scan hint; the status
-    line names only uplinks the module confirmed (TX_DONE), never a mere send."""
+    """The LoRa screen's texts: "Preparing…" until the QR text exists, then what it is (setup or repair
+    code; the repair code names the next hold); the status line names only uplinks the module confirmed
+    (TX_DONE), never a mere send."""
     v = run(cli, "reset", LORA + " now=0", *held(200, 3000, extra=f" {inp} lang={lang}"))
     assert v[-1]["show"] == "1"
     assert (v[-1]["lhint"], v[-1]["lline"]) == (hint, line)
@@ -832,3 +858,145 @@ def test_press_held_across_the_close_never_reopens(cli):
     ]
     v = run(cli, *opened, *back)  # the module goes away during the press and comes back while it is held
     assert v[-1]["show"] == "0" and {x["req"] for x in v[17:]} == {"0"}
+
+
+# ---- the hub QR: the long-press cycle's last state (remote hub) -----------------------------------
+
+HUB_ONLY = BASE + " lora=0 hub=1 auto=0 max=60"  # no LoRa module, a hub config
+
+
+def hold(base, start, until, now0):
+    """`held` on any base line."""
+    lines = [base + f" now={now0 + p} touch=1 press={p}" for p in range(start, until + 1, 200)]
+    if (until - start) % 200:
+        lines.append(base + f" now={now0 + until} touch=1 press={until}")
+    return lines
+
+
+def shows(v):
+    """The show values without repeats, in order."""
+    out = []
+    for x in v:
+        if not out or out[-1] != x["show"]:
+            out.append(x["show"])
+    return out
+
+
+APP_EN = "1. Scan with the camera: get the app\\n2. Add it to the home screen\\n3. Hold 3 s: the van's code"
+
+
+def presses(base, n, hold_ms=3000):
+    """``n`` presses of ``hold_ms`` from now=1000, 4 s apart (each released 200 ms after its end)."""
+    out = [base + " now=0"]
+    for k in range(n):
+        t0 = 1000 + k * (hold_ms + 1000)
+        out += [*hold(base, 200, hold_ms, t0), base + f" now={t0 + hold_ms + 200}"]
+    return out
+
+
+@pytest.mark.parametrize(
+    "inp,order",
+    [
+        (" lora=1 hub=1 ttn=1", ["0", "4", "3", "1", "2"]),  # app, hub, LoRa repair, rotation
+        (" lora=1 hub=1 ttn=0", ["0", "4", "3", "1"]),  # app, hub, LoRa setup (the last: it stays)
+        (" lora=0 hub=1", ["0", "4", "3"]),  # no LoRa: the hub QR is the last
+        (" lora=1 hub=0 ttn=1", ["0", "1", "2"]),  # no hub: as before the hub
+        (" lora=1 hub=0 ttn=0", ["0", "1"]),
+        (" lora=0 hub=0", ["0"]),  # nothing to show: a hold opens nothing
+    ],
+)
+def test_one_cycle_app_hub_lora(cli, inp, order):
+    """Ruling R41: each 3 s hold goes one screen on, in one order: app QR, hub QR (both with a hub
+    config), the LoRa screen (LoRa on), the rotation (TTN keys); a missing screen is skipped, the last
+    one stays. Only entering a LoRa setup QR asks for a transfer key."""
+    b = BASE + " auto=0 max=60" + inp
+    v = run(cli, "reset", *presses(b, 5))
+    assert shows(v) == order
+    setup = [x["show"] for x in v if x["req"] == "1"]
+    if "ttn=1" in inp:
+        assert setup == (["2"] if "2" in order else [])  # the rotation only
+    else:
+        assert setup == (["1"] if "1" in order else [])  # the setup QR on entering the LoRa screen
+    if len(order) > 1:
+        assert v[-1]["bright"] == "100"
+
+
+def test_no_hold_makes_a_hub_key(cli):
+    """Ruling R42: a hold of any length on the app or hub QR goes at most one screen on; no view field
+    asks for a data key any more."""
+    v = run(cli, "reset", HUB_ONLY + " now=0", *hold(HUB_ONLY, 200, 14000, 1000))
+    assert shows(v) == ["0", "4"] and "rekey" not in v[-1]
+    v = run(cli, "reset", *presses(HUB_ONLY, 1), *hold(HUB_ONLY, 200, 14000, 5000))
+    assert shows(v) == ["0", "4", "3"]
+    v = run(cli, "reset", *presses(HUB_ONLY, 2), *hold(HUB_ONLY, 200, 14000, 9000))
+    assert shows(v) == ["0", "4", "3"] and v[-1]["show"] == "3"
+
+
+def test_side_texts_name_the_screen_and_the_next_hold(cli):
+    """R41: the app QR shows its three steps (the last one the next hold); the hub QR says it is the
+    van's code and, with LoRa on, that the next hold shows LoRa."""
+    v = run(cli, "reset", *presses(HUB_ONLY, 1), HUB_ONLY + " now=5000 lang=1")
+    assert (v[-1]["show"], v[-1]["lhint"], v[-1]["lline"]) == ("4", APP_EN, "")
+    # no qrok: the painter sets lora_qr_ready only on the LoRa path (lora_inputs returns before it with LoRa
+    # off), so the hub QR's label must not wait for it (re-review N1)
+    v = run(cli, "reset", *presses(HUB_ONLY, 2), HUB_ONLY + " now=9000 lang=1")
+    assert (v[-1]["show"], v[-1]["lhint"], v[-1]["lline"]) == ("3", "The van's code: scan in the app", "")
+    t = LORA + " hub=1"
+    v = run(cli, "reset", *presses(t, 2), t + " now=9000 lang=0")
+    assert (v[-1]["show"], v[-1]["lhint"], v[-1]["lline"]) == (
+        "3",
+        "Code des Fahrzeugs: in der App scannen",
+        "3 s halten: LoRa",
+    )
+
+
+@pytest.mark.parametrize("n,show", [(1, "4"), (2, "3")])
+def test_app_and_hub_qr_close(cli, n, show):
+    """The key must not stay on screen: a short press, a tap, 120 s, or the hub config going away
+    closes the app and the hub QR."""
+    opened = ["reset", *presses(HUB_ONLY, n)]
+    since = 4000 * n  # the hold that opened it fired at now = 1000 + 4000 (n - 1) + 3000
+    v = run(cli, *opened, HUB_ONLY + f" now={since + 1000} touch=1")
+    assert v[-1]["show"] == "0"
+    v = run(cli, *opened, *hold(HUB_ONLY, 200, 2000, since + 1000), HUB_ONLY + f" now={since + 3400}")
+    assert v[-1]["show"] == "0"
+    v = run(cli, *opened, HUB_ONLY + f" now={since + 119999}", HUB_ONLY + f" now={since + 120000}")
+    assert [x["show"] for x in v[-2:]] == [show, "0"]
+    v = run(cli, *opened, BASE + f" now={since + 1000} lora=0 hub=0 auto=0 max=60")
+    assert v[-1]["show"] == "0"
+
+
+MASK_MAIN = r"""
+#include <stdio.h>
+#include <string.h>
+#include "cali_display_model.h"
+int main(void) {
+    static uint8_t buf[8 * 2 * 4];   /* 8 x 4 pixels, stride 16 */
+    long n;
+    memset(buf, 0x11, sizeof buf);
+    n = cali_shot_mask(buf, 8, 4, 16, 6, -3, 20, 1, CALI_SHOT_MASK_RGB565);   /* clipped: x 6..7, y 0..1 */
+    printf("%ld", n);
+    for (int y = 0; y < 4; y++) {
+        putchar(' ');
+        for (int x = 0; x < 8; x++) putchar(buf[y * 16 + 2 * x] == 0x10 && buf[y * 16 + 2 * x + 1] == 0x84 ? 'G' : '.');
+    }
+    printf(" %ld\n", cali_shot_mask(buf, 8, 4, 16, 9, 0, 12, 3, CALI_SHOT_MASK_RGB565));   /* off the frame: none */
+    return 0;
+}
+"""
+
+
+def test_shot_mask_fills_the_rectangle_clipped_to_the_frame(tmp_path):
+    """Ruling R46: the screenshot greys out a secret QR's rectangle, clipped to the frame, little-endian
+    RGB565; a rectangle off the frame writes nothing (shot.c then refuses the frame)."""
+    cc = shutil.which("cc") or pytest.skip("no C compiler")
+    (tmp_path / "m.c").write_text(MASK_MAIN)
+    exe = tmp_path / "m"
+    subprocess.run(
+        [cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-I", str(CORE / "include"), "-I", str(PLATFORM / "include"),
+         "-I", str(ROOT / "csrc"), "-I", str(ROOT / "firmware/web"), str(CORE / "display_model.c"),
+         str(CORE / "ap_identity.c"), str(PLATFORM / "host/platform_host.c"), str(tmp_path / "m.c"), "-o", str(exe), "-lm"],
+        check=True,
+    )  # fmt: skip
+    out = subprocess.run([str(exe)], capture_output=True, text=True, check=True).stdout.split()
+    assert out == ["4", "......GG", "......GG", "........", "........", "0"]

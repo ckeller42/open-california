@@ -1,9 +1,10 @@
 name: remote-app
 # Publish the remote app (calictl/webui built by tools/build_remote.py) to the separate public repository
 # open-california/open-california.github.io, which serves it as https://open-california.github.io/.
-# INACTIVE until the owner creates that repository, adds its deploy key (write access, that repository only)
-# and stores the private key here as the secret REMOTE_APP_DEPLOY_KEY. Runs only for a tag remote-v* whose
-# commit is on main; no pull_request trigger, so no PR code ever sees the key.
+# The deploy key (write access to that repository only) and the broker origin live in the environment
+# remote-app (secret REMOTE_APP_DEPLOY_KEY, variable OC_HUB_ORIGIN). That environment admits only tags
+# remote-v*, and a tag ruleset lets only the admin create those tags. The job also refuses a tag whose
+# commit is not on main; no pull_request trigger, so no PR code ever sees the key.
 
 on:
   push:
@@ -20,6 +21,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: remote-app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,7 +36,14 @@ jobs:
         with:
           python-version: '3.12'
       - name: Build the remote app
-        run: python3 -m tools.build_remote --out _build/remote
+        # the environment variable OC_HUB_ORIGIN (wss://<broker host>[:<port>]): the remote hub's broker in
+        # connect-src. Required: without it the published app could not reach the broker. build_remote
+        # refuses anything but wss://<host>[:<port>] (no wildcard, path or extra CSP token).
+        env:
+          HUB_ORIGIN: ${{ vars.OC_HUB_ORIGIN }}
+        run: |
+          [ -n "$HUB_ORIGIN" ] || { echo "::error::variable OC_HUB_ORIGIN of environment remote-app is not set"; exit 1; }
+          python3 -m tools.build_remote --out _build/remote --hub-origin "$HUB_ORIGIN"
       - name: Push it to open-california/open-california.github.io (branch main)
         env:
           DEPLOY_KEY: ${{ secrets.REMOTE_APP_DEPLOY_KEY }}

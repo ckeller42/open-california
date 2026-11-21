@@ -42,7 +42,8 @@ DE = {
 LOCALES = [("en-US", "en"), ("de-DE", "de")]
 FORGET_BODY = {"forget": True, "confirm": True}
 HINT = (
-    "Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app."
+    "Set up: hold the satellite's screen 3 s until the LoRa code shows (with a remote hub: the third screen), "
+    "and scan it in the remote app (OC Remote)."
 )
 NOTE = "Only for a satellite with a LoRa module (RAK3172). Off: the LoRa pins stay untouched."
 ASK = (

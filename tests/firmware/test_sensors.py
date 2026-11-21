@@ -50,7 +50,19 @@ def run(cli, tmp_path, lines):
 def test_govee_24bit_layout_decodes(cli, tmp_path):
     out = run(cli, tmp_path, ["init", f"adv A4:C1:38:00:00:01 1 -60 GVH5075_0001 {GOVEE_H5075}", "api 1000"])
     api = json.loads(out[-1][4:])
-    assert api["seen"] == [{"id": api["seen"][0]["id"], "type": "govee", "model": "GVH5075", "rssi": -60}]
+    assert api["seen"] == [
+        {
+            "id": api["seen"][0]["id"],
+            "type": "govee",
+            "model": "GVH5075",
+            "rssi": -60,
+            "value": {
+                "temp_c": 24.3,
+                "humidity": 90.9,
+                "battery": 100,
+            },  # before the add: tells the sensors apart
+        }
+    ]
     assert api["configured"] == []
 
 
@@ -202,6 +214,7 @@ def test_victron_mppt_decodes(cli, tmp_path):
     out = run(cli, tmp_path, ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "api 1000"])
     sid = json.loads(out[-1][4:])["seen"][0]["id"]
     assert json.loads(out[-1][4:])["seen"][0]["type"] == "victron_mppt"
+    assert json.loads(out[-1][4:])["seen"][0]["value"] is None  # no key yet: no reading
     out = run(cli, tmp_path, ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", f"add {sid} - {KEY.hex()}",
                               f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "state 2000"])  # fmt: skip
     assert json.loads(out[-1][4:]) == {"victron_mppt": {"type": "victron_mppt", "battery_current": 2.3, "battery_voltage": 13.52, "charge_state": 5,

@@ -343,11 +343,15 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.firmware.test_lora
 .. automodule:: tests.firmware.test_lora_setup
 .. automodule:: tests.firmware.test_lora_aead
+.. automodule:: tests.firmware.test_lora_cmd
+.. automodule:: tests.firmware.test_hub
 .. automodule:: tests.test_gen_lora_dict
 .. automodule:: tests.test_lora_setup_js
 .. automodule:: tests.test_ttn_js
+.. automodule:: tests.test_hub_js
 .. automodule:: tests.e2e.test_remote_app
 .. automodule:: tests.e2e.test_remote_setup
+.. automodule:: tests.e2e.test_remote_hub
 .. automodule:: tools.build_remote
 .. automodule:: tests.test_build_remote
 .. automodule:: calictl.esp_ingest

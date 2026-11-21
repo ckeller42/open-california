@@ -6,7 +6,8 @@
 // TTS keeps uplinks for 24 h only: the newest frame per function (with its time) and the energy counters
 // stay in localStorage. The keys stay in the configuration: never in a body, an error or a log.
 // Below remoteState: the setup screens (Set up LoRa, Scan the van's code, Remove this van) that app.js render()
-// shows in remote mode; they use the vendored QrScanner (vendor/qr-scanner) and lora_setup.js.
+// shows in remote mode; they use the vendored QrScanner (vendor/qr-scanner) and lora_setup.js. "Scan the van's code"
+// also takes the van's hub QR (OCH1, hub.js).
 
 const REMOTE_CFG_KEY = "oc.remote.cfg";       // {cluster, appId, devId, readKey, cmdKey}; the setup or a repair QR writes it
 const REMOTE_LAST_KEY = "oc.remote.last";     // the newest frame per function, the read cursor
@@ -75,25 +76,34 @@ async function remoteState(cfg, now) {
   for (const u of ups.slice().reverse()) {   // oldest first: a newer frame always wins
     if (u.receivedAt === last.cursor) continue;   // `after` may be inclusive: the cursor's own uplink again
     last.cursor = u.receivedAt;
-    const d = loraDecodeUplink(u.port, u.bytes);
-    if (d.error || d.port === 12) continue;
-    if (d.version !== undefined && d.version !== loraDecodeUplink.VERSION) { last.unknown = d.version; continue; }
-    if (d.version !== undefined) last.unknown = null;
-    for (const [name, fields] of Object.entries(d.fn)) last.fn[name] = { at: u.at, d: fields };
-    if (d.port === 2) {
-      last.ext = { at: u.at, ...d.ext };
-      const p = { at: u.at, boot: d.boot, ...d.counters };
-      last.energy = p;
-      const prev = points[points.length - 1];
-      // a new boot adds a point at once, but at most one a minute (a van in a reboot loop must not fill the storage)
-      if (!prev || p.at - prev.at >= (prev.boot !== p.boot ? 60000 : REMOTE_ENERGY_STEP_MS)) points.push(p);
-    }
-    if (d.port === 4) last.fw = d.fw;
-    last.newest = Math.max(last.newest || 0, u.at);
+    remoteTake(last, points, u);
   }
   remoteSave(REMOTE_LAST_KEY, last);
   remoteSave(REMOTE_ENERGY_KEY, points.filter((p) => now - p.at <= REMOTE_ENERGY_KEEP_MS));
   return remoteBody(last, now);
+}
+
+/**
+ * One uplink into the stored frames `last` (the newest frame per function, the Victron readings, the counters with
+ * their hourly `points`, the firmware); also hub.js's frames from the bridge. Port 12 (key-transfer confirmations)
+ * is not state. @param {any} last @param {any[]} points @param {{port: number, bytes: Uint8Array, at: number}} u
+ */
+function remoteTake(last, points, u) {
+  const d = loraDecodeUplink(u.port, u.bytes);
+  if (d.error || d.port === 12) return;
+  if (d.version !== undefined && d.version !== loraDecodeUplink.VERSION) { last.unknown = d.version; return; }
+  if (d.version !== undefined) last.unknown = null;
+  for (const [name, fields] of Object.entries(d.fn)) last.fn[name] = { at: u.at, d: fields };
+  if (d.port === 2) {
+    last.ext = { at: u.at, ...d.ext };
+    const p = { at: u.at, boot: d.boot, ...d.counters };
+    last.energy = p;
+    const prev = points[points.length - 1];
+    // a new boot adds a point at once, but at most one a minute (a van in a reboot loop must not fill the storage)
+    if (!prev || p.at - prev.at >= (prev.boot !== p.boot ? 60000 : REMOTE_ENERGY_STEP_MS)) points.push(p);
+  }
+  if (d.port === 4) last.fw = d.fw;
+  last.newest = Math.max(last.newest || 0, u.at);
 }
 
 /** @param {{cluster: string, appId: string, devId: string}} cfg the van's identity in oc.remote.last */
@@ -178,6 +188,10 @@ let rsTimer = null;
 let rsDom = null;
 /** @type {any} the running camera scanner */
 let rsCam = null;
+/** @type {ReturnType<typeof setTimeout>|null} the check that the started camera delivers frames */
+let rsCamTimer = null;
+const RS_SCAN_REPEAT_MS = 3000;   // the same code again within this: not acted on again
+const RS_CAM_FRAME_MS = 6000;     // no video frame this long after start(): the camera did not start
 let rsGen = 0;   // +1 by "Remove this van": a step still waiting on TTS then stores nothing
 
 /** @param {Uint8Array} b */
@@ -240,6 +254,8 @@ function rsRefresh() {
 
 /** Stop the camera (leaving the scan, or a code was read). */
 function rsCamStop() {
+  if (rsCamTimer) clearTimeout(rsCamTimer);
+  rsCamTimer = null;
   if (rsCam) { rsCam.destroy(); rsCam = null; }
 }
 
@@ -276,6 +292,22 @@ async function rsCheck(cluster, key) {
     rsPhase = "key"; rsMsg = rsErrText(e);
   }
   rsRefresh();
+}
+
+/** #555: oc-hub.json with "ttn": {cluster, key} (tools/make_hub_file.py --ttn-cluster). Like a submit, the key
+ * goes straight to rsCheck and never into the DOM. @param {HTMLInputElement} inp */
+async function rsFile(inp) {
+  const f = inp.files && inp.files[0];
+  inp.value = "";
+  /** @type {any} */
+  let d = null;
+  try { d = f && JSON.parse(await f.text()); } catch (e) { /* d stays null */ }
+  const t = d && d.format === "oc-hub/1" && d.ttn;
+  if (!t || typeof t.cluster !== "string" || typeof t.key !== "string") {
+    rsMsg = "No LoRa settings in this file (oc-hub.json with ttn)"; rsRefresh(); return;
+  }
+  rsCluster = t.cluster.trim().toLowerCase();
+  await rsCheck(rsCluster, t.key.trim());
 }
 
 /** A scanned setup QR: steps 5 (register, keys, delete the full-rights key) or, after status 1/3, a new transfer
@@ -470,7 +502,7 @@ async function rsStepLocked() {
       delete st.tk;
       st.step = "rescan";
       rsSave(st);
-      rsMsg = "The van did not confirm. Hold its screen for 3 seconds and scan the setup code again.";
+      rsMsg = "The van did not confirm. On the satellite, tap the screen once, then hold it 3 s until the LoRa setup code shows (with a remote hub: the third screen), and scan it again.";
     }
   }
   rsPoll();
@@ -478,6 +510,22 @@ async function rsStepLocked() {
 
 /** A scanned repair QR (spec 5.2): the phone is configured, no TTN console work. @param {string} text */
 function rsRepairQr(text) {
+  // the van's hub QR (hub.js): the remote hub's broker and key. Ruling R27: the repair QR (OCR1) does not carry the
+  // hub configuration; the owner scans the hub QR (OCH1) on this same screen.
+  const hq = parseHubQr(text.trim());
+  if (hq) {
+    if (!hubSaveCfg(hq)) { rsMsg = REMOTE_STORE_MSG; rsRefresh(); return; }
+    rsMsg = "";
+    goto("home");
+    refreshState(true);
+    return;
+  }
+  if (/^https?:\/\//i.test(text.trim())) {   // the display's "Get the app" QR (R36): the van's code is the next screen
+    rsMsg = "This is the app's code: on the satellite, hold the screen 3 s again for the van's code."; rsRefresh(); return;
+  }
+  if (parseSetupQr(text.trim())) {   // a LoRa-only first time: the LoRa screen shows the setup code before the TTN keys
+    rsMsg = "This is the LoRa setup code: open ⋮ and choose Set up LoRa (needs a TTN account)."; rsRefresh(); return;
+  }
   const r = parseRepairQr(text.trim());
   if (!r) { rsMsg = "This is not the van's code."; rsRefresh(); return; }
   /** @type {Record<string, string>} */
@@ -501,7 +549,8 @@ function rsRemove() {
   rsKey = rsKeyId = "";
   rsPhase = "key";
   // and app.js's offline snapshot: a reload never shows the removed van again (oc.remote.pushes stays: TTN counts on)
-  for (const k of [REMOTE_CFG_KEY, REMOTE_SETUP_KEY, REMOTE_ENERGY_KEY, REMOTE_LAST_KEY, LAST_STATE_KEY])
+  hubStop();   // and the remote hub's link (hub.js)
+  for (const k of [REMOTE_CFG_KEY, REMOTE_SETUP_KEY, REMOTE_ENERGY_KEY, REMOTE_LAST_KEY, LAST_STATE_KEY, HUB_CFG_KEY, HUB_LORA_KEY, HUB_SEEN_KEY])
     try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ }
   STATE = {};
   lastRender = "";
@@ -514,7 +563,7 @@ function rsRemove() {
 /** The scan box: a photo (always) and the camera (a secure origin only, on a tap). @param {(text: string) => any} onText */
 function rsScanner(onText) {
   const QS = /** @type {any} */ (window).QrScanner;
-  const file = h("input", { type: "file", accept: "image/*", capture: "environment", id: "rs-file" });
+  const file = h("input", { type: "file", accept: "image/*", capture: "environment", id: "rs-file", hidden: "" });
   file.onchange = async () => {
     const f = file.files && file.files[0];
     file.value = "";
@@ -524,19 +573,43 @@ function rsScanner(onText) {
     catch (e) { rsMsg = "No code found in the photo."; rsRefresh(); return; }
     onText(String(text));
   };
-  const box = h("div", null, h("label", { for: "rs-file" }, T("Take a photo of the code")), file);
+  // a button-looking label, as "Load from file" (the bare input reads "Choose File / no file selected" in Safari)
+  const box = h("div", null, h("div", { class: "acts" }, h("label", { class: "btn", for: "rs-file", id: "rs-photo" }, T("Take a photo of the code"))), file);
   if (window.isSecureContext && QS) {
-    const video = h("video", { muted: "", playsinline: "" });
-    video.hidden = true;
+    const video = /** @type {HTMLVideoElement} */ (h("video", { muted: "", playsinline: "" }));
+    const aim = h("p", { class: "note", id: "rs-aim" }, T("Hold the phone about 10 cm in front of the satellite's screen."));
+    video.hidden = aim.hidden = true;
     const cam = satBtn(T("Use the camera"), "primary", "rs-camera");
+    const off = (/** @type {string} */ m) => { rsCamStop(); video.hidden = aim.hidden = true; rsMsg = m; rsRefresh(); };
     cam.onclick = () => {
       rsCamStop();
-      video.hidden = false;
-      rsCam = new QS(video, (/** @type {any} */ r) => { rsCamStop(); video.hidden = true; onText(String(r.data)); },
-        { returnDetailedScanResult: true, preferredCamera: "environment" });
-      rsCam.start().catch(() => { rsCamStop(); video.hidden = true; rsMsg = "The camera does not start: take a photo instead."; rsRefresh(); });
+      if (rsMsg) { rsMsg = ""; rsRefresh(); }   // an old "did not start" must not stay over a running camera
+      video.hidden = aim.hidden = false;
+      // the camera keeps scanning past a code this screen does not take (the app's code comes first on the
+      // satellite): the handler's hint shows, the screen it moves to on a code it takes stops the camera
+      // (remoteRender, app.js render). The same text again within 3 s, or while its handler runs, is not acted on.
+      let last = "", lastAt = 0, busy = false;
+      const qs = rsCam = new QS(video, async (/** @type {any} */ r) => {
+        const text = String(r.data), now = Date.now();
+        const again = text === last && now - lastAt < RS_SCAN_REPEAT_MS;
+        last = text; lastAt = now;
+        if (again || busy) return;
+        busy = true;
+        try { await onText(text); } finally { busy = false; }
+      }, { returnDetailedScanResult: true, preferredCamera: "environment" });
+      qs.start().then(() => {
+        // the first use on Android: the site prompt, then Chrome's own camera prompt, and the stream may never
+        // deliver a frame. No frame yet after the wait: say so but keep the scanner (iOS can be slow to deliver
+        // the first frame); the hint goes when frames arrive, and the button starts a new scanner
+        const NO = "The camera did not start. Tap Use the camera again, or take a photo of the code.";
+        rsCamTimer = setTimeout(() => {
+          if (rsCam !== qs || video.videoWidth) return;
+          rsMsg = NO; rsRefresh();
+          video.addEventListener("loadeddata", () => { if (rsMsg === NO) { rsMsg = ""; rsRefresh(); } }, { once: true });
+        }, RS_CAM_FRAME_MS);
+      }, () => { if (rsCam === qs) off("The camera does not start: take a photo instead."); });
     };
-    box.prepend(cam, video);
+    box.prepend(cam, video, aim);
   }
   return box;
 }
@@ -546,7 +619,8 @@ function rsBuild(v, phase) {
   const msg = h("p", { class: "warn", id: "rs-msg", "aria-live": "polite" });
   const card = (/** @type {(Node|string|null)[]} */ ...kids) => h("div", { class: "sat" }, h("div", { class: "card dcard" }, ...kids));
   if (v === "remotescan")
-    return card(h("p", null, T("Open the LoRa screen on the van (press its screen for 3 s) and scan the code it shows.")),
+    return card(h("p", null, T("On the satellite, tap the screen once to light it, then hold it 3 s, and again, until “The van's code” shows (without a remote hub: the LoRa code), then scan it here.")),
+      h("p", { class: "note" }, T("The first code opens the app's web address (to install the app); the second is the van's code to scan in the app.")),
       rsScanner(rsRepairQr), msg);
   if (v === "remoteremove") {
     const ok = satBtn(T("Remove"), "danger"), no = satBtn(T("Cancel"));
@@ -570,10 +644,13 @@ function rsBuild(v, phase) {
     // one-time-code: no password manager offers to save or fill it
     const key = h("input", { type: "password", id: "rs-key", autocomplete: "one-time-code", autocapitalize: "none", spellcheck: "false" });
     const go = satBtn(T("Check the key"), "primary", "rs-check");
+    const file = h("input", { id: "rs-hubfile", type: "file", accept: ".json", hidden: "" });
+    file.onchange = () => rsFile(/** @type {HTMLInputElement} */ (file));
     const form = h("form", { autocomplete: "off" },
       h("p", null, T("In the TTN console, create an API key of your application with “Grant all current and future rights” and paste it here. The app uses it for a few calls and deletes it right after.")),
       h("label", { for: "rs-cluster" }, T("Cluster")), sel, hostBox,
-      h("label", { for: "rs-key" }, T("Full-rights API key")), key, h("div", { class: "acts" }, go), msg);
+      h("label", { for: "rs-key" }, T("Full-rights API key")), key,
+      h("div", { class: "acts" }, go, h("label", { class: "btn", for: "rs-hubfile" }, T("Load from file"))), file, msg);
     form.onsubmit = (ev) => {
       ev.preventDefault();
       const k = key.value.trim();
@@ -585,8 +662,8 @@ function rsBuild(v, phase) {
   }
   if (phase === "scan") {
     const st = remoteLoad(REMOTE_SETUP_KEY);
-    return card(h("p", null, T(st ? "The van could not read the keys. Open its LoRa screen again (press its screen for 3 s) and scan the new setup code."
-      : "Open the LoRa screen on the van (press its screen for 3 s) and scan its setup code.")), rsScanner(rsSetupQr), msg);
+    return card(h("p", null, T(st ? "The van could not read the keys. On the satellite, hold the screen 3 s until the LoRa setup code shows again (with a remote hub: the third screen), and scan the new setup code."
+      : "On the satellite, tap the screen once to light it, then hold it 3 s until the LoRa setup code shows (with a remote hub: the third screen), and scan it here.")), rsScanner(rsSetupQr), msg);
   }
   if (phase === "done") {
     const show = satBtn(T("Show the van"), "primary");

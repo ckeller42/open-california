@@ -1,0 +1,5 @@
+## ESP-IDF component manager manifest for cali_hub (the remote hub's MQTT client).
+## ESP-IDF v6 no longer ships esp-mqtt in components/: the registry's espressif/mqtt, exact pin (the
+## newest version the registry served on 2026-11-17).
+dependencies:
+  espressif/mqtt: "==1.1.0"

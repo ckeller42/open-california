@@ -356,6 +356,46 @@ The satellite's writes are proven in a ladder, each rung closer to hardware
    [evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)). The bytes are calictl's, and the real app's identical frames, cooler
    `State=3` included, are accepted by the real unit.
 
+## Fake BLE sensors for the satellite (`tools/fake_sensors_ble.py`)
+
+The satellite's sensor window (`sensors.c`) reads Govee thermometers and Victron Instant Readout
+adverts. `tools/fake_sensors_ble.py` plays them from a Linux laptop's Bluetooth adapter, so a
+board can be tested without the real devices:
+
+```sh
+sudo python3 tools/fake_sensors_ble.py --govee 3 --mppt --battery-monitor          # Ctrl-C stops
+sudo python3 tools/fake_sensors_ble.py --govee 3 --mppt --battery-monitor --list   # addresses, ids, keys
+sudo python3 tools/fake_sensors_ble.py --stop      # remove the sets a killed (-9) run left behind
+```
+
+- The Govees alternate the H5075 and H5074 layouts; each one is 1 °C warmer than the one before
+  (`--temp`, `--humidity`, `--battery` set the base). The MPPT is a SmartSolar (model `0xA075`),
+  the battery monitor a BMV-712 (`0xA389`) with a temperature aux input. The values drift on a
+  10-minute sine and change every `--interval` seconds (10 s); each update is printed, so a value
+  on the board can be matched with the one sent.
+- `--list` prints the satellite's `seen` id of each address and, for a Victron, the line
+  `VictronConnect would show: <key>`. Enter that key as the sensor's key in Satellite settings
+  (or `POST /api/sensors {"add":<id>,"alias":"…","key":"<key>"}`). The keys are fixed test keys.
+- Every fake has its own fixed static random address (`CA:FE:00:00:01:0n` the Govees, `…:02:01`
+  the MPPT, `…:03:01` the battery monitor), so a sensor configured once is found again on the
+  next run.
+- The frame builders reproduce the decoder's test vectors byte for byte, and the drifted frames
+  decode in `sensors_cli` to the printed values (`tests/firmware/test_fake_sensors_ble.py`).
+
+Limits:
+
+- It needs root and a Bluetooth 5 controller with LE extended advertising: one legacy,
+  non-connectable advertising set per fake, at most 8, on handles `0xEF` downwards. It sends the
+  HCI commands itself over a raw socket next to `bluetoothd`. A BlueZ advertisement (D-Bus or
+  `btmgmt`) has no address option. By the kernel source, a non-connectable one gets a new private
+  address whenever the kernel sets the instance up again (each data change), which would orphan a
+  configured sensor. An
+  adapter reset clears the sets; the next update sets them up again.
+- A legacy advert holds 31 bytes. The MPPT's name is `SS_01` (the satellite shows the model `SS`),
+  and the battery monitor has no name.
+- The Victron adverts carry only the fields that the satellite decodes plus plausible
+  battery-monitor extras; they are not a capture of a real device.
+
 ## Which CI job runs what
 
 | Workflow / job | When | Runs |

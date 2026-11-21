@@ -17,7 +17,7 @@ DISPLAY_DIAG_KEYS = frozenset({"lux", "prox", "motion", "dfs", "pm"})
 EXT_ENTRY_KEYS = frozenset({"type", "age_s"})  # every ext.<alias> entry: these + its type's fields
 SENSORS_KEYS = frozenset({"configured", "seen", "scan"})  # GET /api/sensors (R_FW_SENSORS)
 SENSOR_CFG_KEYS = frozenset({"id", "type", "alias", "last_seen_s", "value", "has_key"})  # .configured[]
-SENSOR_SEEN_KEYS = frozenset({"id", "type", "model", "rssi"})  # .seen[]
+SENSOR_SEEN_KEYS = frozenset({"id", "type", "model", "rssi", "value"})  # .seen[]
 DEVICE_KEYS = frozenset(
     {
         "pairing",
@@ -38,6 +38,7 @@ DEVICE_KEYS = frozenset(
         "ux",
         "experimental",
         "energy",
+        "hub",
         "water_held",
     }
 )  # /api/state device

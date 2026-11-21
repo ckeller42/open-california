@@ -76,6 +76,8 @@ firmware/host/cali-host
 firmware/host/cali-host-jw
 firmware/host/store-cli
 firmware/host/lora_aead_cli
+firmware/host/hub_cli
+firmware/host/hub_run_cli
 firmware/build/
 firmware/build-qemu/
 # ESP-IDF generated config (sdkconfig.defaults is the committed source)
@@ -105,3 +107,4 @@ ios/*.xcodeproj/project.xcworkspace/xcshareddata/*
 !ios/*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 ios/*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/*
 !ios/*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+firmware/host/lora_cmd_cli

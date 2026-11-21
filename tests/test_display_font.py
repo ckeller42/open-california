@@ -75,7 +75,7 @@ def test_every_display_string_is_covered(size):
     have = glyphs(size)
     assert 0xE4 in have and 0x2026 in have  # ä and … actually generated
     for key, lang, text in display_texts():
-        bad = [c for c in text if ord(c) not in have]
+        bad = [c for c in text if c != "\n" and ord(c) not in have]  # "\n": an LVGL line break, no glyph
         assert not bad, (size, key, lang, bad)
 
 

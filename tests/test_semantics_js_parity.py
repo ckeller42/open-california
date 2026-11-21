@@ -186,6 +186,7 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
                 "lora_on": None,  # ... nor experimental.lora: a firmware without the switch
                 "setup": None,  # ... nor device.setup (the first-time setup wizard)
                 "lora": None,  # ... nor device.lora (R_FW_LORA)
+                "hub": None,  # ... nor device.hub (the remote hub's MQTT client)
             },
         },
     )

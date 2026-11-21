@@ -117,6 +117,10 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "pi_wake.c"),
             str(CORE / "ble_exp.c"),
             str(CORE / "ble_exp_run.c"),
+            str(CORE / "hub_rpc.c"),
+            str(CORE / "hub.c"),
+            str(CORE / "hub_run.c"),
+            str(CORE / "hub_port_none.c"),
             str(CORE / "display_cfg.c"),
             str(CORE / "battery.c"),
             str(CORE / "sensors.c"),
@@ -339,6 +343,8 @@ EXPECTED_DEVICE_TAIL = (
     '"ux":{"enabled":true},'
     '"experimental":{"sensors":false,"lora":false},'
     '"energy":{"boot":0,"solar_wh":0,"load_wh":0,"batt_net_wh":0,"load_a":null},'
+    '"hub":{"configured":false,"online":false,"last_pub_s":null,"error":null,'
+    '"reason":null,"app_url":"https://open-california.github.io/"},'
     '"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","reverted":false,"scan":[]}'
@@ -937,6 +943,8 @@ def test_post_root_is_not_served(web_cli):
 STATION = ["wifi online minsel 192.168.1.23 -61"]
 CMD = '{"function":"cooler","what":"power","value":"on","confirm":true}'
 OK = {"ok": True, "applied": None, "state": None, "error": None, "function": "cooler"}
+HUB_NOW = 1_700_000_000_000
+HUB_STATION = [*STATION, "ntp %d" % HUB_NOW]  # a command over the hub runs only with SNTP time (503 no_time)
 NOT_STATION = [("setup_ap", 0), ("setup_ap_retrying", 0), ("connecting", 0), ("unprovisioned", 0)]
 
 
@@ -960,6 +968,20 @@ def test_command_pends_until_the_write_completes(web_cli):
     assert submits(other) == [
         "CALL submit [cooler] [power] [on]"
     ]  # 200 only after done: PENDING would be 502
+
+
+def test_accepted_wifi_command_drops_a_held_lora_command(web_cli):
+    """A command from WiFi (HTTP or the hub) that the sequencer accepted drops a held LoRa command: the newer intent
+    wins, a stale LoRa "heater on" must not undo a later "off". A refused one leaves it.
+
+    .. test:: an accepted WiFi command drops held LoRa commands
+       :id: T_FW_COMMAND_DROPS_LORA
+    """
+    _, other = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "loracmd", "ctl busy"])
+    assert not any("held command" in line for line in other)
+    setup = [*STATION, "loracmd", "ctl pending", "ctldone ok 1"]
+    _, other = one(web_cli, "POST", "/api/command", CMD, setup=setup)
+    assert "LOG lora: 1 held command dropped: a newer WiFi command runs" in other
 
 
 def test_command_answer_waits_many_polls(web_cli):
@@ -3641,3 +3663,313 @@ def test_thermostat_bad_stored_config_falls_back_to_defaults(web_cli):
     """A stored ``th_cfg`` that is the wrong size or has a value out of range is dropped, not half used."""
     b, _ = th_get(web_cli, extra=["kvhex th_cfg 0102", "thinit"])
     assert (b["target"], b["cfg"]) == (2000, TH_DEFAULT_CFG)
+
+
+# ---- /api/hub: the remote hub's broker config (cali_hub_cfg_t, KV hub_cfg) -------------------------
+
+HUB_CFG = {
+    "url": "wss://h.example:8884/mqtt",
+    "van": "van-1",
+    "user": "vanuser",
+    "pass": "vanpass-secret",
+    "app_user": "appuser",
+    "app_pass": "apppass-secret",
+}
+HUB_NONE = {
+    "configured": False,
+    "van": "",
+    "url": "",
+    "user": "",
+    "app_user": "",
+    "online": False,
+    "last_pub_s": None,
+    "error": None,
+}
+
+
+def test_api_hub_get_hides_the_passwords_and_post_stores(web_cli):
+    """GET /api/hub never carries the two passwords; POST stores the config; device.hub reports it."""
+    rs, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("GET", "/api/hub"),
+            req("POST", "/api/hub", json.dumps(HUB_CFG)),
+            req("GET", "/api/hub"),
+            req("GET", "/api/state"),
+            req("GET", "/api/state?diag=1"),
+        ],
+    )
+    assert rs[0].json() == HUB_NONE
+    assert (rs[1].status, rs[1].json()) == (200, {"ok": True})
+    assert rs[2].json() == {
+        "configured": True,
+        "van": "van-1",
+        "url": "wss://h.example:8884/mqtt",
+        "user": "vanuser",
+        "app_user": "appuser",
+        "online": False,
+        "last_pub_s": None,
+        "error": None,
+    }
+    assert rs[3].json()["device"]["hub"] == {
+        "configured": True,
+        "online": False,
+        "last_pub_s": None,
+        "error": None,
+        "reason": None,  # ruling R45: why it is not connected (the host has no client)
+        "app_url": "https://open-california.github.io/",  # ruling R35: read-only, GET /api/hub has none
+    }
+    for r in rs:
+        assert b"secret" not in r.body
+
+
+def test_api_hub_key_makes_a_new_data_key(web_cli):
+    """Ruling R42: the Hub card's New data key. Station only, a hub config first, the body must say
+    {"new_key": true}; then the hub QR carries a new key."""
+    rs, _ = drive(
+        web_cli,
+        [
+            b"wifi setup_ap",
+            req("POST", "/api/hub_key", json.dumps({"new_key": True})),
+            *(s.encode() for s in STATION),
+            req("POST", "/api/hub_key", json.dumps({"new_key": True})),
+            req("POST", "/api/hub", json.dumps(HUB_CFG)),
+            req("POST", "/api/hub_key", "{}"),
+            req("POST", "/api/hub_key", json.dumps({"new_key": False})),
+            req("GET", "/api/hub_key"),
+            req("POST", "/api/hub_key", json.dumps({"new_key": True})),
+        ],
+    )
+    assert [(r.status, r.json().get("error")) for r in rs] == [
+        (403, "setup_mode"),
+        (409, "no_hub"),
+        (200, None),
+        (400, "bad_json"),
+        (400, "bad_json"),
+        (405, "method"),
+        (200, None),
+    ]
+
+
+def test_api_hub_post_without_passwords_keeps_the_stored_ones(web_cli):
+    """The card reloads with blank password fields: a POST that leaves them out keeps the stored ones,
+    but a first POST without them is 400."""
+    partial = {k: v for k, v in HUB_CFG.items() if "pass" not in k}
+    rs, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/hub", json.dumps(partial)),
+            req("POST", "/api/hub", json.dumps(HUB_CFG)),
+            req("POST", "/api/hub", json.dumps(dict(partial, van="van-2"))),
+            req("GET", "/api/hub"),
+        ],
+    )
+    assert (rs[0].status, rs[0].json()) == (400, {"ok": False, "error": "bad_value"})
+    assert [r.status for r in rs[1:3]] == [200, 200]
+    assert rs[3].json()["van"] == "van-2" and rs[3].json()["configured"] is True
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("van", ""),
+        ("van", "v" * 24),
+        ("van", "van/1"),
+        ("van", "van+"),
+        ("van", "van#"),
+        ("van", "van*1"),
+        ("url", "mqtts://h:8883"),
+        ("url", "wss://" + "h" * 90),
+        ("url", "wss://h*:8884/mqtt"),
+        ("user", ""),
+        ("user", "u" * 32),
+        ("pass", "p" * 48),
+        ("app_user", "a*b"),
+        ("app_pass", "x*y"),
+        ("app_pass", "p" * 48),
+    ],
+)
+def test_api_hub_post_validates(web_cli, field, value):
+    """Lengths fit cali_hub_cfg_t; no '*' (the QR's separator); van is a topic level (no / + #)."""
+    r, other = one(web_cli, "POST", "/api/hub", json.dumps(dict(HUB_CFG, **{field: value})), setup=STATION)
+    assert (r.status, r.json()) == (400, {"ok": False, "error": "bad_value"})
+
+
+@pytest.mark.parametrize("body", ["{}", '{"van":1}', "[]", '{"van":"a","nope":"b"}'])
+def test_api_hub_post_malformed_is_400(web_cli, body):
+    r, _ = one(web_cli, "POST", "/api/hub", body, setup=STATION)
+    assert r.status == 400
+
+
+def test_api_hub_post_is_station_only(web_cli):
+    r, _ = one(web_cli, "POST", "/api/hub", json.dumps(HUB_CFG), setup=["wifi setup_ap"])
+    assert (r.status, r.json()) == (403, {"ok": False, "error": "setup_mode"})
+    r, _ = one(web_cli, "GET", "/api/hub", setup=["wifi setup_ap"])
+    assert r.status == 200
+
+
+def test_api_hub_store_failure_is_500(web_cli):
+    r, _ = one(web_cli, "POST", "/api/hub", json.dumps(HUB_CFG), setup=[*STATION, "kvfail 1"])
+    assert (r.status, r.json()) == (500, {"ok": False, "error": "store"})
+
+
+def test_hub_state_publish_is_not_a_viewer(web_cli):
+    """The hub's 30 s state publish (``?hub=1``) neither ends a rest nor counts as input, or the BLE
+    link would never rest; a plain GET still is a viewer."""
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"rest 1",
+            b"viewerends 1",
+            req("GET", "/api/state?hub=1"),
+            req("GET", "/api/state"),
+        ],
+    )
+    assert [r.json()["device"]["link"]["rest"] for r in resps] == [True, False]
+
+
+def test_hub_state_publish_carries_its_time_and_the_lora_counter(web_cli):
+    """Rulings R25/R26: the hub's state publish (``?hub=1``) starts with ``hub_t`` (the ESP's wall clock in unix ms,
+    null without one: the app judges the frame's age from it) and ``lora_ctr`` (the last accepted LoRa command
+    counter, null when none is stored: a phone sends max(own, it) + 1). A plain GET carries neither."""
+    resps, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("GET", "/api/state?hub=1"),
+            b"ntp 1790000000000",
+            b"kvhex lora_cmd_ctr 012c",
+            req("GET", "/api/state?hub=1"),
+            req("GET", "/api/state"),
+        ],
+    )
+    a, b, plain = (r.json() for r in resps)
+    assert (a["hub_t"], a["lora_ctr"]) == (None, None)
+    assert (b["hub_t"], b["lora_ctr"]) == (1790000000000, 300)
+    assert list(b)[:3] == ["hub_t", "lora_ctr", "fn"]
+    assert "hub_t" not in plain and "lora_ctr" not in plain
+
+
+def test_hub_state_publish_has_no_time_from_the_unit_clock(web_cli):
+    """I2: ``hub_t`` comes only from SNTP time; the unit clock (1004 CarTime*) can be hours off, and the app keeps the
+    newest hub_t it saw, so with only the unit clock the publish says null."""
+    frame = "80" + bytes([126, 9, 11, 14, 30, 5, 0, 0, 0, 0]).hex()  # 1004, ignition on, 2026-10-11 14:30:05
+    resps, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"unitclock " + frame.encode(),
+            req("GET", "/api/state?hub=1&diag=1"),
+        ],
+    )
+    st = resps[0].json()
+    assert st["hub_t"] is None
+    assert st["device"]["time"]["source"] == "unit"  # the unit clock really is set
+
+
+def test_second_command_while_one_is_pending_is_409_and_keeps_the_first(web_cli):
+    """Ruling R18: two channels (HTTP and the hub RPC) share api_command's one pending slot. A new
+    command while one is pending answers 409 busy at once and never touches that slot, so the first
+    requester still gets its own result."""
+    first = json.dumps({"id": 5, "m": "POST", "p": "/api/command", "b": CMD, "t": HUB_NOW})
+    other_cmd = '{"function":"roof","what":"position","value":"open","confirm":true}'
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in HUB_STATION),
+            b"ctl pending",
+            b"ctldone ok 40",
+            b"rpcbegin " + first.encode(),
+            req("POST", "/api/command", other_cmd),
+            b"rpcpoll",
+        ],
+    )
+    assert "RPCB 0" in other  # the hub's command is pending
+    assert (resps[0].status, resps[0].json()) == (409, {"ok": False, "error": "busy"})
+    res = json.loads(next(ln for ln in other if ln.startswith("RPCS ")).split(" ", 2)[2])
+    assert (res["id"], res["s"]) == (5, 200) and json.loads(res["b"]) == OK
+    assert submits(other) == ["CALL submit [cooler] [power] [on]"]
+
+
+def test_command_slot_stays_busy_until_its_owner_collects(web_cli):
+    """Ruling R19: the slot is held from the submit until the owner's resume collected the result. A
+    finished but uncollected command still makes a new one 409; the owner then gets its own result,
+    and after that a new command is accepted."""
+    first = json.dumps({"id": 6, "m": "POST", "p": "/api/command", "b": CMD, "t": HUB_NOW})
+    roof = '{"function":"roof","what":"position","value":"open","confirm":true}'
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in HUB_STATION),
+            b"ctl pending",
+            b"ctldone ok 1",
+            b"rpcbegin " + first.encode(),
+            req("GET", "/api/state"),  # its polls run the ctl countdown: A is done, not collected
+            req("POST", "/api/command", roof),
+            b"rpcpoll",
+            b"ctldone ok 2",
+            req("POST", "/api/command", roof),
+        ],
+    )
+    assert (resps[1].status, resps[1].json()) == (409, {"ok": False, "error": "busy"})
+    res = json.loads(next(ln for ln in other if ln.startswith("RPCS ")).split(" ", 2)[2])
+    assert (res["id"], res["s"], json.loads(res["b"])["function"]) == (6, 200, "cooler")
+    assert resps[2].status == 200 and resps[2].json()["function"] == "roof"
+    assert submits(other) == ["CALL submit [cooler] [power] [on]", "CALL submit [roof] [position] [open]"]
+
+
+def test_an_uncollected_command_frees_the_slot_after_60_s(web_cli):
+    """A requester that never resumes holds the slot at most CALI_HUB_RPC_PENDING_MS after its submit."""
+    first = json.dumps({"id": 7, "m": "POST", "p": "/api/command", "b": CMD, "t": HUB_NOW})
+    roof = '{"function":"roof","what":"position","value":"open","confirm":true}'
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in HUB_STATION),
+            b"now 1000",
+            b"ctl pending",
+            b"ctldone ok 1",
+            b"rpcbegin " + first.encode(),
+            req("GET", "/api/state"),
+            b"now 62000",
+            b"ctldone ok 2",
+            req("POST", "/api/command", roof),
+        ],
+    )
+    assert resps[1].status == 200 and resps[1].json()["function"] == "roof"
+
+
+def _slot_boundary(web_cli, at_ms):
+    """A hub command submitted at 1000 and finished but not collected; at `at_ms` (the handler's clock) a
+    second command arrives over HTTP, then the hub re-asks at that clock."""
+    first = json.dumps({"id": 8, "m": "POST", "p": "/api/command", "b": CMD, "t": HUB_NOW})
+    roof = '{"function":"roof","what":"position","value":"open","confirm":true}'
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in HUB_STATION),
+            b"now 1000",
+            b"ctl pending",
+            b"ctldone ok 1",
+            b"rpcbegin " + first.encode(),
+            req("GET", "/api/state"),
+            b"now %d" % (at_ms - 10),  # request() adds 10 ms before it hands the request over
+            b"ctldone ok 2",
+            req("POST", "/api/command", roof),
+            b"now %d" % at_ms,
+            b"rpcpoll",
+        ],
+    )
+    res = json.loads(next(ln for ln in other if ln.startswith("RPCS ")).split(" ", 2)[2])
+    return resps[1].status, res["s"]
+
+
+def test_slot_timeout_and_the_hub_give_up_at_the_same_instant(web_cli):
+    """Ruling R24: web.c frees the slot and cali_hub_rpc_poll gives up with the same comparison
+    (elapsed >= CALI_HUB_RPC_PENDING_MS): 1 ms before, the slot is held and the hub still collects; at the
+    limit the new command is accepted and the hub no longer resumes (504), never both."""
+    assert _slot_boundary(web_cli, 1000 + 59_999) == (409, 200)
+    assert _slot_boundary(web_cli, 1000 + 60_000) == (200, 504)

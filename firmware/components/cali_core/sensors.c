@@ -266,12 +266,11 @@ static void rec_fields(char *out, size_t cap, const sens_type_t *t, const cali_s
     }
 }
 
-/* The fields object (or members with null when no reading) for configured sensor i. */
-static void fields_json(cali_json_t *j, int i) {
-    const sens_type_t *t = &TYPES[s_cfg.e[i].type];
+/* The members of type t from reading r (null past r->n: no reading). */
+static void fields_json(cali_json_t *j, const sens_type_t *t, const cali_sensor_reading_t *r) {
     for (uint8_t k = 0; k < t->nfields; k++) {
         cali_json_key(j, t->fields[k]);
-        if (k < s_val[i].r.n) cali_json_num(j, s_val[i].r.f[k]);
+        if (k < r->n) cali_json_num(j, r->f[k]);
         else cali_json_null(j);
     }
 }
@@ -343,7 +342,7 @@ void cali_sensors_state_json(cali_json_t *j, uint64_t now_ms) {
         cali_json_obj_begin(j);
         cali_json_key(j, "type");   /* first: the UI places a reading by its type, not its alias */
         cali_json_str(j, TYPES[s_cfg.e[i].type].id);
-        fields_json(j, i);
+        fields_json(j, &TYPES[s_cfg.e[i].type], &s_val[i].r);
         cali_json_key(j, "age_s");
         if (s_val[i].r.n) cali_json_int(j, (long long)((now_ms - s_val[i].r.at_ms) / 1000u));
         else cali_json_null(j);
@@ -371,7 +370,7 @@ void cali_sensors_api_json(cali_json_t *j, uint64_t now_ms) {
         cali_json_key(j, "value");
         if (have && age_s < SENS_OFFLINE_S) {
             cali_json_obj_begin(j);
-            fields_json(j, i);
+            fields_json(j, &TYPES[c->type], &s_val[i].r);
             cali_json_obj_end(j);
         } else {
             cali_json_null(j);
@@ -394,6 +393,19 @@ void cali_sensors_api_json(cali_json_t *j, uint64_t now_ms) {
         cali_json_str(j, s_seen[i].model);
         cali_json_key(j, "rssi");
         cali_json_int(j, s_seen[i].rssi);
+        /* the last advert decoded, so an owner tells the sensors apart before adding one; a key type: null */
+        const sens_type_t *t = &TYPES[s_seen[i].type];
+        cali_sensor_reading_t r;
+        static const uint8_t nokey[16];
+        memset(&r, 0, sizeof r);
+        cali_json_key(j, "value");
+        if (!t->needs_key && t->decode(s_seen[i].adv, s_seen[i].adv_len, nokey, &r) == 0) {
+            cali_json_obj_begin(j);
+            fields_json(j, t, &r);
+            cali_json_obj_end(j);
+        } else {
+            cali_json_null(j);
+        }
         cali_json_obj_end(j);
     }
     cali_json_arr_end(j);

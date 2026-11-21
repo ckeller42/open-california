@@ -245,8 +245,8 @@ window.STRINGS_DE = {
   "⚠ Grey water tank is full. Please empty.": "⚠ Grauwassertank ist voll. Bitte entleeren.",
   "⚠ Fill level sensor in waste water tank. Please visit a workshop.": "⚠ Fehler: Füllstandsensor im Abwassertank. Bitte Werkstatt aufsuchen.",
   "⚠ General grey water error. Please visit a workshop.": "⚠ Allgemeiner Grauwasser-Fehler. Bitte Werkstatt aufsuchen.",
-  "Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?":
-    "Kraftstoffbetriebene Luftstandheizung starten? Nicht live-verifiziert. Fortfahren?",
+  "Start the air heater (it burns fuel)? Continue?":
+    "Die Luftstandheizung starten (sie verbrennt Kraftstoff)? Fortfahren?",
 
   // --- water ---------------------------------------------------------------------------------
   "Fresh water": "Frischwasser",
@@ -467,6 +467,9 @@ window.STRINGS_DE = {
     + "Kopplung). Trage es in /etc/buspi/calictl.env ein, damit es das übersteht.",
   "Error: ": "Fehler: ",
   "No vehicle found.": "Kein Fahrzeug gefunden.",
+  "The code was not entered in time.": "Der Code wurde nicht rechtzeitig eingegeben.",
+  "The unit was found. Press Try again and type the new code at once.": "Die Camper-Einheit wurde gefunden. Tippe auf Erneut versuchen und gib den neuen Code sofort ein.",
+  "New code": "Neuer Code",
   "Something went wrong. Try again.": "Etwas ist schiefgelaufen. Versuche es erneut.",
   "Could not connect to the camper unit.": "Keine Verbindung zur Camper-Einheit.",
   "Pairing was refused.": "Kopplung abgelehnt.",
@@ -614,7 +617,7 @@ window.STRINGS_DE = {
     + "Heating temperature is a level from 1 to 9 or HI, not degrees.\n\n"
     + "Timer: set Start heating at, then Start timer. The heater then starts at that time for the run "
     + "time. If continuous heating is on, it turns off when the timer ends.\n\n"
-    + "The heater burns fuel, so every start asks first; it is not live-verified. A ⚠ banner shows why "
+    + "The heater burns fuel, so every start asks first. A ⚠ banner shows why "
     + "the unit refused or stopped it, for example low battery, low fuel or a running engine."]:
     "Sofortheizen startet die Heizung jetzt für die eingestellte Laufzeit (10–120 min). Dauerbetrieb "
     + "läuft ohne Zeitbegrenzung. Er lässt sich nur im Fahrzeug starten; hier kannst du ihn nur "
@@ -622,7 +625,7 @@ window.STRINGS_DE = {
     + "von 1 bis 9 oder HI, keine Gradzahl.\n\nTimer: Stelle Heizen startet um ein und tippe auf Timer "
     + "starten. Die Heizung startet dann zu dieser Zeit für die Laufzeit. Ist Dauerbetrieb an, "
     + "schaltet er sich am Ende des Timers aus.\n\nDie Heizung verbrennt Kraftstoff, daher fragt jeder "
-    + "Start nach; sie ist nicht live verifiziert. Ein ⚠-Hinweis zeigt, warum die Einheit sie "
+    + "Start nach. Ein ⚠-Hinweis zeigt, warum die Einheit sie "
     + "abgelehnt oder gestoppt hat, zum Beispiel schwache Batterie, wenig Kraftstoff oder laufender "
     + "Motor.",
   ["Fresh and waste water are read-only. The unit measures the tanks only while the van's water system "
@@ -717,13 +720,72 @@ window.STRINGS_DE = {
   "Joined, waiting for the keys": "Verbunden, wartet auf die Schlüssel",
   "Set up": "Eingerichtet",
   "Key storage unreadable": "Schlüsselspeicher nicht lesbar",
-  "Set up: hold the satellite's screen for 3 seconds and scan the code with the Open California remote app.": "Einrichten: den Bildschirm des Satelliten 3 Sekunden gedrückt halten und den Code mit der Open-California-Fernbedienungs-App scannen.",
+  "Set up: hold the satellite's screen 3 s until the LoRa code shows (with a remote hub: the third screen), and scan it in the remote app (OC Remote).": "Einrichten: Halte den Bildschirm des Satelliten 3 s, bis der LoRa-Code erscheint (mit Fern-Hub: der dritte Bildschirm), und scanne ihn in der Fern-App (OC Remote).",
   "Forget LoRa": "LoRa vergessen",
   "LoRa: on": "LoRa: an",
   "LoRa: off": "LoRa: aus",
   "Only for a satellite with a LoRa module (RAK3172). Off: the LoRa pins stay untouched.": "Nur für einen Satelliten mit LoRa-Modul (RAK3172). Aus: Die LoRa-Pins bleiben unberührt.",
   "Forget LoRa? The satellite deletes its LoRa keys and switches LoRa off. The device stays registered at The Things Network until you delete it there.": "LoRa vergessen? Der Satellit löscht seine LoRa-Schlüssel und schaltet LoRa aus. Das Gerät bleibt im The Things Network registriert, bis du es dort löschst.",
   "Couldn't forget LoRa": "LoRa konnte nicht vergessen werden",
+  // --- Satellite settings: the Remote hub card (POST /api/hub) ---
+  "Remote hub": "Fern-Hub",
+  "Broker address (wss://…)": "Broker-Adresse (wss://…)",
+  "Van name": "Name des Vans",
+  "Van user": "Benutzer des Vans",
+  "Van password": "Passwort des Vans",
+  "App user": "Benutzer der App",
+  "App password": "Passwort der App",
+  "unchanged": "unverändert",
+  "Not connected": "Nicht verbunden",
+  "The data key cannot be stored (retried every 30 s)": "Der Datenschlüssel kann nicht gespeichert werden (neuer Versuch alle 30 s)",
+  "Connected": "Verbunden",
+  "Connected · state sent {n} s ago": "Verbunden · Zustand vor {n} s gesendet",
+  "Install the remote app, then scan the van's code in it": "Installiere die Fern-App und scanne darin den Code des Fahrzeugs",
+  // --- the setup wizard: the Remote step, the home-screen icons, the checklist (rulings R39, R40) ---
+  "Remote hub how-to": "Anleitung zum Fern-Hub",
+  "This satellite has the LoRa module": "Dieser Satellit hat das LoRa-Modul",
+  "The remote app": "Die Fern-App",
+  "Set up ✓": "Eingerichtet ✓",
+  "The first code opens the app's web address (to install the app); the second is the van's code to scan in the app.":
+    "Der erste Code öffnet die Webadresse der App (zum Installieren); der zweite ist der Code des Fahrzeugs, den du in der App scannst.",
+  "Hold the phone about 10 cm in front of the satellite's screen.": "Halte das Handy etwa 10 cm vor den Bildschirm des Satelliten.",
+  "The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then hold the satellite's screen 3 s for the app's code, and 3 s again for “The van's code”, and scan that one in the remote app.": "Der Satellit sendet seinen Zustand an deinen MQTT-Broker und nimmt darüber Befehle der Fern-App an. Halte dann den Bildschirm des Satelliten 3 s für den Code der App und noch einmal 3 s für „Code des Fahrzeugs“ und scanne diesen in der Fern-App.",
+  "Remote access": "Fernzugriff",
+  "See and switch the van when you are away. Two ways, each optional: skip what you do not have; Satellite settings has both later.": "Sieh und schalte das Fahrzeug, wenn du nicht da bist. Zwei Wege, jeder optional: Überspringe, was du nicht hast; die Satelliten-Einstellungen haben später beide.",
+  "Over the internet (remote hub)": "Über das Internet (Fern-Hub)",
+  "Needs your own MQTT broker. Where its values come from": "Braucht deinen eigenen MQTT-Broker. Woher seine Werte kommen",
+  "The app part shows here when the hub is connected.": "Der Teil zur App erscheint hier, wenn der Hub verbunden ist.",
+  "iPhone: open the link in Safari, tap Share, then Add to Home Screen. The icon is called OC Remote.": "iPhone: Öffne den Link in Safari, tippe auf Teilen, dann auf Zum Home-Bildschirm. Das Symbol heißt OC Remote.",
+  "Android: open the link in Chrome, tap ⋮, then Install app (or Add to Home screen). The icon is called OC Remote.": "Android: Öffne den Link in Chrome, tippe auf ⋮, dann auf App installieren (oder Zum Startbildschirm hinzufügen). Das Symbol heißt OC Remote.",
+  "In the app, open ⋮ and choose Scan the van's code. On the satellite, tap the screen once to light it, hold it 3 s (the app's code shows), then hold it 3 s again until “The van's code” shows, and scan that one in the app.": "Öffne in der App ⋮ und wähle Code des Fahrzeugs scannen. Tippe am Satelliten einmal auf den Bildschirm, damit er leuchtet, halte ihn 3 s (der Code der App erscheint), dann noch einmal 3 s, bis „Code des Fahrzeugs“ erscheint, und scanne diesen in der App.",
+  "Then come back to this page and tap Next.": "Komm dann auf diese Seite zurück und tippe auf Weiter.",
+  "Over LoRa": "Über LoRa",
+  "Only for a satellite with the LoRa module (RAK3172). Works without a remote hub.": "Nur für einen Satelliten mit LoRa-Modul (RAK3172). Funktioniert ohne Fern-Hub.",
+  "Then, in the remote app": "Öffne dann in der Fern-App",
+  "open ⋮ and choose Set up LoRa. It needs a TTN account and a full-rights key": "⋮ und wähle LoRa einrichten. Dafür brauchst du ein TTN-Konto und einen Schlüssel mit allen Rechten",
+  "LoRa how-to": "Anleitung zu LoRa",
+  "On the satellite, hold the screen 3 s until the LoRa code shows (with the remote hub it is the third screen).": "Halte am Satelliten den Bildschirm 3 s, bis der LoRa-Code erscheint (mit Fern-Hub ist es der dritte Bildschirm).",
+  "OC Remote, the app from the last step, is for control from anywhere.": "OC Remote, die App aus dem letzten Schritt, ist für die Steuerung von überall.",
+  "Now add this page too. Its icon is called OC Van: the satellite's settings, works in the van's WiFi.": "Füge jetzt auch diese Seite hinzu. Ihr Symbol heißt OC Van: die Einstellungen des Satelliten, funktioniert im WLAN des Fahrzeugs.",
+  "After the sensors, the step Remote access sets up control from anywhere: the remote app over your own remote hub, or LoRa. Both are optional.": "Nach den Sensoren richtet der Schritt Fernzugriff die Steuerung von überall ein: die Fern-App über deinen eigenen Fern-Hub, oder LoRa. Beides ist optional.",
+  "Set up ›": "Einrichten ›",
+  "Not connected yet": "Noch nicht verbunden",
+  "Not connected: the broker address was not found. Check the broker address.": "Nicht verbunden: Die Broker-Adresse wurde nicht gefunden. Prüfe die Broker-Adresse.",
+  "Not connected: the secure connection failed. Check the broker address (wss://…:8084/mqtt).": "Nicht verbunden: Die sichere Verbindung ist fehlgeschlagen. Prüfe die Broker-Adresse (wss://…:8084/mqtt).",
+  "Not connected: the broker refused the login. Check the van user and the van password.": "Nicht verbunden: Der Broker hat die Anmeldung abgelehnt. Prüfe den Benutzer und das Passwort des Vans.",
+  "Not connected: the broker does not answer. Check the broker address and the van's internet.": "Nicht verbunden: Der Broker antwortet nicht. Prüfe die Broker-Adresse und das Internet des Fahrzeugs.",
+  "New data key": "Neuer Datenschlüssel",
+  "Make a new data key? Every phone must scan the van's code again, and the bridge needs the new key (HUB_KEY).": "Neuen Datenschlüssel machen? Jedes Telefon muss den Code des Fahrzeugs neu scannen, und die Bridge braucht den neuen Schlüssel (HUB_KEY).",
+  "New data key made: scan the van's code again on every phone.": "Neuer Datenschlüssel gemacht: Scanne den Code des Fahrzeugs auf jedem Telefon neu.",
+  "Couldn't make a new data key": "Neuer Datenschlüssel konnte nicht gemacht werden",
+  "Saved": "Gespeichert",
+  "Load from file": "Aus Datei laden",
+  "Not a hub setup file (oc-hub.json)": "Keine Hub-Einrichtungsdatei (oc-hub.json)",
+  "Loaded: tap Save, then delete the file (it holds the van password).": "Geladen: Tippe auf Speichern und lösche dann die Datei (sie enthält das Passwort des Vans).",
+  "Loaded: tap Save (LoRa goes on too), then delete the file (it holds the van password).": "Geladen: Tippe auf Speichern (LoRa wird auch eingeschaltet) und lösche dann die Datei (sie enthält das Passwort des Vans).",
+  "Loaded: tap Save (LoRa goes on too). Then load the same file in the app's Set up LoRa, and delete it: it holds passwords.": "Geladen: Tippe auf Speichern (LoRa wird auch eingeschaltet). Lade dann dieselbe Datei in der App unter „LoRa einrichten“ und lösche sie danach: Sie enthält Passwörter.",
+  "Check the fields: no * in any field, the van name only letters, digits, - and _, the address starts with wss://": "Prüfe die Felder: kein * in einem Feld, der Name des Vans nur Buchstaben, Ziffern, - und _, die Adresse beginnt mit wss://",
+  "Couldn't save the hub settings": "Die Hub-Einstellungen konnten nicht gespeichert werden",
   "Scan paused while pairing": "Suche pausiert während der Kopplung",
   "No other sensors nearby (the scan runs every minute).": "Keine weiteren Sensoren in der Nähe (Suche jede Minute).",
   "No sensors found yet (the scan runs every minute).": "Noch keine Sensoren gefunden (die Suche läuft jede Minute).",
@@ -787,6 +849,9 @@ window.STRINGS_DE = {
   "The password needs {min}–{max} characters.": "Das Passwort braucht {min}–{max} Zeichen.",
   "The satellite leaves {ssid} now. If the new password is wrong, it returns to {ssid} by itself.": "Der Satellit verlässt {ssid} jetzt. Ist das neue Passwort falsch, kehrt er von selbst zu {ssid} zurück.",
   "Thermo-hygrometer (Govee)": "Thermo-Hygrometer (Govee)",
+  "needs its key": "braucht seinen Schlüssel",
+  "near": "nah",
+  "far": "fern",
   "Use a–z, 0–9, - or _ (max. 16)": "Nur a–z, 0–9, - oder _ (max. 16)",
   "Wake on motion": "Bei Bewegung einschalten",
   // the Raspberry Pi box (R_FW_PI_WAKE)
@@ -974,7 +1039,7 @@ window.STRINGS_DE = {
   "Join {ssid} with this phone, then scan the new QR code on the satellite's display — or open:": "Verbinde dieses Handy mit {ssid}, dann scanne den neuen QR-Code auf dem Display des Satelliten — oder öffne:",
   "Close the California app. On the camper unit open Einstellungen → Bluetooth → Gerät verbinden, then press Pair now.": "Schließe die California-App. Öffne an der Camper-Einheit Einstellungen → Bluetooth → Gerät verbinden und tippe dann auf Jetzt koppeln.",
   "{n} s left": "noch {n} s",
-  "The code may have expired — press Pair now again.": "Der Code ist vielleicht abgelaufen — tippe noch einmal auf Jetzt koppeln.",
+  "The code may have expired — press New code.": "Der Code ist vielleicht abgelaufen — tippe auf Neuer Code.",
   "Do you have Victron devices (battery monitor, solar charger)?": "Hast du Victron-Geräte (Batteriewächter, Solarladeregler)?",
   "In VictronConnect: open the device → ⋮ → Product info → Instant readout details → Show — copy the encryption key.": "In VictronConnect: Öffne das Gerät → ⋮ → Product info → Instant readout details → Show und kopiere den Verschlüsselungsschlüssel.",
   "Search for sensors": "Nach Sensoren suchen",
@@ -988,4 +1053,10 @@ window.STRINGS_DE = {
   "✓ Setup done": "✓ Einrichtung abgeschlossen",
   "Couldn't finish the setup": "Einrichtung konnte nicht abgeschlossen werden",
   "not set up": "nicht eingerichtet",
+  "skipped": "übersprungen",
+  "Connected ✓": "Verbunden ✓",
+  "On, set up in the app": "An, Einrichtung in der App",
+  "Continue setup": "Einrichtung fortsetzen",
+  "Other phone": "Anderes Handy",
+  "Searching for sensors…": "Suche Sensoren…",
 };

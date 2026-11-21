@@ -22,13 +22,22 @@ int cali_display_init(const cali_transport_t *t);
 void cali_display_tick(uint64_t now_ms);
 /* 1 once cali_display_init succeeded (the screen exists). */
 int cali_display_ready(void);
-/* 1 while the LoRa screen (R_FW_LORA_SCREEN) is up: its QR holds keys, so shot.c sends no frame then. */
+/* 1 while the LoRa screen (R_FW_LORA_SCREEN) is up. */
 int cali_display_lora_shown(void);
+/* shot.c, with bsp_display_lock held (ruling R46): 1 = a QR that holds keys is up (repair, LoRa setup or hub
+ * QR) and *x1..*y2 is its canvas's screen rectangle, quiet zone included, to mask; 0 = nothing to mask (no
+ * QR overlay, or the app QR); -1 = a secret QR is up but its rectangle cannot be read (refuse the frame). */
+int cali_display_qr_mask_area(int *x1, int *y1, int *x2, int *y2);
 /* Console hook (shot.c): handles the exact line "screenshot" (returns 1) by streaming the screen as
  * "[SHOT w h RLE16 n]", base64 lines of 76 chars, "[/SHOT]" (decode with tools/esp_shot.py). Refuses with
- * "LOG display: screenshot failed (no screen|lora screen|no host|no memory|busy|snapshot)" and no frame. Runs on the
+ * "LOG display: screenshot failed (no screen|lora screen|no host|no memory|busy|snapshot)" (lora screen:
+ * a secret QR whose rectangle cannot be read); a frame with a secret QR is sent with it masked grey and no frame. Runs on the
  * caller's task (the NimBLE host task) and blocks it while the frame prints; the LVGL lock is held
  * only for the snapshot itself. Needs a host attached to the USB-Serial/JTAG console (refused with
  * "no host" otherwise: a puts with nobody draining the CDC could block the host task). Any other line returns 0. */
 int cali_display_shot_line(const char *line);
+/* Console hook (USB-console test aid, cali_display_touch_cmd): handles "touch tap" / "touch hold <1-10000 ms>"
+ * (returns 1) by pressing the screen in the touch read for that long, as a finger; a bad argument logs the usage.
+ * Any other line returns 0. Owner task. */
+int cali_display_touch_line(const char *line);
 #endif
