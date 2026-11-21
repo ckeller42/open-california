@@ -89,8 +89,8 @@ a file in this repository or a log.
 | `WEBHOOK_SECRET` | your computer: `openssl rand -hex 24` (step 2.7) | Cloudflare Worker secret `WEBHOOK_SECRET` (step 2.8) **and** the TTN webhook header `X-OC-Secret` (step 3.3) | your secret store |
 | `HUB_KEY` (the data key) | the satellite, at the first save of the Hub card | the hub QR, scanned by every phone (step 5.4); Cloudflare Worker secret `HUB_KEY`, read from the QR with `zbarcam` (step 5.7) | no copy: the satellite holds it and the hub QR shows it again; **New data key** in the Hub card makes a new one |
 | Bridge settings `VAN`, `BROKER_WSS`, `DEV_ID` | your choice; `DEV_ID` is the van's TTN device ID | `bridge/wrangler.toml` under `[vars]` (step 2.4) | the repository: they are not secret |
-| `REMOTE_APP_DEPLOY_KEY` (SSH key pair) | your computer, `ssh-keygen` in a temporary folder (step 4.3) | private half: GitHub secret of `ckeller42/open-california` (`gh secret set`); public half: deploy key with write access on the Pages repository | no copy: the temporary folder is deleted |
-| `OC_HUB_ORIGIN` | the broker URL of step 1.5 without the path | GitHub variable of `ckeller42/open-california` (`gh variable set`, step 4.4) | not secret |
+| `REMOTE_APP_DEPLOY_KEY` (SSH key pair) | your computer, `ssh-keygen` in a temporary folder (step 4.4) | private half: secret of the environment `remote-app` of `ckeller42/open-california` (`gh secret set --env`); public half: deploy key with write access on the Pages repository | no copy: the temporary folder is deleted |
+| `OC_HUB_ORIGIN` | the broker URL of step 1.5 without the path | variable of the environment `remote-app` of `ckeller42/open-california` (`gh variable set --env`, step 4.5) | not secret |
 | Cloudflare access for `wrangler` | `npx wrangler login` in the browser (step 2.3), or an API token from the Cloudflare dashboard, **My Profile > API Tokens**, template *Edit Cloudflare Workers* | your computer only: `wrangler` keeps the login, or reads the token from `CLOUDFLARE_API_TOKEN` | your secret store (the token) |
 | EMQX platform API key (optional) | EMQX console, **Settings > Platform API Key > New API Key** | your computer only, as `EMQX_API_KEY` and `EMQX_API_SECRET`, for automation; the setup does not need it | your secret store |
 | EMQX deployment API key (optional) | EMQX console, the deployment's **API Key** page (**check in the console**; the Platform API cannot make one for Serverless) | your computer only, as `EMQX_DEPLOY_APP_ID` and `EMQX_DEPLOY_APP_SECRET`, to create logins and permissions through `https://<host>:8443/api/v5` | your secret store |
@@ -125,8 +125,9 @@ O->>C: wrangler deploy
 C-->>O: Worker URL /ttn
 O->>T: webhook: Worker URL, header X-OC-Secret = WEBHOOK_SECRET
 O->>G: Pages repo, deploy key (public half)
-O->>G: secret REMOTE_APP_DEPLOY_KEY (private half)
-O->>G: variable OC_HUB_ORIGIN = wss origin
+O->>G: environment remote-app (tags remote-v* only), tag ruleset
+O->>G: environment secret REMOTE_APP_DEPLOY_KEY (private half)
+O->>G: environment variable OC_HUB_ORIGIN = wss origin
 O->>G: tag remote-v*
 G-->>O: app on GitHub Pages
 Note over O,C: HUB_KEY comes later, from the satellite's hub QR (step 5.7)
@@ -217,7 +218,7 @@ The EMQX platform API key can automate the console steps. It belongs in your sec
    **Check:** it ends with all tests passed.
 6. Commit the change and push `main` (`git commit -am "bridge: van and broker"` and `git push origin
    main`). If `main` is protected, open a pull request and merge it. The app's publish job
-   (step 4.5) accepts only a tag on a commit that is on `origin/main`.
+   (step 4.6) accepts only a tag on a commit that is on `origin/main`.
    **Check:** `git fetch && git status` says `main` is up to date with `origin/main`.
 7. Make the webhook secret (at least 16 characters): `openssl rand -hex 24`. Save it in your secret
    store, for example as `OC_WEBHOOK_SECRET`. Never type it into a command line.
@@ -259,34 +260,71 @@ The EMQX platform API key can automate the console steps. It belongs in your sec
 
 ### 4. GitHub: the app on Pages
 
+The publish job in `ckeller42/open-california` writes to a second repository, so it needs a key for
+it. That key can change the app on every phone, so it gets the narrowest scope GitHub offers: a deploy
+key on the Pages repository only, kept in an environment that only `remote-v*` tags can use, and those
+tags only you can create.
+
 1. Create the repository `open-california/open-california.github.io` (public) with a first commit on
    `main`, for example a README. The publish job clones branch `main`, so the branch must exist.
-   **Check:** `gh repo view open-california/open-california.github.io` works.
-2. In that repository open **Settings > Pages** and serve **branch `main`, folder `/`** (**check in
-   the GitHub settings**).
-3. Make a deploy key that can write to that repository only, and store its private half as the
-   secret `REMOTE_APP_DEPLOY_KEY` of `ckeller42/open-california`, without a copy on disk:
+   GitHub serves a `<org>.github.io` repository on Pages by itself (branch `main`, folder `/`).
+   **Check:** `gh api repos/open-california/open-california.github.io/pages --jq .source` shows
+   `main` and `/`.
+2. Protect that repository's `main` against force-push and deletion (the publish job only adds
+   commits):
+
+   ```sh
+   gh api -X POST repos/open-california/open-california.github.io/rulesets --input - <<'J'
+   {"name":"main: no force-push, no delete","target":"branch","enforcement":"active",
+    "conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},
+    "rules":[{"type":"deletion"},{"type":"non_fast_forward"}]}
+   J
+   ```
+
+3. Make the environment `remote-app` in `ckeller42/open-california` that only tags `remote-v*` can
+   use, and let only admins create, move or delete those tags:
+
+   ```sh
+   R=ckeller42/open-california
+   gh api -X PUT repos/$R/environments/remote-app --input - <<'J'
+   {"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
+   J
+   gh api -X POST repos/$R/environments/remote-app/deployment-branch-policies -f name='remote-v*' -f type=tag
+   gh api -X POST repos/$R/rulesets --input - <<'J'
+   {"name":"remote-v tags: admin only","target":"tag","enforcement":"active",
+    "conditions":{"ref_name":{"include":["refs/tags/remote-v*"],"exclude":[]}},
+    "bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],
+    "rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"},{"type":"non_fast_forward"}]}
+   J
+   ```
+
+4. A new organization blocks deploy keys. Allow them (the organization has only this repository):
+   `gh api -X PATCH orgs/open-california -F deploy_keys_enabled_for_repositories=true`.
+   Then make a deploy key that can write to the Pages repository only, and store its private half
+   as the environment secret, without a copy on disk:
 
    ```sh
    d=$(mktemp -d)
    ssh-keygen -t ed25519 -N '' -C oc-remote-app -f "$d/k"
    gh repo deploy-key add "$d/k.pub" -R open-california/open-california.github.io --allow-write --title remote-app
-   gh secret set REMOTE_APP_DEPLOY_KEY -R ckeller42/open-california < "$d/k"
+   gh secret set REMOTE_APP_DEPLOY_KEY -R ckeller42/open-california --env remote-app < "$d/k"
    shred -u "$d/k"; rm -rf "$d"
    ```
 
-   **Check:** `gh secret list -R ckeller42/open-california` names `REMOTE_APP_DEPLOY_KEY`, and
+   **Check:** `gh secret list -R ckeller42/open-california --env remote-app` names
+   `REMOTE_APP_DEPLOY_KEY`, `gh secret list -R ckeller42/open-california` does **not**, and
    `gh repo deploy-key list -R open-california/open-california.github.io` shows `remote-app` with
    write access.
-4. Set the repository variable with the broker origin (the URL of step 1.5 without the path). The
-   build puts it into the page's `connect-src`; without it the page cannot reach the broker:
+5. Set the broker origin (the URL of step 1.5 without the path) in the same environment. The build
+   puts it into the page's `connect-src`, accepts only `wss://<host>[:<port>]`, and the job stops if
+   it is missing:
 
    ```sh
-   gh variable set OC_HUB_ORIGIN -R ckeller42/open-california --body 'wss://<address>:8084'
+   gh variable set OC_HUB_ORIGIN -R ckeller42/open-california --env remote-app --body 'wss://<address>:8084'
    ```
 
-   **Check:** `gh variable list -R ckeller42/open-california` shows `OC_HUB_ORIGIN`.
-5. Push `main` first if it has commits that `origin/main` lacks (step 2.6 did this for the bridge
+   **Check:** `gh variable list -R ckeller42/open-california --env remote-app` shows `OC_HUB_ORIGIN`.
+6. Push `main` first if it has commits that `origin/main` lacks (step 2.6 did this for the bridge
    change): the workflow stops with "tag is not on main" for a tag on a commit that is not on
    `origin/main`. Then tag that commit and push the tag (workflow `.github/workflows/remote-app.yml`):
 
@@ -507,8 +545,8 @@ Never write a value into this repository, a chat or a log. Names and places only
 | `bridge` user and password = `BROKER_USER`, `BROKER_PASS` | EMQX console; Cloudflare secrets | publish `oc/<van>/lora/#` | New password in the console, then `npx wrangler secret put BROKER_PASS`. |
 | `WEBHOOK_SECRET` | Cloudflare secret; the TTN webhook header `X-OC-Secret`; your secret store | make the bridge accept an uplink (it can feed the app fake LoRa values; the bridge still seals them) | New value in your secret store, `wrangler secret put WEBHOOK_SECRET`, new header value in the TTN webhook. |
 | `HUB_KEY` (the data key) | the satellite's flash; the hub QR; every phone; Cloudflare secret | read the van's WiFi data, send valid commands | [Rekey](#lost-phone-or-leaked-key-rekey). |
-| `REMOTE_APP_DEPLOY_KEY` | GitHub secret of `ckeller42/open-california`; the public half is the deploy key of the Pages repo | write to the Pages repository only | Step 4.3 again with a new key, then delete the old deploy key (`gh repo deploy-key delete`). |
-| `OC_HUB_ORIGIN` | GitHub variable (not a secret) | the broker origin in the page's `connect-src` | `gh variable set`, then a new tag. |
+| `REMOTE_APP_DEPLOY_KEY` | secret of the environment `remote-app` of `ckeller42/open-california` (tags `remote-v*` only); the public half is the deploy key of the Pages repo | write to the Pages repository only | Step 4.4 again with a new key, then delete the old deploy key (`gh repo deploy-key delete`). |
+| `OC_HUB_ORIGIN` | variable of the environment `remote-app` (not a secret: it is in the page's CSP) | the broker origin in the page's `connect-src` | `gh variable set --env remote-app`, then a new tag. |
 | `EMQX_API_KEY`, `EMQX_API_SECRET` | your secret store | optional: the EMQX platform API for automation; this page does not need it | New key in the EMQX console. |
 | TTN full-rights API key | the phone, once | the app deletes it after the LoRa setup | n/a |
 | `EMQX_DEPLOY_APP_ID`, `EMQX_DEPLOY_APP_SECRET` | your secret store | optional: the EMQX deployment API (logins, permissions, clients) | Delete the key in the console and make a new one. |
