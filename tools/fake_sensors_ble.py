@@ -271,6 +271,17 @@ def describe(sensors, t: float) -> None:
             print("        VictronConnect would show: %s" % s.key.hex())
 
 
+def _ignore_signals() -> None:
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, signal.SIG_IGN)
+
+
+def _quit(*_) -> None:
+    """SIGTERM/SIGINT: ignore further ones first (``sudo`` relays a pkill's signal, so two arrive), then unwind to the cleanup."""
+    _ignore_signals()
+    raise SystemExit(0)
+
+
 def main(argv=None) -> int:
     """CLI: advertise until Ctrl-C/SIGTERM, then remove every set."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -300,7 +311,8 @@ def main(argv=None) -> int:
         for h in range(TOP_HANDLE, TOP_HANDLE - MAX_SETS, -1):
             hci.stop(h)
         return 0
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    signal.signal(signal.SIGTERM, _quit)
+    signal.signal(signal.SIGINT, _quit)
     describe(sensors, t0)
     try:
         while True:
@@ -313,11 +325,10 @@ def main(argv=None) -> int:
                 flush=True,
             )
             time.sleep(a.interval)
-    except KeyboardInterrupt:
+    except SystemExit:
         pass
     finally:
-        for sig in (signal.SIGTERM, signal.SIGINT):  # a second signal (sudo relays one) must not cut the cleanup
-            signal.signal(sig, signal.SIG_IGN)
+        _ignore_signals()
         for h in handles:
             hci.stop(h)
         print("advertising stopped", flush=True)
