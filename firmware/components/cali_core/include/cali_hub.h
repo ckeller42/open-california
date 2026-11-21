@@ -101,7 +101,8 @@ size_t cali_hub_seal(cali_hub_crypto_t *c, uint8_t dir, const uint8_t *pt, size_
  * added (the oldest entry is evicted) and its counter starts fresh.
  * Replay state lives in RAM only: it is per boot. A replay after a reboot, or of a session older than the
  * ring, is covered by the caller (the RPC layer): the 120 s time check with SNTP time, and without it no method
- * but GET runs; the ESP port also drops a retained request frame.
+ * but GET runs; and cali_hub_tick drops a request frame the broker delivered as retained (after a reboot the ring is
+ * empty: a retained request would run again at every subscribe).
  * @param expect_mask Bit d set = a frame with dir d is accepted (ESP: 1<<2; app: (1<<1)|(1<<3)).
  * @param dir Receives the frame's dir; may be NULL.
  * @return the plaintext length, or -1 (bad version, dir, nonce, size, tag or replay).
@@ -301,8 +302,9 @@ int cali_hub_port_why(void);
  * @brief Copies the next request frame into `buf`. @return its length, 0 = none (a longer one is dropped).
  * @param buf Receives the next request frame.
  * @param max Size of `buf`.
+ * @param retained Receives 1 when the broker delivered the frame as retained, else 0.
  */
-size_t cali_hub_port_take(uint8_t *buf, size_t max);
+size_t cali_hub_port_take(uint8_t *buf, size_t max, int *retained);
 /**
  * @brief Hands a sealed frame to the client for `topic` (it copies it; never waits). @return 0 or -1.
  * @param topic The topic (CALI_HUB_T_STATE or CALI_HUB_T_RES).

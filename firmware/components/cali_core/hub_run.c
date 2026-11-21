@@ -91,8 +91,13 @@ void cali_hub_tick(uint64_t now_ms) {
     if (s_rpc.buf) {
         if (cali_hub_rpc_poll(&s_rpc, s_res, CALI_HUB_RES_MAX)) answered(now_ms);
     } else {
-        size_t n = cali_hub_port_take(s_frame, FRAME_MAX);
-        if (n) {
+        int retained = 0;
+        size_t n = cali_hub_port_take(s_frame, FRAME_MAX, &retained);
+        if (n && retained) {
+            /* the app never retains a request: a retained one (valid tag, fresh t) would run again at every
+             * subscribe, and after a reboot the replay ring is empty */
+            cali_log("hub: retained request dropped");
+        } else if (n) {
             int k = cali_hub_open(&s_c, s_frame, n, (uint8_t *)s_pt, CALI_HUB_REQ_MAX, 1u << CALI_HUB_DIR_APP, NULL);
             if (k < 0) {
                 cali_log("hub: request rejected (%u bytes)", (unsigned)n); /* bad tag, replay, wrong dir */

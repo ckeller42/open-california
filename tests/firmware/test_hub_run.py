@@ -54,6 +54,17 @@ def test_replayed_frame_is_dropped():
     assert any(ln.startswith("LOG hub: request rejected") for ln in out)
 
 
+def test_a_retained_request_after_a_reboot_is_dropped():
+    """Coverage row 32 (bench gate): after a reboot the replay ring is empty and SNTP is synced, so a retained
+    request (valid tag, fresh t) the broker delivers at the subscribe would run again. It is dropped, not executed;
+    the same frame delivered live runs."""
+    out = _run(*UP, "mark", "retained " + json.dumps(CMD), "tick 1100")  # a fresh process = a fresh boot
+    assert _posts(out[out.index("MARK") :]) == []
+    assert "LOG hub: retained request dropped" in out
+    out = _run(*UP, "mark", "req " + json.dumps(CMD), "tick 1100")
+    assert [ln[:9] for ln in _posts(out[out.index("MARK") :])] == ["POST res ", "POST stat"]
+
+
 def test_state_every_30_s_and_not_while_http_sends():
     out = _run(*UP, "mark", "tick 20000", "tick 30999", "busy 1", "tick 31000", "busy 0", "tick 31100")
     assert _posts(out[out.index("MARK") :]) == ['POST state {"st":2}']

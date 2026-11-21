@@ -3,7 +3,8 @@
  *
  * Lines: cfg (store a hub config) | changed (cali_hub_cfg_changed) | online 0|1 | busy 0|1 (cali_http_busy) |
  *   keyfail 0|1 (storing hub_key fails) | tick <ms> (clock = ms, cali_hub_tick) | req <json> (the app seals it,
- *   dir 2, into the port's take slot) | replay (the last request frame again) | newkey (cali_hub_new_key) |
+ *   dir 2, into the port's take slot) | retained <json> (the same, delivered as a retained message) |
+ *   replay (the last request frame again) | newkey (cali_hub_new_key) |
  *   mark (prints MARK) | status (prints "STATUS <online> <last_pub_s != 0> <key_error>").
  * The port prints START / STOP and "POST state|res <plaintext>" (opened by the app's context with the stored
  * key, dir 1), or "POST <topic> unopened". The router answers GET /api/state 200 {"st":<n>} (n counts),
@@ -89,6 +90,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
 static cali_hub_crypto_t s_app;
 static uint8_t s_slot[CALI_HUB_REQ_MAX], s_last[CALI_HUB_REQ_MAX];
 static size_t s_slot_n, s_last_n;
+static int s_slot_retained;
 
 static void app_key(void) {   /* the app scanned the QR: the stored key, its own session */
     size_t n = sizeof s_app.key;
@@ -106,8 +108,9 @@ int cali_hub_port_start(const cali_hub_cfg_t *cfg) {
 void cali_hub_port_stop(void) { puts("STOP"); }
 int cali_hub_port_online(void) { return s_online; }
 int cali_hub_port_why(void) { return s_why; }
-size_t cali_hub_port_take(uint8_t *buf, size_t max) {
+size_t cali_hub_port_take(uint8_t *buf, size_t max, int *retained) {
     size_t n = s_slot_n;
+    *retained = s_slot_retained;
     if (!n || n > max) return 0;
     memcpy(buf, s_slot, n);
     s_slot_n = 0;
@@ -151,9 +154,10 @@ int main(void) {
         } else if (sscanf(line, "tick %llu", &ms) == 1) {
             s_now = ms;
             cali_hub_tick(s_now);
-        } else if (!strncmp(line, "req ", 4)) {
-            s_slot_n = cali_hub_seal(&s_app, CALI_HUB_DIR_APP, (const uint8_t *)line + 4, strlen(line + 4), s_slot,
-                                     sizeof s_slot);
+        } else if (!strncmp(line, "req ", 4) || !strncmp(line, "retained ", 9)) {
+            const char *j = strchr(line, ' ') + 1;
+            s_slot_retained = !strncmp(line, "retained ", 9);
+            s_slot_n = cali_hub_seal(&s_app, CALI_HUB_DIR_APP, (const uint8_t *)j, strlen(j), s_slot, sizeof s_slot);
             memcpy(s_last, s_slot, s_slot_n);
             s_last_n = s_slot_n;
         } else if (!strcmp(line, "replay")) {

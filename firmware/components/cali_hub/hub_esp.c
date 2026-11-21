@@ -46,6 +46,7 @@ typedef struct {
     uint8_t *buf;
     size_t len;
     int topic;
+    int retain;   /* a request: the broker delivered it retained (hub_run.c drops it) */
 } frame_t;
 
 typedef struct {
@@ -103,15 +104,12 @@ static void rx_data(client_t *c, const esp_mqtt_event_t *e) {
         heap_caps_free(c->rx.buf);
         c->rx.buf = NULL;
         if (e->topic_len != (int)strlen(c->topic[T_REQ]) || memcmp(e->topic, c->topic[T_REQ], (size_t)e->topic_len)) return;
-        if (e->retain) {   /* the app never retains a request: a retained one would run again at every subscribe */
-            cali_log("hub: retained request dropped");
-            return;
-        }
         if (e->total_data_len <= 0 || e->total_data_len > CALI_HUB_REQ_MAX) {
             cali_log("hub: request of %d bytes dropped", e->total_data_len);
             return;
         }
         c->rx.len = (size_t)e->total_data_len;
+        c->rx.retain = e->retain;
         c->rx.buf = ps_alloc(c->rx.len);
         if (!c->rx.buf) {
             cali_log("hub: request dropped: no memory");
@@ -260,17 +258,19 @@ int cali_hub_port_online(void) { return s_cur && atomic_load(&s_cur->online); }
 
 int cali_hub_port_why(void) { return s_cur ? atomic_load(&s_cur->why) : CALI_HUB_WHY_NONE; }
 
-size_t cali_hub_port_take(uint8_t *buf, size_t max) {
+size_t cali_hub_port_take(uint8_t *buf, size_t max, int *retained) {
     frame_t f;
     size_t n = 0;
+    *retained = 0;
     if (!s_cur || xQueueReceive(s_cur->req_q, &f, 0) != pdTRUE) return 0;
     if (f.len <= max) memcpy(buf, f.buf, n = f.len);
+    *retained = f.retain;
     heap_caps_free(f.buf);
     return n;
 }
 
 int cali_hub_port_post(int topic, const uint8_t *frame, size_t n) {
-    frame_t o = {NULL, n, topic};
+    frame_t o = {NULL, n, topic, 0};
     if (!s_cur || !(o.buf = ps_alloc(n))) return -1;
     memcpy(o.buf, frame, n);
     if (xQueueSend(s_cur->out_q, &o, 0) != pdTRUE) {
