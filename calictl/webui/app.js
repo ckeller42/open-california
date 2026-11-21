@@ -1902,7 +1902,10 @@ let pairingTimer = null;
 
 async function pairingFetch() {
   try { PAIRING = await api("/api/pairing"); } catch (e) { /* transient -- keep the last snapshot */ }
+  if (PAIRING && PAIRING.state === "waiting_passkey") pairingCodeSeen = true;
 }
+/** This flow reached the code step: a later "timeout" is the code wait, not "no vehicle found". */
+let pairingCodeSeen = false;
 
 // Terminal snapshot states: no flow is mid-flight, so nothing will change again until the user
 // acts (Start/Retry/reset). Polling every 1 s forever after that would just be a background
@@ -1934,6 +1937,7 @@ function stopPairingPoll() {
 /** @type {Record<string, string>} */
 const PAIRING_ERROR_MSG = {
   timeout: "No vehicle found.",
+  code_timeout: "The code was not entered in time.",
   connect_failed: "Could not connect to the camper unit.",
   pairing_failed: "Pairing was refused.",
   verify_failed: "Could not verify the pairing.",
@@ -1941,6 +1945,7 @@ const PAIRING_ERROR_MSG = {
 
 /** @type {Record<string, string>} */
 const PAIRING_ERROR_HINT = {
+  code_timeout: "The unit was found. Press Try again and type the new code at once.",
   timeout: "Check that “Gerät verbinden” is open on the unit, that buspi is in range, and that no phone is connected to the unit.",
   connect_failed: "The unit may be asleep, a phone may still hold its single connection, or another app on this Pi keeps Bluetooth scanning. Wake the unit at its panel, disconnect the phone, pause other Bluetooth apps, then try again. An existing pairing is kept.",
   pairing_failed: "Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and try again.",
@@ -1977,7 +1982,7 @@ const SAT_PAIRING_ERROR_HINT = {
  */
 async function pairingAction(action, value, confirmFlag) {
   if (pairingBusy) return;   // one POST per tap: the card's buttons are disabled while it runs
-  if (action === "start" || action === "reset") startPairingPoll();  // re-arm: a new flow begins
+  if (action === "start" || action === "reset") { pairingCodeSeen = false; startPairingPoll(); }  // re-arm: a new flow begins
   /** @type {Record<string, any>} */
   const body = { action };
   if (value !== undefined) body.value = value;
@@ -1992,6 +1997,7 @@ async function pairingAction(action, value, confirmFlag) {
   } catch (e) { /* res stays null */ }
   pairingBusy = false;
   if (res && res.state) PAIRING = res;              // a real snapshot -> adopt it
+  if (PAIRING && PAIRING.state === "waiting_passkey") pairingCodeSeen = true;
   // never a raw error enum: known request errors get their own text, anything else the generic one.
   // A row in the card, not a toast: it stays until the next request.
   else pairingReqError = PAIRING_REQUEST_ERROR_MSG[(res && res.error) || ""] || "Pairing request failed";
@@ -2143,6 +2149,12 @@ function pairingCard() {
     sendBtn.disabled = pairingBusy;
     row.appendChild(sendBtn);
     card.appendChild(row);
+    // the unit's code lasts about 30 s, the wait 60 s: a new code at once instead of waiting for the error
+    const newBtn = document.createElement("button"); newBtn.type = "button"; newBtn.className = "btn"; newBtn.id = "pairing-newcode";
+    newBtn.textContent = /** @type {string} */ (t("New code"));
+    newBtn.disabled = pairingBusy;
+    newBtn.onclick = async () => { await pairingAction("cancel"); await pairingAction("start"); };
+    card.appendChild(newBtn);
   } else if (p.state === "pairing" || p.state === "verifying" || p.state === "resetting") {
     const row = document.createElement("div"); row.className = "row";
     row.appendChild(spinner());
@@ -2177,7 +2189,8 @@ function pairingCard() {
     }
   } else if (p.state === "error") {
     const errRow = document.createElement("div"); errRow.className = "warn";
-    const perr = /** @type {string} */ (p.error || "");
+    // one firmware "timeout" for every phase: after the code showed, it was the code wait
+    const perr = p.error === "timeout" && pairingCodeSeen ? "code_timeout" : /** @type {string} */ (p.error || "");
     errRow.textContent = /** @type {string} */ (t("Error: "))
       + (/** @type {string} */ (t(PAIRING_ERROR_MSG[perr])) || /** @type {string} */ (t(PAIRING_ERROR_FALLBACK)));
     card.appendChild(errRow);
@@ -2832,7 +2845,7 @@ function setupTick() {
   else if (pairCodeSince === null) pairCodeSince = Date.now();
   const left = pairCodeSince === null ? null : PAIR_CODE_S - Math.floor((Date.now() - pairCodeSince) / 1000);
   sq("setup-count").textContent = left === null ? "" : left > 0 ? tf("{n} s left", { n: left })
-    : T("The code may have expired — press Pair now again.");
+    : T("The code may have expired — press New code.");
 }
 
 /** Does `<hostname>.local` resolve from this phone? Yes: move there (a home-screen link that survives

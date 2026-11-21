@@ -284,8 +284,31 @@ def test_the_countdown_ends_in_a_retry_hint(station_pending, locale, lang):
         expect(pg.locator("#setup-count")).to_contain_text(re.compile(tr("{n} s left", lang, n=r"\d+")))
         pg.clock.run_for(31000)
         expect(pg.locator("#setup-count")).to_have_text(
-            tr("The code may have expired — press Pair now again.", lang)
+            tr("The code may have expired — press New code.", lang)
         )
+
+
+def test_a_timeout_after_the_code_says_so_and_new_code_restarts(station_pending):
+    """The firmware's one "timeout" covers every phase: after the code showed, the page names the code wait,
+    not "No vehicle found". "New code" cancels and starts again without the 60 s wait."""
+    with _page(station_pending, "/#setup/pair", "en-US") as pg:
+        pg.get_by_role("button", name="Pair now", exact=True).click()
+        expect(pg.locator("#pairing-passkey")).to_be_visible()
+        pg.click("#pairing-newcode")
+        expect(pg.locator("#pairing-passkey")).to_be_visible()
+        assert [b["action"] for b in station_pending.pairing_posts] == ["start", "cancel", "start"]
+        station_pending.fixtures["station"]["/api/pairing"].update(state="error", error="timeout")
+        expect(pg.locator("#pairing-card")).to_contain_text("The code was not entered in time.")
+        expect(pg.locator("#pairing-card")).not_to_contain_text("No vehicle found")
+
+
+def test_a_timeout_before_any_code_still_says_no_vehicle(station_pending):
+    with _page(station_pending, "/#setup/pair", "en-US") as pg:
+        station_pending.pairing_scan_polls = 1000   # the search never finds the unit
+        pg.get_by_role("button", name="Pair now", exact=True).click()
+        pg.wait_for_timeout(1500)
+        station_pending.fixtures["station"]["/api/pairing"].update(state="error", error="timeout")
+        expect(pg.locator("#pairing-card")).to_contain_text("No vehicle found.")
 
 
 def test_the_home_step_saves_the_apps_start_url(station_pending):
