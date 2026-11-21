@@ -1007,6 +1007,7 @@ window.STRINGS_DE = {
   "Taking over continuous heating": "Übernimmt den Dauerbetrieb",
   "Level raised": "Stufe erhöht",
   "Level lowered": "Stufe gesenkt",
+  "Getting colder — highest level": "Wird kälter — höchste Stufe",
   "Holding the level": "Stufe wird gehalten",
   "Warmer than the target at the lowest level": "Wärmer als das Ziel bei niedrigster Stufe",
   "Too warm — heater stopped": "Zu warm — Heizung gestoppt",

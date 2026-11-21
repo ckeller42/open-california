@@ -43,6 +43,8 @@ THERMO_DEFAULTS: dict[str, int] = {
     "runtime_min": 120,  # min (AUTO from OFF; owner-settable 10-120)
     "night_wait_ms": 300000,  # ms (night start: wait for Dauerbetrieb at the panel)
     "night_confirm_ms": 30000,  # ms (Dauerbetrieb counts after it held this long)
+    "band_lo": 30,  # centi-°C (below target - band_lo the level never falls)
+    "cool_rate": 5,  # centi-°C per minute, smoothed (a fall this fast below the target: level 10)
 }
 
 #: The demand acts on the reference this many minutes ahead: the cabin keeps rising for minutes after
@@ -98,6 +100,7 @@ REASONS = (
     "WAITING_FOR_CONTINUOUS",
     "NIGHT_WAIT_ENDED",
     "HOLD_AT_MIN_LEVEL",
+    "COOLING_MAX",
 )
 
 
@@ -175,7 +178,13 @@ def control(
        demand differs from the current level by at least ``500 + hyst`` and ``min_dwell_ms`` has
        passed. It shall report ``OVERHEAT`` above ``target + overheat`` and
        ``TARGET_EXCEEDED_AT_MIN_LEVEL`` after ``hot_hold_ms`` above ``target + band_hi`` at the
-       minimum level, both from ``t_ref`` itself. All arithmetic is integer; division uses :func:`_rdiv`.
+       minimum level, both from ``t_ref`` itself. Below the target the air heater must not sit in its
+       own control pause (it stops burning at a low level and starts again only when its own sensor
+       is cold or the level rises): while ``t_ref < target - band_lo`` the level shall not fall, and
+       while ``t_ref < target`` and the smoothed rate is at or below ``-cool_rate`` it shall be set
+       to 10 at once (``COOLING_MAX``), past the dwell and the hysteresis, with the integrator set
+       so that the demand is level 10 (:func:`track`); at level 10 it shall hold. All arithmetic is integer; division uses
+       :func:`_rdiv`.
 
     :param t_ref: reference temperature in centi-°C.
     :param t_out: outside temperature in centi-°C, or ``None`` (no feed-forward).
@@ -222,11 +231,18 @@ def control(
         return None, new, "OVERHEAT"
     if hot_since is not None and now_ms - hot_since >= cfg["hot_hold_ms"]:
         return None, new, "TARGET_EXCEEDED_AT_MIN_LEVEL"
+    if t_ref < target and rate <= -cfg["cool_rate"]:
+        if cur_level == 10:
+            return None, new, "HOLD"  # still cooling: no step down from full heat
+        # the heater may sit in its own pause while the cabin cools: full heat now
+        new = {**track(new, 10, t_ref, target, cfg), "u": 10000, "last_change_ms": now_ms}
+        return 10, new, "COOLING_MAX"
     level = min(max(_rdiv(u, 1000), cfg["min_level"]), 10)
     if cur_level is None:
         return level, new, "LEVEL_UP"
     if (
         level == cur_level
+        or (level < cur_level and t_ref < target - cfg["band_lo"])  # no step down while cold
         or abs(u - cur_level * 1000) < 500 + cfg["hyst"]
         or now_ms - ctl["last_change_ms"] < cfg["min_dwell_ms"]
     ):

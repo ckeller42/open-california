@@ -76,11 +76,11 @@
  *    request of the same body. The switch, an AUTO request and ``cfg`` shall be
  *    refused without ``confirm: true``; a value outside its range (target 500..3000 in steps of 50,
  *    run time 10..120 min, ``min_level`` 1..10, ``batt_min_dv`` 100..150, periods and times above
- *    0, gains not below 0) shall be refused before anything changes; a ``rev`` other than the current
+ *    0, gains and ``band_lo`` not below 0, ``cool_rate`` above 0) shall be refused before anything changes; a ``rev`` other than the current
  *    one shall be refused, except for a body that is only ``mode`` ``OFF`` (a stop is never blocked);
  *    every accepted POST shall count ``rev``. The settings, the target, the
- *    aliases, ``outside_on`` and ``night`` shall persist in kv ``th_cfg`` (a version-1 record of an
- *    older firmware loads with the new members at their defaults), the switch in ``th_on``, the mode
+ *    aliases, ``outside_on`` and ``night`` shall persist in kv ``th_cfg`` (a version-1 or version-2
+ *    record of an older firmware loads with the new members at their defaults), the switch in ``th_on``, the mode
  *    never. ``/api/state`` shall carry ``device.thermostat`` (``mode``, ``target``, ``t_ref``,
  *    ``level``, ``reason``) only while a reference thermometer is selected.
  * @endverbatim
@@ -128,6 +128,8 @@ typedef struct {
     int32_t runtime_min;      /**< Run time sent with a start from OFF, min. */
     int32_t night_wait_ms;    /**< Night start: longest wait for Dauerbetrieb at the panel, ms. */
     int32_t night_confirm_ms; /**< Night start: Dauerbetrieb counts after it held this long, ms. */
+    int32_t band_lo;          /**< Below the target minus this the level never falls, centi-degrees C. */
+    int32_t cool_rate;        /**< Smoothed fall below the target that sets level 10, centi-degrees C per minute. */
 } cali_thermo_cfg_t;
 
 /** @brief Initializer with the default settings (equal to Python `THERMO_DEFAULTS`). */
@@ -137,7 +139,7 @@ typedef struct {
         .min_dwell_ms = 300000, .band_hi = 200, .hot_hold_ms = 900000, .overheat = 400,             \
         .min_level = 1, .stale_after_ms = 600000, .heater_stale_ms = 180000, .batt_min_dv = 119,    \
         .batt_hold_ms = 300000, .verify_ms = 10000, .runtime_min = 120, .night_wait_ms = 300000,   \
-        .night_confirm_ms = 30000                                                                   \
+        .night_confirm_ms = 30000, .band_lo = 30, .cool_rate = 5                                    \
     }
 
 /** @brief Heater states (Python `HEATER_STATES`, same order). */
@@ -457,7 +459,7 @@ void cali_thermo_state_json(cali_json_t *j);
 /** @brief kv key of the stored configuration (settings, target, aliases, outside_on). */
 #define CALI_THERMO_CFG_KEY "th_cfg"
 /** @brief Number of settings in cali_thermo_cfg_t (the keys of the `cfg` object). */
-#define CALI_THERMO_CFG_N 19
+#define CALI_THERMO_CFG_N 21
 /** @brief Lowest target, centi-degrees C. */
 #define CALI_THERMO_TARGET_MIN 500
 /** @brief Highest target, centi-degrees C. */

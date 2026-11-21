@@ -1,6 +1,7 @@
 """Tests for the cabin thermostat (heater state, control law, session machine)."""
 
 import json
+import pathlib
 
 import pytest
 
@@ -64,7 +65,7 @@ def test_settings_and_reasons():
         "min_dwell_ms": 300000, "band_hi": 200, "hot_hold_ms": 900000, "overheat": 400,
         "min_level": 1, "stale_after_ms": 600000, "heater_stale_ms": 180000, "batt_min_dv": 119,
         "batt_hold_ms": 300000, "verify_ms": 10000, "runtime_min": 120,
-        "night_wait_ms": 300000, "night_confirm_ms": 30000,
+        "night_wait_ms": 300000, "night_confirm_ms": 30000, "band_lo": 30, "cool_rate": 5,
     }  # fmt: skip
     assert (th.TARGET_MIN, th.TARGET_MAX, th.TARGET_STEP) == (500, 3000, 50)
     assert len(set(th.REASONS)) == len(th.REASONS)
@@ -210,6 +211,117 @@ def test_step_gap_freezes_integrator():
     assert ctl["i"] == 123
     _, ctl, _ = th.control(1900, None, 2100, CFG["period_ms"], _ctl(i=123), CFG, 3, 0)
     assert ctl["i"] == 123 + th._rdiv(CFG["ki"] * 200 * CFG["period_ms"], 100 * 60000)
+
+
+def _rising(t_ref, level, target=1600):
+    """Controller state on a cabin that rose 0.3 K in the last minute, seated at ``level``."""
+    return {**th.track(_ctl(), level, t_ref - 30, target, CFG), "t_prev": t_ref - 30, "rate": 30}
+
+
+def test_no_step_down_below_the_target():
+    """Below ``target - band_lo`` the level stays or rises, never falls, even when the lead wants less.
+
+    .. test:: Thermostat holds the level below the target
+       :id: T_THERMOSTAT_NO_STEP_DOWN_COLD
+       :links: R_THERMOSTAT_CONTROL
+    """
+    # 1 K below a 16.0 C target, still rising 0.3 K/min: the lead asks for level 7 from 9
+    lvl, ctl, why = th.control(1500, None, 1600, 60000, _rising(1500, 9), CFG, 9, 0)
+    assert (lvl, why) == (None, "HOLD") and th._rdiv(ctl["u"], 1000) < 9
+    edge = 1600 - CFG["band_lo"]
+    lvl, _, why = th.control(edge - 1, None, 1600, 60000, _rising(edge - 1, 9), CFG, 9, 0)
+    assert (lvl, why) == (None, "HOLD")
+    lvl, _, why = th.control(edge, None, 1600, 60000, _rising(edge, 9), CFG, 9, 0)
+    assert why == "LEVEL_DOWN" and lvl < 9  # at the band edge the lead acts again
+    # a step up below the target still happens
+    lvl, _, why = th.control(1300, None, 1600, 60000, _ctl(), CFG, 3, 0)
+    assert why == "LEVEL_UP" and lvl > 3
+
+
+def _falling(t_ref, rate, level, target=1600):
+    """Controller state on a cabin that falls by ``rate`` centi-°C per minute (smoothed and latest)."""
+    return {**th.track(_ctl(), level, t_ref, target, CFG), "t_prev": t_ref + rate, "rate": -rate}
+
+
+def test_cooling_below_the_target_goes_to_level_10():
+    """A falling cabin below the target gets level 10 at once, inside the dwell and the hysteresis.
+
+    .. test:: Thermostat maximum level on a cooling cabin
+       :id: T_THERMOSTAT_COOLING_MAX
+       :links: R_THERMOSTAT_CONTROL
+    """
+    cool = CFG["cool_rate"]
+    inside_dwell = {"last_change_ms": -60000}
+    lvl, ctl, why = th.control(1500, 700, 1600, 60000, {**_falling(1500, cool, 4), **inside_dwell}, CFG, 4, 0)
+    assert (lvl, why, ctl["last_change_ms"]) == (10, "COOLING_MAX", 0)
+    assert (ctl["u"], ctl["t_prev"], ctl["rate"]) == (10000, None, 0)
+    assert th.control(1500, 700, 1600, 0, ctl, CFG, 10, 0)[1]["u"] == 10000  # the integrator holds 10
+    # just below the target too, and with an unknown level
+    assert th.control(1599, None, 1600, 60000, _falling(1599, cool, 2), CFG, 2, 0)[2] == "COOLING_MAX"
+    assert th.control(1599, None, 1600, 60000, _falling(1599, cool, 2), CFG, None, 0)[:3:2] == (
+        10,
+        "COOLING_MAX",
+    )
+    # not at or above the target, not on a slower fall, not when already at level 10
+    assert th.control(1600, None, 1600, 60000, _falling(1600, 3 * cool, 4), CFG, 4, 0)[2] != "COOLING_MAX"
+    assert th.control(1500, None, 1600, 60000, _falling(1500, cool - 1, 4), CFG, 4, 0)[2] != "COOLING_MAX"
+    assert th.control(1500, None, 1600, 60000, _falling(1500, cool, 10), CFG, 10, 0)[:3:2] == (None, "HOLD")
+    # at level 10 within band_lo of the target, a falling cabin holds (the demand alone would step down)
+    low = {**_falling(1590, cool, 10), "i": 0}
+    assert th._rdiv(th.control(1590, None, 1600, 60000, low, CFG, 10, 0)[1]["u"], 1000) < 9
+    assert th.control(1590, None, 1600, 60000, low, CFG, 10, 0)[:3:2] == (None, "HOLD")
+
+
+def test_steady_fall_of_0_3_k_per_5_min_reaches_the_threshold():
+    """The smoothed rate settles one count short of a steady fall, so ``cool_rate`` 5 catches 0.3 K per 5 min.
+
+    .. test:: Thermostat cooling threshold on a steady fall
+       :id: T_THERMOSTAT_COOL_RATE_STEADY
+       :links: R_THERMOSTAT_CONTROL
+    """
+    ctl, t, now = th.track(_ctl(), 4, 1550, 1600, CFG), 1550, 0
+    for _ in range(10):
+        lvl, ctl, why = th.control(t, None, 1600, 60000, ctl, CFG, 4, now)
+        if why == "COOLING_MAX":
+            break
+        t, now = t - 6, now + 60000
+    assert (lvl, why) == (10, "COOLING_MAX")
+
+
+def _van_rows():
+    path = pathlib.Path(__file__).parent / "data" / "thermostat-van-2026-11-21.ndjson"
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def test_van_replay_holds_and_reaches_level_10():
+    """Replay of the van run 2026-11-21 19:59-21:00 (reference in the cabin, target 16.0 C, outside 5.5-7.2 C).
+
+    The recorded AUTO run started at level 2, sat in the heater's own pause and stepped up one level at
+    a time. Replayed through :func:`calictl.thermostat.control` (the heater taken to follow each command),
+    the level never falls while the reference is below 15.7 C, and a fall of 0.3 K in 5 min gets level 10
+    within one control period.
+
+    .. test:: Thermostat replay of the van run 2026-11-21
+       :id: T_THERMOSTAT_VAN_REPLAY
+       :links: R_THERMOSTAT_CONTROL
+    """
+    rows = _van_rows()
+    t = [r["t_ref"] for r in rows]
+    target = rows[0]["target"]
+    ctl0 = {**_ctl(), "u_out": 0}
+    level, ctl, _ = th.control(t[0], rows[0]["t_out"], target, 0, ctl0, CFG, None, 0)
+    levels = [level]
+    for k, r in enumerate(rows[1:], 1):
+        new, ctl, _ = th.control(r["t_ref"], r["t_out"], target, 60000, ctl, CFG, level, k * 60000)
+        if new is not None:
+            assert new >= level or r["t_ref"] >= target - CFG["band_lo"], (r["time"], level, new)
+            level = new
+        levels.append(level)
+    drops = [k for k in range(5, len(t)) if t[k - 5] - t[k] >= 30 and t[k] < target]
+    assert drops  # the run has such falls (20:10, 20:17)
+    for k in drops:
+        assert 10 in levels[k : k + 2], (rows[k]["time"], levels[k - 5 : k + 2])
+    assert max(levels) == 10 and levels[-1] == 10
 
 
 # --- session machine (step) ---------------------------------------------------------------
@@ -943,3 +1055,20 @@ def test_panel_off_during_pending_level_ends_quietly():
         assert out["cmds"] == [("level", 10)] and st["pending"]["what"] == "level"
         out, st = _step(st, now_ms=1000, heater=OFF_H, ref=_ref(800))
         assert (out["mode"], out["reason"], out["cmds"]) == ("OFF", why, [])
+
+
+def test_step_sends_level_10_on_a_cooling_cabin_inside_the_dwell():
+    """A running AUTO session sends level 10 with ``COOLING_MAX`` when the cabin falls, inside the dwell.
+
+    .. test:: Thermostat session sends level 10 on a cooling cabin
+       :id: T_THERMOSTAT_COOLING_MAX_STEP
+       :links: R_THERMOSTAT_CONTROL
+    """
+    out, st = _auto(ref=_ref(1700))
+    assert (out["reason"], out["cmds"]) == ("ADOPT_RUN", [])
+    for k, t in enumerate((1690, 1680, 1670), 1):
+        out, st = _step(st, now_ms=k * P, heater=RUN, ref=_ref(t))
+        if out["reason"] == "COOLING_MAX":
+            break
+    assert k * P < CFG["min_dwell_ms"]
+    assert (out["mode"], out["reason"], out["cmds"]) == ("AUTO", "COOLING_MAX", [("level", 10)])

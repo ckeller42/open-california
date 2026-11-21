@@ -101,6 +101,11 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.e2e.test_thermostat_card.test_eta_line
 .. autofunction:: tests.test_thermostat.test_cold_cabin_raises_level
 .. autofunction:: tests.test_thermostat.test_rising_cabin_steps_down_before_the_target
+.. autofunction:: tests.test_thermostat.test_no_step_down_below_the_target
+.. autofunction:: tests.test_thermostat.test_cooling_below_the_target_goes_to_level_10
+.. autofunction:: tests.test_thermostat.test_van_replay_holds_and_reaches_level_10
+.. autofunction:: tests.test_thermostat.test_steady_fall_of_0_3_k_per_5_min_reaches_the_threshold
+.. autofunction:: tests.test_thermostat.test_step_sends_level_10_on_a_cooling_cabin_inside_the_dwell
 .. autofunction:: tests.test_thermostat.test_heater_state_table
 .. autofunction:: tests.test_thermostat.test_auto_from_off_sends_runtime_level_power_in_order
 .. autofunction:: tests.test_thermostat.test_adopt_goes_to_demand

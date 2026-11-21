@@ -1463,6 +1463,28 @@ level changes only when the demand is at least `500 + hyst` milli-levels away fr
 ({term}`hysteresis`) and `min_dwell_ms` has passed since the last change ({term}`dwell time <dwell>`).
 Otherwise the reason is `HOLD`.
 
+The air heater regulates itself on its own sensor, so a low level is not simply less heat. At a low
+level the heater stops burning: a control pause, with no fault (`ErrorCode` 0) and the run still on.
+It starts again only when its own sensor is cold enough or the level rises. On the second battery a
+pause shows as about -0.5 to -1.1 A, burning as -1.2 to -4.8 A, and a glow-plug start as about -9 to
+-10 A for about 2 minutes. At a fixed level 5, with the cabin about 1 K below the target, the heater
+paused for 9 and 13 minutes while the cabin cooled. Two rules keep the heater out of that pause while
+the cabin is cold:
+
+- **No step down below the target.** While the reference is more than `band_lo` below the target,
+  the level stays or rises; it never falls. The lead and `p` would otherwise lower the level while a
+  cold cabin warms, and the lower level sends the heater into its pause.
+- **Highest level on a cooling cabin.** While the reference is below the target and the smoothed
+  `rate` is at or below `-cool_rate`, the controller sends level 10 at once (`COOLING_MAX`), also
+  inside the dwell time and the hysteresis. It sets the integrator so that the demand is level 10,
+  and the rate starts again. At level 10 the level holds while the cabin still cools. A cabin that
+  cools below the target means that the heater does not heat.
+  The smoothing rounds: a steady fall settles one count short of its real rate, so the default
+  `cool_rate` 5 catches a steady fall of 0.3 K in 5 minutes. With a sensor that reports 0.1 K steps,
+  one step every 2 to 3 minutes is enough.
+
+Above the target, and within `band_lo` below it, the level goes down as before.
+
 Above the target the controller goes down to `min_level` and stays there; it does not switch the
 heater off for being warm. Two limits stop the heater: the reference more than `overheat` above the
 target (`OVERHEAT`), and the reference more than `band_hi` above the target at the minimum level for
@@ -1518,7 +1540,8 @@ A level command is never sent when the link is down. A command that returned `BU
 | `ADOPT_RUN` | AUTO took over a running heater |
 | `ADOPT_CONTINUOUS` | AUTO took over continuous heating |
 | `LEVEL_UP` / `LEVEL_DOWN` | The level was changed |
-| `HOLD` | The level stays (hysteresis, dwell or equal) |
+| `COOLING_MAX` | The cabin cools below the target: level 10 was sent |
+| `HOLD` | The level stays (hysteresis, dwell, equal, or a lower level while the cabin is below the target) |
 | `TARGET_EXCEEDED_AT_MIN_LEVEL` | Warmer than the target at the lowest level for `hot_hold_ms`: stop |
 | `OVERHEAT` | More than `overheat` above the target: stop |
 | `BACKUP_SELECTED` | The reference is lost, the backup regulates |
@@ -1566,6 +1589,8 @@ A level command is never sent when the link is down. A command that returned `BU
 | `runtime_min` | 120 | min | run time of an AUTO start from off (10 to 120) |
 | `night_wait_ms` | 300000 | ms | night mode: longest wait for continuous heating at the panel |
 | `night_confirm_ms` | 30000 | ms | night mode: continuous heating counts after it held this long |
+| `band_lo` | 30 | centi-°C | below the target minus this, the level never falls |
+| `cool_rate` | 5 | centi-°C per minute | a smoothed fall this fast below the target sends level 10 |
 
 The target is not a setting of this table: 500 to 3000 centi-°C in steps of 50 (default 2000).
 

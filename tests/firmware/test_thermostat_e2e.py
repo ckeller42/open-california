@@ -110,7 +110,7 @@ def _auto(fw, hu):
 
 
 def test_auto_regulates_cold_cabin(host_fw, hci_unit):
-    """17.0 C, target 21.0 C: runtime, level, power on as calictl builds them; 16.0 C later raises the level."""
+    """17.0 C, target 21.0 C: runtime, level, power on as calictl builds them; a fall to 16.0 C sends level 10."""
     fw, adv, _ = _setup(host_fw, hci_unit)
     assert _heater_writes(hci_unit) == []
     _auto(fw, hci_unit)
@@ -126,12 +126,12 @@ def test_auto_regulates_cold_cabin(host_fw, hci_unit):
     time.sleep(21)
     _reading(fw, 1600)
     end = time.monotonic() + 20  # fw.log: the sensors polls above may have consumed the line from the queue
-    while not any(s.startswith("LOG thermostat: LEVEL_UP") for s in fw.log):
+    while not any(s.startswith("LOG thermostat: COOLING_MAX") for s in fw.log):
         assert time.monotonic() < end, fw.log[-30:]
         time.sleep(0.2)
     time.sleep(1)
     lv = hci_unit.unit.unit.state["airheater"]["HeatingLevel"]
-    assert lv > 6 and _heater_writes(hci_unit)[-1] == _frame(hci_unit, "level", lv)
+    assert lv == 10 and _heater_writes(hci_unit)[-1] == _frame(hci_unit, "level", lv)
     assert _thermo(fw)["mode"] == "AUTO"
 
 
