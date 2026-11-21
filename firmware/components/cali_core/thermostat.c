@@ -99,7 +99,11 @@ static int32_t control(int32_t t_ref, int32_t t_out, int32_t target, int64_t dt_
         *why = "TARGET_EXCEEDED_AT_MIN_LEVEL";
         return NONE;
     }
-    if (t_ref < target && rate <= -(int64_t)cfg->cool_rate && cur_level != 10) {
+    if (t_ref < target && rate <= -(int64_t)cfg->cool_rate) {
+        if (cur_level == 10) { /* still cooling: no step down from full heat */
+            *why = "HOLD";
+            return NONE;
+        }
         /* the heater may sit in its own pause while the cabin cools: full heat now */
         track(ctl, 10, t_ref, target, cfg);
         ctl->u = 10000;

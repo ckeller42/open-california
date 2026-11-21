@@ -266,10 +266,19 @@ def test_cooling_below_the_target_goes_to_level_10():
     assert th.control(1600, None, 1600, 60000, _falling(1600, 3 * cool, 4), CFG, 4, 0)[2] != "COOLING_MAX"
     assert th.control(1500, None, 1600, 60000, _falling(1500, cool - 1, 4), CFG, 4, 0)[2] != "COOLING_MAX"
     assert th.control(1500, None, 1600, 60000, _falling(1500, cool, 10), CFG, 10, 0)[:3:2] == (None, "HOLD")
+    # at level 10 within band_lo of the target, a falling cabin holds (the demand alone would step down)
+    low = {**_falling(1590, cool, 10), "i": 0}
+    assert th._rdiv(th.control(1590, None, 1600, 60000, low, CFG, 10, 0)[1]["u"], 1000) < 9
+    assert th.control(1590, None, 1600, 60000, low, CFG, 10, 0)[:3:2] == (None, "HOLD")
 
 
 def test_steady_fall_of_0_3_k_per_5_min_reaches_the_threshold():
-    """The smoothed rate settles one count short of a steady fall, so ``cool_rate`` 5 catches 0.3 K per 5 min."""
+    """The smoothed rate settles one count short of a steady fall, so ``cool_rate`` 5 catches 0.3 K per 5 min.
+
+    .. test:: Thermostat cooling threshold on a steady fall
+       :id: T_THERMOSTAT_COOL_RATE_STEADY
+       :links: R_THERMOSTAT_CONTROL
+    """
     ctl, t, now = th.track(_ctl(), 4, 1550, 1600, CFG), 1550, 0
     for _ in range(10):
         lvl, ctl, why = th.control(t, None, 1600, 60000, ctl, CFG, 4, now)
@@ -1049,7 +1058,12 @@ def test_panel_off_during_pending_level_ends_quietly():
 
 
 def test_step_sends_level_10_on_a_cooling_cabin_inside_the_dwell():
-    """A running AUTO session sends level 10 with ``COOLING_MAX`` when the cabin falls, inside the dwell."""
+    """A running AUTO session sends level 10 with ``COOLING_MAX`` when the cabin falls, inside the dwell.
+
+    .. test:: Thermostat session sends level 10 on a cooling cabin
+       :id: T_THERMOSTAT_COOLING_MAX_STEP
+       :links: R_THERMOSTAT_CONTROL
+    """
     out, st = _auto(ref=_ref(1700))
     assert (out["reason"], out["cmds"]) == ("ADOPT_RUN", [])
     for k, t in enumerate((1690, 1680, 1670), 1):

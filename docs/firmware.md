@@ -1477,7 +1477,8 @@ the cabin is cold:
 - **Highest level on a cooling cabin.** While the reference is below the target and the smoothed
   `rate` is at or below `-cool_rate`, the controller sends level 10 at once (`COOLING_MAX`), also
   inside the dwell time and the hysteresis. It sets the integrator so that the demand is level 10,
-  and the rate starts again. A cabin that cools below the target means that the heater does not heat.
+  and the rate starts again. At level 10 the level holds while the cabin still cools. A cabin that
+  cools below the target means that the heater does not heat.
   The smoothing rounds: a steady fall settles one count short of its real rate, so the default
   `cool_rate` 5 catches a steady fall of 0.3 K in 5 minutes. With a sensor that reports 0.1 K steps,
   one step every 2 to 3 minutes is enough.

@@ -183,7 +183,7 @@ def control(
        is cold or the level rises): while ``t_ref < target - band_lo`` the level shall not fall, and
        while ``t_ref < target`` and the smoothed rate is at or below ``-cool_rate`` it shall be set
        to 10 at once (``COOLING_MAX``), past the dwell and the hysteresis, with the integrator set
-       so that the demand is level 10 (:func:`track`). All arithmetic is integer; division uses
+       so that the demand is level 10 (:func:`track`); at level 10 it shall hold. All arithmetic is integer; division uses
        :func:`_rdiv`.
 
     :param t_ref: reference temperature in centi-°C.
@@ -231,7 +231,9 @@ def control(
         return None, new, "OVERHEAT"
     if hot_since is not None and now_ms - hot_since >= cfg["hot_hold_ms"]:
         return None, new, "TARGET_EXCEEDED_AT_MIN_LEVEL"
-    if t_ref < target and rate <= -cfg["cool_rate"] and cur_level != 10:
+    if t_ref < target and rate <= -cfg["cool_rate"]:
+        if cur_level == 10:
+            return None, new, "HOLD"  # still cooling: no step down from full heat
         # the heater may sit in its own pause while the cabin cools: full heat now
         new = {**track(new, 10, t_ref, target, cfg), "u": 10000, "last_change_ms": now_ms}
         return 10, new, "COOLING_MAX"
