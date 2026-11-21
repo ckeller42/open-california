@@ -563,7 +563,7 @@ function rsRemove() {
 /** The scan box: a photo (always) and the camera (a secure origin only, on a tap). @param {(text: string) => any} onText */
 function rsScanner(onText) {
   const QS = /** @type {any} */ (window).QrScanner;
-  const file = h("input", { type: "file", accept: "image/*", capture: "environment", id: "rs-file" });
+  const file = h("input", { type: "file", accept: "image/*", capture: "environment", id: "rs-file", hidden: "" });
   file.onchange = async () => {
     const f = file.files && file.files[0];
     file.value = "";
@@ -573,7 +573,8 @@ function rsScanner(onText) {
     catch (e) { rsMsg = "No code found in the photo."; rsRefresh(); return; }
     onText(String(text));
   };
-  const box = h("div", null, h("label", { for: "rs-file" }, T("Take a photo of the code")), file);
+  // a button-looking label, as "Load from file" (the bare input reads "Choose File / no file selected" in Safari)
+  const box = h("div", null, h("div", { class: "acts" }, h("label", { class: "btn", for: "rs-file", id: "rs-photo" }, T("Take a photo of the code"))), file);
   if (window.isSecureContext && QS) {
     const video = /** @type {HTMLVideoElement} */ (h("video", { muted: "", playsinline: "" }));
     const aim = h("p", { class: "note", id: "rs-aim" }, T("Hold the phone about 10 cm in front of the satellite's screen."));

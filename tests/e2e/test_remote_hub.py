@@ -401,6 +401,9 @@ def test_the_camera_reads_the_apps_code_then_the_vans_code(world):
     qr = "OCH1*%s*ws://127.0.0.1:%d*qr-user*qr-pass*%s" % (VAN, broker.port, KEY.hex().upper())
     with _error_gated_page(url + "#remotescan", init_script=FAKE_QS, service_workers="block") as pg:
         expect(pg.get_by_text("The first code opens the app's web address")).to_be_visible()
+        # I2: the photo input is a button-looking label, as "Load from file", not a bare "Choose File"
+        expect(pg.locator("#rs-file")).to_be_hidden()
+        expect(pg.locator('label.btn[for="rs-file"]')).to_have_text("Take a photo of the code")
         pg.locator("#rs-camera").click()
         pg.evaluate("window.__qs.cb({ data: 'https://open-california.github.io/' })")
         expect(pg.locator("#rs-msg")).to_have_text(
