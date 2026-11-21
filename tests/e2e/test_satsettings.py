@@ -874,7 +874,51 @@ def test_password_fields_say_unchanged_only_with_a_stored_hub(station):
         expect(pg.locator("#hub-url")).to_be_visible()
         pg.wait_for_timeout(500)
         assert pg.locator("#hub-app_pass").get_attribute("placeholder") in (None, "")
-    station.fixtures["station"]["/api/hub"].update(configured=True, url="wss://h.example:8084/mqtt", van="van1")
+    station.fixtures["station"]["/api/hub"].update(
+        configured=True, url="wss://h.example:8084/mqtt", van="van1"
+    )
     with _open(station, viewport=PHONE) as pg:
         expect(pg.locator("#hub-pass")).to_have_attribute("placeholder", "unchanged")
         expect(pg.locator("#hub-app_pass")).to_have_attribute("placeholder", "unchanged")
+
+
+HUB_FORM = {
+    "url": "wss://h.example:8084/mqtt",
+    "van": "van-1",
+    "user": "vanuser",
+    "pass": "vanpass",
+    "app_user": "appuser",
+    "app_pass": "apppass",
+}
+
+
+def _hub_file(pg, body, name="oc-hub.json"):
+    pg.set_input_files(
+        "#hub-file",
+        files=[{"name": name, "mimeType": "application/json", "buffer": json.dumps(body).encode()}],
+    )
+
+
+@pytest.mark.parametrize("lora", [False, True])
+def test_the_hub_card_loads_a_hub_file_and_save_posts_it(station, lora):
+    """Coverage row 14: "Load from file" on the Satellite-settings Hub card (not the wizard). Another file is
+    refused and leaves the fields empty; an oc-hub.json fills the six fields; nothing is posted before Save;
+    Save posts /api/hub, and a file with ``"lora": true`` also posts /api/experimental {"lora": true}."""
+    station.fixtures["station"]["/api/state"]["device"]["experimental"]["lora"] = False
+    with _open(station, locale="en-US", viewport=PHONE) as pg:
+        expect(pg.locator("#hub-status")).to_have_text("Not set up")
+        _hub_file(pg, {"url": "wss://x"}, name="x.json")
+        expect(pg.locator("#hub-msg")).to_have_text("Not a hub setup file (oc-hub.json)")
+        expect(pg.locator("#hub-url")).to_have_value("")
+        _hub_file(pg, {"format": "oc-hub/1", **HUB_FORM, **({"lora": True} if lora else {})})
+        for k, v in HUB_FORM.items():
+            expect(pg.locator("#hub-" + k)).to_have_value(v)
+        if lora:
+            expect(pg.locator("#hub-msg")).to_contain_text("LoRa goes on too")
+        pg.wait_for_timeout(300)
+        assert _posts(station, "/api/hub") == []
+        assert _posts(station, "/api/experimental") == []
+        pg.click("#hub-save")
+        expect(pg.locator("#hub-msg")).to_have_text("Saved")
+    assert _posts(station, "/api/hub") == [HUB_FORM]
+    assert _posts(station, "/api/experimental") == ([{"lora": True}] if lora else [])
