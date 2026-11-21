@@ -2108,7 +2108,8 @@ def test_heater_start_confirm_only_on_a_real_start(fresh_url, error_gated_page):
         power.click()
         _poll(pg, fresh_url, lambda st: st["airheater"]["normal"] is True, "heater on")
         assert (
-            len(msgs) == 1 and "fuel-burning" in msgs[0] and "{w}" not in msgs[0] and "power" not in msgs[0]
+            len(msgs) == 1 and "burns fuel" in msgs[0] and "{w}" not in msgs[0] and "power" not in msgs[0]
+            and "verified" not in msgs[0]  # G5: plain words, no "not live-verified" scare
         )
         expect(power).to_have_attribute("aria-checked", "true", timeout=15000)
         power.click()

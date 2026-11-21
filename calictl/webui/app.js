@@ -31,7 +31,7 @@
  * @typedef {{mode?: string, ssid?: string|null, ip?: string|null, rssi?: number|null, ap_ssid?: string|null}} SatWifi
  * @typedef {SatWifi & {last_error?: string|null, reverted?: boolean, scan?: {ssid: string, rssi: number, secure: boolean}[]}} SatWifiGet  GET /api/wifi
  * @typedef {{id: number, type: string, alias: string, last_seen_s: number|null, value: Record<string, number|null>|null}} SatSensCfg
- * @typedef {{id: number, type: string, model: string, rssi: number}} SatSensSeen
+ * @typedef {{id: number, type: string, model: string, rssi: number, value?: Record<string, number|null>|null}} SatSensSeen
  * @typedef {{module: string, joined: boolean, at_unanswered: number, last_s: number|null, airtime_ms_24h: number, airtime_charged_ms_24h: number, setup: string, dev_eui: string|null}} SatLora  device.lora (R_FW_LORA_SETUP)
  * @typedef {{configured: SatSensCfg[], seen: SatSensSeen[], scan: string, error?: string}} SatSensors  GET/POST /api/sensors
  * @typedef {{enabled: boolean, last_s: number|null, reason: string|null, halt_after_min?: number, halt_soc_pct?: number,
@@ -701,7 +701,7 @@ const HELP = {
     + "Heating temperature is a level from 1 to 9 or HI, not degrees.\n\n"
     + "Timer: set Start heating at, then Start timer. The heater then starts at that time for the run "
     + "time. If continuous heating is on, it turns off when the timer ends.\n\n"
-    + "The heater burns fuel, so every start asks first; it is not live-verified. A ⚠ banner shows why "
+    + "The heater burns fuel, so every start asks first. A ⚠ banner shows why "
     + "the unit refused or stopped it, for example low battery, low fuel or a running engine."],
   water: ["business-logic/value-freshness.html",
     "Fresh and waste water are read-only. The unit measures the tanks only while the van's water system "
@@ -863,7 +863,7 @@ const FEATURES = {
     title: "Air heater", icon: "heater",
     // Fuel-burning: only a real START prompts — Immediate heating ON and arming the timer. Level,
     // run time, start time and every OFF write no dialog (ui/screens/air-heater.yaml).
-    confirm: (w, v) => ((w === "power" && v === "on") || w === "timer_start" ? t("Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?") : null),
+    confirm: (w, v) => ((w === "power" && v === "on") || w === "timer_start" ? t("Start the air heater (it burns fuel)? Continue?") : null),
     controls: [
       // "Immediate heating" = NormalOperation (start now, for `runtime` minutes). Never greyed (app
       // 5.4.0): under ErrorCode 5 the server refuses ON with the app's dialog text; under continuous
@@ -2601,7 +2601,8 @@ function buildSat(v) {
   const hkacts = h("div", { class: "btnrow", id: "hub-keyacts" }, newKey);
   newKey.onclick = () => satAsk(hkacts, [h("span", null, T("Make a new data key? Every phone must scan the van's code again, and the bridge needs the new key (HUB_KEY)."))],
     T("New data key"), "danger", satHubNewKey, "hub-msg");
-  root.append(satCard("hub", T("Remote hub"), h("p", { class: "note" }, T("The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then hold the satellite's screen 3 s for the app's code, and 3 s again for “The van's code”, and scan that one in the remote app.")),
+  root.append(satCard("hub", T("Remote hub"), h("p", { class: "note" }, T("The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then hold the satellite's screen 3 s for the app's code, and 3 s again for “The van's code”, and scan that one in the remote app.") + " "
+    + T("Hold the phone about 10 cm in front of the satellite's screen.")),
     h("p", { id: "hub-app" }, T("Install the remote app, then scan the van's code in it") + ": ", appLink()), ...hubForm(), hkacts));
   satHubLoad();
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
@@ -2778,6 +2779,8 @@ function buildSetup() {
         ...setupAppHow(p(T("iPhone: open the link in Safari, tap Share, then Add to Home Screen. The icon is called OC Remote."), "setup-app-ios"),
           p(T("Android: open the link in Chrome, tap ⋮, then Install app (or Add to Home screen). The icon is called OC Remote."), "setup-app-android")),
         p(T("In the app, open ⋮ and choose Scan the van's code. On the satellite, tap the screen once to light it, hold it 3 s (the app's code shows), then hold it 3 s again until “The van's code” shows, and scan that one in the app."), "setup-app-scan"),
+        p(T("The first code opens the app's web address (to install the app); the second is the van's code to scan in the app.") + " "
+          + T("Hold the phone about 10 cm in front of the satellite's screen."), "setup-app-codes"),
         p(T("Then come back to this page and tap Next."), "setup-app-back")),
       h("h2", null, T("Over LoRa")),
       h("p", { class: "note" }, T("Only for a satellite with the LoRa module (RAK3172). Works without a remote hub.")),
@@ -3402,7 +3405,7 @@ function hubForm() {
   file.onchange = satHubFile;
   return [h("p", { id: "hub-status" }),
     ...HUB_FIELDS.map(([id, label, type]) => h("div", null, h("label", { for: "hub-" + id }, T(label)),
-      h("input", { id: "hub-" + id, type: type, autocomplete: "off", autocapitalize: "none", spellcheck: "false",
+      h("input", { id: "hub-" + id, type: type, autocomplete: "off", autocorrect: "off", autocapitalize: "none", spellcheck: "false",
       }))),
     h("div", { class: "btnrow" }, save, h("label", { class: "btn", for: "hub-file" }, T("Load from file"))),
     file, satMsg("hub-msg")];
@@ -3526,6 +3529,7 @@ const SENS_ERR = { bad_alias: "Name already used", bad_key: "Key must be 32 hex 
   key_mismatch: "Key does not match this device", full: "Sensor list is full (16)" };
 /** a field name -> its unit, in display order (the rest is not shown here) @type {[RegExp, string][]} */
 const SENS_UNIT = [[/_c$/, "°C"], [/humidity/, "%"], [/voltage/, "V"], [/power/, "W"], [/kwh/, "kWh"], [/current/, "A"], [/^battery$/, "%"]];   // battery: the sensor's own, "🔋 49 %"
+const SENS_NEAR_DBM = -70;   // ponytail: one threshold; a seen row at or above it reads "near"
 let sensOn = false, sensBusy = false;
 let sensGen = 0;   // bumped by each screen build: an older screen's poll loop ends
 /** @type {string|null} the setup wizard lists only this type prefix ("victron", "govee"); null: all */
@@ -3552,7 +3556,8 @@ function sensVals(v) {
 }
 /** A name field. @param {string} value @param {string} ph @returns {HTMLInputElement} */
 function sensName(value, ph) {
-  const n = h("input", { type: "text", autocapitalize: "none", spellcheck: "false", placeholder: ph, "aria-label": T("Name (a–z, 0–9, -, _)") });
+  const n = h("input", { type: "text", autocomplete: "off", autocorrect: "off", autocapitalize: "none", spellcheck: "false",
+    placeholder: ph, "aria-label": T("Name (a–z, 0–9, -, _)") });
   n.value = value;
   return n;
 }
@@ -3602,13 +3607,16 @@ function satRenderSens(s) {
     seen.appendChild(h("p", { class: "note" }, T(s.scan === "paused" ? "Scan paused while pairing"
       : s.configured.length ? "No other sensors nearby (the scan runs every minute)." : "No sensors found yet (the scan runs every minute).")));
   for (const r of s.seen) {
-    const [row, acts] = sensRow([T(SENS_TYPE[r.type] || r.type), r.model, r.rssi + " dBm"].join(" · "), "seen-row");
+    // the live reading (a key type has none before its key) and a distance word: "the one at 4 °C is the fridge"
+    const vals = r.value ? sensVals(r.value) : r.type.startsWith("victron") ? [T("needs its key")] : [];
+    const [row, acts] = sensRow([T(SENS_TYPE[r.type] || r.type), r.model, ...vals,
+      (r.rssi >= SENS_NEAR_DBM ? T("near") : T("far")) + " (" + r.rssi + " dBm)"].join(" · "), "seen-row");
     // a name (optional for the first of a type: the firmware then names it after the type id), a key
     // for a key type; then Add posts
     acts.appendChild(satBtn(T("Add"), "primary")).onclick = () => {
       const need = s.configured.some((c) => c.type === r.type);
       const n = sensName("", need ? T("Name (a–z, 0–9, -, _)") : r.type), nodes = [n];
-      const k = r.type.startsWith("victron") ? h("input", { type: "text", autocomplete: "off", spellcheck: "false",
+      const k = r.type.startsWith("victron") ? h("input", { type: "text", autocomplete: "off", autocorrect: "off", autocapitalize: "none", spellcheck: "false",
         placeholder: T("Encryption key (32 hex digits)"), "aria-label": T("Encryption key (32 hex digits)") }) : null;
       if (k) nodes.push(k);
       satAsk(acts, nodes, T("Add"), "primary", () => {

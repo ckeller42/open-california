@@ -99,9 +99,9 @@ def test_remote_build_contents(site):
     assert f'const CACHE = "{build_remote.CACHE}"' in sw and "oc-shell-v1" not in sw
     manifest = json.loads((site / "manifest.webmanifest").read_text(encoding="utf-8"))
     assert manifest["name"] == manifest["short_name"] == "OC Remote"  # ruling R44
-    assert '<meta name="apple-mobile-web-app-title" content="OC Remote">' in (site / "index.html").read_text(
-        encoding="utf-8"
-    )
+    html = (site / "index.html").read_text(encoding="utf-8")
+    assert '<meta name="apple-mobile-web-app-title" content="OC Remote">' in html
+    assert "<title>OC Remote</title>" in html  # G6: the tab and task switcher too, distinct from "OC Van"
     assert manifest["id"] == manifest["start_url"] == manifest["scope"] == "/"
     # the local app's files stay what they were
     local = (ROOT / "calictl" / "webui" / "index.html").read_text(encoding="utf-8")

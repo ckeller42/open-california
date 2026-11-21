@@ -444,6 +444,9 @@ def test_the_remote_step_saves_the_hub_then_shows_the_app(station_pending, local
         for text in (
             "iPhone: open the link in Safari, tap Share, then Add to Home Screen. The icon is called OC Remote.",
             "Then come back to this page and tap Next.",
+            # G4 + S3: what the first code is for, and how close to hold the phone
+            "The first code opens the app's web address (to install the app); the second is the van's code to scan in the app.",
+            "Hold the phone about 10 cm in front of the satellite's screen.",
         ):
             expect(app).to_contain_text(tr(text, lang))
         pg.get_by_role("button", name=tr("Next", lang), exact=True).click()

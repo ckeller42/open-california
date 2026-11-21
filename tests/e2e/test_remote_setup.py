@@ -40,6 +40,7 @@ from tests.e2e.test_remote_app import CLUSTER, port2, port4, site, ttn  # noqa: 
 
 segno = pytest.importorskip("segno")
 AESGCM = pytest.importorskip("cryptography.hazmat.primitives.ciphers.aead").AESGCM
+expect = pytest.importorskip("playwright.sync_api").expect
 
 DEV_EUI = bytes([0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x0A, 0xBC, 0xDE]).hex().upper()
 DEV = "van-0abcde"  # van- + the last 6 hex of the DevEUI, lower case
@@ -730,3 +731,96 @@ def test_load_from_file_looks_like_a_button(site, ttn, error_gated_page):  # noq
             "e => { const s = getComputedStyle(e); return [s.display, s.marginTop, s.borderTopStyle] }"
         )
         assert st == ["flex", "0px", "solid"]
+
+
+# A fake camera scanner (headless Chromium has no camera): the vendored QrScanner assigns window.QrScanner after
+# this runs, so a setter keeps the real one only for scanImage (the photo path). window.__qs is the last scanner,
+# its .cb the decode callback; window.__qsFrames = false: the stream never delivers a frame (videoWidth stays 0).
+FAKE_QS = """(() => {
+  let real = null;
+  class FakeQs {
+    constructor(video, cb) { this.video = video; this.cb = cb; this.destroyed = false; window.__qs = this;
+      window.__qsMade = (window.__qsMade || 0) + 1; }
+    start() {
+      if (window.__qsFrames !== false) Object.defineProperty(this.video, "videoWidth", { value: 640, configurable: true });
+      return Promise.resolve();
+    }
+    destroy() { this.destroyed = true; }
+    static scanImage(...a) { return real.scanImage(...a); }
+  }
+  Object.defineProperty(window, "QrScanner", { configurable: true, get: () => FakeQs, set: (v) => { real = v; } });
+})();"""
+
+
+def _decode(pg, text):
+    """The camera decodes ``text`` (the fake scanner's callback)."""
+    pg.evaluate("(t) => window.__qs.cb({ data: t })", text)
+
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_camera_scans_on_past_a_wrong_code_and_stops_on_the_setup_code(site, ttn, error_gated_page, locale):  # noqa: F811
+    """S1 + S3: the camera keeps scanning after a code this screen does not take (the app's code, shown first on
+    the satellite) and shows the hint; the same code again within 3 s is not acted on; the setup code is taken and
+    the camera stops. The aiming hint shows under the camera view."""
+    de = locale == "de-DE"
+    wrong = "Das ist nicht der Einrichtungscode des Fahrzeugs." if de else "This is not the van's setup code."
+    aim = (
+        "Halte das Handy etwa 10 cm vor den Bildschirm des Satelliten."
+        if de
+        else "Hold the phone about 10 cm in front of the satellite's screen."
+    )
+    tx = TEXT[locale]
+    with error_gated_page(
+        site, init_script=_empty_app(ttn) + FAKE_QS, service_workers="block", locale=locale
+    ) as pg:
+        pg.clock.install()
+        _, secret = ttn.make_key("all")
+        _menu(pg, tx["setup"])
+        pg.locator("#rs-key").fill(secret)
+        pg.get_by_role("button", name=tx["check"]).click()
+        pg.get_by_text(tx["scanhint"]).first.wait_for()
+        expect(pg.locator("#rs-aim")).to_be_hidden()
+        pg.locator("#rs-camera").click()
+        expect(pg.locator("#rs-aim")).to_have_text(aim)
+        _decode(pg, "https://open-california.github.io/")
+        expect(pg.locator("#rs-msg")).to_have_text(wrong)
+        pg.evaluate("document.querySelector('#rs-msg').textContent = 'x'")  # acted on again: the hint comes back
+        _decode(pg, "https://open-california.github.io/")
+        pg.clock.fast_forward(1000)
+        expect(pg.locator("#rs-msg")).to_have_text("x")  # the same code within 3 s: ignored
+        assert pg.evaluate("window.__qs.destroyed") is False  # still scanning
+        pg.clock.fast_forward(5000)  # past the 4 s frame check: the stream has frames, the camera stays on
+        assert pg.evaluate("window.__qs.destroyed") is False
+        _decode(pg, setup_qr())
+        pg.get_by_text(tx["join"]).wait_for()
+        assert pg.evaluate("window.__qs.destroyed") is True
+
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_a_camera_without_frames_says_so_and_the_button_works_again(site, ttn, error_gated_page, locale):  # noqa: F811
+    """S2: the first camera use on Android: start() resolves but no frame comes. After 4 s the screen says so,
+    hides the video, and a second tap on Use the camera starts a new scanner."""
+    msg = (
+        "Die Kamera ist nicht gestartet. Tippe noch einmal auf Kamera verwenden, oder fotografiere den Code."
+        if locale == "de-DE"
+        else "The camera did not start. Tap Use the camera again, or take a photo of the code."
+    )
+    with error_gated_page(
+        site,
+        init_script=_empty_app(ttn) + FAKE_QS + "window.__qsFrames = false;",
+        service_workers="block",
+        locale=locale,
+    ) as pg:
+        pg.clock.install()
+        _menu(pg, TEXT[locale]["scan"])
+        pg.locator("#rs-camera").click()
+        expect(pg.locator("#rs-msg")).to_have_text("")
+        pg.clock.fast_forward(4500)
+        expect(pg.locator("#rs-msg")).to_have_text(msg)
+        expect(pg.locator("video")).to_be_hidden()
+        assert pg.evaluate("window.__qs.destroyed") is True
+        pg.evaluate("window.__qsFrames = true")
+        pg.locator("#rs-camera").click()
+        assert pg.evaluate("window.__qsMade") == 2
+        pg.clock.fast_forward(4500)
+        assert pg.evaluate("window.__qs.destroyed") is False  # frames now: the camera runs on

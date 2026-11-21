@@ -32,9 +32,15 @@ DE = {
     for k, v in re.findall(r'^\s*"((?:[^"\\]|\\.)*)":\s*"((?:[^"\\]|\\.)*)",?\s*(?://.*)?$', _DE_SRC, re.M)
 }
 LOCALES = [("en-US", "en"), ("de-DE", "de")]
-GOVEE_A = {"id": 0x2001, "type": "govee", "model": "GVH5074_0001", "rssi": -61}
-GOVEE_B = {"id": 0x2003, "type": "govee", "model": "GVH5074_0002", "rssi": -66}
-MPPT = {"id": 0x2005, "type": "victron_mppt", "model": "SmartSolar", "rssi": -72}
+GOVEE_A = {
+    "id": 0x2001,
+    "type": "govee",
+    "model": "GVH5074_0001",
+    "rssi": -61,
+    "value": {"temp_c": 4.1, "humidity": 80.5, "battery": 90},  # the last advert, decoded (sensors.c)
+}
+GOVEE_B = {"id": 0x2003, "type": "govee", "model": "GVH5074_0002", "rssi": -66}  # an older firmware: no value
+MPPT = {"id": 0x2005, "type": "victron_mppt", "model": "SmartSolar", "rssi": -72, "value": None}
 POLL = "() => sensFetch()"  # the 10 s poll's fetch + render, now
 
 
@@ -370,3 +376,20 @@ def test_a_sensor_key_never_reaches_a_beacon(stub, error_gated_page):
     assert stub.ux_beacons, "no beacon reached the stub"
     assert stub.sensor_posts[-1]["key"] == _key()
     assert _key() not in json.dumps(stub.ux_beacons)
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_seen_rows_show_the_reading_and_the_distance(stub, error_gated_page, locale, lang):
+    """G1: a seen sensor shows its live reading and near/far, so the owner tells "the one at 4 °C" apart; a key
+    type says it needs its key. G2: the name and key fields never autocorrect ("Solar" became "Dollar")."""
+    with _open(error_gated_page, stub, lang) as pg:
+        a = _seen_row(pg, "GVH5074_0001")
+        expect(a).to_contain_text("4.1 °C · 80.5 % · 🔋 90 % · " + tr("near", lang) + " (-61 dBm)")
+        expect(_seen_row(pg, "GVH5074_0002")).to_contain_text("GVH5074_0002 · %s (-66 dBm)" % tr("near", lang))
+        m = _seen_row(pg, "SmartSolar")
+        expect(m).to_contain_text("%s · %s (-72 dBm)" % (tr("needs its key", lang), tr("far", lang)))
+        m.get_by_role("button", name=tr("Add", lang)).click()
+        for name in ("Name (a–z, 0–9, -, _)", "Encryption key (32 hex digits)"):
+            box = m.get_by_role("textbox", name=tr(name, lang))
+            for attr, v in (("autocomplete", "off"), ("autocorrect", "off"), ("autocapitalize", "none"), ("spellcheck", "false")):
+                expect(box).to_have_attribute(attr, v)

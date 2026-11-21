@@ -245,8 +245,8 @@ window.STRINGS_DE = {
   "⚠ Grey water tank is full. Please empty.": "⚠ Grauwassertank ist voll. Bitte entleeren.",
   "⚠ Fill level sensor in waste water tank. Please visit a workshop.": "⚠ Fehler: Füllstandsensor im Abwassertank. Bitte Werkstatt aufsuchen.",
   "⚠ General grey water error. Please visit a workshop.": "⚠ Allgemeiner Grauwasser-Fehler. Bitte Werkstatt aufsuchen.",
-  "Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?":
-    "Kraftstoffbetriebene Luftstandheizung starten? Nicht live-verifiziert. Fortfahren?",
+  "Start the air heater (it burns fuel)? Continue?":
+    "Die Luftstandheizung starten (sie verbrennt Kraftstoff)? Fortfahren?",
 
   // --- water ---------------------------------------------------------------------------------
   "Fresh water": "Frischwasser",
@@ -617,7 +617,7 @@ window.STRINGS_DE = {
     + "Heating temperature is a level from 1 to 9 or HI, not degrees.\n\n"
     + "Timer: set Start heating at, then Start timer. The heater then starts at that time for the run "
     + "time. If continuous heating is on, it turns off when the timer ends.\n\n"
-    + "The heater burns fuel, so every start asks first; it is not live-verified. A ⚠ banner shows why "
+    + "The heater burns fuel, so every start asks first. A ⚠ banner shows why "
     + "the unit refused or stopped it, for example low battery, low fuel or a running engine."]:
     "Sofortheizen startet die Heizung jetzt für die eingestellte Laufzeit (10–120 min). Dauerbetrieb "
     + "läuft ohne Zeitbegrenzung. Er lässt sich nur im Fahrzeug starten; hier kannst du ihn nur "
@@ -625,7 +625,7 @@ window.STRINGS_DE = {
     + "von 1 bis 9 oder HI, keine Gradzahl.\n\nTimer: Stelle Heizen startet um ein und tippe auf Timer "
     + "starten. Die Heizung startet dann zu dieser Zeit für die Laufzeit. Ist Dauerbetrieb an, "
     + "schaltet er sich am Ende des Timers aus.\n\nDie Heizung verbrennt Kraftstoff, daher fragt jeder "
-    + "Start nach; sie ist nicht live verifiziert. Ein ⚠-Hinweis zeigt, warum die Einheit sie "
+    + "Start nach. Ein ⚠-Hinweis zeigt, warum die Einheit sie "
     + "abgelehnt oder gestoppt hat, zum Beispiel schwache Batterie, wenig Kraftstoff oder laufender "
     + "Motor.",
   ["Fresh and waste water are read-only. The unit measures the tanks only while the van's water system "
@@ -746,6 +746,9 @@ window.STRINGS_DE = {
   "This satellite has the LoRa module": "Dieser Satellit hat das LoRa-Modul",
   "The remote app": "Die Fern-App",
   "Set up ✓": "Eingerichtet ✓",
+  "The first code opens the app's web address (to install the app); the second is the van's code to scan in the app.":
+    "Der erste Code öffnet die Webadresse der App (zum Installieren); der zweite ist der Code des Fahrzeugs, den du in der App scannst.",
+  "Hold the phone about 10 cm in front of the satellite's screen.": "Halte das Handy etwa 10 cm vor den Bildschirm des Satelliten.",
   "The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then hold the satellite's screen 3 s for the app's code, and 3 s again for “The van's code”, and scan that one in the remote app.": "Der Satellit sendet seinen Zustand an deinen MQTT-Broker und nimmt darüber Befehle der Fern-App an. Halte dann den Bildschirm des Satelliten 3 s für den Code der App und noch einmal 3 s für „Code des Fahrzeugs“ und scanne diesen in der Fern-App.",
   "Remote access": "Fernzugriff",
   "See and switch the van when you are away. Two ways, each optional: skip what you do not have; Satellite settings has both later.": "Sieh und schalte das Fahrzeug, wenn du nicht da bist. Zwei Wege, jeder optional: Überspringe, was du nicht hast; die Satelliten-Einstellungen haben später beide.",
@@ -846,6 +849,9 @@ window.STRINGS_DE = {
   "The password needs {min}–{max} characters.": "Das Passwort braucht {min}–{max} Zeichen.",
   "The satellite leaves {ssid} now. If the new password is wrong, it returns to {ssid} by itself.": "Der Satellit verlässt {ssid} jetzt. Ist das neue Passwort falsch, kehrt er von selbst zu {ssid} zurück.",
   "Thermo-hygrometer (Govee)": "Thermo-Hygrometer (Govee)",
+  "needs its key": "braucht seinen Schlüssel",
+  "near": "nah",
+  "far": "fern",
   "Use a–z, 0–9, - or _ (max. 16)": "Nur a–z, 0–9, - oder _ (max. 16)",
   "Wake on motion": "Bei Bewegung einschalten",
   // the Raspberry Pi box (R_FW_PI_WAKE)

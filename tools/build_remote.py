@@ -103,6 +103,7 @@ def build(out: Path, hub_origin: str | None = None) -> None:
     )
     tag = '<script src="/%s"></script>\n'
     html = _replace_once(html, tag % "strings.de.js", tag % "remote-flag.js" + tag % "strings.de.js")
+    html = _replace_once(html, "<title>OC Van</title>", "<title>OC Remote</title>")  # the tab / task switcher
     html = _replace_once(  # the iPhone's home-screen name (ruling R44)
         html,
         '<meta name="apple-mobile-web-app-title" content="OC Van">',

@@ -302,7 +302,7 @@
  *   `{"ok":true,"lora":<bool>}`. Errors: 403 `setup_mode`, 400 `bad_json`, 500 `store`, 405.
  * - `GET|POST /api/sensors` (R_FW_SENSORS, cali_sensors.h): every WiFi mode. Both answer 404
  *   `{"ok":false,"error":"disabled"}` while exp_sensors is off (checked first). GET answers 200
- *   `{"configured":[{id,type,alias,last_seen_s,value|null,has_key}],"seen":[{id,type,model,rssi}],
+ *   `{"configured":[{id,type,alias,last_seen_s,value|null,has_key}],"seen":[{id,type,model,rssi,value|null}],
  *   "scan":"ok"|"paused"}` and calls cali_sensors_kick. POST takes exactly one of
  *   `{"add":<id>,"alias"?:"…","key"?:"<32 hex>"}`, `{"remove":<id>}` or `{"id":<id>,"alias":"…"}`
  *   (any order, each key once; id 0..65535) and answers 200 with the GET body. Errors: 400

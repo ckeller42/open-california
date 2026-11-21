@@ -46,7 +46,7 @@ sys.path.insert(0, str(E2E))
 from conftest import _error_gated_page  # noqa: E402
 from fake_ttn import FakeTtn  # noqa: E402
 
-from tests.e2e.test_remote_setup import qr_png  # noqa: E402
+from tests.e2e.test_remote_setup import FAKE_QS, qr_png  # noqa: E402
 
 KEY = bytes(range(16))
 EUI = "70B3D57ED0000001"
@@ -389,6 +389,27 @@ def test_scanning_the_hub_qr_connects_to_the_van(world):
         expect(_tile(pg, "Cooler")).to_be_visible()
         assert broker.logins[0][0][-2:] == ["qr-user", "qr-pass"]
         assert json.loads(pg.evaluate("localStorage.getItem('oc.hub.cfg')"))["key"] == KEY.hex()
+
+
+def test_the_camera_reads_the_apps_code_then_the_vans_code(world):
+    """S1 + G4: the documented hold sequence shows the app's code first. The camera shows the hint and keeps
+    scanning, then takes the van's code (OCH1) on the second hold and stops. The screen says what each code is."""
+    broker, _, url, _ = world
+    esp = Sealer()
+    broker.publish("oc/%s/online" % VAN, b"1", retain=True)
+    broker.publish("oc/%s/state" % VAN, esp.seal(1, raw_state()), retain=True)
+    qr = "OCH1*%s*ws://127.0.0.1:%d*qr-user*qr-pass*%s" % (VAN, broker.port, KEY.hex().upper())
+    with _error_gated_page(url + "#remotescan", init_script=FAKE_QS, service_workers="block") as pg:
+        expect(pg.get_by_text("The first code opens the app's web address")).to_be_visible()
+        pg.locator("#rs-camera").click()
+        pg.evaluate("window.__qs.cb({ data: 'https://open-california.github.io/' })")
+        expect(pg.locator("#rs-msg")).to_have_text(
+            "This is the app's code: on the satellite, hold the screen 3 s again for the van's code."
+        )
+        assert pg.evaluate("window.__qs.destroyed") is False and broker.logins == []
+        pg.evaluate("(t) => window.__qs.cb({ data: t })", qr)
+        expect(pg.locator("#status")).to_have_text("WLAN · just now")
+        assert pg.evaluate("window.__qs.destroyed") is True
 
 
 @pytest.mark.parametrize("on", [True, False])

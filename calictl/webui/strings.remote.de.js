@@ -33,6 +33,7 @@ Object.assign(window.STRINGS_DE, {
   "Take a photo of the code": "Code fotografieren",
   "Use the camera": "Kamera verwenden",
   "The camera does not start: take a photo instead.": "Die Kamera startet nicht: Fotografiere den Code stattdessen.",
+  "The camera did not start. Tap Use the camera again, or take a photo of the code.": "Die Kamera ist nicht gestartet. Tippe noch einmal auf Kamera verwenden, oder fotografiere den Code.",
   "Remove this van from this phone? The app deletes its keys and data here. The device stays registered at The Things Network until you delete it in the console.": "Dieses Fahrzeug von diesem Telefon entfernen? Die App löscht hier seine Schlüssel und Daten. Das Gerät bleibt bei The Things Network registriert, bis du es in der Konsole löschst.",
   "Other (TTS Cloud tenant)": "Anderer (TTS-Cloud-Tenant)",
   "Cluster host": "Host des Clusters",

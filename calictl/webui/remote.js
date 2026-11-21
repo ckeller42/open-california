@@ -188,6 +188,10 @@ let rsTimer = null;
 let rsDom = null;
 /** @type {any} the running camera scanner */
 let rsCam = null;
+/** @type {ReturnType<typeof setTimeout>|null} the check that the started camera delivers frames */
+let rsCamTimer = null;
+const RS_SCAN_REPEAT_MS = 3000;   // the same code again within this: not acted on again
+const RS_CAM_FRAME_MS = 4000;     // no video frame this long after start(): the camera did not start
 let rsGen = 0;   // +1 by "Remove this van": a step still waiting on TTS then stores nothing
 
 /** @param {Uint8Array} b */
@@ -250,6 +254,8 @@ function rsRefresh() {
 
 /** Stop the camera (leaving the scan, or a code was read). */
 function rsCamStop() {
+  if (rsCamTimer) clearTimeout(rsCamTimer);
+  rsCamTimer = null;
   if (rsCam) { rsCam.destroy(); rsCam = null; }
 }
 
@@ -569,17 +575,34 @@ function rsScanner(onText) {
   };
   const box = h("div", null, h("label", { for: "rs-file" }, T("Take a photo of the code")), file);
   if (window.isSecureContext && QS) {
-    const video = h("video", { muted: "", playsinline: "" });
-    video.hidden = true;
+    const video = /** @type {HTMLVideoElement} */ (h("video", { muted: "", playsinline: "" }));
+    const aim = h("p", { class: "note", id: "rs-aim" }, T("Hold the phone about 10 cm in front of the satellite's screen."));
+    video.hidden = aim.hidden = true;
     const cam = satBtn(T("Use the camera"), "primary", "rs-camera");
+    const off = (/** @type {string} */ m) => { rsCamStop(); video.hidden = aim.hidden = true; rsMsg = m; rsRefresh(); };
     cam.onclick = () => {
       rsCamStop();
-      video.hidden = false;
-      rsCam = new QS(video, (/** @type {any} */ r) => { rsCamStop(); video.hidden = true; onText(String(r.data)); },
-        { returnDetailedScanResult: true, preferredCamera: "environment" });
-      rsCam.start().catch(() => { rsCamStop(); video.hidden = true; rsMsg = "The camera does not start: take a photo instead."; rsRefresh(); });
+      video.hidden = aim.hidden = false;
+      // the camera keeps scanning past a code this screen does not take (the app's code comes first on the
+      // satellite): the handler's hint shows, the screen it moves to on a code it takes stops the camera
+      // (remoteRender, app.js render). The same text again within 3 s, or while its handler runs, is not acted on.
+      let last = "", lastAt = 0, busy = false;
+      const qs = rsCam = new QS(video, async (/** @type {any} */ r) => {
+        const text = String(r.data), now = Date.now();
+        const again = text === last && now - lastAt < RS_SCAN_REPEAT_MS;
+        last = text; lastAt = now;
+        if (again || busy) return;
+        busy = true;
+        try { await onText(text); } finally { busy = false; }
+      }, { returnDetailedScanResult: true, preferredCamera: "environment" });
+      qs.start().then(() => {
+        // the first use on Android: the site prompt, then Chrome's own camera prompt, and the stream may never
+        // deliver a frame. No frame in 4 s: say so; the button starts a new scanner
+        rsCamTimer = setTimeout(() => { if (rsCam === qs && !video.videoWidth)
+          off("The camera did not start. Tap Use the camera again, or take a photo of the code."); }, RS_CAM_FRAME_MS);
+      }, () => { if (rsCam === qs) off("The camera does not start: take a photo instead."); });
     };
-    box.prepend(cam, video);
+    box.prepend(cam, video, aim);
   }
   return box;
 }
@@ -590,6 +613,7 @@ function rsBuild(v, phase) {
   const card = (/** @type {(Node|string|null)[]} */ ...kids) => h("div", { class: "sat" }, h("div", { class: "card dcard" }, ...kids));
   if (v === "remotescan")
     return card(h("p", null, T("On the satellite, tap the screen once to light it, then hold it 3 s, and again, until “The van's code” shows (without a remote hub: the LoRa code), then scan it here.")),
+      h("p", { class: "note" }, T("The first code opens the app's web address (to install the app); the second is the van's code to scan in the app.")),
       rsScanner(rsRepairQr), msg);
   if (v === "remoteremove") {
     const ok = satBtn(T("Remove"), "danger"), no = satBtn(T("Cancel"));
