@@ -3,9 +3,9 @@ sensor window (R_FW_SENSORS, ``firmware/components/cali_core/sensors.c``).
 
 The satellite tells sensors apart by their BLE address (the seen id is a CRC of it), so every fake
 sensor gets its own legacy, non-connectable advertising set with a fixed static random address. BlueZ
-cannot do that: a D-Bus or ``btmgmt`` advertisement has no address option, and the kernel gives a
-non-connectable instance a fresh non-resolvable private address each time it sets the instance up
-(every data change), which would orphan a configured sensor. So this tool sends the LE extended
+cannot do that: a D-Bus or ``btmgmt`` advertisement has no address option, and by the kernel source
+(``hci_get_random_address``) a non-connectable instance gets a fresh non-resolvable private address
+each time the kernel sets it up (every data change), which would orphan a configured sensor. So this tool sends the LE extended
 advertising HCI commands itself, over a raw HCI socket next to bluetoothd, on set handles at the top
 of the range (the kernel numbers its own instances from 1 upwards). It needs root (CAP_NET_RAW) and a
 controller with LE extended advertising (Bluetooth 5).
@@ -152,8 +152,9 @@ class Sensor:
         s = math.sin(2 * math.pi * (t - self.t0) / 600 + sensor_id(self.addr))
         if self.kind == "govee":
             nd = 2 if self.model == "H5074" else 1  # the layout's resolution: what the satellite shows
-            return {"temp_c": round(self.temp + 0.5 * s, nd), "humidity": round(self.humidity + 3 * s, nd),
-                    "battery": self.battery}  # fmt: skip
+            hum = min(max(self.humidity + 3 * s, 0.0), 99.9)  # H5075: 100 % or more spills into the temperature
+            return {"temp_c": round(self.temp + 0.5 * s, nd), "humidity": round(hum, nd),
+                    "battery": min(max(self.battery, 0), 100)}  # fmt: skip
         if self.kind == "mppt":
             v, pv = round(13.5 + 0.2 * s, 2), round(90 + 40 * s)
             return {"charge_state": 3, "error_code": 0, "battery_voltage": v, "battery_current": round(pv / v, 1),
@@ -315,6 +316,8 @@ def main(argv=None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        for sig in (signal.SIGTERM, signal.SIGINT):  # a second signal (sudo relays one) must not cut the cleanup
+            signal.signal(sig, signal.SIG_IGN)
         for h in handles:
             hci.stop(h)
         print("advertising stopped", flush=True)

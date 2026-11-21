@@ -387,8 +387,9 @@ Limits:
 - It needs root and a Bluetooth 5 controller with LE extended advertising: one legacy,
   non-connectable advertising set per fake, at most 8, on handles `0xEF` downwards. It sends the
   HCI commands itself over a raw socket next to `bluetoothd`. A BlueZ advertisement (D-Bus or
-  `btmgmt`) has no address option, and the kernel gives a non-connectable one a new private
-  address whenever it sets the instance up again, which would orphan a configured sensor. An
+  `btmgmt`) has no address option. By the kernel source, a non-connectable one gets a new private
+  address whenever the kernel sets the instance up again (each data change), which would orphan a
+  configured sensor. An
   adapter reset clears the sets; the next update sets them up again.
 - A legacy advert holds 31 bytes. The MPPT's name is `SS_01` (the satellite shows the model `SS`),
   and the battery monitor has no name.
