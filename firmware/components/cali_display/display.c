@@ -182,6 +182,7 @@ static struct touch_ctx s_touch_ctx;                      /* LVGL task writes, o
 static portMUX_TYPE s_touch_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint32_t s_press_start;          /* LVGL task -> owner task, __atomic: uptime ms (| 1) of the delivered press, 0 = none */
 static uint32_t s_press_seen;           /* LVGL task -> owner task, __atomic: uptime ms (| 1) of its last read that saw the touch */
+static uint32_t s_inject_until;         /* owner task -> LVGL task, __atomic: uptime ms the console's "touch" press lasts to */
 static int s_lora_shown;                /* owner task -> shot.c, __atomic: the LoRa screen is up */
 /* the LoRa screen, owner task only (under the LVGL lock) */
 static lv_obj_t *s_lora, *s_lqr, *s_lora_hint, *s_lora_line;
@@ -407,6 +408,11 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
             data->point.y = p[0].y;
         }
     }
+    /* the console's "touch tap|hold" (cali_display_touch_line): a good read that sees a finger, as a real one */
+    if ((int32_t)(__atomic_load_n(&s_inject_until, __ATOMIC_RELAXED) - (uint32_t)cali_uptime_ms()) > 0) {
+        e = ESP_OK;
+        data->state = LV_INDEV_STATE_PRESSED;
+    }
     pressed = data->state == LV_INDEV_STATE_PRESSED;
     if (pressed) __atomic_store_n(&s_touched, 1, __ATOMIC_RELAXED);
     if (!cali_display_touch_gate(&s_swallow, pressed, __atomic_load_n(&s_awake, __ATOMIC_RELAXED), e == ESP_OK)) {
@@ -419,6 +425,22 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
     /* only a good read that reports no touch ends the press: a failed read (#346 NACKs) is "released"
      * for LVGL but must not restart the 3 s count or close the LoRa screen mid-press */
     if (!pressed && e == ESP_OK) __atomic_store_n(&s_press_start, 0, __ATOMIC_RELAXED);
+}
+
+/* USB-console test aid (cali_display_touch_cmd): "touch tap" / "touch hold <ms>" press the screen in touch_read for
+ * that long, the same read a finger gives (a wake tap is swallowed; a 3 s hold cycles the app, hub and LoRa QR
+ * screens). The USB console already is physical access (it can flash the board), so no new attack surface. */
+int cali_display_touch_line(const char *line) {
+    uint32_t ms = 0;
+    int r = cali_display_touch_cmd(line, &ms);
+    if (!r) return 0;
+    if (r < 0) cali_log("display: usage: touch tap | touch hold <1-%u ms>", (unsigned)CALI_DISPLAY_HOLD_MAX_MS);
+    else if (!s_ok) cali_log("display: touch: no screen");
+    else {
+        __atomic_store_n(&s_inject_until, (uint32_t)cali_uptime_ms() + ms, __ATOMIC_RELAXED);
+        cali_log("display: touch %u ms", (unsigned)ms);
+    }
+    return 1;
 }
 
 static void bus_mark(int dev) {   /* owner task: an I2C transfer on dev just finished */

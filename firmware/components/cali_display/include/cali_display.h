@@ -36,4 +36,8 @@ int cali_display_qr_mask_area(int *x1, int *y1, int *x2, int *y2);
  * only for the snapshot itself. Needs a host attached to the USB-Serial/JTAG console (refused with
  * "no host" otherwise: a puts with nobody draining the CDC could block the host task). Any other line returns 0. */
 int cali_display_shot_line(const char *line);
+/* Console hook (USB-console test aid, cali_display_touch_cmd): handles "touch tap" / "touch hold <1-10000 ms>"
+ * (returns 1) by pressing the screen in the touch read for that long, as a finger; a bad argument logs the usage.
+ * Any other line returns 0. Owner task. */
+int cali_display_touch_line(const char *line);
 #endif

@@ -468,6 +468,21 @@ long cali_shot_mask(uint8_t *buf, int w, int h, int stride, int x1, int y1, int 
     return n;
 }
 
+int cali_display_touch_cmd(const char *line, uint32_t *ms) {
+    unsigned long v = 0;
+    int n = 0;
+    if (strncmp(line, "touch", 5) || (line[5] && line[5] != ' ')) return 0;
+    if (!strcmp(line, "touch tap")) {
+        *ms = CALI_DISPLAY_TAP_MS;
+        return 1;
+    }
+    if (strncmp(line, "touch hold ", 11)) return -1;
+    for (line += 11; line[n] >= '0' && line[n] <= '9' && n < 6; n++) v = v * 10 + (unsigned long)(line[n] - '0');
+    if (!n || line[n] || v < 1 || v > CALI_DISPLAY_HOLD_MAX_MS) return -1;
+    *ms = (uint32_t)v;
+    return 1;
+}
+
 int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake, int read_ok) {
     if (!read_ok) return 0;   /* a failed read: "released" for the widgets, but the press (and its swallow) goes on */
     if (!pressed) *swallow = 0;

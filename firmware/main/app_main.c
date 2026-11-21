@@ -392,7 +392,7 @@ static void do_work(void) {
         if (!kvprobe_line(line))
 #endif
 #if CONFIG_CALI_DISPLAY
-            if (!cali_display_shot_line(line))
+            if (!cali_display_shot_line(line) && !cali_display_touch_line(line))
 #endif
                 if (!cali_ota_esp_console_line(line))
                     cali_console_line(line);

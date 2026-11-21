@@ -306,6 +306,24 @@ long cali_shot_mask(uint8_t *buf, int w, int h, int stride, int x1, int y1, int 
  */
 int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake, int read_ok);
 
+/** @brief The press length of the console's "touch tap" (a short tap: wakes the screen, or counts as a touch). */
+#define CALI_DISPLAY_TAP_MS 100u
+/** @brief The longest press of the console's "touch hold <ms>". */
+#define CALI_DISPLAY_HOLD_MAX_MS 10000u
+
+/**
+ * @brief Parses the USB-console test aid "touch tap" | "touch hold <ms>" (1..CALI_DISPLAY_HOLD_MAX_MS).
+ *
+ * The display (cali_display_touch_line) then feeds a press of that length into its touch read, as a finger would
+ * (a 3 s hold cycles the app QR, the hub QR and the LoRa QR screens). The USB console is physical access to the
+ * board already (it can also flash it), so this adds no attack surface.
+ *
+ * @param line A console line.
+ * @param ms   Receives the press length for a valid line.
+ * @return 1 for a valid line, -1 for a "touch" line with a bad argument, 0 for any other line.
+ */
+int cali_display_touch_cmd(const char *line, uint32_t *ms);
+
 /* ---- display_cfg.c: the settings in NVS and the last painted state for /api/state ---- */
 
 /**

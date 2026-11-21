@@ -52,6 +52,12 @@ int main(int argc, char **argv) {
             printf("fit=%s\n", dst);
             continue;
         }
+        if (!strncmp(line, "touchcmd=", 9)) {   /* the console's "touch" parse: touchcmd=<line> */
+            uint32_t ms = 0;
+            int r = cali_display_touch_cmd(line + 9, &ms);
+            printf("touch=%d ms=%u\n", r, (unsigned)ms);
+            continue;
+        }
         if (!strncmp(line, "gate=", 5)) {
             printf("deliver=%d\n", cali_display_touch_gate(&swallow, line[5] == '1', line[6] == '1', line[7] != '0'));
             continue;

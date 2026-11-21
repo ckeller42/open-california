@@ -537,6 +537,31 @@ def test_failed_touch_read_keeps_the_wake_swallow(cli):
     assert [ln.split("=")[1] for ln in run_raw(cli, "gate=111", "gate=010", "gate=111")] == ["1", "0", "1"]
 
 
+@pytest.mark.parametrize(
+    "line,want",
+    [
+        ("touch tap", "touch=1 ms=100"),
+        ("touch hold 1", "touch=1 ms=1"),
+        ("touch hold 3000", "touch=1 ms=3000"),
+        ("touch hold 10000", "touch=1 ms=10000"),
+        ("touch hold 0", "touch=-1 ms=0"),
+        ("touch hold 10001", "touch=-1 ms=0"),
+        ("touch hold 0000001", "touch=-1 ms=0"),
+        ("touch hold 3s", "touch=-1 ms=0"),
+        ("touch hold -5", "touch=-1 ms=0"),
+        ("touch hold", "touch=-1 ms=0"),
+        ("touch", "touch=-1 ms=0"),
+        ("touch press", "touch=-1 ms=0"),
+        ("touchy", "touch=0 ms=0"),
+        ("status", "touch=0 ms=0"),
+    ],
+)
+def test_console_touch_aid_parses_tap_and_hold(cli, line, want):
+    """The USB-console test aid ``touch tap`` / ``touch hold <ms>`` (1..10000): the press length the display feeds
+    into its touch read; a bad argument is refused (-1), any other line is not a touch line (0)."""
+    assert run_raw(cli, "touchcmd=" + line) == [want]
+
+
 def bright_at(cli, *lux, **cfg):
     extra = "".join(" %s=%s" % kv for kv in cfg.items())
     return [
