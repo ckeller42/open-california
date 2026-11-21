@@ -118,6 +118,11 @@ def test_vectors_cover_the_control_branches():
         "continuous_hold_overheat",
         "blocked_known_frames",
         "wait_left_ceil",
+        "takeover_keeps_level",
+        "resume_auto",
+        "resume_waiting",
+        "resume_wait",
+        "resume_drop_off",
         *(
             "blocked_" + c
             for c in ("NOT_INSTALLED", "FAULT", "TIMER_ARMED", "NO_CAMPING", "IGNITION", "NO_REFERENCE")

@@ -122,7 +122,7 @@ def flat_st(s):
         s["mode"], s["active"], c["i"], c["last_change_ms"], c["hot_since_ms"], c["u"], c["u_out"], c["t_prev"], c["rate"],
         *pend, *_snap(s["expect"]), s["batt_low_since_ms"], *_snap(s["stop_snapshot"]),
         (s["stop_snapshot"] or {}).get("why"), s["last_ctl_ms"],
-        s["night"], s["wait_until_ms"], s["cont_since_ms"],
+        s["night"], s["wait_until_ms"], s["cont_since_ms"], s["resume"],
     ]  # fmt: skip
 
 
@@ -175,6 +175,28 @@ class Rec:
         sent = [w for w, _ in out["cmds"]]
         if why in ("ADOPT_RUN", "ADOPT_CONTINUOUS") and "level" in sent:
             self.tags.add("adopt_to_demand")
+        lvl = out["status"]["level"]
+        t_ref = out["status"]["t_ref"]
+        if (
+            why in ("ADOPT_RUN", "ADOPT_CONTINUOUS", "AUTO_RESUMED")
+            and lvl is not None
+            and t_ref is not None
+            and t_ref < inp["target"] - cfg["band_lo"]
+            and not sent
+            and st2["ctl"]["u"] == lvl * 1000
+            # the demand from integrator 0 (the takeover's) is a lower level
+            and th._rdiv(
+                th._rdiv(cfg["kp"] * (inp["target"] - t_ref), 100) + (st2["ctl"]["u_out"] or 0), 1000
+            )
+            < lvl
+        ):
+            self.tags.add("takeover_keeps_level")
+        if why == "AUTO_RESUMED":
+            self.tags.add("resume_" + st2["mode"].lower())
+        if st["resume"] and st2["resume"]:
+            self.tags.add("resume_wait")
+        if st["resume"] and not st2["resume"] and st2["mode"] == "OFF" and out["status"]["heater"] == "OFF":
+            self.tags.add("resume_drop_off")
         if why == "WAITING_FOR_CONTINUOUS":
             if not wait and "level" in sent:
                 self.tags.add("night_preset")
@@ -566,6 +588,7 @@ def sessions(rec):
     )  # fmt: skip
     _night_sessions(rec)
     _hold_and_blocked_sessions(rec)
+    _resume_sessions(rec)
 
 
 def _night_sessions(rec):
@@ -690,6 +713,40 @@ def _night_sessions(rec):
     )  # fmt: skip
 
 
+def _resume_sessions(rec):
+    """Takeover below the target (no lower level) and AUTO resumed after a reboot."""
+    cold = {"ref": sensor(1480), "target": 1600}
+    session(  # the van at 00:09 on 2026-11-22: Dauerbetrieb at 6, 14.8 C, target 16.0 C, demand 2
+        rec, "takeover_cold_keeps_level", 0,
+        [{"request": "AUTO", "heater": run_h(6, 1), **cold}, {**cold}, {**cold, "ref": sensor(1490)}],
+    )  # fmt: skip
+    session(rec, "takeover_cold_run_odd_cfg", 1, [{"request": "AUTO", "heater": run_h(9), **cold}, {**cold}])
+    session(  # a reboot with AUTO on: the heater read arrives late, the reference later still
+        rec, "resume_continuous", 0,
+        [{"heater": None, **cold}, {"heater": run_h(6, 1), "ref": None, "target": 1600},
+         {"heater": run_h(6, 1), **cold}, {**cold}],
+        st=th.initial_state(resume=True),
+    )  # fmt: skip
+    session(  # the heater ran out while the satellite was down: nothing is started
+        rec, "resume_heater_off", 0, [{"heater": OFF_H, **cold}, {**cold}], st=th.initial_state(resume=True),
+    )  # fmt: skip
+    session(  # night: an immediate run goes into the wait
+        rec, "resume_night_run", 0, [{"heater": run_h(4), "night": True, **cold}, {"night": True, **cold}],
+        st=th.initial_state(resume=True),
+    )  # fmt: skip
+    session(
+        rec,
+        "resume_disabled",
+        0,
+        [{"heater": run_h(6, 1), "enabled": False}],
+        st=th.initial_state(resume=True),
+    )
+    session(  # an owner OFF while the resume waits ends it
+        rec, "resume_owner_off", 0, [{"heater": run_h(6, 1), "ignition_on": None}, {"request": "OFF"}],
+        st=th.initial_state(resume=True),
+    )  # fmt: skip
+
+
 def _hold_and_blocked_sessions(rec):
     auto = {"request": "AUTO"}
     cont = run_h(6, 1)
@@ -802,6 +859,7 @@ def grid(rec):
             bases.append(copy.deepcopy(st))
 
     keep(th.initial_state())
+    keep(th.initial_state(resume=True))
     probe = Rec()
     for steps in (
         [{"request": "AUTO"}],  # START: power on pending
@@ -872,6 +930,7 @@ def _variations():
 def sweep(rec, n=2000):
     """Seeded random walks: the heater mostly follows the thermostat, sometimes does its own thing."""
     rnd = random.Random(4711)
+    rres = random.Random(4712)  # its own stream: the walks of rnd stay as they were
     P = D["period_ms"]
     dts = (0, 1000, D["verify_ms"], P, P, P, 2 * P, 3 * P + 1, D["min_dwell_ms"], D["heater_stale_ms"] + 1,
            D["night_confirm_ms"], D["night_wait_ms"])  # fmt: skip
@@ -884,7 +943,7 @@ def sweep(rec, n=2000):
     while sum(c[0] == "sweep" for c in rec.cases) < n:
         k = rnd.choice((0, 0, 1))
         cfg = CFGS[k]
-        st, now, last = th.initial_state(), rnd.randrange(0, 10**7), None
+        st, now, last = th.initial_state(rres.random() < 0.3), rnd.randrange(0, 10**7), None
         t, target = rnd.randrange(300, 2800), rnd.choice((1500, 2100, 2350, 3000))
         for _ in range(rnd.randrange(3, 40)):
             now += rnd.choice(dts) if k == 0 else rnd.choice(dts) // 2 + rnd.choice((0, 1))

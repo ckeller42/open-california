@@ -4525,6 +4525,7 @@ const THERMO_REASON = {
   START: "Heater started",
   ADOPT_RUN: "Taking over the running heater",
   ADOPT_CONTINUOUS: "Taking over continuous heating",
+  AUTO_RESUMED: "AUTO resumed after a restart",
   LEVEL_UP: "Level raised",
   LEVEL_DOWN: "Level lowered",
   COOLING_MAX: "Getting colder — highest level",

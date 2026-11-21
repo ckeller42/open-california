@@ -109,6 +109,8 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.test_thermostat.test_heater_state_table
 .. autofunction:: tests.test_thermostat.test_auto_from_off_sends_runtime_level_power_in_order
 .. autofunction:: tests.test_thermostat.test_adopt_goes_to_demand
+.. autofunction:: tests.test_thermostat.test_takeover_below_the_target_sends_no_lower_level
+.. autofunction:: tests.test_thermostat.test_resume_takes_over_a_heating_heater_after_a_reboot
 .. autofunction:: tests.test_thermostat.test_night_start_presets_level_and_waits
 .. autofunction:: tests.test_thermostat.test_night_waits_30s_of_continuous_then_adopts
 .. autofunction:: tests.test_thermostat.test_night_unconfirmed_panel_start_keeps_waiting

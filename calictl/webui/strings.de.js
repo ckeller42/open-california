@@ -1005,6 +1005,7 @@ window.STRINGS_DE = {
   "Heater started": "Heizung gestartet",
   "Taking over the running heater": "Übernimmt die laufende Heizung",
   "Taking over continuous heating": "Übernimmt den Dauerbetrieb",
+  "AUTO resumed after a restart": "AUTO nach einem Neustart fortgesetzt",
   "Level raised": "Stufe erhöht",
   "Level lowered": "Stufe gesenkt",
   "Getting colder — highest level": "Wird kälter — höchste Stufe",

@@ -34,7 +34,8 @@
  * `thermostat`, one at a time (the next from the previous one's done callback); the batch stops at
  * the first result that is not OK, and that result goes into the next step's `cmd_*` input. The
  * request is a one-shot: one step sees it. The feature switch is the kv key CALI_THERMO_ON_KEY
- * (missing = off); the mode is never stored (OFF after boot).
+ * (missing = off). The mode itself is not stored (OFF after boot); CALI_THERMO_AUTO_KEY stores only whether
+ * AUTO is on, so that a boot takes a heating heater over again (`AUTO_RESUMED`).
  *
  * @verbatim embed:rst:leading-asterisk
  * .. req:: The satellite runs the cabin thermostat on its own link
@@ -48,16 +49,21 @@
  *    the stored 1702 frame's age and the configured thermometers' readings by alias; send its
  *    commands through the control sequencer one at a time, stopping at the first result that is not
  *    OK and handing that result to the next step; ship with the feature off (kv ``th_on``, missing =
- *    off) and never store the mode. While the mode is not OFF (also ``WAITING``) it holds the session: no power-save
+ *    off) and store only whether AUTO is on (kv ``th_auto``: set while the mode is ``AUTO``, ``DEGRADED`` or
+ *    ``WAITING``, cleared at every other mode, written on a change only). After a boot with ``th_auto`` set
+ *    and the feature on, it shall wake and hold the link and step on each new 1702 frame until the step has
+ *    taken the heater over (``AUTO_RESUMED``) or dropped the resume, and drop it after
+ *    ``CALI_THERMO_RESUME_WAIT_MS`` (10 min); it never starts an off heater. While the mode is not OFF (also ``WAITING``) it holds the session: no power-save
  *    rest, no idle demotion, and 1702 re-read every ``CALI_SESSION_HEATER_REREAD_MS``. It logs one
  *    ``thermo`` record per step and one ``evt`` ``thermo`` record per mode change and command result,
- *    only while the feature is on or a mode is active.
+ *    only while the feature is on or a mode is active, and one ``evt`` ``thermo`` ``resume`` record when a resume
+ *    ends (taken over, dropped or timed out).
  * @endverbatim
  *
  * **API** (thermostat_run.c, served by web.c): ``GET /api/thermostat`` reads the configuration and the
  * status, ``POST /api/thermostat`` changes it through cali_thermo_apply(). The switch, an AUTO request
  * and the settings need ``confirm``; every value is range-checked before anything changes; the
- * configuration is stored whole in kv ``th_cfg``; the mode is never stored.
+ * configuration is stored whole in kv ``th_cfg``; the mode is not stored.
  *
  * @verbatim embed:rst:leading-asterisk
  * .. req:: The satellite serves the cabin thermostat's settings and switch
@@ -252,7 +258,7 @@ typedef struct {
     const char *why;    /**< A stop's cause ("USER_OFF", "DISABLED", "OVERHEAT", "TARGET_EXCEEDED_AT_MIN_LEVEL", "BATTERY_LOW"), else NULL. */
 } cali_thermo_pending_t;
 
-/** @brief The session state (Python `initial_state()`); never persisted. */
+/** @brief The session state (Python `initial_state()`); never persisted (the runner stores only whether AUTO is on). */
 typedef struct {
     int mode;                           /**< enum cali_thermo_mode_e. */
     int active;                         /**< 0 = the reference sensor, 1 = the backup. */
@@ -269,6 +275,7 @@ typedef struct {
     int night;                          /**< The night setting of this run (cleared at mode OFF). */
     int64_t wait_until_ms;              /**< End of the night wait, or CALI_THERMO_NONE_MS (only in WAITING). */
     int64_t cont_since_ms;              /**< Start of the Dauerbetrieb seen in WAITING, or CALI_THERMO_NONE_MS. */
+    int resume;                         /**< AUTO was on before the boot: take a heating heater over again (Python `resume`). */
 } cali_thermo_state_t;
 
 /** @brief One command: `what` with an int value (a level, a run time, or 1 = on, 0 = off). */
@@ -372,6 +379,11 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
 
 /** @brief kv key of the feature switch: 1 byte, 0 off, 1 on, missing = off. */
 #define CALI_THERMO_ON_KEY "th_on"
+/** @brief kv key "AUTO is on": 1 byte, 1 while the mode is AUTO, DEGRADED or WAITING (or a resume waits), else 0;
+ * missing = 0. A boot with it set takes a heating heater over again (`cali_thermo_state_t.resume`). */
+#define CALI_THERMO_AUTO_KEY "th_auto"
+/** Longest wait of a resume after the boot for the link, a fresh 1702 read and the entry checks, ms; then AUTO stays off. */
+#define CALI_THERMO_RESUME_WAIT_MS 600000u
 /** @brief Default target, centi-degrees C. */
 #define CALI_THERMO_TARGET_DEFAULT 2000
 

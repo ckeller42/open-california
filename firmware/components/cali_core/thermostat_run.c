@@ -33,6 +33,8 @@ static cali_thermo_state_t S;
 static cali_thermo_out_t s_out;     /* the last step's output (status) */
 static const char *s_reason;        /* the last reason that was not NULL */
 static int s_on, s_req, s_due;
+static int s_auto_kv;               /* the stored CALI_THERMO_AUTO_KEY: AUTO is on */
+static uint64_t s_resume_until;     /* the end of a resume's wait after the boot; 0 = not started */
 static uint64_t s_next;
 static uint64_t s_link_wait;        /* an AUTO tap waits for the link it woke until this uptime; 0 = not yet */
 static uint64_t s_heater_seen;      /* the time of the last 1702 frame the tick looked at */
@@ -252,7 +254,7 @@ static void eta_update(uint64_t now, const cali_thermo_in_t *in, int32_t rem_min
 }
 
 static void step(uint64_t now) {
-    int mode_before = S.mode;
+    int mode_before = S.mode, resume_before = S.resume;
     cali_thermo_in_t in;
     inputs(&in, now, 1);
     const codec_kv_t *h = s_h;
@@ -265,13 +267,25 @@ static void step(uint64_t now) {
 
     cali_thermo_step(&in, &C.s, &S, &s_out);
     s_stepped = 1;
+    if (resume_before && !S.resume) {
+        cali_log("thermostat: resume after the boot %s", S.mode != CALI_THERMO_OFF ? "done" : "dropped");
+        cali_diag_evt("thermo", "\"e\":\"resume\",\"r\":\"%s\",\"m\":\"%s\",\"h\":\"%s\"",
+                      s_out.reason ? s_out.reason : "", cali_thermo_mode_names[S.mode],
+                      cali_thermo_heater_names[s_out.status.heater]);
+    }
+    {   /* AUTO on (or a resume that waits) is stored, so a boot takes the heater over again; written on a change only */
+        uint8_t want = (uint8_t)(s_on && (S.resume || S.mode == CALI_THERMO_AUTO || S.mode == CALI_THERMO_DEGRADED ||
+                                          S.mode == CALI_THERMO_WAITING));
+        if (want != s_auto_kv && cali_kv_set(CALI_THERMO_AUTO_KEY, &want, 1) == 0) s_auto_kv = want;
+    }
     eta_update(now, &in, field(h, nh, "RunningTimeinAction"));
 
     if (s_out.reason && (!s_reason || strcmp(s_out.reason, s_reason) != 0 || S.mode != mode_before))
         cali_log("thermostat: %s (mode %s, heater %s)", s_out.reason, cali_thermo_mode_names[S.mode],
                  cali_thermo_heater_names[s_out.status.heater]);
     if (s_out.reason) s_reason = s_out.reason;
-    int busy = S.mode != CALI_THERMO_OFF || S.has_pending;   /* a mode, or a stop still pending in OFF */
+    /* a mode, a stop still pending in OFF, or a resume that waits for its inputs */
+    int busy = S.mode != CALI_THERMO_OFF || S.has_pending || S.resume;
     if (s_on || mode_before != CALI_THERMO_OFF || busy) {   /* a disabled idle one logs nothing */
         char b[6][16], r[40] = "null";
         int32_t want = S.has_pending && strcmp(S.pending.what, "level") == 0 ? S.pending.value
@@ -420,6 +434,9 @@ void cali_thermo_run_init(void) {
     size_t bn = sizeof blob;
     cali_thermo_run_cfg_t old;   /* an older record, converted */
     s_on = cali_kv_get(CALI_THERMO_ON_KEY, &b, &n) == CALI_KV_OK && n == 1 && b != 0;   /* missing = off */
+    n = 1;
+    s_auto_kv = cali_kv_get(CALI_THERMO_AUTO_KEY, &b, &n) == CALI_KV_OK && n == 1 && b != 0;   /* missing = off */
+    s_resume_until = 0;
     static const cali_thermo_run_cfg_t DEFAULTS = {.s = CALI_THERMO_DEFAULTS, .target = CALI_THERMO_TARGET_DEFAULT};
     C = DEFAULTS;
     old = DEFAULTS;
@@ -429,7 +446,9 @@ void cali_thermo_run_init(void) {
         else if (cfg_from_v2(&blob, bn, &old) == 0 && cfg_valid(&old)) C = old;
     }
     s_rev = 0;
+    s_reason = NULL;
     cali_thermo_init(&S);
+    S.resume = s_on && s_auto_kv;   /* never with the feature off: the first step then clears the stored flag */
     memset(&s_out, 0, sizeof s_out);
     s_stepped = 0;
     s_en = 0;
@@ -440,7 +459,7 @@ void cali_thermo_run_init(void) {
     s_out.status.t_ref = s_out.status.t_out = s_out.status.level = CALI_THERMO_NONE;
     s_out.status.end = "none";
     s_out.status.wait_left_s = CALI_THERMO_NONE;
-    cali_log("thermostat: %s", s_on ? "enabled" : "disabled");
+    cali_log("thermostat: %s%s", s_on ? "enabled" : "disabled", S.resume ? ", AUTO was on: resume" : "");
 }
 
 void cali_thermo_run_tick(uint64_t now_ms) {
@@ -453,7 +472,7 @@ void cali_thermo_run_tick(uint64_t now_ms) {
         int n = frame_fields("airheater", 1, kv);
         s_heater_seen = hat;
         int32_t err = field(kv, n, "ErrorCode");
-        if (field(kv, n, "FaultTriggerBit") > 0 || err > 0) s_due = 1;
+        if (field(kv, n, "FaultTriggerBit") > 0 || err > 0 || S.resume) s_due = 1;   /* a resume acts on a fresh read */
         if (err > 0) s_heater_fault = (int)err;
         else if (field(kv, n, "NormalOperation") > 0 || field(kv, n, "PermanentOperation") > 0) s_heater_fault = 0;
     }
@@ -469,6 +488,17 @@ void cali_thermo_run_tick(uint64_t now_ms) {
         }
     }
     s_link_wait = 0;
+    /* a resume after the boot: wake and hold the link (1702 is read at once) for up to CALI_THERMO_RESUME_WAIT_MS */
+    if (S.resume && !s_resume_until) {
+        s_resume_until = now_ms + CALI_THERMO_RESUME_WAIT_MS;
+        cali_session_hold(1);
+        cali_session_connect_now();
+    } else if (S.resume && now_ms >= s_resume_until) {
+        S.resume = 0;   /* the inputs did not come in: the step stores AUTO off */
+        cali_log("thermostat: resume after the boot timed out");
+        cali_diag_evt("thermo", "\"e\":\"resume\",\"r\":\"timeout\"");
+        s_due = 1;
+    }
     if (!s_due && now_ms < s_next) return;
     s_due = 0;
     step(now_ms);

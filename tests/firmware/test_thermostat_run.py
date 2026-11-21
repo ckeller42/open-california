@@ -77,7 +77,10 @@ def test_hold_stays_while_a_stop_is_pending(cli, tmp_path):
        :id: T_FW_THERMOSTAT_RUN_PENDING_STOP
        :links: R_FW_THERMOSTAT_RUN
     """
-    mark = len(run(cli, tmp_path, STARTED))
+    (tmp_path / "m").mkdir()
+    mark = len(
+        run(cli, tmp_path / "m", STARTED)
+    )  # its own kv: the stored AUTO flag would resume in the next run
     out = run(cli, tmp_path, [*STARTED, "on 0", f"rc {BUSY}", "now 2000", "tick", "now 3000", "tick",
                               f"done {OK}", "now 3500", OFF_HEATER, "tick", "state"])  # fmt: skip
     tail = out[mark:]
@@ -369,3 +372,81 @@ def test_eta_after_six_minutes_of_rise(cli, tmp_path):
         states[12]["active"] == "bed" and states[12]["eta_s"] is None
     )  # a new thermometer starts a new series
     assert states[-1]["eta_s"] is None and states[-1]["eta_ends_first"] is False
+
+
+CONT6 = frame("airheater", Installed=1, NormalOperation=1, PermanentOperation=1, HeatingLevel=6)
+COLD = [*SETUP[:-1], "target 1600", "sensor cabin 1480"]  # 14.8 C, target 16.0 C: the demand is level 2
+ADOPTED = [*COLD, CONT6, "auto", "tick"]  # AUTO takes Dauerbetrieb over at level 6
+REBOOT = ["init", "ref cabin", "target 1600", "now 100000"]  # the CLI sets ref/target in RAM only
+
+
+def evts(out, e):
+    return [
+        json.loads("{" + s[4:] + "}") for s in out if s.startswith('REC "ev":"evt"') and f'"e":"{e}"' in s
+    ]
+
+
+def test_takeover_below_the_target_keeps_the_level(cli, tmp_path):
+    """The van case: Dauerbetrieb at level 6, 14.8 C, target 16.0 C. AUTO takes it over without a lower level.
+
+    .. test:: Thermostat runner: a takeover below the target sends no lower level
+       :id: T_FW_THERMOSTAT_RUN_TAKEOVER_COLD
+       :links: R_FW_THERMOSTAT_RUN, R_THERMOSTAT_SESSION
+    """
+    out = run(cli, tmp_path, [*ADOPTED, "state"])
+    st = state(out)
+    assert (st["mode"], st["reason"], submits(out)) == ("AUTO", "ADOPT_CONTINUOUS", [])
+
+
+def test_auto_resumes_after_a_reboot_while_the_heater_heats(cli, tmp_path):
+    """AUTO was on and the satellite reboots while Dauerbetrieb runs: the first step with a fresh heater read
+    takes it over again (AUTO_RESUMED) and sends nothing to a heater at its level; the stored flag survives.
+
+    .. test:: Thermostat runner: AUTO resumes after a reboot
+       :id: T_FW_THERMOSTAT_RUN_RESUME
+       :links: R_FW_THERMOSTAT_RUN
+    """
+    out = run(cli, tmp_path, [*ADOPTED, *REBOOT, CONT6, "tick", "state"])
+    tail = out[out.index("LOG thermostat: enabled, AUTO was on: resume") :]
+    st = state(out)
+    assert (st["mode"], st["reason"]) == ("AUTO", "AUTO_RESUMED"), st
+    assert submits(out) == [] and "CONNECT_NOW" in tail
+    assert [e["r"] for e in evts(out, "resume")] == ["AUTO_RESUMED"]
+    out = run(cli, tmp_path, [*COLD, CONT6, "tick", "state"])  # a new process, the flag still stored: again
+    assert state(out)["reason"] == "AUTO_RESUMED"
+
+
+def test_resume_waits_for_the_reference_then_times_out(cli, tmp_path):
+    """After the boot the reference reading comes later than the heater read: the resume waits for it. Without
+    it the resume ends after CALI_THERMO_RESUME_WAIT_MS, AUTO stays off and the flag is cleared."""
+    base = [*ADOPTED, *REBOOT, "sensor cabin -", CONT6, "tick", "state"]
+    out = run(cli, tmp_path, [*base, "now 101000", "sensor cabin 1480", "now 161000", "tick", "state"])
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert states[-2]["mode"] == "OFF" and states[-1]["reason"] == "AUTO_RESUMED", states
+    out = run(
+        cli,
+        tmp_path,
+        [*base, "now 700001", "tick", "state", *REBOOT, "sensor cabin 1480", CONT6, "tick", "state"],
+    )
+    states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
+    assert [s["mode"] for s in states[-2:]] == ["OFF", "OFF"] and submits(out) == []
+    assert "timeout" in [e["r"] for e in evts(out, "resume")]
+
+
+@pytest.mark.parametrize(
+    "before, at_boot",
+    [
+        ([], [OFF_HEATER]),  # the heater stopped while the satellite was down: nothing is started
+        (
+            ["stop", f"done {OK}", "now 2000", OFF_HEATER, "tick", "now 3000", CONT6],
+            [CONT6],
+        ),  # owner OFF first
+    ],
+)
+def test_no_resume_after_an_auto_end_or_an_off_heater(cli, tmp_path, before, at_boot):
+    """An off heater after the boot ends the resume without a command; an AUTO that ended before the boot
+    (here an owner OFF) is not resumed."""
+    out = run(cli, tmp_path, [*ADOPTED, *before, *REBOOT, *at_boot, "tick", "state"])
+    st = state(out)
+    assert st["mode"] == "OFF" and st["reason"] != "AUTO_RESUMED", st
+    assert [s for s in submits(out) if s != "permanent off"] == []
