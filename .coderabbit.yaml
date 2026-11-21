@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit: security review rules for the remote app and its publish path (hub, LoRa/TTN, Pages).
+# Each rule names an invariant of this repository; a change that breaks one is a finding, not a nit.
+language: en-US
+reviews:
+  path_instructions:
+    - path: "calictl/webui/**/*.js"
+      instructions: |
+        Security review. The remote app holds the hub data key, the broker app login and TTN API keys in
+        localStorage and serves on https://open-california.github.io/ under a strict CSP. Flag:
+        - Any secret (hub data key, app password, TTN API key, transfer key, AppKey, hotspot password) that
+          reaches console.*, an Error message, a URL (query or fragment), a fetch body to an origin that is not
+          the key's own service, or the DOM, except the existing screens that show it on purpose.
+        - innerHTML, outerHTML, insertAdjacentHTML or document.write with data from the network (/api/state,
+          MQTT, TTN), a scanned QR, a loaded file or localStorage. Use h() / textContent.
+        - eval, new Function, string arguments to setTimeout/setInterval, inline event handlers or inline
+          <script>: the CSP is script-src 'self' and must stay so.
+        - AES-GCM without a fresh crypto.getRandomValues IV per message, IV reuse under one key, Math.random for
+          keys, IVs or tokens, or a decrypt failure that falls back to plaintext instead of rejecting.
+        - fetch / WebSocket / MQTT to an origin not in the CSP connect-src; any new third-party origin, CDN,
+          font or analytics.
+        - Input from a QR (OCH1*, the LoRa setup QR), oc-hub.json or TTN used without checking format,
+          length and characters first.
+        - Remote mode: a settings write sent over the hub (the satellite answers 403 local_only; only
+          POST /api/command may go over the hub), or a command sent without the hub seal.
+    - path: "calictl/webui/sw.js"
+      instructions: |
+        Service worker security: cache only same-origin GET of the app shell. Flag caching of /api/*
+        responses, of any response that carries a key, cross-origin requests, push or background sync.
+    - path: "calictl/webui/index.html"
+      instructions: |
+        Flag inline scripts, inline event handlers, external scripts or styles, and any meta CSP that is
+        weaker than the one tools/build_remote.py writes.
+    - path: "tools/build_remote.py"
+      instructions: |
+        This builds the published app and its CSP. Flag: 'unsafe-inline', 'unsafe-eval', a wildcard
+        source other than the TTN hosts, http: or ws: sources (only ws://127.0.0.1 for tests), a looser
+        HUB_ORIGIN_RE (it must stay wss://<host>[:<port>], no path, no extra CSP token), and publishing a
+        file that git does not track.
+    - path: ".github/workflows/**"
+      instructions: |
+        Flag: ${{ }} of untrusted input (github.event.*, head_ref, PR titles) inside run:, pull_request_target,
+        actions not pinned to a full commit SHA, permissions wider than the job needs, persist-credentials
+        left on, and secrets outside env:. remote-app.yml must keep environment: remote-app, the
+        tag-on-main check, the GitHub host key check and the deletion of the deploy key file.
+    - path: "bridge/**"
+      instructions: |
+        Cloudflare Worker that forwards TTN uplinks to the broker. Flag: X-OC-Secret checked without a
+        constant-time compare, an uplink accepted for an end_device_ids other than DEV_ID, a payload,
+        header or secret written to console, and anything published to the broker that is not sealed with
+        HUB_KEY.
+    - path: "firmware/components/cali_hub/**"
+      instructions: |
+        Satellite side of the hub. Flag: a secret (hub key, broker passwords) in ESP_LOG*, a settings write
+        accepted over the hub (must answer 403 local_only), a request that is not sealed or replays an old
+        counter accepted, and length or bounds checks missing on data from the broker.
+    - path: "tools/make_hub_file.py"
+      instructions: |
+        Writes oc-hub.json, which holds the van password. Flag a value taken from argv or printed to
+        stderr or a log; values come from the environment only.
+  tools:
+    gitleaks:
+      enabled: true
+    actionlint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    osvScanner:
+      enabled: true
+    semgrep:
+      enabled: true
