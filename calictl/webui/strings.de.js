@@ -1047,4 +1047,10 @@ window.STRINGS_DE = {
   "✓ Setup done": "✓ Einrichtung abgeschlossen",
   "Couldn't finish the setup": "Einrichtung konnte nicht abgeschlossen werden",
   "not set up": "nicht eingerichtet",
+  "skipped": "übersprungen",
+  "Connected ✓": "Verbunden ✓",
+  "On, set up in the app": "An, Einrichtung in der App",
+  "Continue setup": "Einrichtung fortsetzen",
+  "Other phone": "Anderes Handy",
+  "Searching for sensors…": "Suche Sensoren…",
 };

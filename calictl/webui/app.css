@@ -188,6 +188,7 @@ label.row { cursor: pointer; }
 .btn { flex: 1; min-height: 44px; padding: .6rem; border-radius: 10px; border: 1px solid var(--border);
   background: var(--bg); color: inherit; cursor: pointer; }
 .btn.danger { color: var(--danger); }   /* Device status: Unpair… */
+label.btn { display: flex; align-items: center; justify-content: center; font-size: 13.3333px; }   /* "Load from file" (a file input's label) */
 #pairing-card { scroll-margin-top: calc(env(safe-area-inset-top) + 4.5rem); }   /* clear the sticky topbar */
 @media (display-mode: standalone) {   /* the taller standalone topbar (see #topbar above); must follow the base rule */
   #pairing-card { scroll-margin-top: calc(env(safe-area-inset-top) + 5.5rem); }
@@ -296,7 +297,7 @@ dialog.help a { display: block; margin: .2rem 0 .9rem; color: var(--accent); }
 .sat .card.dcard { margin: 0; padding-bottom: .2rem; }
 .sat > h2.sec { font-size: 1rem; margin: .6rem .2rem 0; color: var(--muted); }
 .sat h3 { font-size: .95rem; margin: .8rem 0 .2rem; }
-.sat label:not(.row):not(.lbl) { display: block; margin: .7rem 0 .3rem; color: var(--muted); font-size: .9rem; }
+.sat label:not(.row):not(.lbl):not(.btn) { display: block; margin: .7rem 0 .3rem; color: var(--muted); font-size: .9rem; }
 .sat select, .sat input:not([type=checkbox]) { width: 100%; min-height: 44px; font: inherit; padding: .45rem .6rem;
   border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--fg); }
 .sat .row select { width: auto; max-width: 60%; }

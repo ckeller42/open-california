@@ -703,11 +703,14 @@ def test_setup_key_from_the_hub_file(site, ttn, error_gated_page):  # noqa: F811
         _no_key_anywhere(pg, secret)
 
 
-@pytest.mark.parametrize("d", [
-    {"format": "oc-hub/1", "van": "van1"},            # a hub-only file
-    {"format": "other", "ttn": {"cluster": CLUSTER, "key": "NNSXS.A.B"}},
-    {"format": "oc-hub/1", "ttn": {"cluster": CLUSTER}},
-])
+@pytest.mark.parametrize(
+    "d",
+    [
+        {"format": "oc-hub/1", "van": "van1"},  # a hub-only file
+        {"format": "other", "ttn": {"cluster": CLUSTER, "key": "NNSXS.A.B"}},
+        {"format": "oc-hub/1", "ttn": {"cluster": CLUSTER}},
+    ],
+)
 def test_a_file_without_lora_settings_is_refused(site, ttn, error_gated_page, d):  # noqa: F811
     with _page(error_gated_page, site, ttn) as pg:
         _menu(pg, "Set up LoRa")
@@ -715,3 +718,14 @@ def test_a_file_without_lora_settings_is_refused(site, ttn, error_gated_page, d)
         pg.get_by_text("No LoRa settings in this file (oc-hub.json with ttn)").wait_for()
         assert pg.locator("#rs-key").is_visible()
     assert not ttn.calls
+
+
+def test_load_from_file_looks_like_a_button(site, ttn, error_gated_page):  # noqa: F811
+    """The file input's label sits next to "Check the key" with the button look, not a form label's."""
+    with _page(error_gated_page, site, ttn) as pg:
+        _menu(pg, "Set up LoRa")
+        lbl = pg.locator('label[for="rs-hubfile"]')
+        st = lbl.evaluate(
+            "e => { const s = getComputedStyle(e); return [s.display, s.marginTop, s.borderTopStyle] }"
+        )
+        assert st == ["flex", "0px", "solid"]

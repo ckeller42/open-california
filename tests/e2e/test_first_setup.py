@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-from tests.e2e.test_satsettings import LOCALES, PHONE, _device_status, _open, _posts, tr
+from tests.e2e.test_satsettings import LOCALES, PHONE, _device_status, _open, _posts, _wait, tr
 
 sync_api = pytest.importorskip("playwright.sync_api")
 expect = sync_api.expect
@@ -99,7 +99,7 @@ def test_after_the_join_the_page_names_the_new_address(setup, locale, lang):
         addr = pg.locator("#setup-next-addr")
         expect(addr).to_contain_text("http://192.168.", timeout=15000)
         expect(addr).to_contain_text("scanne den neuen QR-Code" if lang == "de" else "scan the new QR code")
-        expect(addr.locator('a[href="http://192.168.1.57/#setup"]')).to_be_visible()
+        expect(addr.locator('a[href="http://192.168.1.57/?lang=%s#setup"]' % lang)).to_be_visible()
         pg.wait_for_timeout(2500)  # a station poll later the page still shows it (no jump to pairing)
         expect(pg).to_have_url(re.compile(r"#setup/wifi$"))
     assert setup.wifi_posts == [{"ssid": "HomeNet", "psk": "secret123"}]
@@ -203,7 +203,10 @@ def test_no_mdns_still_shows_the_ip_and_the_reservation_hint(station_pending, lo
     with _page(station_pending, "/#setup/home", locale, allow=NO_MDNS) as pg:
         pg.route(LOCAL, lambda r: r.abort())
         home = pg.locator("#setup-home")
-        expect(home).to_contain_text("DHCP-Reservierung" if lang == "de" else "DHCP reservation")
+        # the probe can start before the route: a real .local lookup ends by its 3 s timeout
+        expect(home).to_contain_text(
+            "DHCP-Reservierung" if lang == "de" else "DHCP reservation", timeout=10000
+        )
         expect(home.locator('a[href="http://192.168.1.57/"]')).to_be_visible()
 
 
@@ -225,8 +228,14 @@ def test_done_posts_setup_done_and_shows_skipped_rows(station_pending, locale, l
 
 
 def test_leaving_after_wifi_counts_as_done(station_pending):
-    """ "Done" = finished, or left the wizard after WiFi: ‹ from a step posts it once."""
+    """ "Done" = finished, or left the wizard after WiFi: ‹ walks the steps back (also from a landed
+    step), from the first step it leaves for Home and posts it once. ⋮ then leads back in."""
     with _page(station_pending, "/#setup/pair", "en-US") as pg:
+        pg.click("#back")
+        expect(pg).to_have_url(re.compile(r"#setup/wifi$"))
+        pg.click("#back")
+        expect(pg).to_have_url(re.compile(r"#setup/welcome$"))
+        assert _posts(station_pending, "/api/setup") == []
         pg.click("#back")
         expect(pg.locator(".tilegrid")).to_be_visible()
         expect(pg.locator("#pairing-card")).to_have_count(0)
@@ -234,7 +243,58 @@ def test_leaving_after_wifi_counts_as_done(station_pending):
             if _posts(station_pending, "/api/setup"):
                 break
             pg.wait_for_timeout(100)
+        pg.click("#menu")
+        pg.get_by_role("menuitem", name="Continue setup").click()
+        expect(pg).to_have_url(re.compile(r"#setup/pair$"))
     assert _posts(station_pending, "/api/setup") == [{"done": True}]
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_back_goes_to_the_step_before_after_next(station_pending, locale, lang):
+    with _page(station_pending, "/#setup/sensors", locale) as pg:
+        pg.get_by_role("button", name=tr("Skip", lang)).click()
+        expect(pg).to_have_url(re.compile(r"#setup/remote$"))
+        pg.click("#back")
+        expect(pg).to_have_url(re.compile(r"#setup/sensors$"))
+        pg.click("#back")
+        expect(pg).to_have_url(re.compile(r"#setup/victron$"))
+        expect(pg.get_by_role("button", name=tr("Yes", lang), exact=True)).to_be_visible()
+        pg.click("#menu")
+        expect(pg.get_by_role("menuitem", name=tr("Continue setup", lang))).to_have_count(0)  # in the wizard
+
+
+def test_a_pending_setup_offers_continue_setup_on_home(station_pending):
+    """A detour to Home (a deep link) while device.setup.pending: ⋮ → Continue setup."""
+    with _page(station_pending, "/#devicestatus", "en-US") as pg:
+        pg.click("#menu")
+        pg.get_by_role("menuitem", name="Continue setup").click()
+        expect(pg).to_have_url(re.compile(r"#setup/pair$"))
+
+
+def test_the_mdns_move_carries_the_language(station_pending):
+    """localStorage is per origin: the move to calictl-esp.local takes the choice along as ?lang=."""
+    seen = []
+
+    def local(r):
+        seen.append(r.request.url)
+        r.fulfill(status=200, content_type="text/html", body="<html></html>")
+
+    with _page(station_pending, "/#devicestatus", "en-US") as pg:
+        pg.click("#menu")
+        pg.get_by_role("menuitem", name="Deutsch").click()  # the choice the user made on this origin
+        pg.route(LOCAL, local)
+        pg.goto(station_pending.base + "/#setup/home")
+        pg.wait_for_url("http://calictl-esp.local/**")
+        assert pg.url == "http://calictl-esp.local/?lang=de#setup/home"
+
+
+def test_a_lang_parameter_sets_the_language_once(station_pending):
+    with _page(station_pending, "/?lang=de#setup/pair", "en-US") as pg:
+        expect(pg.locator("#title")).to_have_text(tr("Set up the satellite", "de"))
+        assert pg.evaluate("location.search + location.hash") == "#setup/pair"
+        assert pg.evaluate("localStorage.getItem('calictl.lang')") == "de"
+        pg.reload()
+        expect(pg.locator("#title")).to_have_text(tr("Set up the satellite", "de"))
 
 
 def _bond(stub):
@@ -297,6 +357,9 @@ def test_a_timeout_after_the_code_says_so_and_new_code_restarts(station_pending)
         pg.click("#pairing-newcode")
         expect(pg.locator("#pairing-passkey")).to_be_visible()
         # every POST answered with a snapshot: no request error (a misplaced else once showed one)
+        _wait(
+            pg, lambda: len(station_pending.pairing_posts) >= 3, "the second start"
+        )  # the old passkey shows until then: a race under load
         expect(pg.locator("#pairing-card")).not_to_contain_text("Pairing request failed")
         assert [b["action"] for b in station_pending.pairing_posts] == ["start", "cancel", "start"]
         station_pending.fixtures["station"]["/api/pairing"].update(state="error", error="timeout")
@@ -316,7 +379,7 @@ def test_a_good_code_pairs_without_a_request_error(station_pending):
 
 def test_a_timeout_before_any_code_still_says_no_vehicle(station_pending):
     with _page(station_pending, "/#setup/pair", "en-US") as pg:
-        station_pending.pairing_scan_polls = 1000   # the search never finds the unit
+        station_pending.pairing_scan_polls = 1000  # the search never finds the unit
         pg.get_by_role("button", name="Pair now", exact=True).click()
         pg.wait_for_timeout(1500)
         station_pending.fixtures["station"]["/api/pairing"].update(state="error", error="timeout")
@@ -394,19 +457,39 @@ def test_load_from_file_fills_the_hub_form_and_save_posts_it(station_pending, lo
     Another file is refused with a reason and leaves the fields as they were."""
     with _page(station_pending, "/#setup/remote", locale) as pg:
         expect(pg.locator("#hub-status")).to_have_text(tr("Not set up", lang))
-        pg.set_input_files("#hub-file", files=[{"name": "x.json", "mimeType": "application/json",
-                                                "buffer": json.dumps({"url": "wss://x"}).encode()}])
+        pg.set_input_files(
+            "#hub-file",
+            files=[
+                {
+                    "name": "x.json",
+                    "mimeType": "application/json",
+                    "buffer": json.dumps({"url": "wss://x"}).encode(),
+                }
+            ],
+        )
         expect(pg.locator("#hub-msg")).to_have_text(tr("Not a hub setup file (oc-hub.json)", lang))
+        expect(pg.locator("#hub-msg")).to_have_class("warn")  # an error stays red
         expect(pg.locator("#hub-url")).to_have_value("")
-        pg.set_input_files("#hub-file", files=[{"name": "oc-hub.json", "mimeType": "application/json",
-                                                "buffer": json.dumps({"format": "oc-hub/1", **HUB_FORM}).encode()}])
+        pg.set_input_files(
+            "#hub-file",
+            files=[
+                {
+                    "name": "oc-hub.json",
+                    "mimeType": "application/json",
+                    "buffer": json.dumps({"format": "oc-hub/1", **HUB_FORM}).encode(),
+                }
+            ],
+        )
         expect(pg.locator("#hub-msg")).to_have_text(
-            tr("Loaded: tap Save, then delete the file (it holds the van password).", lang))
+            tr("Loaded: tap Save, then delete the file (it holds the van password).", lang)
+        )
+        expect(pg.locator("#hub-msg")).to_have_class("note")  # a success is not a warning
         for k, v in HUB_FORM.items():
             expect(pg.locator("#hub-" + k)).to_have_value(v)
         assert _posts(station_pending, "/api/hub") == []
         pg.click("#hub-save")
         expect(pg.locator("#hub-msg")).to_have_text(tr("Saved", lang))
+        expect(pg.locator("#hub-msg")).to_have_class("note")
     assert _posts(station_pending, "/api/hub") == [HUB_FORM]
     assert _posts(station_pending, "/api/experimental") == []
 
@@ -415,11 +498,22 @@ def test_a_hub_file_with_lora_turns_the_lora_switch_on_at_save(station_pending):
     station_pending.fixtures["station"]["/api/state"]["device"]["experimental"]["lora"] = False
     with _page(station_pending, "/#setup/remote", "en-US") as pg:
         expect(pg.locator("#hub-status")).to_have_text("Not set up")
-        pg.set_input_files("#hub-file", files=[{"name": "oc-hub.json", "mimeType": "application/json",
-                                                "buffer": json.dumps({"format": "oc-hub/1", "lora": True, **HUB_FORM}).encode()}])
+        pg.set_input_files(
+            "#hub-file",
+            files=[
+                {
+                    "name": "oc-hub.json",
+                    "mimeType": "application/json",
+                    "buffer": json.dumps({"format": "oc-hub/1", "lora": True, **HUB_FORM}).encode(),
+                }
+            ],
+        )
         expect(pg.locator("#hub-url")).to_have_value(HUB_FORM["url"])
         expect(pg.locator("#hub-msg")).to_contain_text("LoRa goes on too")  # the switch is in another card
-        assert pg.locator("#hub-pass").get_attribute("placeholder") in (None, "")  # nothing stored: not "unchanged"
+        assert pg.locator("#hub-pass").get_attribute("placeholder") in (
+            None,
+            "",
+        )  # nothing stored: not "unchanged"
         assert _posts(station_pending, "/api/experimental") == []
         pg.click("#hub-save")
         expect(pg.locator("#hub-msg")).to_have_text("Saved")
@@ -481,7 +575,105 @@ def test_done_lists_the_remote_hub(station_pending):
         expect(pg).to_have_url(re.compile(r"#setup/remote$"))
 
 
-def test_done_says_the_remote_hub_is_set_up(station_pending):
-    _hub(station_pending, configured=True, online=True)
+@pytest.mark.parametrize("online,text", [(True, "Connected ✓"), (False, "Not connected yet")])
+def test_done_says_the_remote_hub_is_connected(station_pending, online, text):
+    """The row says what the satellite knows (it reaches the broker), not that the app is installed."""
+    _hub(station_pending, configured=True, online=online)
     with _page(station_pending, "/#setup/done", "en-US") as pg:
-        expect(pg.locator("#setup-check").get_by_text("Remote hub").locator("..")).to_contain_text("Set up ✓")
+        row = pg.locator("#setup-check").get_by_text("Remote hub").locator("..")
+        expect(row).to_contain_text(text)
+        expect(row.get_by_role("button", name="Set up ›")).to_have_count(0 if online else 1)
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_done_says_skipped_for_a_skipped_step(station_pending, locale, lang):
+    """Victron "No" and Sensors "Skip" were a choice: neutral "skipped", the settings link stays."""
+    with _page(station_pending, "/#setup/victron", locale) as pg:
+        pg.get_by_role("button", name=tr("No", lang), exact=True).click()
+        pg.get_by_role("button", name=tr("Skip", lang)).click()
+        expect(pg).to_have_url(re.compile(r"#setup/remote$"))
+        pg.evaluate("location.hash = '#setup/done'")
+        check = pg.locator("#setup-check")
+        for label in ("Victron", tr("Sensors", lang)):
+            row = check.get_by_text(label, exact=True).locator("..")
+            expect(row).to_contain_text(tr("skipped", lang))
+            expect(row.get_by_role("button", name=tr("Satellite settings ›", lang))).to_be_visible()
+        expect(check.get_by_text(tr("Camper unit", lang), exact=True).locator("..")).to_contain_text(
+            tr("not set up", lang)
+        )
+
+
+@pytest.mark.parametrize("lora,text", [(None, "On, set up in the app"), ("ttn_keys", "Set up ✓")])
+def test_done_lists_lora_while_its_switch_is_on(station_pending, lora, text):
+    dev = station_pending.fixtures["station"]["/api/state"]["device"]
+    with _page(station_pending, "/#setup/done", "en-US") as pg:
+        expect(pg.locator("#setup-check")).to_contain_text("HomeNet ✓")
+        expect(pg.locator("#setup-check")).not_to_contain_text("LoRa")  # switch off: no row
+    dev["experimental"]["lora"] = True
+    if lora:
+        dev["lora"] = ux_gallery.lora_device(setup=lora)
+    with _page(station_pending, "/#setup/done", "en-US") as pg:
+        expect(pg.locator("#setup-check").get_by_text("LoRa", exact=True).locator("..")).to_contain_text(text)
+
+
+def test_the_wifi_list_drops_searching_once_filled(setup):
+    with _page(setup, "/#setup/wifi", "en-US") as pg:
+        pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
+        expect(pg.locator("#setup-msg")).to_have_text("", timeout=1500)  # before the 4 s second read
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_search_for_sensors_says_it_searches_then_none_found(station_pending, locale, lang):
+    held = []
+    with _page(station_pending, "/#setup/sensors", locale) as pg:
+        step = pg.locator("#setup-step")
+        expect(step.locator(".btn.primary:visible")).to_have_count(1)  # Search; Next is not a 2nd primary
+        pg.route("**/api/experimental", lambda r: held.append(r))
+        pg.get_by_role("button", name=tr("Search for sensors", lang)).click()
+        expect(pg.locator("#setup-sens-wait")).to_have_text(tr("Searching for sensors…", lang))
+        pg.route("**/api/sensors", lambda r: held.append(r))
+        held[0].continue_()
+        _wait(pg, lambda: len(held) > 1, "the first sensor list")
+        expect(pg.locator("#setup-sens-wait")).to_have_text(
+            tr("Searching for sensors…", lang)
+        )  # until the list
+        held[1].continue_()
+        pg.unroute("**/api/sensors")
+        expect(step).to_contain_text(tr("No sensors found yet (the scan runs every minute).", lang))
+        expect(pg.locator("#setup-sens-wait")).to_have_text("")
+        expect(step.locator(".btn.primary:visible")).to_have_count(1)  # now Next
+        expect(pg.locator("#setup-sens-next")).to_have_class(re.compile(r"\bprimary\b"))
+
+
+@pytest.mark.parametrize(
+    "ua,first,folded",
+    [
+        ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", "setup-app-ios", "setup-app-android"),
+        ("Mozilla/5.0 (Linux; Android 15; Pixel 9)", "setup-app-android", "setup-app-ios"),
+        (None, None, None),
+    ],
+)
+def test_the_app_install_text_shows_this_phone_first(station_pending, ua, first, folded):
+    _hub(station_pending, configured=True, online=True)
+    with _page(station_pending, "/#setup/remote", "en-US", **({"user_agent": ua} if ua else {})) as pg:
+        app = pg.locator("#setup-app")
+        if not ua:  # unknown platform: both, nothing folded
+            expect(pg.locator("#setup-app-ios")).to_be_visible()
+            expect(pg.locator("#setup-app-android")).to_be_visible()
+            expect(app.locator("details")).to_have_count(0)
+            return
+        expect(pg.locator("#" + first)).to_be_visible()
+        expect(pg.locator("#" + folded)).to_be_hidden()
+        app.get_by_text("Other phone").click()
+        expect(pg.locator("#" + folded)).to_be_visible()
+
+
+def test_load_from_file_looks_like_a_button(station_pending):
+    with _page(station_pending, "/#setup/remote", "en-US") as pg:
+        lbl = pg.locator('label[for="hub-file"]')
+        expect(lbl).to_be_visible()
+        st = lbl.evaluate(
+            "e => { const s = getComputedStyle(e); return [s.display, s.marginTop, s.fontSize, s.borderTopStyle] }"
+        )
+        save = pg.locator("#hub-save").evaluate("e => getComputedStyle(e).fontSize")
+        assert st == ["flex", "0px", save, "solid"]
