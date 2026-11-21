@@ -3342,7 +3342,7 @@ function hubForm() {
   return [h("p", { id: "hub-status" }),
     ...HUB_FIELDS.map(([id, label, type]) => h("div", null, h("label", { for: "hub-" + id }, T(label)),
       h("input", { id: "hub-" + id, type: type, autocomplete: "off", autocapitalize: "none", spellcheck: "false",
-        placeholder: type === "password" ? T("unchanged") : null }))),
+      }))),
     h("div", { class: "btnrow" }, save, h("label", { class: "btn", for: "hub-file" }, T("Load from file"))),
     file, satMsg("hub-msg")];
 }
@@ -3355,9 +3355,13 @@ async function satHubFile() {
   let d = null;
   try { d = f && JSON.parse(await f.text()); } catch (e) { }
   if (!f || !satDom) return;
-  sq("hub-msg").textContent = T(d && d.format === "oc-hub/1" ? "Loaded: tap Save, then delete the file (it holds the van password)." : "Not a hub setup file (oc-hub.json)");
-  if (d && d.format === "oc-hub/1") for (const [id] of HUB_FIELDS) if (typeof d[id] === "string") sqInput("hub-" + id).value = d[id];
-  hubFileLora = !!(d && d.format === "oc-hub/1" && d.lora === true);
+  const ok = !!d && d.format === "oc-hub/1";
+  hubFileLora = ok && d.lora === true;
+  sq("hub-msg").textContent = T(!ok ? "Not a hub setup file (oc-hub.json)"
+    : d.ttn ? "Loaded: tap Save (LoRa goes on too). Then load the same file in the app's Set up LoRa, and delete it: it holds passwords."
+      : hubFileLora ? "Loaded: tap Save (LoRa goes on too), then delete the file (it holds the van password)."
+        : "Loaded: tap Save, then delete the file (it holds the van password).");
+  if (ok) for (const [id] of HUB_FIELDS) if (typeof d[id] === "string") sqInput("hub-" + id).value = d[id];
 }
 /** The loaded oc-hub.json asks for LoRa on: Save also turns the LoRa switch on. */
 let hubFileLora = false;
@@ -3395,6 +3399,8 @@ async function satHubLoad() {
   try { r = await satFetch("/api/hub"); } catch (e) { /* the fields stay empty */ }
   if (!r || r.status !== 200 || !satDom) return;
   for (const [id] of HUB_FIELDS) if (r.body[id] !== undefined) sqInput("hub-" + id).value = r.body[id];
+  // "unchanged" only where a password is stored: on a new satellite an empty field means "not set"
+  if (r.body.url) for (const id of ["pass", "app_pass"]) sqInput("hub-" + id).placeholder = T("unchanged");
 }
 
 /** POST /api/hub_key {new_key: true} (ruling R42): the satellite makes a new data key. @param {() => void} close */

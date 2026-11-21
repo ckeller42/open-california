@@ -865,3 +865,16 @@ def test_no_new_data_key_button_without_a_hub(station):
     with _open(station, locale="en-US", viewport=PHONE) as pg:
         expect(pg.locator("#hub-status")).to_have_text("Not set up")
         expect(pg.locator("#hub-newkey")).to_be_hidden()
+
+
+def test_password_fields_say_unchanged_only_with_a_stored_hub(station):
+    """A new satellite has no hub password: its fields stay blank. With a hub set up, an empty field keeps the
+    stored password, and the placeholder says so."""
+    with _open(station, viewport=PHONE) as pg:
+        expect(pg.locator("#hub-url")).to_be_visible()
+        pg.wait_for_timeout(500)
+        assert pg.locator("#hub-app_pass").get_attribute("placeholder") in (None, "")
+    station.fixtures["station"]["/api/hub"].update(configured=True, url="wss://h.example:8084/mqtt", van="van1")
+    with _open(station, viewport=PHONE) as pg:
+        expect(pg.locator("#hub-pass")).to_have_attribute("placeholder", "unchanged")
+        expect(pg.locator("#hub-app_pass")).to_have_attribute("placeholder", "unchanged")

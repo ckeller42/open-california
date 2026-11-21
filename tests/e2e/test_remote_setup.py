@@ -684,3 +684,34 @@ def test_scan_the_vans_code_names_the_other_codes(site, ttn, error_gated_page, t
         _menu(pg, "Scan the van's code")
         _photo(pg, text)
         pg.locator("#rs-msg").get_by_text(msg).wait_for()
+
+
+def _hub_file(pg, d):
+    pg.locator("#rs-hubfile").set_input_files(
+        files=[{"name": "oc-hub.json", "mimeType": "application/json", "buffer": json.dumps(d).encode()}]
+    )
+
+
+def test_setup_key_from_the_hub_file(site, ttn, error_gated_page):  # noqa: F811
+    """#555: "Load from file" reads oc-hub.json's ttn {cluster, key} and checks the key at once; the key never
+    reaches the DOM or storage, and the setup goes on to the scan."""
+    _, secret = ttn.make_key("all")
+    with _page(error_gated_page, site, ttn) as pg:
+        _menu(pg, "Set up LoRa")
+        _hub_file(pg, {"format": "oc-hub/1", "van": "van1", "ttn": {"cluster": CLUSTER, "key": secret}})
+        pg.get_by_text(TEXT["en-US"]["scanhint"]).first.wait_for()
+        _no_key_anywhere(pg, secret)
+
+
+@pytest.mark.parametrize("d", [
+    {"format": "oc-hub/1", "van": "van1"},            # a hub-only file
+    {"format": "other", "ttn": {"cluster": CLUSTER, "key": "NNSXS.A.B"}},
+    {"format": "oc-hub/1", "ttn": {"cluster": CLUSTER}},
+])
+def test_a_file_without_lora_settings_is_refused(site, ttn, error_gated_page, d):  # noqa: F811
+    with _page(error_gated_page, site, ttn) as pg:
+        _menu(pg, "Set up LoRa")
+        _hub_file(pg, d)
+        pg.get_by_text("No LoRa settings in this file (oc-hub.json with ttn)").wait_for()
+        assert pg.locator("#rs-key").is_visible()
+    assert not ttn.calls

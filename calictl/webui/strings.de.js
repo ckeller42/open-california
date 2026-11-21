@@ -776,6 +776,8 @@ window.STRINGS_DE = {
   "Load from file": "Aus Datei laden",
   "Not a hub setup file (oc-hub.json)": "Keine Hub-Einrichtungsdatei (oc-hub.json)",
   "Loaded: tap Save, then delete the file (it holds the van password).": "Geladen: Tippe auf Speichern und lösche dann die Datei (sie enthält das Passwort des Vans).",
+  "Loaded: tap Save (LoRa goes on too), then delete the file (it holds the van password).": "Geladen: Tippe auf Speichern (LoRa wird auch eingeschaltet) und lösche dann die Datei (sie enthält das Passwort des Vans).",
+  "Loaded: tap Save (LoRa goes on too). Then load the same file in the app's Set up LoRa, and delete it: it holds passwords.": "Geladen: Tippe auf Speichern (LoRa wird auch eingeschaltet). Lade dann dieselbe Datei in der App unter „LoRa einrichten“ und lösche sie danach: Sie enthält Passwörter.",
   "Check the fields: no * in any field, the van name only letters, digits, - and _, the address starts with wss://": "Prüfe die Felder: kein * in einem Feld, der Name des Vans nur Buchstaben, Ziffern, - und _, die Adresse beginnt mit wss://",
   "Couldn't save the hub settings": "Die Hub-Einstellungen konnten nicht gespeichert werden",
   "Scan paused while pairing": "Suche pausiert während der Kopplung",

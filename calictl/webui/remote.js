@@ -288,6 +288,22 @@ async function rsCheck(cluster, key) {
   rsRefresh();
 }
 
+/** #555: oc-hub.json with "ttn": {cluster, key} (tools/make_hub_file.py --ttn-cluster). Like a submit, the key
+ * goes straight to rsCheck and never into the DOM. @param {HTMLInputElement} inp */
+async function rsFile(inp) {
+  const f = inp.files && inp.files[0];
+  inp.value = "";
+  /** @type {any} */
+  let d = null;
+  try { d = f && JSON.parse(await f.text()); } catch (e) { /* d stays null */ }
+  const t = d && d.format === "oc-hub/1" && d.ttn;
+  if (!t || typeof t.cluster !== "string" || typeof t.key !== "string") {
+    rsMsg = "No LoRa settings in this file (oc-hub.json with ttn)"; rsRefresh(); return;
+  }
+  rsCluster = t.cluster.trim().toLowerCase();
+  await rsCheck(rsCluster, t.key.trim());
+}
+
 /** A scanned setup QR: steps 5 (register, keys, delete the full-rights key) or, after status 1/3, a new transfer
  * key for the same van. While a new scan is asked for, the van's repair QR with the stored keys also ends the
  * setup: the van has the keys and only its confirmation was lost. @param {string} text */
@@ -597,10 +613,13 @@ function rsBuild(v, phase) {
     // one-time-code: no password manager offers to save or fill it
     const key = h("input", { type: "password", id: "rs-key", autocomplete: "one-time-code", autocapitalize: "none", spellcheck: "false" });
     const go = satBtn(T("Check the key"), "primary", "rs-check");
+    const file = h("input", { id: "rs-hubfile", type: "file", accept: ".json", hidden: "" });
+    file.onchange = () => rsFile(/** @type {HTMLInputElement} */ (file));
     const form = h("form", { autocomplete: "off" },
       h("p", null, T("In the TTN console, create an API key of your application with “Grant all current and future rights” and paste it here. The app uses it for a few calls and deletes it right after.")),
       h("label", { for: "rs-cluster" }, T("Cluster")), sel, hostBox,
-      h("label", { for: "rs-key" }, T("Full-rights API key")), key, h("div", { class: "acts" }, go), msg);
+      h("label", { for: "rs-key" }, T("Full-rights API key")), key,
+      h("div", { class: "acts" }, go, h("label", { class: "btn", for: "rs-hubfile" }, T("Load from file"))), file, msg);
     form.onsubmit = (ev) => {
       ev.preventDefault();
       const k = key.value.trim();

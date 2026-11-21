@@ -383,6 +383,8 @@ def test_a_hub_file_with_lora_turns_the_lora_switch_on_at_save(station_pending):
         pg.set_input_files("#hub-file", files=[{"name": "oc-hub.json", "mimeType": "application/json",
                                                 "buffer": json.dumps({"format": "oc-hub/1", "lora": True, **HUB_FORM}).encode()}])
         expect(pg.locator("#hub-url")).to_have_value(HUB_FORM["url"])
+        expect(pg.locator("#hub-msg")).to_contain_text("LoRa goes on too")  # the switch is in another card
+        assert pg.locator("#hub-pass").get_attribute("placeholder") in (None, "")  # nothing stored: not "unchanged"
         assert _posts(station_pending, "/api/experimental") == []
         pg.click("#hub-save")
         expect(pg.locator("#hub-msg")).to_have_text("Saved")

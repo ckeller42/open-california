@@ -11,6 +11,7 @@ Object.assign(window.STRINGS_DE, {
   "The Things Stack does not answer.": "The Things Stack antwortet nicht.",
   // the remote app's setup (R_UI_REMOTE_APP, remote.js): TTN, the van's QR codes, "Remove this van"
   "Set up LoRa": "LoRa einrichten",
+  "No LoRa settings in this file (oc-hub.json with ttn)": "Keine LoRa-Einstellungen in dieser Datei (oc-hub.json mit ttn)",
   "Scan the van's code": "Code des Fahrzeugs scannen",
   "Remove this van": "Dieses Fahrzeug entfernen",
   "This is not an application key: create the key in the application's API keys.": "Das ist kein Anwendungsschlüssel: Erstelle den Schlüssel unter den API-Schlüsseln der Anwendung.",

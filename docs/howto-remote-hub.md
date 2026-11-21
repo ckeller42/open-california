@@ -355,6 +355,13 @@ file holds the van password in plain text: delete it after the form is saved. Th
 the page on the phone; nothing is sent before **Save**. With `--lora`, **Save** also turns the LoRa
 switch on (the LoRa keys are made on the satellite; the TTN part stays in the app).
 
+The same file can also carry the app's LoRa part: `--ttn-cluster <host>` adds the TTN cluster and a
+full-rights **application** key from `OC_HUB_TTN_KEY`. In the remote app, **Set up LoRa → Load from file**
+reads them and checks the key at once (the key never shows on the page); the app deletes that key at TTN
+after the setup. Make the key only for this, with all rights of the application and a short expiry
+(TTN console, **Applications → API keys → Add**, or the API). Never use your user key here: the app
+deletes the key it gets. Delete the file once both the satellite and the app have read it.
+
 On the satellite's screen, each **3-second hold** shows the next screen, always in this order: the
 **app QR** (the app's address) → **the van's code** (the hub QR) → the **LoRa code** (with LoRa on:
 the setup code before the TTN keys, the repair code after). The app QR and the van's code show only
