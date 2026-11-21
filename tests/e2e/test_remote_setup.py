@@ -823,7 +823,9 @@ def test_a_camera_without_frames_says_so_and_the_button_works_again(site, ttn, e
         pg.clock.fast_forward(2000)
         expect(pg.locator("#rs-msg")).to_have_text(msg)
         assert pg.evaluate("window.__qs.destroyed") is False  # the scanner stays
-        pg.evaluate("document.querySelector('video').dispatchEvent(new Event('loadeddata'))")  # frames arrive late
+        pg.evaluate(
+            "document.querySelector('video').dispatchEvent(new Event('loadeddata'))"
+        )  # frames arrive late
         expect(pg.locator("#rs-msg")).to_have_text("")
         pg.clock.fast_forward(6500)
         expect(pg.locator("#rs-msg")).to_have_text("")  # the first scanner's check ran once only
@@ -850,11 +852,16 @@ def test_the_camera_view_never_widens_the_page(site, ttn, error_gated_page):  # 
     """On an iPhone the 1000+ px camera stream made the page wider than the screen, and Safari zoomed the whole
     page out (tiny header and buttons). The view fits the card and the page keeps the screen's width."""
     with error_gated_page(
-        site, init_script=_empty_app(ttn) + FAKE_QS_BIG_STREAM, service_workers="block", viewport={"width": 390, "height": 844}
+        site,
+        init_script=_empty_app(ttn) + FAKE_QS_BIG_STREAM,
+        service_workers="block",
+        viewport={"width": 390, "height": 844},
     ) as pg:
         _menu(pg, TEXT["en-US"]["scan"])
         pg.locator("#rs-camera").click()
-        pg.wait_for_function("() => document.querySelector('video').readyState >= 2")  # the 1600 px stream plays
+        pg.wait_for_function(
+            "() => document.querySelector('video').readyState >= 2"
+        )  # the 1600 px stream plays
         dims = pg.evaluate(
             "() => [document.documentElement.scrollWidth, window.innerWidth,"
             " document.querySelector('video').getBoundingClientRect().width,"
