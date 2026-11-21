@@ -3418,17 +3418,19 @@ async function satHubFile() {
   /** @type {any} */
   let d = null;
   try { d = f && JSON.parse(await f.text()); } catch (e) { }
-  if (!f || !satDom) return;
+  if (!f || !hubFormShown()) return;
   const ok = !!d && d.format === "oc-hub/1";
   hubFileLora = ok && d.lora === true;
   hubSay(ok, !ok ? "Not a hub setup file (oc-hub.json)"
     : d.ttn ? "Loaded: tap Save (LoRa goes on too). Then load the same file in the app's Set up LoRa, and delete it: it holds passwords."
       : hubFileLora ? "Loaded: tap Save (LoRa goes on too), then delete the file (it holds the van password)."
         : "Loaded: tap Save, then delete the file (it holds the van password).");
-  if (ok) for (const [id] of HUB_FIELDS) if (typeof d[id] === "string") sqInput("hub-" + id).value = d[id];
+  if (ok && hubFormShown()) for (const [id] of HUB_FIELDS) if (typeof d[id] === "string") sqInput("hub-" + id).value = d[id];
 }
 /** The hub form's line: a success neutral, an error red. @param {boolean} ok @param {string} text */
 function hubSay(ok, text) { const m = sq("hub-msg"); m.className = ok ? "note" : "warn"; m.textContent = T(text); }
+/** The Hub form is on the page now (an awaited answer may arrive after the user moved on). */
+const hubFormShown = () => !!(satDom && satDom.root.querySelector("#hub-url"));
 /** The loaded oc-hub.json asks for LoRa on: Save also turns the LoRa switch on. */
 let hubFileLora = false;
 
@@ -3463,7 +3465,8 @@ function satRenderHub(hb, st) {
 async function satHubLoad() {
   let r = null;
   try { r = await satFetch("/api/hub"); } catch (e) { /* the fields stay empty */ }
-  if (!r || r.status !== 200 || !satDom) return;
+  // the answer can come after the user left the step (Next): the form is gone, nothing to fill
+  if (!r || r.status !== 200 || !satDom || !hubFormShown()) return;
   for (const [id] of HUB_FIELDS) if (r.body[id] !== undefined) sqInput("hub-" + id).value = r.body[id];
   // "unchanged" only where a password is stored: on a new satellite an empty field means "not set"
   if (r.body.url) for (const id of ["pass", "app_pass"]) sqInput("hub-" + id).placeholder = T("unchanged");
@@ -3497,7 +3500,7 @@ async function satHubSave() {
   if (!satDom) return;
   b.disabled = false;
   if (r && r.body && r.body.ok) {
-    sqInput("hub-pass").value = ""; sqInput("hub-app_pass").value = "";
+    if (hubFormShown()) { sqInput("hub-pass").value = ""; sqInput("hub-app_pass").value = ""; }
     hubSay(true, "Saved");
     if (hubFileLora) {
       hubFileLora = false;

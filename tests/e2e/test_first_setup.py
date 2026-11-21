@@ -680,3 +680,23 @@ def test_load_from_file_looks_like_a_button(station_pending):
         )
         save = pg.locator("#hub-save").evaluate("e => getComputedStyle(e).fontSize")
         assert st == ["flex", "0px", save, "solid"]
+
+
+def test_a_late_hub_answer_after_leaving_the_step_is_harmless(station_pending):
+    """The Hub form's GET /api/hub can answer after the user tapped Next: it must not write into the gone
+    form (a pageerror "Cannot set properties of null" in CI). The answer is held until the done step shows."""
+    held = []
+    with _page(station_pending, "/#setup/victron", "en-US") as pg:
+        pg.route("**/api/hub", lambda route: held.append(route))
+        pg.get_by_role("button", name="No", exact=True).click()
+        pg.get_by_role("button", name="Skip").click()
+        expect(pg).to_have_url(re.compile(r"#setup/remote$"))
+        for _ in range(50):
+            if held:
+                break
+            pg.wait_for_timeout(100)
+        assert held, "the remote step asked for /api/hub"
+        pg.evaluate("location.hash = '#setup/done'")
+        expect(pg.locator("#setup-check")).to_be_visible()
+        held[0].continue_()  # the late answer arrives now
+        pg.wait_for_timeout(500)
