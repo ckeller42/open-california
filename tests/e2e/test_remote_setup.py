@@ -784,7 +784,9 @@ def test_camera_scans_on_past_a_wrong_code_and_stops_on_the_setup_code(site, ttn
         expect(pg.locator("#rs-aim")).to_have_text(aim)
         _decode(pg, "https://open-california.github.io/")
         expect(pg.locator("#rs-msg")).to_have_text(wrong)
-        pg.evaluate("document.querySelector('#rs-msg').textContent = 'x'")  # acted on again: the hint comes back
+        pg.evaluate(
+            "document.querySelector('#rs-msg').textContent = 'x'"
+        )  # acted on again: the hint comes back
         _decode(pg, "https://open-california.github.io/")
         pg.clock.fast_forward(1000)
         expect(pg.locator("#rs-msg")).to_have_text("x")  # the same code within 3 s: ignored

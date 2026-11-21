@@ -46,8 +46,10 @@ flowchart LR
 **Who can read what.** LoRa uplinks are **not** sealed on the air: LoRaWAN encryption only, so TTN
 can read the values. The bridge seals them with the data key before the broker, and the data key is a
 Cloudflare secret. So **TTN and Cloudflare can read the LoRa uplink values; the broker cannot.** The
-WiFi path is end-to-end between the satellite and your phones: the broker and Cloudflare see only
-ciphertext. Not protected: when and how much the van sends, and a compromised phone.
+WiFi path is end-to-end between the satellite and your phones; the broker sees only ciphertext. The
+Worker holds the **full** data key, so whoever gets that Cloudflare secret (or the Cloudflare account)
+can also open the WiFi state and send valid commands, like a phone: protect the Cloudflare account like
+a phone, and rekey if it leaks. Not protected: when and how much the van sends, and a compromised phone.
 
 **Why EMQX.** HiveMQ Cloud Serverless reaches end of life on 2026-12-31 and accepts no new clusters
 (docs.hivemq.com, "Serverless end of life"). EMQX Cloud Serverless is the hosted broker that this
@@ -652,7 +654,8 @@ Note over P,E: the lost phone now has neither the key nor the login
   data key changes, or when a newer command from WiFi runs first. The app has already said
   **Sent over LoRa.**; only the console log shows it.
 - The LoRa repair QR (`OCR1`) carries no hub data: every phone scans the hub QR (`OCH1`).
-- TTN and Cloudflare can read LoRa uplink values (see above); the broker cannot.
+- TTN and Cloudflare can read LoRa uplink values (see above); the broker cannot. The Worker's secret is the
+  full data key: a leak of the Cloudflare account counts as a lost phone (rekey).
 - Settings (WiFi, hub, pairing, firmware update) work only in the van's WiFi.
 - Over LoRa only heater and camping mode, on or off, at most 8 commands per rolling 24 hours.
 - The free tiers have no service level agreement. EMQX Serverless can stop at its quota.

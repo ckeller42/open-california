@@ -46,12 +46,21 @@ def test_psa_opens_js_vector():
     assert (rc, conf[:2], plain) == ("1", "01", "-")
 
 
-KEY, NONCE, AD, PT = "000102030405060708090a0b0c0d0e0f", "a0a1a2a3a4a5a6a7a8a9aaab", "0011223344556677", "6b657920706c61696e74657874"
+KEY, NONCE, AD, PT = (
+    "000102030405060708090a0b0c0d0e0f",
+    "a0a1a2a3a4a5a6a7a8a9aaab",
+    "0011223344556677",
+    "6b657920706c61696e74657874",
+)
 
 
 def _cli(*cmd):
     out = subprocess.run(
-        [str(build_host("lora_aead_cli"))], input=" ".join(map(str, cmd)) + "\n", capture_output=True, text=True, check=True
+        [str(build_host("lora_aead_cli"))],
+        input=" ".join(map(str, cmd)) + "\n",
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.split()
     return out
 

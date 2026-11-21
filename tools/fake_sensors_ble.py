@@ -152,7 +152,9 @@ class Sensor:
         s = math.sin(2 * math.pi * (t - self.t0) / 600 + sensor_id(self.addr))
         if self.kind == "govee":
             nd = 2 if self.model == "H5074" else 1  # the layout's resolution: what the satellite shows
-            hum = min(max(self.humidity + 3 * s, 0.0), 99.9)  # H5075: 100 % or more spills into the temperature
+            hum = min(
+                max(self.humidity + 3 * s, 0.0), 99.9
+            )  # H5075: 100 % or more spills into the temperature
             return {"temp_c": round(self.temp + 0.5 * s, nd), "humidity": round(hum, nd),
                     "battery": min(max(self.battery, 0), 100)}  # fmt: skip
         if self.kind == "mppt":

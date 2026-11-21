@@ -374,7 +374,9 @@ def test_a_phone_without_a_van_is_sent_to_the_vans_code(site, error_gated_page):
     it), not the LoRa setup (a TTN account)."""
     with error_gated_page(site, init_script="window.OC_REMOTE = true;", service_workers="block") as pg:
         expect(
-            pg.get_by_text("No van on this phone yet: scan the van's code (with LoRa only: set up LoRa, needs a TTN account).")
+            pg.get_by_text(
+                "No van on this phone yet: scan the van's code (with LoRa only: set up LoRa, needs a TTN account)."
+            )
         ).to_be_visible()
         # F1 (onboarding run 2026-11-18): no tiles with made-up values, the two ways in as buttons
         expect(pg.get_by_role("button", name="Scan the van's code")).to_be_visible()

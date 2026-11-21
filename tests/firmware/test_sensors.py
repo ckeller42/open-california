@@ -56,7 +56,11 @@ def test_govee_24bit_layout_decodes(cli, tmp_path):
             "type": "govee",
             "model": "GVH5075",
             "rssi": -60,
-            "value": {"temp_c": 24.3, "humidity": 90.9, "battery": 100},  # before the add: tells the sensors apart
+            "value": {
+                "temp_c": 24.3,
+                "humidity": 90.9,
+                "battery": 100,
+            },  # before the add: tells the sensors apart
         }
     ]
     assert api["configured"] == []

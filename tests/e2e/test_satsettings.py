@@ -843,7 +843,9 @@ def test_the_hub_card_links_the_remote_app(station, locale, lang):
         expect(app).to_contain_text(tr("Install the remote app, then scan the van's code in it", lang))
         expect(app.locator('a[href="https://open-california.github.io/"]')).to_be_visible()
         hub = pg.locator("#hub")  # S3: how close to hold the phone, next to the hold sequence
-        expect(hub).to_contain_text(tr("Hold the phone about 10 cm in front of the satellite's screen.", lang))
+        expect(hub).to_contain_text(
+            tr("Hold the phone about 10 cm in front of the satellite's screen.", lang)
+        )
 
 
 def test_the_hub_card_makes_a_new_data_key_after_asking(station):

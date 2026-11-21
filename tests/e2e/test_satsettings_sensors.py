@@ -385,11 +385,18 @@ def test_seen_rows_show_the_reading_and_the_distance(stub, error_gated_page, loc
     with _open(error_gated_page, stub, lang) as pg:
         a = _seen_row(pg, "GVH5074_0001")
         expect(a).to_contain_text("4.1 °C · 80.5 % · 🔋 90 % · " + tr("near", lang) + " (-61 dBm)")
-        expect(_seen_row(pg, "GVH5074_0002")).to_contain_text("GVH5074_0002 · %s (-66 dBm)" % tr("near", lang))
+        expect(_seen_row(pg, "GVH5074_0002")).to_contain_text(
+            "GVH5074_0002 · %s (-66 dBm)" % tr("near", lang)
+        )
         m = _seen_row(pg, "SmartSolar")
         expect(m).to_contain_text("%s · %s (-72 dBm)" % (tr("needs its key", lang), tr("far", lang)))
         m.get_by_role("button", name=tr("Add", lang)).click()
         for name in ("Name (a–z, 0–9, -, _)", "Encryption key (32 hex digits)"):
             box = m.get_by_role("textbox", name=tr(name, lang))
-            for attr, v in (("autocomplete", "off"), ("autocorrect", "off"), ("autocapitalize", "none"), ("spellcheck", "false")):
+            for attr, v in (
+                ("autocomplete", "off"),
+                ("autocorrect", "off"),
+                ("autocapitalize", "none"),
+                ("spellcheck", "false"),
+            ):
                 expect(box).to_have_attribute(attr, v)

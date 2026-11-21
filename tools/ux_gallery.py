@@ -931,7 +931,13 @@ class EspStub:
                 cfg.remove(c)
                 model = self._sens_model.pop(c["id"], c["type"])
                 self._sens_back.append(
-                    {"id": c["id"], "type": c["type"], "model": model, "rssi": -70, "value": c["value"] if c["type"] == "govee" else None}
+                    {
+                        "id": c["id"],
+                        "type": c["type"],
+                        "model": model,
+                        "rssi": -70,
+                        "value": c["value"] if c["type"] == "govee" else None,
+                    }
                 )
         elif "id" in body:
             c = by_id(cfg, "id")

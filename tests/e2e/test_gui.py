@@ -2013,7 +2013,9 @@ def test_the_focused_title_has_no_ring_on_a_touch_screen(base_url, error_gated_p
             assert pg.evaluate("matchMedia('(hover: none) and (pointer: coarse)').matches")
             assert pg.locator("#title").evaluate("e => getComputedStyle(e).outlineStyle") == "none"
         else:
-            pg.keyboard.press("Tab")  # a keyboard user: the next script focus is :focus-visible, the ring shows
+            pg.keyboard.press(
+                "Tab"
+            )  # a keyboard user: the next script focus is :focus-visible, the ring shows
             pg.evaluate("document.getElementById('title').focus()")
             assert pg.locator("#title").evaluate("e => getComputedStyle(e).outlineStyle") != "none"
 
@@ -2126,7 +2128,10 @@ def test_heater_start_confirm_only_on_a_real_start(fresh_url, error_gated_page):
         power.click()
         _poll(pg, fresh_url, lambda st: st["airheater"]["normal"] is True, "heater on")
         assert (
-            len(msgs) == 1 and "burns fuel" in msgs[0] and "{w}" not in msgs[0] and "power" not in msgs[0]
+            len(msgs) == 1
+            and "burns fuel" in msgs[0]
+            and "{w}" not in msgs[0]
+            and "power" not in msgs[0]
             and "verified" not in msgs[0]  # G5: plain words, no "not live-verified" scare
         )
         expect(power).to_have_attribute("aria-checked", "true", timeout=15000)

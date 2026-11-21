@@ -204,7 +204,7 @@ def test_qr_text():
     .. test:: hub QR text OCH1*van*url*user*pass*key
        :id: T_FW_HUB_QR
     """
-    key = "00112233445566778899aabbccddeeff"
+    key = "00112233445566778899aabbccddeeff"  # gitleaks:allow (a test vector, not a key)
     assert _run(f"qr van1 wss://h:8884/mqtt u p {key}")[0] == [f"OCH1*van1*wss://h:8884/mqtt*u*p*{key}"]
 
 
