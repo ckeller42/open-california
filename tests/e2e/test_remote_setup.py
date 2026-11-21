@@ -800,8 +800,9 @@ def test_camera_scans_on_past_a_wrong_code_and_stops_on_the_setup_code(site, ttn
 
 @pytest.mark.parametrize("locale", ["en-US", "de-DE"])
 def test_a_camera_without_frames_says_so_and_the_button_works_again(site, ttn, error_gated_page, locale):  # noqa: F811
-    """S2: the first camera use on Android: start() resolves but no frame comes. After 4 s the screen says so,
-    hides the video, and a second tap on Use the camera starts a new scanner."""
+    """S2: start() resolves but no frame comes (the first use on Android). After 6 s the screen says so but keeps
+    the scanner (iOS can be slow); the hint goes when frames arrive, and a new tap clears it at once (it once stayed
+    over a running camera on an iPhone) and starts a new scanner."""
     msg = (
         "Die Kamera ist nicht gestartet. Tippe noch einmal auf Kamera verwenden, oder fotografiere den Code."
         if locale == "de-DE"
@@ -818,11 +819,46 @@ def test_a_camera_without_frames_says_so_and_the_button_works_again(site, ttn, e
         pg.locator("#rs-camera").click()
         expect(pg.locator("#rs-msg")).to_have_text("")
         pg.clock.fast_forward(4500)
+        expect(pg.locator("#rs-msg")).to_have_text("")  # not yet: iOS may need longer
+        pg.clock.fast_forward(2000)
         expect(pg.locator("#rs-msg")).to_have_text(msg)
-        expect(pg.locator("video")).to_be_hidden()
-        assert pg.evaluate("window.__qs.destroyed") is True
+        assert pg.evaluate("window.__qs.destroyed") is False  # the scanner stays
+        pg.evaluate("document.querySelector('video').dispatchEvent(new Event('loadeddata'))")  # frames arrive late
+        expect(pg.locator("#rs-msg")).to_have_text("")
+        pg.clock.fast_forward(6500)
+        expect(pg.locator("#rs-msg")).to_have_text("")  # the first scanner's check ran once only
+        pg.evaluate("window.__qsFrames = false")
+        pg.locator("#rs-camera").click()
+        pg.clock.fast_forward(6500)
+        expect(pg.locator("#rs-msg")).to_have_text(msg)
         pg.evaluate("window.__qsFrames = true")
         pg.locator("#rs-camera").click()
-        assert pg.evaluate("window.__qsMade") == 2
-        pg.clock.fast_forward(4500)
-        assert pg.evaluate("window.__qs.destroyed") is False  # frames now: the camera runs on
+        expect(pg.locator("#rs-msg")).to_have_text("")  # a new tap clears the old hint at once
+        assert pg.evaluate("window.__qsMade") == 3
+
+
+# The stream's own size, as a phone camera delivers it (1600 x 1200): a canvas stream on the video element.
+FAKE_QS_BIG_STREAM = FAKE_QS.replace(
+    "return Promise.resolve();",
+    "const c = document.createElement('canvas'); c.width = 1600; c.height = 1200;"
+    " c.getContext('2d').fillRect(0, 0, 1600, 1200); this.video.srcObject = c.captureStream();"
+    " return this.video.play().catch(() => {});",
+)
+
+
+def test_the_camera_view_never_widens_the_page(site, ttn, error_gated_page):  # noqa: F811
+    """On an iPhone the 1000+ px camera stream made the page wider than the screen, and Safari zoomed the whole
+    page out (tiny header and buttons). The view fits the card and the page keeps the screen's width."""
+    with error_gated_page(
+        site, init_script=_empty_app(ttn) + FAKE_QS_BIG_STREAM, service_workers="block", viewport={"width": 390, "height": 844}
+    ) as pg:
+        _menu(pg, TEXT["en-US"]["scan"])
+        pg.locator("#rs-camera").click()
+        pg.wait_for_function("() => document.querySelector('video').readyState >= 2")  # the 1600 px stream plays
+        dims = pg.evaluate(
+            "() => [document.documentElement.scrollWidth, window.innerWidth,"
+            " document.querySelector('video').getBoundingClientRect().width,"
+            " document.querySelector('video').getBoundingClientRect().height]"
+        )
+        assert dims[0] <= dims[1], dims  # no horizontal overflow
+        assert dims[2] <= dims[1] and dims[3] <= 0.56 * 844, dims  # fits the width, leaves room below

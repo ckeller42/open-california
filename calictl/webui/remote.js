@@ -191,7 +191,7 @@ let rsCam = null;
 /** @type {ReturnType<typeof setTimeout>|null} the check that the started camera delivers frames */
 let rsCamTimer = null;
 const RS_SCAN_REPEAT_MS = 3000;   // the same code again within this: not acted on again
-const RS_CAM_FRAME_MS = 4000;     // no video frame this long after start(): the camera did not start
+const RS_CAM_FRAME_MS = 6000;     // no video frame this long after start(): the camera did not start
 let rsGen = 0;   // +1 by "Remove this van": a step still waiting on TTS then stores nothing
 
 /** @param {Uint8Array} b */
@@ -583,6 +583,7 @@ function rsScanner(onText) {
     const off = (/** @type {string} */ m) => { rsCamStop(); video.hidden = aim.hidden = true; rsMsg = m; rsRefresh(); };
     cam.onclick = () => {
       rsCamStop();
+      if (rsMsg) { rsMsg = ""; rsRefresh(); }   // an old "did not start" must not stay over a running camera
       video.hidden = aim.hidden = false;
       // the camera keeps scanning past a code this screen does not take (the app's code comes first on the
       // satellite): the handler's hint shows, the screen it moves to on a code it takes stops the camera
@@ -598,9 +599,14 @@ function rsScanner(onText) {
       }, { returnDetailedScanResult: true, preferredCamera: "environment" });
       qs.start().then(() => {
         // the first use on Android: the site prompt, then Chrome's own camera prompt, and the stream may never
-        // deliver a frame. No frame in 4 s: say so; the button starts a new scanner
-        rsCamTimer = setTimeout(() => { if (rsCam === qs && !video.videoWidth)
-          off("The camera did not start. Tap Use the camera again, or take a photo of the code."); }, RS_CAM_FRAME_MS);
+        // deliver a frame. No frame yet after the wait: say so but keep the scanner (iOS can be slow to deliver
+        // the first frame); the hint goes when frames arrive, and the button starts a new scanner
+        const NO = "The camera did not start. Tap Use the camera again, or take a photo of the code.";
+        rsCamTimer = setTimeout(() => {
+          if (rsCam !== qs || video.videoWidth) return;
+          rsMsg = NO; rsRefresh();
+          video.addEventListener("loadeddata", () => { if (rsMsg === NO) { rsMsg = ""; rsRefresh(); } }, { once: true });
+        }, RS_CAM_FRAME_MS);
       }, () => { if (rsCam === qs) off("The camera does not start: take a photo instead."); });
     };
     box.prepend(cam, video, aim);

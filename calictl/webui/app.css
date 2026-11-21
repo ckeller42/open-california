@@ -336,3 +336,8 @@ dialog.help a { display: block; margin: .2rem 0 .9rem; color: var(--accent); }
 .thermo-opt { min-height: 44px; padding: .3rem 0; }
 .thermo-opt.stale, .thermo-opt.stale .sval { color: var(--warn-text); }
 .thermo-opt input:disabled ~ .lbl { opacity: .8; }
+
+/* The scanner's camera view: the stream's own size (often > 1000 px) must never widen the page (iOS Safari
+   then zooms the whole page out); a square-ish window keeps the aim hint and the buttons on screen. */
+.sat video { display: block; width: 100%; max-width: 100%; height: auto; max-height: 55vh; object-fit: cover;
+  border-radius: 8px; background: #000; }
