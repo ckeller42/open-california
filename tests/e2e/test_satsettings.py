@@ -951,7 +951,7 @@ def test_settings_backup_downloads_after_the_warning(station):
     with _open(station, locale="en-US", viewport=PHONE) as pg:
         pg.click("#bk-get")
         acts = pg.locator("#bk-acts")
-        expect(acts).to_contain_text("WiFi password, the hub passwords and the sensor keys in plain text")
+        expect(acts).to_contain_text("the sensor keys and the camper pairing keys in plain text")
         assert _posts(station, "/api/backup") == []  # nothing before the confirm
         with pg.expect_download() as dl:
             acts.get_by_role("button", name="Download", exact=True).click()

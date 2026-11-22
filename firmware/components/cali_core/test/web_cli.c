@@ -297,6 +297,23 @@ int cali_mac(uint8_t mac[6]) {   /* the host fake MAC 02:00:00:00:C0:FE */
     memcpy(mac, M, 6);
     return 0;
 }
+/* the bond store's shape for the settings backup: 3 sec slots of 40 bytes, 8 cccd slots of 8 ("devaddr <12 hex>"
+ * sets the board's own address, default AA:BB:CC:DD:EE:FF; "devaddr none": unknown) */
+static uint8_t s_dev[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+static int s_dev_known = 1;
+size_t cali_bond_rec_size(const char *key) {
+    int n;
+    char end;
+    if (sscanf(key, "sec_our_%d%c", &n, &end) == 1 || sscanf(key, "sec_peer_%d%c", &n, &end) == 1)
+        return n >= 0 && n < 3 ? 40 : 0;
+    if (sscanf(key, "cccd_%d%c", &n, &end) == 1) return n >= 0 && n < 8 ? 8 : 0;
+    return 0;
+}
+int cali_ble_own_addr(uint8_t out[6]) {
+    if (!s_dev_known) return -1;
+    memcpy(out, s_dev, 6);
+    return 0;
+}
 void cali_random(void *buf, size_t len) { memset(buf, 7, len); }   /* a fixed byte: the hotspot password is 14 of one letter */
 uint64_t cali_uptime_ms(void) { return s_now; }
 static int64_t s_epoch_ms;   /* "ntp": the SNTP wall clock (fixed) */
@@ -645,6 +662,9 @@ int main(void) {
                 (void)sscanf(line, "%*s %*s %*s %n", &off);
                 snprintf(s_done_reason, sizeof s_done_reason, "%s", off ? line + off : "");
             }
+        } else if (strcmp(w, "devaddr") == 0) {
+            s_dev_known = strcmp(a1, "none") != 0;
+            for (int i = 0; s_dev_known && i < 6; i++) (void)sscanf(a1 + 2 * i, "%2hhx", &s_dev[i]);
         } else if (strcmp(w, "kvx") == 0) {   /* kvx <key>: "KVX <hex>" or "KVX <missing>" (binary values) */
             unsigned char buf[1024];
             size_t len = sizeof buf;

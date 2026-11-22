@@ -2610,10 +2610,10 @@ function buildSat(v) {
     h("p", { id: "hub-app" }, T("Install the remote app, then scan the van's code in it") + ": ", appLink()), apacts, ...hubForm(), hkacts));
   const bkGet = satBtn(T("Download settings backup"), "", "bk-get");
   const bkacts = h("div", { class: "btnrow", id: "bk-acts" }, bkGet);
-  bkGet.onclick = () => satAsk(bkacts, [h("span", null, T("The file holds the WiFi password, the hub passwords and the sensor keys in plain text. Keep it private and delete it when the new satellite runs."))],
+  bkGet.onclick = () => satAsk(bkacts, [h("span", null, T("The file holds the WiFi password, the hub passwords, the sensor keys and the camper pairing keys in plain text. Keep it private and delete it when the new satellite runs."))],
     T("Download"), "primary", satBackup, "bk-msg");
   root.append(satCard("bk", T("Settings backup"),
-    h("p", { class: "note" }, T("One file with this satellite's settings, for a new satellite: its setup wizard restores it. Not in it: the pairing with the camper and the LoRa keys.")),
+    h("p", { class: "note" }, T("One file with this satellite's settings, for a new satellite: its setup wizard restores it. The camper pairing comes back only onto this same satellite; the LoRa keys are not in it.")),
     bkacts, satMsg("bk-msg")));
   satHubLoad();
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
@@ -3456,7 +3456,10 @@ async function setupRestore() {
   /** @type {{status: number, body: any}|null} */
   let r = null;
   try { r = await satFetch("/api/restore", d); } catch (e) { /* r stays null */ }
-  if (r && r.status === 200 && r.body.ok) say(true, "Restarting… then pair with the camper (one passkey: the bond cannot be copied) and set up LoRa again.");
+  if (r && r.status === 200 && r.body.ok) {
+    say(true, r.body.bond === "restored" ? "Restarting… The camper pairing was kept (the same satellite); set up LoRa again."
+      : "Restarting… then pair with the camper (one passkey: the bond cannot be copied) and set up LoRa again.");
+  }
   else say(false, r && r.body && r.body.error === "not_fresh" ? "This satellite is set up already: a backup restores only onto a new one." : "Couldn't restore the backup");
 }
 

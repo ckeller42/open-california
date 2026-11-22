@@ -735,9 +735,17 @@ def test_the_wifi_step_restores_a_backup_file(setup, locale, lang):
             )
         )
         expect(msg).to_have_class("note")
+        setup.post_reply["/api/restore"] = (
+            200,
+            {"ok": True, "restored": ["wifi_ssid"], "bond": "restored", "reboot": True},
+        )
+        _restore_file(pg, backup)  # the same satellite: the camper pairing came back
+        expect(msg).to_have_text(
+            tr("Restarting… The camper pairing was kept (the same satellite); set up LoRa again.", lang)
+        )
         setup.post_reply["/api/restore"] = (409, {"ok": False, "error": "not_fresh"})
         _restore_file(pg, backup)
         expect(msg).to_have_text(
             tr("This satellite is set up already: a backup restores only onto a new one.", lang)
         )
-    assert _posts(setup, "/api/restore") == [backup, backup]
+    assert _posts(setup, "/api/restore") == [backup, backup, backup]

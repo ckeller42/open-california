@@ -142,7 +142,7 @@ def test_unhandled_404(http_cli):
 
 
 def test_oversized_body_413(http_cli):
-    out = run(http_cli, ["POST /echo HTTP/1.1\r\nContent-Length: 5000\r\n\r\n"])
+    out = run(http_cli, ["POST /echo HTTP/1.1\r\nContent-Length: %d\r\n\r\n" % (REQ_MAX + 1)])
     assert out.startswith("HTTP/1.1 413 ")
 
 

@@ -89,8 +89,10 @@
  *    with that JSON shall work only on a fresh board (a first-time setup pending, or no WiFi stored; else 409
  *    ``not_fresh``), check every key against the allow-list and every value against what this build loads
  *    before it writes anything (400 ``bad_value``, nothing written), then write them all, end the first-time
- *    setup and restart. Never in the file: the hotspot password (per board), the BLE bond (keyed to the
- *    chip's address) and the LoRa keys (keyed to the module's DevEUI).
+ *    setup and restart. The file also carries the board's BLE address (``dev``) and the bond records (LTK,
+ *    IRK, CCCDs); restore writes them only when ``dev`` is this board (the bond is keyed to the chip's
+ *    address), else skips them (``"bond":"other_device"``, never an error). Never in the file: the hotspot
+ *    password (per board) and the LoRa keys (keyed to the module's DevEUI).
  * @endverbatim
  *
  * @verbatim embed:rst:leading-asterisk
@@ -375,15 +377,17 @@
  * - `POST /api/backup` (R_FW_SETTINGS_BACKUP): body exactly `{"confirm":true}`; station mode only (403
  *   `setup_mode`); 400 `bad_json` (another shape), 400 `confirm_required` (confirm false); 500 `store` (a
  *   key unreadable); 405 for another method (never a GET: every GET under /api/ passes the hub). 200
- *   `{"format":"oc-backup/1","fw":"<the first 8 chars of cali_fw_version()>","kv":{"<key>":"<base64>",...}}`
- *   with the allow-listed keys present (web.c BACKUP_KEYS, docs/firmware.md "Settings backup"). Over the
- *   hub: 403 `local_only`.
+ *   `{"format":"oc-backup/1","fw":"<the first 8 chars of cali_fw_version()>","dev":"<12 hex>","kv":{"<key>":"<base64>",...}}`
+ *   with the allow-listed keys present (web.c BACKUP_KEYS, docs/firmware.md "Settings backup") and every used
+ *   bond slot (cali_bond_rec_size); `dev` = cali_ble_own_addr, left out when unknown. Over the hub: 403 `local_only`.
  * - `POST /api/restore` (R_FW_SETTINGS_BACKUP): that JSON (`format` and `kv` required, `fw` optional), in
  *   every WiFi mode, but only while a first-time setup is pending or no `wifi_ssid` is stored (else 409
  *   `not_fresh`). 400 `bad_json` (not that shape), 400 `bad_value` (another format, an empty `kv`, a key
  *   not in the allow-list or twice, bad base64, a value of a length or range this build does not load);
  *   nothing is written unless every key checks. Then it writes every key (with WiFi also `wifi_ok` "1"),
- *   erases `setup_qr`, answers 200 `{"ok":true,"restored":[<keys>],"reboot":true}` and calls cali_restart()
+ *   erases `setup_qr`, answers 200 `{"ok":true,"restored":[<keys>],"skipped":[<bond keys>],"bond":"restored"|
+ *   "other_device"|"none","reboot":true}` (bond keys: a slot of this build, its record size; written only when
+ *   `dev` is this board, else skipped, never an error) and calls cali_restart()
  *   about 1 s later from cali_web_poll. 500 `store` when a write fails (the setup stays pending: try again).
  *   405 for another method. Over the hub: 403 `local_only`.
  *
@@ -494,6 +498,19 @@ void cali_web_poll(uint64_t now_ms);
  *        (R_FW_SETTINGS_BACKUP). web.c's weak default only logs (host, tests); the ESP app overrides it.
  */
 void cali_restart(void);
+
+/**
+ * @brief The size of the bond record a settings backup may carry under `key` (ble_store_kv.c: `sec_our_<n>`,
+ *        `sec_peer_<n>`, `cccd_<n>` with n a slot of this build), 0 for any other key. web.c's weak default
+ *        (no NimBLE) is 0 for every key (R_FW_SETTINGS_BACKUP).
+ */
+size_t cali_bond_rec_size(const char *key);
+
+/**
+ * @brief This board's own BLE address, the one the bond is keyed to (ble_nimble.c), most significant byte first.
+ * @return 0, or -1 unknown (before the host synced; web.c's weak default, no NimBLE).
+ */
+int cali_ble_own_addr(uint8_t out[6]);
 
 /**
  * @brief The HTTP handler for every route in this file.

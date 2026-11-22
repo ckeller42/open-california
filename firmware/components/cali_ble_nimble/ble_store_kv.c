@@ -13,6 +13,7 @@
  */
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "syscfg/syscfg.h"
@@ -21,6 +22,7 @@
 
 #include "cali_ble_nimble.h"
 #include "cali_platform.h"
+#include "cali_web.h"
 
 #define MAX_BONDS MYNEWT_VAL(BLE_STORE_MAX_BONDS)
 #define MAX_CCCDS MYNEWT_VAL(BLE_STORE_MAX_CCCDS)
@@ -60,6 +62,22 @@ static struct kv_table s_peer = {"sec_peer_", s_peer_secs, sizeof s_peer_secs[0]
                                  sec_same_key};
 static struct kv_table s_cccd = {"cccd_", s_cccds, sizeof s_cccds[0], MAX_CCCDS, 0, 0,
                                  cccd_same_key};
+
+/* The settings backup's bond check (R_FW_SETTINGS_BACKUP): the record size of "<prefix><n>" with n a slot
+ * of this build (decimal, no leading zero), 0 for any other name. */
+size_t cali_bond_rec_size(const char *key) {
+    const struct kv_table *const T[] = {&s_our, &s_peer, &s_cccd};
+    for (size_t i = 0; i < sizeof T / sizeof *T; i++) {
+        size_t pl = strlen(T[i]->prefix);
+        char *end;
+        long n;
+        if (strncmp(key, T[i]->prefix, pl) != 0) continue;
+        if (key[pl] < '0' || key[pl] > '9' || (key[pl] == '0' && key[pl + 1])) return 0;
+        n = strtol(key + pl, &end, 10);
+        return *end == 0 && n < T[i]->max ? T[i]->size : 0;
+    }
+    return 0;
+}
 
 static void slot_key(char *out, size_t cap, const struct kv_table *t, int n) {
     snprintf(out, cap, "%s%d", t->prefix, n);

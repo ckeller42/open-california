@@ -4054,9 +4054,6 @@ BACKUP_KEYS = {
 # never in a backup: per board (ap_psk), keyed to this chip / this module (bond, LoRa), runtime state
 NOT_BACKED_UP = {
     "ap_psk": "41" * 14,
-    "sec_our_0": "01" * 40,
-    "sec_peer_0": "02" * 40,
-    "cccd_0": "03" * 8,
     "lora_dev": "04" * 24,
     "lora_tk": "05" * 16,
     "lora_ttn": "06" * 8,
@@ -4068,6 +4065,10 @@ NOT_BACKED_UP = {
     "ac_state": "0102",
     "kvprobe": "01",
 }
+# the bond in the driver's fake store shape (sec 40 B, cccd 8 B); sec_our_1 is a free (zero-length) slot
+BOND = {"sec_our_0": "01" * 40, "sec_peer_0": "02" * 40, "cccd_0": "03" * 8, "sec_our_1": ""}
+BOND_KEYS = ["sec_our_0", "sec_peer_0", "cccd_0"]  # what a backup carries of it, in web.c's order
+DEV = "aabbccddeeff"  # the driver's own BLE address, AA:BB:CC:DD:EE:FF
 SMALL = {  # the 1- and 2-byte keys, each in range (ph_min little-endian, disp_off a signed byte: -20)
     "th_on": "01",
     "pw_ign": "01",
@@ -4117,6 +4118,7 @@ def _full_store():
         "kvhex sens_list " + SENS_LIST.hex(),
         *("kvhex %s %s" % kv for kv in SMALL.items()),
         *("kvhex %s %s" % kv for kv in NOT_BACKED_UP.items()),
+        *("kvhex %s %s" % kv for kv in BOND.items()),
     ]
 
 
@@ -4201,16 +4203,23 @@ def test_backup_and_restore_never_pass_the_hub(web_cli):
 
 
 def test_backup_holds_exactly_the_allow_listed_keys(web_cli):
-    """Every allow-listed key present, each value its stored bytes in base64; never the hotspot password,
-    the bond, the LoRa keys or the runtime state.
+    """Every allow-listed key present and every used bond slot (with this board's address ``dev``), each value
+    its stored bytes in base64; never the hotspot password, the LoRa keys, the runtime state or a free slot.
 
-    .. test:: POST /api/backup holds exactly the allow-listed keys present, never ap_psk, bond or LoRa keys
+    .. test:: POST /api/backup holds exactly the allow-listed keys and bond slots present, never ap_psk or LoRa keys
        :id: T_FW_BACKUP_ALLOW_LIST
        :links: R_FW_SETTINGS_BACKUP
     """
     body, stored = _export(web_cli)
-    assert set(body) == {"format", "fw", "kv"} and body["format"] == "oc-backup/1" and body["fw"] == "test"
-    assert set(body["kv"]) == BACKUP_KEYS
+    assert (
+        set(body) == {"format", "fw", "dev", "kv"}
+        and body["format"] == "oc-backup/1"
+        and body["fw"] == "test"
+    )
+    assert body["dev"] == DEV
+    assert set(body["kv"]) == BACKUP_KEYS | set(BOND_KEYS)
+    assert {k: base64.b64decode(body["kv"][k]).hex() for k in BOND_KEYS} == {k: BOND[k] for k in BOND_KEYS}
+    body["kv"] = {k: v for k, v in body["kv"].items() if k in BACKUP_KEYS}
     assert {k: base64.b64decode(v).hex() for k, v in body["kv"].items()} == stored
     assert base64.b64decode(body["kv"]["sens_list"]) == SENS_LIST
     for k in NOT_BACKED_UP:
@@ -4237,8 +4246,9 @@ def test_restore_round_trip_onto_a_fresh_board(web_cli):
         *_HOTSPOT,
         ("POST", "/api/restore", raw, BROWSER_HEADERS),
         *("kvx " + k for k in sorted(BACKUP_KEYS)),
-        "kv wifi_ok",
         "kvx ap_psk",
+        *("kvx " + k for k in BOND_KEYS),
+        "kv wifi_ok",
         "thinit",
         ("GET", "/api/thermostat"),
         ("GET", "/api/state"),
@@ -4247,11 +4257,14 @@ def test_restore_round_trip_onto_a_fresh_board(web_cli):
     )
     assert (rs[0].status, rs[0].json()) == (
         200,
-        {"ok": True, "restored": [k for k in RESTORE_ORDER], "reboot": True},
+        {"ok": True, "restored": RESTORE_ORDER + BOND_KEYS, "bond": "restored", "reboot": True},
     )
     got = _kvx(other)
-    assert dict(zip(sorted(BACKUP_KEYS), got[:-1])) == stored
-    assert got[-1] != NOT_BACKED_UP["ap_psk"]  # B keeps its own hotspot password
+    assert dict(zip(sorted(BACKUP_KEYS), got[: len(BACKUP_KEYS)])) == stored
+    assert got[len(BACKUP_KEYS)] != NOT_BACKED_UP["ap_psk"]  # B keeps its own hotspot password
+    assert got[len(BACKUP_KEYS) + 1 :] == [
+        BOND[k] for k in BOND_KEYS
+    ]  # the same board: the bond byte for byte
     assert "KV 1" in other  # wifi_ok: the restored WiFi joined on A
     assert rs[1].json()["target"] == 2150
     assert pending(rs[2]) is False
@@ -4336,7 +4349,9 @@ def test_restore_only_on_a_fresh_board(web_cli):
     "body",
     [
         _wifi_backup(ap_psk=base64.b64encode(b"A" * 14).decode()),  # not in the allow-list
-        _wifi_backup(sec_our_0="AQID"),
+        _wifi_backup(sec_peer_0=base64.b64encode(bytes(39)).decode()),  # not the store's record size
+        _wifi_backup(sec_our_3=base64.b64encode(bytes(40)).decode()),  # a slot this build does not have
+        _wifi_backup(cccd_x=base64.b64encode(bytes(8)).decode()),
         _wifi_backup(lora_dev=base64.b64encode(bytes(24)).decode()),
         _wifi_backup(hub_cfg=base64.b64encode(bytes(279)).decode()),  # one byte short of cali_hub_cfg_t
         _wifi_backup(hub_key=base64.b64encode(bytes(15)).decode()),
@@ -4553,3 +4568,30 @@ def test_secret_routes_take_the_boards_own_names(web_cli, host):
     assert [r.status for r in rs[-2:]] == [200, 200]
     rs, _ = script(web_cli, *_HOTSPOT, ("POST", "/api/restore", _wifi_backup(), "", host))
     assert rs[-1].status == 200
+
+
+@pytest.mark.parametrize("case", ["other_board", "no_dev", "dev_unknown"])
+def test_restore_onto_another_board_skips_the_bond(web_cli, case):
+    """The bond is keyed to the chip's own BLE address: onto another board (another ``dev``, none in the file,
+    or this board's address unknown) the bond keys are skipped, never an error; the rest restores.
+
+    .. test:: A backup restores the bond only onto the same board; elsewhere it is skipped as other_device
+       :id: T_FW_RESTORE_BOND_SAME_BOARD
+       :links: R_FW_SETTINGS_BACKUP
+    """
+    body, _ = _export(web_cli)
+    setup = list(_HOTSPOT)
+    if case == "other_board":
+        setup.append("devaddr 112233445566")
+    elif case == "no_dev":
+        del body["dev"]
+    else:
+        setup.append("devaddr none")
+    rs, other = script(
+        web_cli, *setup, ("POST", "/api/restore", json.dumps(body)), *("kvx " + k for k in BOND_KEYS)
+    )
+    assert (rs[0].status, rs[0].json()) == (
+        200,
+        {"ok": True, "restored": RESTORE_ORDER, "skipped": BOND_KEYS, "bond": "other_device", "reboot": True},
+    )
+    assert _kvx(other) == ["<missing>"] * len(BOND_KEYS)
