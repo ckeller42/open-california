@@ -239,6 +239,11 @@ static void takeover(cali_thermo_state_t *st, const cali_thermo_snap_t *snap, in
     lvl = control(t_ref, t_out, in->target, 0, &ctl0, cfg, NONE, now, &w);
     st->ctl = ctl0;
     if (lvl == NONE || lvl == 0) lvl = cfg->min_level; /* overheat: the lowest level */
+    if (t_ref < in->target - cfg->band_lo && level != NONE && lvl < level && (snap->normal || snap->permanent)) {
+        lvl = level; /* a lower level would put the heater into its own control pause */
+        track(&st->ctl, level, t_ref, in->target, cfg);
+        st->ctl.u = level * 1000;
+    }
     if (lvl == level || !in->link_ready) return;
     pend(st, "level", lvl, now, level, NULL);
     st->expect.level = lvl;
@@ -338,7 +343,7 @@ void cali_thermo_init(cali_thermo_state_t *st) {
 void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, cali_thermo_state_t *st,
                       cali_thermo_out_t *out) {
     int64_t now = in->now_ms;
-    int link = in->link_ready, hs, level, code, has_snap, on, req, faulty, heating, owner_off;
+    int link = in->link_ready, hs, level, code, has_snap, on, req, faulty, heating, owner_off, resume, resumed = 0;
     int32_t target = in->target, t_out;
     const char *reason = NULL;
     cali_thermo_snap_t snap = {0, 0, NONE};
@@ -464,6 +469,16 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
     /* (2) owner request (feature disabled while on = owner OFF) */
     on = st->mode == CALI_THERMO_AUTO || st->mode == CALI_THERMO_DEGRADED;
     req = on && !in->enabled ? CALI_THERMO_REQ_OFF : in->request;
+    resume = st->resume; /* a resume after a reboot acts as AUTO */
+    st->resume = 0;
+    if (resume && st->mode == CALI_THERMO_OFF && !st->has_pending && req == CALI_THERMO_REQ_NONE && in->enabled) {
+        if (hs == CALI_THERMO_H_UNKNOWN || (heating && refusal(in, cfg, hs, code)))
+            st->resume = 1; /* not all inputs are in yet after the boot: wait (the runner ends the wait) */
+        else if (heating) {
+            req = CALI_THERMO_REQ_AUTO; /* an off heater is never started: the resume ends */
+            resumed = 1;
+        }
+    }
     if (req == CALI_THERMO_REQ_OFF && on) {
         stop(st, link && has_snap, now, in->enabled ? "USER_OFF" : "DISABLED", out);
         RET(st->mode == CALI_THERMO_STOPPING ? "STOPPING" : "USER_OFF");
@@ -508,7 +523,7 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             st->expect = snap;
             /* pre-set the demand: the panel starts Dauerbetrieb at the stored level */
             if (hs == CALI_THERMO_H_OFF) takeover(st, &snap, level, t_ref, t_out, in, cfg, out);
-            RET("WAITING_FOR_CONTINUOUS");
+            RET(resumed ? "AUTO_RESUMED" : "WAITING_FOR_CONTINUOUS");
         }
         if (hs == CALI_THERMO_H_OFF) {
             lvl = control(t_ref, t_out, target, 0, &ctl0, cfg, NONE, now, &w);
@@ -526,7 +541,7 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             RET("START");
         }
         takeover(st, &snap, level, t_ref, t_out, in, cfg, out);
-        RET(hs == CALI_THERMO_H_CONTINUOUS ? "ADOPT_CONTINUOUS" : "ADOPT_RUN");
+        RET(resumed ? "AUTO_RESUMED" : hs == CALI_THERMO_H_CONTINUOUS ? "ADOPT_CONTINUOUS" : "ADOPT_RUN");
     }
     if (req == CALI_THERMO_REQ_AUTO && on && st->active == 1 && valid(&in->ref, cfg)) {
         st->active = 0; /* back to the reference only by the owner */

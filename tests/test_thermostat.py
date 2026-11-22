@@ -1072,3 +1072,86 @@ def test_step_sends_level_10_on_a_cooling_cabin_inside_the_dwell():
             break
     assert k * P < CFG["min_dwell_ms"]
     assert (out["mode"], out["reason"], out["cmds"]) == ("AUTO", "COOLING_MAX", [("level", 10)])
+
+
+# --- takeover below the target, resume after a reboot --------------------------------------
+
+#: The van at 00:09 on 2026-11-22: Dauerbetrieb at level 6, 14.8 °C, target 16.0 °C (demand: level 3).
+COLD_CONT = {**CONT, "HeatingLevel": 6}
+
+
+def test_takeover_below_the_target_sends_no_lower_level():
+    """A takeover while the cabin is below ``target - band_lo`` keeps the heater's level (a lower level
+    puts the heater into its own control pause); the demand is re-seated on the kept level.
+
+    .. test:: Takeover below the target keeps the level
+       :id: T_THERMO_TAKEOVER_NO_STEP_DOWN
+       :links: R_THERMOSTAT_SESSION
+    """
+    for heater, why in ((COLD_CONT, "ADOPT_CONTINUOUS"), ({**RUN, "HeatingLevel": 6}, "ADOPT_RUN")):
+        out, st = _auto(heater, ref=_ref(1500), target=1600)
+        assert (out["reason"], out["cmds"], out["mode"]) == (why, [], "AUTO"), out
+        assert st["ctl"]["u"] == 6000 and st["expect"]["level"] == 6
+        out, st = _step(st, now_ms=P, heater=heater, ref=_ref(1500), target=1600)
+        assert (out["reason"], out["cmds"]) == ("HOLD", [])  # the demand equals the kept level
+    # a higher demand still raises the level; at or above target - band_lo the demand rules
+    assert _auto(COLD_CONT, ref=_ref(900), target=1600)[0]["cmds"] == [("level", 10)]
+    assert _auto(COLD_CONT, ref=_ref(1570), target=1600)[0]["cmds"] == [("level", 1)]
+
+
+def test_night_preset_on_an_off_heater_is_unchanged():
+    """The night pre-set of an off heater sends the demand, whatever the stored level: nothing pauses.
+
+    .. test:: Night pre-set of an off heater sends the demand
+       :id: T_THERMO_NIGHT_PRESET_OFF_HEATER
+       :links: R_THERMOSTAT_NIGHT
+    """
+    out, _ = _night({**OFF_H, "HeatingLevel": 6}, ref=_ref(1500), target=1600)
+    assert out["cmds"] == [("level", 2)]
+
+
+def _resume(heater=COLD_CONT, **kw):
+    kw.setdefault("ref", _ref(1480))
+    kw.setdefault("target", 1600)
+    return _step(th.initial_state(resume=True), heater=heater, **kw)
+
+
+def test_resume_takes_over_a_heating_heater_after_a_reboot():
+    """AUTO was on before the reboot and the heater still heats: AUTO takes it over again
+    (``AUTO_RESUMED``) with the takeover's rules, and the resume is done.
+
+    .. test:: AUTO resumes after a reboot
+       :id: T_THERMO_RESUME
+       :links: R_THERMOSTAT_SESSION
+    """
+    out, st = _resume()
+    assert (out["reason"], out["mode"], out["cmds"], st["resume"]) == ("AUTO_RESUMED", "AUTO", [], False)
+    out, st = _resume({**RUN, "HeatingLevel": 1})  # a normal run below the demand: raised
+    assert (out["reason"], out["cmds"]) == ("AUTO_RESUMED", [("level", 2)])
+    out, st = _resume(night=True, heater=COLD_CONT)
+    assert (out["reason"], out["mode"]) == ("AUTO_RESUMED", "AUTO")
+    out, st = _resume(night=True, heater={**RUN, "HeatingLevel": 6})  # an immediate run: the night wait
+    assert (out["reason"], out["mode"], out["cmds"]) == ("AUTO_RESUMED", "WAITING", [])
+
+
+def test_resume_waits_for_its_inputs_and_drops_on_an_off_heater():
+    """The resume waits for a fresh heater and the entry checks, never starts an off heater, and ends
+    on an owner request or the feature switched off.
+
+    .. test:: A resume waits for its inputs and never starts an off heater
+       :id: T_THERMO_RESUME_WAIT_DROP
+       :links: R_THERMOSTAT_SESSION
+    """
+    for kw in ({"heater": None}, {"heater_age_ms": CFG["heater_stale_ms"] + 1}, {"ref": None},
+               {"link_ready": False}, {"ignition_on": None}, {"camping_on": False}):  # fmt: skip
+        out, st = _resume(**kw)
+        assert (out["reason"], out["mode"], out["cmds"], st["resume"]) == (None, "OFF", [], True), kw
+    for kw in ({"heater": OFF_H}, {"heater": {**CONT, "ErrorCode": 6}}, {"enabled": False},
+               {"request": "OFF"}, {"heater": {"Installed": 1, "OperationModeAirHeater": 3}}):  # fmt: skip
+        out, st = _resume(**kw)
+        assert out["cmds"] == [] and out["mode"] == "OFF" and st["resume"] is False, kw
+    out, st = _resume(request="AUTO")  # the owner's own AUTO wins: a normal takeover
+    assert (out["reason"], st["resume"]) == ("ADOPT_CONTINUOUS", False)
+    out, st = _resume(heater=None)
+    out, st = _step(st, now_ms=P, heater=COLD_CONT, ref=_ref(1480), target=1600)  # the heater read arrives
+    assert (out["reason"], out["mode"]) == ("AUTO_RESUMED", "AUTO")

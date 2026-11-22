@@ -144,6 +144,7 @@ static void state_print(const cali_thermo_state_t *st) {
     printf(" %d", st->night);
     p64(st->wait_until_ms);
     p64(st->cont_since_ms);
+    printf(" %d", st->resume);
 }
 
 static void defaults(void) {
@@ -245,6 +246,7 @@ int main(int argc, char **argv) {
             st.night = flag();
             st.wait_until_ms = i64();
             st.cont_since_ms = i64();
+            st.resume = flag();
 
             cali_thermo_step(&in, &cfg, &st, &out);
 

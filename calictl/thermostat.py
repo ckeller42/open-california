@@ -101,6 +101,7 @@ REASONS = (
     "NIGHT_WAIT_ENDED",
     "HOLD_AT_MIN_LEVEL",
     "COOLING_MAX",
+    "AUTO_RESUMED",
 )
 
 
@@ -270,12 +271,15 @@ _FAULTS = ("FAULT", "LOCKED", "BLOCKED")
 _HEATING = ("RUNNING", "CONTINUOUS")
 
 
-def initial_state() -> dict:
-    """The session state after boot: mode ``OFF`` (AUTO is never persisted).
+def initial_state(resume: bool = False) -> dict:
+    """The session state after boot: mode ``OFF``.
 
+    :param resume: AUTO was on before the boot (the runner stores that); the first steps take a
+        heating heater over again (``AUTO_RESUMED``).
     :returns: a fresh state dict for :func:`step`.
     """
     return {
+        "resume": resume,
         "mode": "OFF",
         "active": "ref",
         "ctl": {
@@ -387,6 +391,7 @@ def _takeover(
     """Start the controller from its demand (integrator 0) and send that level at once if it differs.
 
     ``t_ref`` ``None`` (no valid reference): take the heater as it is; rule (7) acts next step.
+    A heating heater below ``target - band_lo`` keeps at least its level, as in :func:`control`.
     """
     assert snap is not None  # only called with a fresh OFF, RUNNING or CONTINUOUS heater
     now = inp["now_ms"]
@@ -406,6 +411,10 @@ def _takeover(
         return []
     lvl, st["ctl"], _ = control(t_ref, t_out, inp["target"], 0, ctl0, cfg, None, now)
     lvl = lvl or cfg["min_level"]  # overheat: the lowest level
+    cold = t_ref < inp["target"] - cfg["band_lo"]
+    if cold and level is not None and lvl < level and (snap["normal"] or snap["permanent"]):
+        lvl = level  # a lower level would put the heater into its own control pause
+        st["ctl"] = {**track(st["ctl"], level, t_ref, inp["target"], cfg), "u": level * 1000}
     if lvl == level or not inp["link_ready"]:
         return []
     st["pending"] = _pend("level", lvl, now, level)
@@ -527,7 +536,12 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
        in ``STOPPING``, an AUTO request is ignored with ``STOPPING``. From OFF it shall send ``runtime``, ``level`` and
        one ``power on`` in that order; a running or continuous heater it shall take over from
        the computed demand (integrator 0) and send that level at once when it differs from the
-       heater's. It shall end AUTO without a command on a heater fault (ErrorCode 1 excepted: a
+       heater's; with ``t_ref < target - band_lo`` it shall send no level below the heater's and set
+       the demand to the level it keeps. After a boot with AUTO on before (``resume``), a heater
+       that runs or heats continuously shall be taken over as an AUTO request would (``AUTO_RESUMED``)
+       once a fresh heater reading is in and the entry checks pass; while the reading is not fresh or
+       a check fails the resume waits, and it ends without a command on a heater that does not heat,
+       an owner request or the feature switched off. It shall end AUTO without a command on a heater fault (ErrorCode 1 excepted: a
        normal stop, ``BATTERY_LOW``), a change it did not make (also during its own pending level
        command), the end of the run (also a heater switched off during its own pending level
        command: ``RUN_ENDED`` or ``CONTINUOUS_ENDED``), and a command not applied after one retry (an
@@ -719,9 +733,16 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         cmds = _takeover(st, snap, level, t_ref, t_out, inp, cfg)
         return out("ADOPT_CONTINUOUS")
 
-    # (2) owner request (feature disabled while on = owner OFF)
+    # (2) owner request (feature disabled while on = owner OFF); a resume after a reboot acts as AUTO
     on = st["mode"] in ("AUTO", "DEGRADED")
     req = "OFF" if on and not inp["enabled"] else inp["request"]
+    resumed, resume = False, st["resume"]
+    st["resume"] = False
+    if resume and st["mode"] == "OFF" and st["pending"] is None and req is None and inp["enabled"]:
+        if hs == "UNKNOWN" or (hs in _HEATING and _refusal(inp, cfg, hs, code)):
+            st["resume"] = True  # not all inputs are in yet after the boot: wait (the runner ends the wait)
+        elif hs in _HEATING:
+            req, resumed = "AUTO", True  # an off heater is never started: the resume ends
     if req == "OFF" and on:
         cmds = _stop(st, link and snap is not None, now, "USER_OFF" if inp["enabled"] else "DISABLED")
         return out("STOPPING" if st["mode"] == "STOPPING" else "USER_OFF")
@@ -760,7 +781,7 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             st["expect"] = dict(snap)
             if hs == "OFF":  # pre-set the demand: the panel starts Dauerbetrieb at the stored level
                 cmds = _takeover(st, snap, level, t_ref, t_out, inp, cfg)
-            return out("WAITING_FOR_CONTINUOUS")
+            return out("AUTO_RESUMED" if resumed else "WAITING_FOR_CONTINUOUS")
         if hs == "OFF":
             lvl, st["ctl"], _ = control(t_ref, t_out, target, 0, ctl0, cfg, None, now)
             lvl = lvl or cfg["min_level"]  # overheat at entry: start low, the next step stops
@@ -769,7 +790,7 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             cmds = [("runtime", inp["runtime_min"]), ("level", lvl), ("power", "on")]
             return out("START")
         cmds = _takeover(st, snap, level, t_ref, t_out, inp, cfg)
-        return out("ADOPT_CONTINUOUS" if hs == "CONTINUOUS" else "ADOPT_RUN")
+        return out("AUTO_RESUMED" if resumed else "ADOPT_CONTINUOUS" if hs == "CONTINUOUS" else "ADOPT_RUN")
     if req == "AUTO" and on and st["active"] == "backup" and _valid(inp["ref"], cfg):
         st["active"] = "ref"  # back to the reference only by the owner
         if level is not None:
