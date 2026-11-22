@@ -1737,6 +1737,44 @@ static void api_hub_key(const cali_http_req_t *req, cali_http_resp_t *resp) {
     else SET_CONST(resp, 200, OK_BODY);
 }
 
+/* ---- the secret-bearing POSTs (/api/hub_app, /api/backup, /api/restore): more than the trusted-LAN stance ----
+ * A JSON Content-Type: a cross-site page can send that only after a CORS preflight, which the board never
+ * answers (no CSRF with a "simple" text/plain POST). A Host of the board's own kind (an IPv4 literal, *.local,
+ * *.ts.net for the tailnet proxy, or none): a page on a rebound DNS name sends its own name (no DNS rebinding). */
+
+static int ieq_n(const char *a, const char *b, size_t n) {   /* a[0..n) == b[0..n), ASCII case-insensitive */
+    for (size_t i = 0; i < n; i++) {
+        char x = a[i] >= 'A' && a[i] <= 'Z' ? (char)(a[i] + 32) : a[i];
+        if (x != b[i]) return 0;
+    }
+    return 1;
+}
+
+static int host_ok(const char *h) {
+    size_t n, dots = 0, i;
+    if (!h) return 1;   /* HTTP/1.0 or a proxy that drops it: no name a rebinding page could own */
+    n = strcspn(h, ": \t");
+    for (i = 0; i < n && ((h[i] >= '0' && h[i] <= '9') || h[i] == '.'); i++) dots += h[i] == '.';
+    if (i == n && n >= 7 && dots == 3) return 1;   /* an IPv4 literal */
+    return (n > 6 && ieq_n(h + n - 6, ".local", 6)) || (n > 7 && ieq_n(h + n - 7, ".ts.net", 7));
+}
+
+/* 0 the request may go on; else resp is the 415 content_type or 403 host answer */
+static int secret_route_ok(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static const char ERR_CT[] = "{\"ok\":false,\"error\":\"content_type\"}";
+    static const char ERR_HOST[] = "{\"ok\":false,\"error\":\"host\"}";
+    const char *ct = req->content_type;
+    if (!ct || strlen(ct) < 16 || !ieq_n(ct, "application/json", 16) || (ct[16] && ct[16] != ';' && ct[16] != ' ')) {
+        SET_CONST(resp, 415, ERR_CT);
+        return -1;
+    }
+    if (!host_ok(req->host)) {
+        SET_CONST(resp, 403, ERR_HOST);
+        return -1;
+    }
+    return 0;
+}
+
 /* ---- POST /api/hub_app {"confirm":true}: the remote app's file oc-app/1 = the van's hub QR text (cali_hub_qr, the
  * display's "The van's code"), so a phone imports it instead of scanning. Station only (403 setup_mode), a POST:
  * over the hub 403 local_only (ruling R21); 409 no_hub when no QR text can be made. ---- */
@@ -1750,6 +1788,7 @@ static void api_hub_app(const cali_http_req_t *req, cali_http_resp_t *resp) {
         SET_CONST(resp, 405, ERR_METHOD);
         return;
     }
+    if (secret_route_ok(req, resp) != 0) return;
     if (wifi_mode() != CALI_WIFI_MODE_STATION) {
         SET_CONST(resp, 403, ERR_SETUP_MODE);
         return;
@@ -1878,6 +1917,7 @@ static void api_backup(const cali_http_req_t *req, cali_http_resp_t *resp) {
         SET_CONST(resp, 405, ERR_METHOD);
         return;
     }
+    if (secret_route_ok(req, resp) != 0) return;
     if (wifi_mode() != CALI_WIFI_MODE_STATION) {
         SET_CONST(resp, 403, ERR_SETUP_MODE);
         return;
@@ -1978,6 +2018,7 @@ static void api_restore(const cali_http_req_t *req, cali_http_resp_t *resp) {
         SET_CONST(resp, 405, ERR_METHOD);
         return;
     }
+    if (secret_route_ok(req, resp) != 0) return;
     if (!fresh()) {
         SET_CONST(resp, 409, ERR_NOT_FRESH);
         return;

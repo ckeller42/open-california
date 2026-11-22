@@ -57,7 +57,7 @@ static void post(int topic, const char *pt, size_t n) {
 
 /* the /api/state body; "?hub=1": no viewer mark */
 static void publish_state(uint64_t now_ms) {
-    cali_http_req_t rq = {"GET", "/api/state", "hub=1", "", 0, 0, NULL};
+    cali_http_req_t rq = {"GET", "/api/state", "hub=1", "", 0, 0, NULL, NULL, NULL};
     cali_http_resp_t rs = {200, "text/plain", NULL, 0, NULL, NULL, NULL, NULL};
     s_pub_due = 0;
     s_next_pub = now_ms + CALI_HUB_PUB_MS;

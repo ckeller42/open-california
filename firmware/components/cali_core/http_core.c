@@ -172,13 +172,14 @@ static long content_length(size_t from, size_t to) {
     return v;
 }
 
-/* The If-None-Match value in the header lines buf[from..to), NUL-terminated in place (its "\r"
- * becomes the NUL), or NULL when absent. Call after content_length (which reads the raw lines). */
-static const char *if_none_match(size_t from, size_t to) {
+/* The value of header `name` (lower case, with its ':') in the header lines buf[from..to), NUL-terminated
+ * in place (its "\r" becomes the NUL), or NULL when absent. Call after content_length (which reads the raw
+ * lines); a line an earlier call cut ends in NUL + "\n". */
+static const char *header(size_t from, size_t to, const char *name) {
     while (from < to) {
         size_t eol = from, i;
-        while (eol + 1 < to && !(S.buf[eol] == '\r' && S.buf[eol + 1] == '\n')) eol++;
-        if ((i = header_value(from, eol, "if-none-match:")) != 0) {
+        while (eol + 1 < to && !((S.buf[eol] == '\r' || S.buf[eol] == '\0') && S.buf[eol + 1] == '\n')) eol++;
+        if ((i = header_value(from, eol, name)) != 0) {
             while (i < eol && (S.buf[i] == ' ' || S.buf[i] == '\t')) i++;
             S.buf[eol] = '\0';
             return S.buf + i;
@@ -245,7 +246,9 @@ static void dispatch(uint64_t now_ms) {
     cali_http_req_t req;
     cali_http_resp_t resp = {200, "text/plain", NULL, 0, NULL, NULL, NULL, NULL};
     size_t line_end = request_line_end();
-    req.if_none_match = if_none_match(line_end + 2, S.head_len - 2);   /* before the line is split */
+    req.if_none_match = header(line_end + 2, S.head_len - 2, "if-none-match:");   /* before the line is split */
+    req.host = header(line_end + 2, S.head_len - 2, "host:");
+    req.content_type = header(line_end + 2, S.head_len - 2, "content-type:");
     if (parse_request_line(line_end, &req) != 0) {
         respond_error(400, now_ms);
         return;

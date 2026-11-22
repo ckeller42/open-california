@@ -277,7 +277,7 @@ static void rpc_free(cali_hub_rpc_t *r) {
 
 /* one ask of the router; 1 = answered (r freed), 0 = pending */
 static int rpc_ask(cali_hub_rpc_t *r, char *res_json, size_t max, int resume) {
-    cali_http_req_t rq = {r->method, r->path, r->query, r->buf, r->body_len, resume, NULL};
+    cali_http_req_t rq = {r->method, r->path, r->query, r->buf, r->body_len, resume, NULL, NULL, NULL};
     cali_http_resp_t rs = {200, "text/plain", NULL, 0, NULL, NULL, NULL, NULL};
     int rc = cali_web_handle(&rq, &rs, NULL);
     if (rc == CALI_HTTP_PENDING) return 0;

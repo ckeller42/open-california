@@ -186,8 +186,13 @@ def drive(cli, lines):
     return resps, other
 
 
-def req(method, path, body=None, headers=""):
-    text = "%s %s HTTP/1.1\r\nHost: x\r\n%s" % (method, path, headers)
+def req(method, path, body=None, headers="", host="calictl-esp.local"):
+    """One request line for the driver, as the web UI sends it: Host ``host`` (None: no Host header), and with a
+    body Content-Type: application/json unless ``headers`` names one."""
+    low = headers.lower()
+    text = "%s %s HTTP/1.1\r\n%s%s" % (method, path, "Host: %s\r\n" % host if host else "", headers)
+    if body is not None and "content-type:" not in low:
+        text += "Content-Type: application/json\r\n"
     b = text.encode()
     if body is not None:
         body = body.encode() if isinstance(body, str) else body
@@ -4467,3 +4472,85 @@ def test_hub_app_file_never_passes_the_hub(web_cli):
     res = [json.loads(x[4:]) for x in other if x.startswith("RPC ")]
     assert [(r["id"], r["s"]) for r in res] == [(1, 403), (2, 405)]
     assert json.loads(res[0]["b"]) == {"error": "local_only"} and "OCH1" not in res[1]["b"]
+
+
+SECRET_ROUTES = [
+    ("/api/backup", CONFIRM),
+    ("/api/hub_app", CONFIRM),
+    ("/api/restore", '{"format":"oc-backup/1","kv":{}}'),
+]
+
+
+@pytest.mark.parametrize("path,body", SECRET_ROUTES)
+@pytest.mark.parametrize(
+    "ct", ["text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", None]
+)
+def test_secret_routes_need_a_json_content_type(web_cli, path, body, ct):
+    """A cross-site page can send a "simple" POST (text/plain, a form) without a CORS preflight; a JSON
+    Content-Type forces one, which the board never answers. Anything else: 415, nothing done.
+
+    .. test:: POST /api/backup, /api/restore and /api/hub_app answer 415 without a JSON Content-Type
+       :id: T_FW_SECRET_ROUTES_CONTENT_TYPE
+       :links: R_FW_SETTINGS_BACKUP, R_FW_HUB_APP_FILE
+    """
+    hdr = "Content-Type: %s\r\n" % ct if ct else "Content-Type:\r\n"
+    rs, other = script(
+        web_cli,
+        *_HOTSPOT if path == "/api/restore" else _full_store(),
+        ("POST", path, body, hdr),
+        "kv wifi_ssid",
+    )
+    assert (rs[-1].status, rs[-1].json()) == (415, {"ok": False, "error": "content_type"})
+    assert b"OCH1" not in rs[-1].body and b"kv" not in rs[-1].body
+
+
+@pytest.mark.parametrize("path,body", SECRET_ROUTES)
+@pytest.mark.parametrize(
+    "host",
+    [
+        "evil.example",
+        "evil.example:80",
+        "calictl-esp.local.evil.example",
+        "1.2.3.4.evil.example",
+        "localhost",
+    ],
+)
+def test_secret_routes_refuse_a_foreign_host(web_cli, path, body, host):
+    """DNS rebinding: a page on a name the attacker owns, rebound to the board's address, still sends its own
+    Host. Only the board's own kinds of name pass.
+
+    .. test:: POST /api/backup, /api/restore and /api/hub_app answer 403 host for a foreign Host
+       :id: T_FW_SECRET_ROUTES_HOST
+       :links: R_FW_SETTINGS_BACKUP, R_FW_HUB_APP_FILE
+    """
+    steps = _HOTSPOT if path == "/api/restore" else _full_store()
+    rs, _ = script(web_cli, *steps, ("POST", path, body, "", host))
+    assert (rs[-1].status, rs[-1].json()) == (403, {"ok": False, "error": "host"})
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "192.168.8.113",
+        "192.168.4.1:80",
+        "calictl-esp.local",
+        "CALICTL-ESP.LOCAL",
+        "busnet.tail0e7f29.ts.net:8443",
+        None,
+    ],
+)
+def test_secret_routes_take_the_boards_own_names(web_cli, host):
+    """
+    .. test:: The secret-bearing routes take an IPv4 literal, a .local name, a .ts.net name or no Host
+       :id: T_FW_SECRET_ROUTES_HOST_OK
+       :links: R_FW_SETTINGS_BACKUP, R_FW_HUB_APP_FILE
+    """
+    rs, _ = script(
+        web_cli,
+        *_full_store(),
+        ("POST", "/api/backup", CONFIRM, "", host),
+        ("POST", "/api/hub_app", CONFIRM, "", host),
+    )
+    assert [r.status for r in rs[-2:]] == [200, 200]
+    rs, _ = script(web_cli, *_HOTSPOT, ("POST", "/api/restore", _wifi_backup(), "", host))
+    assert rs[-1].status == 200
