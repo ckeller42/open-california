@@ -354,7 +354,12 @@ def test_a_cabin_that_still_cools_kicks_again():
 
 
 def test_overheat_and_hot_hold_come_before_the_kick():
-    """``OVERHEAT`` during a kick still reports, the kick does not hide it."""
+    """``OVERHEAT`` during a kick still reports, the kick does not hide it.
+
+    .. test:: Thermostat overheat comes before the cooling kick
+       :id: T_THERMOSTAT_KICK_OVERHEAT
+       :links: R_THERMOSTAT_CONTROL
+    """
     assert (
         th.control(1700 + CFG["overheat"] + 1, None, 1700, 60000, _kicked(5), CFG, 10, 60000)[2] == "OVERHEAT"
     )
@@ -1256,9 +1261,44 @@ def test_step_keeps_the_kick_in_line_with_the_level_sent():
     assert out["reason"] == "LEVEL_DOWN" and out["cmds"][0][1] >= 6 and st["ctl"]["kick_since_ms"] is None
 
 
+def test_a_late_level_10_still_gets_the_whole_kick():
+    """A level-10 command that the heater applies late (BUSY retries for longer than ``kick_ms``) holds
+    level 10 for ``kick_ms`` from the step that reads level 10 back.
+
+    .. test:: Thermostat cooling kick counts from the applied level
+       :id: T_THERMOSTAT_KICK_LATE_APPLY
+       :links: R_THERMOSTAT_CONTROL
+    """
+    out, st = _auto(ref=_ref(1700))
+    for k, t in enumerate((1690, 1680, 1670), 1):
+        out, st = _step(st, now_ms=k * P, heater=RUN, ref=_ref(t))
+        if out["reason"] == "COOLING_MAX":
+            break
+    now, busy = k * P, {"what": "level", "result": "BUSY"}
+    while now < k * P + CFG["kick_ms"] + P:
+        now += P
+        out, st = _step(st, now_ms=now, heater=RUN, ref=_ref(t), cmd=busy)
+        assert out["cmds"] == [("level", 10)], out
+    at10, applied = {**RUN, "HeatingLevel": 10}, now + P
+    out, st = _step(st, now_ms=applied, heater=at10, ref=_ref(t))
+    assert st["pending"] is None and st["ctl"]["kick_since_ms"] == applied and out["cmds"] == []
+    now = applied
+    while now + P < applied + CFG["kick_ms"]:
+        now += P
+        out, st = _step(st, now_ms=now, heater=at10, ref=_ref(t))
+        assert out["cmds"] == [], out
+    out, _ = _step(st, now_ms=now + P, heater=at10, ref=_ref(t))
+    assert out["reason"] == "LEVEL_DOWN"
+
+
 def test_a_kick_ends_when_the_heater_is_not_at_level_10():
     """A heater moved off level 10 (minimum level on a lost reference, a hold at the minimum) ends the kick:
-    the controller does not jump back to the level before it."""
+    the controller does not jump back to the level before it.
+
+    .. test:: Thermostat cooling kick ends off level 10
+       :id: T_THERMOSTAT_KICK_OFF_10
+       :links: R_THERMOSTAT_CONTROL
+    """
     kicked = _kicked(8)
     for cur in (1, 5):
         got = th.control(1690, None, 1700, 60000, kicked, CFG, cur, CFG["kick_ms"])

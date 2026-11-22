@@ -109,6 +109,9 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.test_thermostat.test_kick_holds_level_10_then_returns_to_the_demand_or_the_level_before
 .. autofunction:: tests.test_thermostat.test_a_cabin_that_still_cools_kicks_again
 .. autofunction:: tests.test_thermostat.test_above_the_target_a_step_down_ignores_the_dwell
+.. autofunction:: tests.test_thermostat.test_overheat_and_hot_hold_come_before_the_kick
+.. autofunction:: tests.test_thermostat.test_a_kick_ends_when_the_heater_is_not_at_level_10
+.. autofunction:: tests.test_thermostat.test_a_late_level_10_still_gets_the_whole_kick
 .. autofunction:: tests.test_thermostat.test_steady_fall_of_0_3_k_per_5_min_reaches_the_threshold
 .. autofunction:: tests.test_thermostat.test_step_sends_level_10_on_a_cooling_cabin_inside_the_dwell
 .. autofunction:: tests.test_thermostat.test_step_keeps_the_kick_in_line_with_the_level_sent

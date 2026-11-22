@@ -423,6 +423,8 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             st->has_pending = 0;
             st->has_expect = 1;
             st->expect = snap;
+            if (is(p->what, "level") && st->ctl.kick_since_ms != NONE_MS)
+                st->ctl.kick_since_ms = now; /* the kick counts from the heater at 10, not from the send */
         } else if (faulty) {
             /* rule (3) ends AUTO with the fault's reason */
         } else if (is(p->what, "level") && is(res, "REFUSED") && owner_off) {

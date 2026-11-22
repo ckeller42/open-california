@@ -184,7 +184,8 @@ def control(
        own control pause (it stops burning at a low level and starts again only when its own sensor
        is cold or the level rises): while ``t_ref < target - band_lo`` the level shall not fall, and
        while ``t_ref < target`` and the smoothed rate is at or below ``-cool_rate`` it shall be set
-       to 10 at once (``COOLING_MAX``), past the dwell and the hysteresis, for ``kick_ms`` (a kick:
+       to 10 at once (``COOLING_MAX``), past the dwell and the hysteresis, for ``kick_ms`` from the
+       step that reads level 10 back (a kick:
        the integrator and the rate stay as they are). During the kick the level shall hold at 10, and a
        cabin that still cools shall start the kick again. When the kick ends the level shall go at once
        to the higher of the demand's level and the level before the kick. At or above the target a lower
@@ -704,6 +705,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             return out("FOREIGN_CHANGE")
         if snap is not None and post and _applied(p, snap):
             st["pending"], st["expect"] = None, snap
+            if p["what"] == "level" and st["ctl"]["kick_since_ms"] is not None:
+                st["ctl"]["kick_since_ms"] = now  # the kick counts from the heater at 10, not from the send
         elif hs in _FAULTS:
             pass  # rule (3) ends AUTO with the fault's reason
         elif p["what"] == "level" and res == "REFUSED" and owner_off:

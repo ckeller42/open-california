@@ -1499,7 +1499,8 @@ the cabin is cold:
   cold cabin warms, and the lower level sends the heater into its pause.
 - **Highest level on a cooling cabin.** While the reference is below the target and the smoothed
   `rate` is at or below `-cool_rate`, the controller sends level 10 at once (`COOLING_MAX`), also
-  inside the dwell time and the hysteresis. This is a kick: level 10 holds for `kick_ms`, and the
+  inside the dwell time and the hysteresis. This is a {term}`kick`: level 10 holds for `kick_ms` from
+  the moment the heater shows it, and the
   integrator, the demand and the rate stay as the controller computes them. A cabin that still cools
   during the kick starts it again. When the kick ends, the level goes at once to the demand's level,
   but not below the level before the kick, so the rule above holds against that level and not
