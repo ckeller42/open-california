@@ -45,6 +45,7 @@ THERMO_DEFAULTS: dict[str, int] = {
     "night_confirm_ms": 30000,  # ms (Dauerbetrieb counts after it held this long)
     "band_lo": 30,  # centi-°C (below target - band_lo the level never falls)
     "cool_rate": 5,  # centi-°C per minute, smoothed (a fall this fast below the target: level 10)
+    "kick_ms": 300000,  # ms (level 10 on a cooling cabin holds this long, then the demand acts again)
 }
 
 #: The demand acts on the reference this many minutes ahead: the cabin keeps rising for minutes after
@@ -183,17 +184,23 @@ def control(
        own control pause (it stops burning at a low level and starts again only when its own sensor
        is cold or the level rises): while ``t_ref < target - band_lo`` the level shall not fall, and
        while ``t_ref < target`` and the smoothed rate is at or below ``-cool_rate`` it shall be set
-       to 10 at once (``COOLING_MAX``), past the dwell and the hysteresis, with the integrator set
-       so that the demand is level 10 (:func:`track`); at level 10 it shall hold. All arithmetic is integer; division uses
-       :func:`_rdiv`.
+       to 10 at once (``COOLING_MAX``), past the dwell and the hysteresis, for ``kick_ms`` from the
+       step that reads level 10 back (a kick:
+       the integrator and the rate stay as they are). During the kick the level shall hold at 10, and a
+       cabin that still cools shall start the kick again. When the kick ends the level shall go at once
+       to the higher of the demand's level and the level before the kick. At or above the target a lower
+       level shall be sent without waiting for ``min_dwell_ms`` (the hysteresis still applies).
+       ``OVERHEAT`` and ``TARGET_EXCEEDED_AT_MIN_LEVEL`` come before all of this. All arithmetic is
+       integer; division uses :func:`_rdiv`.
 
     :param t_ref: reference temperature in centi-°C.
     :param t_out: outside temperature in centi-°C, or ``None`` (no feed-forward).
     :param target: target temperature in centi-°C.
     :param dt_ms: time since the previous step in ms.
-    :param ctl: controller state ``{i, last_change_ms, hot_since_ms, u, u_out, t_prev, rate}``; not
-        modified. ``u_out`` is ``None`` while no outside reading is used; ``t_prev`` is the previous
-        step's ``t_ref`` (``None``: no rate yet), ``rate`` the smoothed rise in centi-°C per minute.
+    :param ctl: controller state ``{i, last_change_ms, hot_since_ms, u, u_out, t_prev, rate, kick_since_ms,
+        kick_from}``; not modified. ``u_out`` is ``None`` while no outside reading is used; ``t_prev`` is the
+        previous step's ``t_ref`` (``None``: no rate yet), ``rate`` the smoothed rise in centi-°C per minute;
+        ``kick_since_ms`` the start of a running kick (``None``: none), ``kick_from`` the level before it.
     :param cfg: settings dict (:data:`THERMO_DEFAULTS` keys).
     :param cur_level: the heater's current level 1..10, or ``None`` when unknown.
     :param now_ms: current time in ms.
@@ -232,20 +239,43 @@ def control(
         return None, new, "OVERHEAT"
     if hot_since is not None and now_ms - hot_since >= cfg["hot_hold_ms"]:
         return None, new, "TARGET_EXCEEDED_AT_MIN_LEVEL"
+    kicking = (
+        ctl["kick_since_ms"] is not None and cur_level == 10
+    )  # a kick lasts only while the heater is at 10
+    if not kicking:
+        new.update(kick_since_ms=None, kick_from=None)
     if t_ref < target and rate <= -cfg["cool_rate"]:
         if cur_level == 10:
-            return None, new, "HOLD"  # still cooling: no step down from full heat
-        # the heater may sit in its own pause while the cabin cools: full heat now
-        new = {**track(new, 10, t_ref, target, cfg), "u": 10000, "last_change_ms": now_ms}
+            if kicking:
+                new["kick_since_ms"] = now_ms  # still cooling: the kick starts again
+            return None, new, "HOLD"  # no step down from full heat
+        # the heater may sit in its own pause while the cabin cools: a kick at full heat, the PI state kept
+        new.update(
+            kick_since_ms=now_ms, kick_from=ctl["kick_from"] if kicking else cur_level, last_change_ms=now_ms
+        )
         return 10, new, "COOLING_MAX"
     level = min(max(_rdiv(u, 1000), cfg["min_level"]), 10)
+    if kicking:
+        if now_ms - ctl["kick_since_ms"] < cfg["kick_ms"]:
+            return None, new, "HOLD"
+        # the kick ends: back to the demand, never below the level before the kick
+        new.update(kick_since_ms=None, kick_from=None)
+        level = max(level, ctl["kick_from"] or 0)
+        if cur_level is None or level == cur_level:
+            return None, new, "HOLD"
+        new["last_change_ms"] = now_ms
+        return level, new, "LEVEL_UP" if level > cur_level else "LEVEL_DOWN"
     if cur_level is None:
         return level, new, "LEVEL_UP"
     if (
         level == cur_level
         or (level < cur_level and t_ref < target - cfg["band_lo"])  # no step down while cold
         or abs(u - cur_level * 1000) < 500 + cfg["hyst"]
-        or now_ms - ctl["last_change_ms"] < cfg["min_dwell_ms"]
+        # the dwell; at or above the target a step down goes at once (the cabin overshoots while it waits)
+        or (
+            now_ms - ctl["last_change_ms"] < cfg["min_dwell_ms"]
+            and not (level < cur_level and t_ref >= target)
+        )
     ):
         return None, new, "HOLD"
     new["last_change_ms"] = now_ms
@@ -261,10 +291,11 @@ def track(ctl: dict, cur_level: int, t_ref: int, target: int, cfg: dict) -> dict
     :param target: target temperature in centi-°C.
     :param cfg: settings dict.
     :returns: a copy of ``ctl`` whose integrator makes ``p + i + u_out == cur_level * 1000``, with
-        the rate reset (``t_prev`` ``None``), so the next step has no lead either.
+        the rate reset (``t_prev`` ``None``), so the next step has no lead either, and no kick.
     """
     p = _rdiv(cfg["kp"] * (target - t_ref), 100)
-    return {**ctl, "i": cur_level * 1000 - p - (ctl["u_out"] or 0), "t_prev": None, "rate": 0}
+    i = cur_level * 1000 - p - (ctl["u_out"] or 0)
+    return {**ctl, "i": i, "t_prev": None, "rate": 0, "kick_since_ms": None, "kick_from": None}
 
 
 _FAULTS = ("FAULT", "LOCKED", "BLOCKED")
@@ -290,6 +321,8 @@ def initial_state(resume: bool = False) -> dict:
             "u_out": None,
             "t_prev": None,
             "rate": 0,
+            "kick_since_ms": None,
+            "kick_from": None,
         },
         "pending": None,
         "expect": None,
@@ -405,6 +438,8 @@ def _takeover(
         "u_out": 0,
         "t_prev": None,
         "rate": 0,
+        "kick_since_ms": None,
+        "kick_from": None,
     }
     st["ctl"] = ctl0
     if t_ref is None:
@@ -670,6 +705,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             return out("FOREIGN_CHANGE")
         if snap is not None and post and _applied(p, snap):
             st["pending"], st["expect"] = None, snap
+            if p["what"] == "level" and st["ctl"]["kick_since_ms"] is not None:
+                st["ctl"]["kick_since_ms"] = now  # the kick counts from the heater at 10, not from the send
         elif hs in _FAULTS:
             pass  # rule (3) ends AUTO with the fault's reason
         elif p["what"] == "level" and res == "REFUSED" and owner_off:
@@ -765,6 +802,8 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
             "u_out": 0,
             "t_prev": None,
             "rate": 0,
+            "kick_since_ms": None,
+            "kick_from": None,
         }
         st.update(
             mode="AUTO",
@@ -877,7 +916,7 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
     # (8) control: once per period, frozen while a command is pending
     if st["pending"] is not None or now - st["last_ctl_ms"] < cfg["period_ms"]:
         return out(reason or "AUTO_ON")
-    old_change = st["ctl"]["last_change_ms"]
+    old_change, old_kick = st["ctl"]["last_change_ms"], (st["ctl"]["kick_since_ms"], st["ctl"]["kick_from"])
     lvl, ctl, why = control(t_ref, t_out, target, now - st["last_ctl_ms"], st["ctl"], cfg, level, now)
     st["ctl"], st["last_ctl_ms"] = ctl, now
     if why in ("OVERHEAT", "TARGET_EXCEEDED_AT_MIN_LEVEL") and hs == "CONTINUOUS":
@@ -898,4 +937,6 @@ def step(inp: dict, cfg: dict, st: dict) -> tuple[dict, dict]:
         ctl["last_change_ms"] = now
         return out(why)
     ctl["last_change_ms"] = old_change  # nothing sent: the dwell does not restart
+    if lvl is not None:  # a level not sent: a kick did not start or end
+        ctl["kick_since_ms"], ctl["kick_from"] = old_kick
     return out("OUTSIDE_INACTIVE" if inp["outside_on"] and t_out is None else "HOLD")

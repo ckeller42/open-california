@@ -66,6 +66,7 @@ def test_settings_and_reasons():
         "min_level": 1, "stale_after_ms": 600000, "heater_stale_ms": 180000, "batt_min_dv": 119,
         "batt_hold_ms": 300000, "verify_ms": 10000, "runtime_min": 120,
         "night_wait_ms": 300000, "night_confirm_ms": 30000, "band_lo": 30, "cool_rate": 5,
+        "kick_ms": 300000,
     }  # fmt: skip
     assert (th.TARGET_MIN, th.TARGET_MAX, th.TARGET_STEP) == (500, 3000, 50)
     assert len(set(th.REASONS)) == len(th.REASONS)
@@ -92,6 +93,8 @@ def _ctl(**kw):
         "u_out": 0,
         "t_prev": None,
         "rate": 0,
+        "kick_since_ms": None,
+        "kick_from": None,
         **kw,
     }
 
@@ -254,8 +257,7 @@ def test_cooling_below_the_target_goes_to_level_10():
     inside_dwell = {"last_change_ms": -60000}
     lvl, ctl, why = th.control(1500, 700, 1600, 60000, {**_falling(1500, cool, 4), **inside_dwell}, CFG, 4, 0)
     assert (lvl, why, ctl["last_change_ms"]) == (10, "COOLING_MAX", 0)
-    assert (ctl["u"], ctl["t_prev"], ctl["rate"]) == (10000, None, 0)
-    assert th.control(1500, 700, 1600, 0, ctl, CFG, 10, 0)[1]["u"] == 10000  # the integrator holds 10
+    assert (ctl["kick_since_ms"], ctl["kick_from"], ctl["t_prev"], ctl["rate"]) == (0, 4, 1500, -cool)
     # just below the target too, and with an unknown level
     assert th.control(1599, None, 1600, 60000, _falling(1599, cool, 2), CFG, 2, 0)[2] == "COOLING_MAX"
     assert th.control(1599, None, 1600, 60000, _falling(1599, cool, 2), CFG, None, 0)[:3:2] == (
@@ -270,6 +272,120 @@ def test_cooling_below_the_target_goes_to_level_10():
     low = {**_falling(1590, cool, 10), "i": 0}
     assert th._rdiv(th.control(1590, None, 1600, 60000, low, CFG, 10, 0)[1]["u"], 1000) < 9
     assert th.control(1590, None, 1600, 60000, low, CFG, 10, 0)[:3:2] == (None, "HOLD")
+
+
+def test_cooling_max_is_a_kick_that_keeps_the_pi_state():
+    """``COOLING_MAX`` is a kick: the integrator, the demand and the rate are those of the plain PI step.
+
+    .. test:: Thermostat cooling kick keeps the controller state
+       :id: T_THERMOSTAT_KICK_KEEPS_PI
+       :links: R_THERMOSTAT_CONTROL
+    """
+    ctl0 = _falling(1650, CFG["cool_rate"], 4, target=1700)
+    lvl, kick, why = th.control(1650, 600, 1700, 60000, ctl0, CFG, 4, 0)
+    _, plain, _ = th.control(1650, 600, 1700, 60000, ctl0, {**CFG, "cool_rate": 10**6}, 4, 0)
+    assert (lvl, why) == (10, "COOLING_MAX")
+    assert {k: kick[k] for k in ("i", "u", "u_out", "t_prev", "rate")} == {
+        k: plain[k] for k in ("i", "u", "u_out", "t_prev", "rate")
+    }
+    assert th._rdiv(kick["u"], 1000) < 10  # the demand is not re-seated to level 10
+
+
+def _kicked(level_before, t_ref=1690, target=1700, since=0):
+    """Controller state in a kick that started at ``since`` from ``level_before``, with a steady cabin."""
+    return {
+        **th.track(_ctl(), level_before, t_ref, target, CFG),
+        "t_prev": t_ref,
+        "kick_since_ms": since,
+        "kick_from": level_before,
+        "last_change_ms": since,
+    }
+
+
+def test_kick_holds_level_10_then_returns_to_the_demand_or_the_level_before():
+    """The kick holds level 10 for ``kick_ms``; then the level is max(demand, level before the kick) at once.
+
+    .. test:: Thermostat cooling kick ends at the higher of demand and level before
+       :id: T_THERMOSTAT_KICK_END
+       :links: R_THERMOSTAT_CONTROL
+    """
+    k = CFG["kick_ms"]
+    # during the kick: hold 10, the kick runs on
+    lvl, ctl, why = th.control(1690, None, 1700, 60000, _kicked(5), CFG, 10, k - 60000)
+    assert (lvl, why, ctl["kick_since_ms"]) == (None, "HOLD", 0)
+    # the kick ends just below the target: the demand is about 5, the level before 5: back to 5
+    lvl, ctl, why = th.control(1690, None, 1700, 60000, _kicked(5), CFG, 10, k)
+    assert (lvl, why, ctl["kick_since_ms"], ctl["kick_from"], ctl["last_change_ms"]) == (
+        5,
+        "LEVEL_DOWN",
+        None,
+        None,
+        k,
+    )
+    # the cabin warmed during the kick: the demand is low, but never below the level before (rule 1)
+    cold = {**_kicked(8, t_ref=1600), "i": 0}  # the demand is about level 2
+    lvl, ctl, why = th.control(1600, None, 1700, 60000, cold, CFG, 10, k)
+    assert th._rdiv(ctl["u"], 1000) < 8 and (lvl, why) == (8, "LEVEL_DOWN")
+    # a high demand wins over the level before
+    lvl, _, why = th.control(1500, None, 1700, 60000, {**_kicked(3, t_ref=1500), "i": 4000}, CFG, 10, k)
+    assert (lvl, why) == (7, "LEVEL_DOWN")
+    # the demand at 10: the level stays
+    lvl, ctl, why = th.control(1500, None, 1700, 60000, {**_kicked(3, t_ref=1500), "i": 20000}, CFG, 10, k)
+    assert (lvl, why, ctl["kick_since_ms"]) == (None, "HOLD", None)
+
+
+def test_a_cabin_that_still_cools_kicks_again():
+    """A fall during the kick restarts it; a fall after it ended starts a new kick.
+
+    .. test:: Thermostat cooling kick starts again on a falling cabin
+       :id: T_THERMOSTAT_KICK_AGAIN
+       :links: R_THERMOSTAT_CONTROL
+    """
+    k, cool = CFG["kick_ms"], CFG["cool_rate"]
+    falling = {**_kicked(5), "t_prev": 1690 + cool, "rate": -cool}
+    lvl, ctl, why = th.control(1690, None, 1700, 60000, falling, CFG, 10, k - 60000)
+    assert (lvl, why, ctl["kick_since_ms"], ctl["kick_from"]) == (None, "HOLD", k - 60000, 5)
+    lvl, ctl, why = th.control(1690, None, 1700, 60000, ctl, CFG, 10, k)
+    assert (lvl, why) == (None, "HOLD") and ctl["kick_since_ms"] is not None  # the new kick holds on
+    # after the kick: level 5, the cabin falls again: a new kick from 5
+    after = {**_falling(1690, cool, 5, target=1700), "last_change_ms": k}
+    lvl, ctl, why = th.control(1690, None, 1700, 60000, after, CFG, 5, k + 60000)
+    assert (lvl, why, ctl["kick_since_ms"], ctl["kick_from"]) == (10, "COOLING_MAX", k + 60000, 5)
+
+
+def test_overheat_and_hot_hold_come_before_the_kick():
+    """``OVERHEAT`` during a kick still reports, the kick does not hide it.
+
+    .. test:: Thermostat overheat comes before the cooling kick
+       :id: T_THERMOSTAT_KICK_OVERHEAT
+       :links: R_THERMOSTAT_CONTROL
+    """
+    assert (
+        th.control(1700 + CFG["overheat"] + 1, None, 1700, 60000, _kicked(5), CFG, 10, 60000)[2] == "OVERHEAT"
+    )
+
+
+def test_above_the_target_a_step_down_ignores_the_dwell():
+    """At or above the target a lower level goes out inside ``min_dwell_ms``; below it and upward the dwell holds.
+
+    .. test:: Thermostat fast step down above the target
+       :id: T_THERMOSTAT_FAST_DOWN_ABOVE
+       :links: R_THERMOSTAT_CONTROL
+    """
+    in_dwell = {"last_change_ms": -60000}
+    # 0.5 K above 17.0 C at level 8, rising: the demand is far lower
+    lvl, _, why = th.control(1750, None, 1700, 60000, {**_rising(1750, 8, 1700), **in_dwell}, CFG, 8, 0)
+    assert why == "LEVEL_DOWN" and lvl < 8
+    lvl, _, why = th.control(1700, None, 1700, 60000, {**_rising(1700, 8, 1700), **in_dwell}, CFG, 8, 0)
+    assert why == "LEVEL_DOWN" and lvl < 8  # at the target too
+    # just below the target (inside band_lo) the dwell still holds
+    lvl, _, why = th.control(1699, None, 1700, 60000, {**_rising(1699, 8, 1700), **in_dwell}, CFG, 8, 0)
+    assert (lvl, why) == (None, "HOLD")
+    # a step up inside the dwell still waits, above the target as well
+    assert th.control(1300, None, 1700, 60000, _ctl(**in_dwell), CFG, 3, 0)[:3:2] == (None, "HOLD")
+    # the hysteresis still applies above the target
+    near = {**th.track(_ctl(), 8, 1700, 1700, CFG), "t_prev": 1700, **in_dwell, "i": 8000 - 900}
+    assert th.control(1700, None, 1700, 60000, near, CFG, 8, 0)[:3:2] == (None, "HOLD")
 
 
 def test_steady_fall_of_0_3_k_per_5_min_reaches_the_threshold():
@@ -298,7 +414,8 @@ def test_van_replay_holds_and_reaches_level_10():
 
     The recorded AUTO run started at level 2, sat in the heater's own pause and stepped up one level at
     a time. Replayed through :func:`calictl.thermostat.control` (the heater taken to follow each command),
-    the level never falls while the reference is below 15.7 C, and a fall of 0.3 K in 5 min gets level 10
+    the level never falls while the reference is below 15.7 C (a kick at level 10 ends at the level
+    before it or higher), and a fall of 0.3 K in 5 min gets level 10
     within one control period.
 
     .. test:: Thermostat replay of the van run 2026-11-21
@@ -312,9 +429,10 @@ def test_van_replay_holds_and_reaches_level_10():
     level, ctl, _ = th.control(t[0], rows[0]["t_out"], target, 0, ctl0, CFG, None, 0)
     levels = [level]
     for k, r in enumerate(rows[1:], 1):
+        floor = level if ctl["kick_since_ms"] is None else ctl["kick_from"]  # a kick ends at its level before
         new, ctl, _ = th.control(r["t_ref"], r["t_out"], target, 60000, ctl, CFG, level, k * 60000)
         if new is not None:
-            assert new >= level or r["t_ref"] >= target - CFG["band_lo"], (r["time"], level, new)
+            assert new >= floor or r["t_ref"] >= target - CFG["band_lo"], (r["time"], level, new)
             level = new
         levels.append(level)
     drops = [k for k in range(5, len(t)) if t[k - 5] - t[k] >= 30 and t[k] < target]
@@ -322,6 +440,42 @@ def test_van_replay_holds_and_reaches_level_10():
     for k in drops:
         assert 10 in levels[k : k + 2], (rows[k]["time"], levels[k - 5 : k + 2])
     assert max(levels) == 10 and levels[-1] == 10
+
+
+def test_van_replay_2026_11_22_kick_and_fast_step_down():
+    """Replay of the van night 2026-11-22 01:03-10:01 (target 17.0 C, continuous heating, outside 3-8 C).
+
+    The file holds the recorded levels, which are the old controller's: each ``COOLING_MAX`` re-seated
+    the integrator to level 10, and the level then fell one step per dwell while the cabin rose past
+    the target to 18.5 C. Replayed open loop (the heater follows each command, the recorded reference),
+    every recorded ``COOLING_MAX`` still sends level 10, the kick ends within ``kick_ms`` after the
+    last fall, and the level-minutes above level 6 at or above the target drop to an eighth.
+
+    .. test:: Thermostat replay of the van night 2026-11-22
+       :id: T_THERMOSTAT_VAN_REPLAY_KICK
+       :links: R_THERMOSTAT_CONTROL
+    """
+    path = pathlib.Path(__file__).parent / "data" / "thermostat-van-2026-11-22.ndjson"
+    head, *rows = [json.loads(line) for line in path.read_text().splitlines()]
+    target = head["target"]
+    level = rows[0][3]
+    ctl = th.track(_ctl(), level, rows[0][1], target, CFG)
+    levels, kicks = [level], []
+    for prev, (s, t_ref, t_out, _) in zip(rows, rows[1:]):
+        new, ctl, why = th.control(t_ref, t_out, target, (s - prev[0]) * 1000, ctl, CFG, level, s * 1000)
+        if why == "COOLING_MAX":
+            kicks.append(len(levels))
+        level = new if new is not None else level
+        levels.append(level)
+    recorded = [r[3] for r in rows]
+    assert [k for k in range(1, len(rows)) if recorded[k] == 10 and recorded[k - 1] < 10] == kicks
+    for k in kicks:  # 10 for at least kick_ms, then off 10 within 15 min (a still falling cabin kicks again)
+        assert levels[k : k + 5] == [10] * 5 and 10 not in levels[k + 15 : k + 30], levels[k : k + 30]
+
+    def above6(lv):
+        return sum(max(0, x - 6) for x, r in zip(lv, rows) if r[1] >= target)
+
+    assert (above6(recorded), above6(levels)) == (275, 34)
 
 
 # --- session machine (step) ---------------------------------------------------------------
@@ -1072,6 +1226,94 @@ def test_step_sends_level_10_on_a_cooling_cabin_inside_the_dwell():
             break
     assert k * P < CFG["min_dwell_ms"]
     assert (out["mode"], out["reason"], out["cmds"]) == ("AUTO", "COOLING_MAX", [("level", 10)])
+
+
+def test_step_keeps_the_kick_in_line_with_the_level_sent():
+    """A kick starts and ends only with the level it sends: with the link down nothing changes.
+
+    .. test:: Thermostat session kick follows the sent level
+       :id: T_THERMOSTAT_KICK_STEP
+       :links: R_THERMOSTAT_CONTROL
+    """
+    out, st = _auto(ref=_ref(1700))
+    for k, t in enumerate((1690, 1680, 1670), 1):
+        before = st
+        out, st = _step(st, now_ms=k * P, heater=RUN, ref=_ref(t))
+        if out["reason"] == "COOLING_MAX":
+            break
+    assert out["cmds"] == [("level", 10)] and st["ctl"]["kick_from"] == 6
+    # the same step with the link down: no level, no kick
+    down, st_down = _step(before, now_ms=k * P, heater=RUN, ref=_ref(t), link_ready=False)
+    assert down["cmds"] == [] and (st_down["ctl"]["kick_since_ms"], st_down["ctl"]["kick_from"]) == (
+        None,
+        None,
+    )
+    # the heater at 10, the cabin steady: the kick holds, then ends; with the link down it stays on
+    at10 = {**RUN, "HeatingLevel": 10}
+    now = k * P
+    while now + P < k * P + CFG["kick_ms"]:
+        now += P
+        out, st = _step(st, now_ms=now, heater=at10, ref=_ref(t))
+        assert out["cmds"] == [], out
+    down, st_down = _step(st, now_ms=now + P, heater=at10, ref=_ref(t), link_ready=False)
+    assert down["cmds"] == [] and st_down["ctl"]["kick_from"] == 6
+    out, st = _step(st_down, now_ms=now + 2 * P, heater=at10, ref=_ref(t))
+    assert out["reason"] == "LEVEL_DOWN" and out["cmds"][0][1] >= 6 and st["ctl"]["kick_since_ms"] is None
+
+
+def test_a_late_level_10_still_gets_the_whole_kick():
+    """A level-10 command that the heater applies late (BUSY retries for longer than ``kick_ms``) holds
+    level 10 for ``kick_ms`` from the step that reads level 10 back.
+
+    .. test:: Thermostat cooling kick counts from the applied level
+       :id: T_THERMOSTAT_KICK_LATE_APPLY
+       :links: R_THERMOSTAT_CONTROL
+    """
+    out, st = _auto(ref=_ref(1700))
+    for k, t in enumerate((1690, 1680, 1670), 1):
+        out, st = _step(st, now_ms=k * P, heater=RUN, ref=_ref(t))
+        if out["reason"] == "COOLING_MAX":
+            break
+    now, busy = k * P, {"what": "level", "result": "BUSY"}
+    while now < k * P + CFG["kick_ms"] + P:
+        now += P
+        out, st = _step(st, now_ms=now, heater=RUN, ref=_ref(t), cmd=busy)
+        assert out["cmds"] == [("level", 10)], out
+    at10, applied = {**RUN, "HeatingLevel": 10}, now + P
+    out, st = _step(st, now_ms=applied, heater=at10, ref=_ref(t))
+    assert st["pending"] is None and st["ctl"]["kick_since_ms"] == applied and out["cmds"] == []
+    now = applied
+    while now + P < applied + CFG["kick_ms"]:
+        now += P
+        out, st = _step(st, now_ms=now, heater=at10, ref=_ref(t))
+        assert out["cmds"] == [], out
+    out, _ = _step(st, now_ms=now + P, heater=at10, ref=_ref(t))
+    assert out["reason"] == "LEVEL_DOWN"
+
+
+def test_a_kick_ends_when_the_heater_is_not_at_level_10():
+    """A heater moved off level 10 (minimum level on a lost reference, a hold at the minimum) ends the kick:
+    the controller does not jump back to the level before it.
+
+    .. test:: Thermostat cooling kick ends off level 10
+       :id: T_THERMOSTAT_KICK_OFF_10
+       :links: R_THERMOSTAT_CONTROL
+    """
+    kicked = _kicked(8)
+    for cur in (1, 5):
+        got = th.control(1690, None, 1700, 60000, kicked, CFG, cur, CFG["kick_ms"])
+        plain = th.control(
+            1690,
+            None,
+            1700,
+            60000,
+            {**kicked, "kick_since_ms": None, "kick_from": None},
+            CFG,
+            cur,
+            CFG["kick_ms"],
+        )
+        assert got == plain and got[1]["kick_since_ms"] is None
+    assert th.track(kicked, 10, 1690, 1700, CFG)["kick_since_ms"] is None
 
 
 # --- takeover below the target, resume after a reboot --------------------------------------

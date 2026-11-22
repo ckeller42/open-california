@@ -320,7 +320,8 @@ static void step(uint64_t now) {
     X(hyst, 0, I32) X(min_dwell_ms, 1, I32) X(band_hi, 1, I32) X(hot_hold_ms, 1, I32)            \
     X(overheat, 1, I32) X(min_level, 1, 10) X(stale_after_ms, 1, I32) X(heater_stale_ms, 1, I32) \
     X(batt_min_dv, 100, 150) X(batt_hold_ms, 1, I32) X(verify_ms, 1, I32) X(runtime_min, 10, 120)    \
-    X(night_wait_ms, 1, I32) X(night_confirm_ms, 1, I32) X(band_lo, 0, I32) X(cool_rate, 1, I32)
+    X(night_wait_ms, 1, I32) X(night_confirm_ms, 1, I32) X(band_lo, 0, I32) X(cool_rate, 1, I32) \
+    X(kick_ms, 1, I32)
 #define X(m, lo, hi) #m,
 const char *const cali_thermo_cfg_keys[CALI_THERMO_CFG_N] = {CFG_TABLE(X)};
 #undef X
@@ -354,7 +355,7 @@ typedef struct {
     uint8_t ver, pad[3];
     cali_thermo_run_cfg_t c;
 } th_blob_t;
-#define TH_BLOB_VER 3
+#define TH_BLOB_VER 4
 /* Version 1 (no night_wait_ms, night_confirm_ms, night): loaded with those at their defaults, so the
  * settings of an older firmware survive the update. */
 #define TH_V1_CFG_N 17   /* period_ms .. runtime_min: a prefix of cali_thermo_cfg_t */
@@ -366,16 +367,12 @@ typedef struct {
     int outside_on;
 } th_blob_v1_t;
 typedef char th_blob_v1_size[sizeof(th_blob_v1_t) == 132 ? 1 : -1];   /* the layout on the van */
-/* Version 2 (no band_lo, cool_rate): loaded with those at their defaults. */
-#define TH_V2_CFG_N 19   /* period_ms .. night_confirm_ms: a prefix of cali_thermo_cfg_t */
-typedef struct {
-    uint8_t ver, pad[3];
-    int32_t s[TH_V2_CFG_N];
-    int32_t target;
-    char ref[CALI_THERMO_ALIAS_LEN], backup[CALI_THERMO_ALIAS_LEN], out[CALI_THERMO_ALIAS_LEN];
-    int outside_on, night;
-} th_blob_v2_t;
-typedef char th_blob_v2_size[sizeof(th_blob_v2_t) == 144 ? 1 : -1];   /* the layout on the van */
+/* Version 2 (19 settings, no band_lo, cool_rate) and version 3 (21 settings, no kick_ms): the version
+ * byte, 3 pad bytes, the first settings of cali_thermo_cfg_t, then the rest of cali_thermo_run_cfg_t as
+ * now (144 and 152 bytes on the van). Loaded with the newer settings at their defaults. */
+#define TH_RUN_TAIL (sizeof(cali_thermo_run_cfg_t) - sizeof(cali_thermo_cfg_t))   /* target .. night */
+typedef char th_run_tail_size[TH_RUN_TAIL == 64 ? 1 : -1];   /* the layout on the van */
+typedef char th_run_tail_at[offsetof(cali_thermo_run_cfg_t, target) == sizeof(cali_thermo_cfg_t) ? 1 : -1];
 
 static int cfg_valid(const cali_thermo_run_cfg_t *c) {
     cali_thermo_cfg_t s = c->s;
@@ -411,19 +408,13 @@ static int cfg_from_v1(const void *raw, size_t len, cali_thermo_run_cfg_t *c) {
     return 0;
 }
 
-/* a stored version-2 record into *c (the rest at the defaults already there); 0 when it is one */
-static int cfg_from_v2(const void *raw, size_t len, cali_thermo_run_cfg_t *c) {
-    th_blob_v2_t v;
-    if (len != sizeof v) return -1;
-    memcpy(&v, raw, sizeof v);
-    if (v.ver != 2) return -1;
-    memcpy(&c->s, v.s, sizeof v.s);
-    c->target = v.target;
-    memcpy(c->ref, v.ref, sizeof c->ref);
-    memcpy(c->backup, v.backup, sizeof c->backup);
-    memcpy(c->out, v.out, sizeof c->out);
-    c->outside_on = v.outside_on;
-    c->night = v.night;
+/* a stored version-2 or version-3 record into *c (the rest at the defaults already there); 0 when it is one */
+static int cfg_from_v23(const void *raw, size_t len, cali_thermo_run_cfg_t *c) {
+    const uint8_t *b = raw;
+    size_t n = len > 0 && b[0] == 2 ? 19 : len > 0 && b[0] == 3 ? 21 : 0;   /* settings in the record */
+    if (n == 0 || len != 4 + n * sizeof(int32_t) + TH_RUN_TAIL) return -1;
+    memcpy(&c->s, b + 4, n * sizeof(int32_t));
+    memcpy((char *)c + sizeof c->s, b + 4 + n * sizeof(int32_t), TH_RUN_TAIL);   /* target .. night, as now */
     return 0;
 }
 
@@ -443,7 +434,7 @@ void cali_thermo_run_init(void) {
     if (cali_kv_get(CALI_THERMO_CFG_KEY, &blob, &bn) == CALI_KV_OK) {
         if (bn == sizeof blob && blob.ver == TH_BLOB_VER && cfg_valid(&blob.c)) C = blob.c;
         else if (cfg_from_v1(&blob, bn, &old) == 0 && cfg_valid(&old)) C = old;
-        else if (cfg_from_v2(&blob, bn, &old) == 0 && cfg_valid(&old)) C = old;
+        else if (cfg_from_v23(&blob, bn, &old) == 0 && cfg_valid(&old)) C = old;
     }
     s_rev = 0;
     s_reason = NULL;

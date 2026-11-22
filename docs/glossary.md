@@ -361,4 +361,9 @@ Hysteresis
 Dwell
 Dwell time
   The least time between two level changes of the thermostat.
+
+Kick
+  A short time at level 10 that the thermostat sends when the cabin cools below the target. It holds
+  for `kick_ms` from the moment the heater shows level 10; then the level goes back to the demand,
+  but not below the level before the kick.
 ```

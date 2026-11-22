@@ -47,6 +47,7 @@ ODD = {
     "runtime_min": 30,
     "band_lo": 45,
     "cool_rate": 7,
+    "kick_ms": 180000,
 }
 CFGS = [D, ODD]
 
@@ -120,6 +121,7 @@ def flat_st(s):
     )
     return [
         s["mode"], s["active"], c["i"], c["last_change_ms"], c["hot_since_ms"], c["u"], c["u_out"], c["t_prev"], c["rate"],
+        c["kick_since_ms"], c["kick_from"],
         *pend, *_snap(s["expect"]), s["batt_low_since_ms"], *_snap(s["stop_snapshot"]),
         (s["stop_snapshot"] or {}).get("why"), s["last_ctl_ms"],
         s["night"], s["wait_until_ms"], s["cont_since_ms"], s["resume"],
@@ -1097,6 +1099,21 @@ def coverage():
                 else "cooling_max"
             )
         want = min(max(th._rdiv(u, 1000), cfg["min_level"]), 10)
+        if ctl["kick_since_ms"] is not None:
+            if res[2] == "HOLD" and res[1]["kick_since_ms"] == now_ms != ctl["kick_since_ms"]:
+                tags.add("kick_again")
+            elif res[2] == "HOLD" and res[1]["kick_since_ms"] is not None:
+                tags.add("kick_hold")
+            elif res[1]["kick_since_ms"] is None and res[0] is not None:
+                tags.add(
+                    "kick_end_from" if res[0] == ctl["kick_from"] and want < res[0] else "kick_end_demand"
+                )
+        elif (
+            res[2] == "LEVEL_DOWN"
+            and t_ref >= target
+            and now_ms - ctl["last_change_ms"] < cfg["min_dwell_ms"]
+        ):
+            tags.add("fast_down_above")
         if (
             res[2] == "HOLD"
             and cur_level is not None
