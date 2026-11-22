@@ -897,8 +897,8 @@ same release (the channel is read once per request, so a change mid-download can
 Satellite settings' *Firmware update* box has a *Channel* select.
 
 After a downgrade, an older build uses its defaults for a stored record that it cannot read. The
-thermostat settings (kv `th_cfg`) are one such record: a build from before the night settings starts
-with the default thermostat settings, target and thermometer choices.
+thermostat settings (kv `th_cfg`) are one such record: a build older than the stored record (one with
+fewer thermostat settings) starts with the default thermostat settings, target and thermometer choices.
 
 | Partition | Offset | Size |
 |---|---|---|
@@ -1361,9 +1361,9 @@ alias, temperature and age of the reading (a stale reading is marked and cannot 
 - **Outside**: optional. An outside thermometer for the outside compensation. The reference is not offered here.
 
 The sheet also holds the **Outside compensation** switch. The choices, the target, the run time, the
-night setting and the switch persist (kv `th_cfg`); the mode never does. A firmware older than the
-night settings does not read this record: after a downgrade (for example to `esp-stable`) it starts
-with the default settings, target and thermometer choices.
+night setting and the switch persist (kv `th_cfg`); the mode never does. A firmware with fewer
+thermostat settings does not read this record: after a downgrade (for example to `esp-stable`) it
+starts with the default settings, target and thermometer choices.
 
 ### Entering AUTO
 
@@ -1482,7 +1482,9 @@ demand `u = p + i + u_out` in milli-levels from the error `target - (t_ref + 5 �
 The wanted level is the demand divided by 1000 and rounded, kept between `min_level` and 10. The
 level changes only when the demand is at least `500 + hyst` milli-levels away from the current level
 ({term}`hysteresis`) and `min_dwell_ms` has passed since the last change ({term}`dwell time <dwell>`).
-Otherwise the reason is `HOLD`.
+At or above the target a step down does not wait for the dwell time: the cabin keeps rising while a
+high level waits, so the lower level goes out at once (the hysteresis still applies). Steps up, and
+steps down below the target, wait for the dwell time. Otherwise the reason is `HOLD`.
 
 The air heater regulates itself on its own sensor, so a low level is not simply less heat. At a low
 level the heater stops burning: a control pause, with no fault (`ErrorCode` 0) and the run still on.
@@ -1497,9 +1499,14 @@ the cabin is cold:
   cold cabin warms, and the lower level sends the heater into its pause.
 - **Highest level on a cooling cabin.** While the reference is below the target and the smoothed
   `rate` is at or below `-cool_rate`, the controller sends level 10 at once (`COOLING_MAX`), also
-  inside the dwell time and the hysteresis. It sets the integrator so that the demand is level 10,
-  and the rate starts again. At level 10 the level holds while the cabin still cools. A cabin that
-  cools below the target means that the heater does not heat.
+  inside the dwell time and the hysteresis. This is a kick: level 10 holds for `kick_ms`, and the
+  integrator, the demand and the rate stay as the controller computes them. A cabin that still cools
+  during the kick starts it again. When the kick ends, the level goes at once to the demand's level,
+  but not below the level before the kick, so the rule above holds against that level and not
+  against 10. A cooling cabin can start a new kick at any time. A cabin that cools below the target
+  means that the heater does not heat; a kick that set the demand to level 10 instead would hold a
+  high level for many dwell times after the cabin is warm again, and the cabin would rise well
+  past the target.
   The smoothing rounds: a steady fall settles one count short of its real rate, so the default
   `cool_rate` 5 catches a steady fall of 0.3 K in 5 minutes. With a sensor that reports 0.1 K steps,
   one step every 2 to 3 minutes is enough.
@@ -1562,7 +1569,7 @@ A level command is never sent when the link is down. A command that returned `BU
 | `ADOPT_CONTINUOUS` | AUTO took over continuous heating |
 | `AUTO_RESUMED` | After a restart, AUTO took over the heater that still heats ([Resume after a restart](#resume-after-a-restart)) |
 | `LEVEL_UP` / `LEVEL_DOWN` | The level was changed |
-| `COOLING_MAX` | The cabin cools below the target: level 10 was sent |
+| `COOLING_MAX` | The cabin cools below the target: level 10 was sent for `kick_ms` |
 | `HOLD` | The level stays (hysteresis, dwell, equal, or a lower level while the cabin is below the target) |
 | `TARGET_EXCEEDED_AT_MIN_LEVEL` | Warmer than the target at the lowest level for `hot_hold_ms`: stop |
 | `OVERHEAT` | More than `overheat` above the target: stop |
@@ -1613,6 +1620,7 @@ A level command is never sent when the link is down. A command that returned `BU
 | `night_confirm_ms` | 30000 | ms | night mode: continuous heating counts after it held this long |
 | `band_lo` | 30 | centi-째C | below the target minus this, the level never falls |
 | `cool_rate` | 5 | centi-째C per minute | a smoothed fall this fast below the target sends level 10 |
+| `kick_ms` | 300000 | ms | how long that level 10 holds before the demand acts again |
 
 The target is not a setting of this table: 500 to 3000 centi-째C in steps of 50 (default 2000).
 
@@ -1631,8 +1639,8 @@ change and each command result writes one `evt` `thermo` record ([Diagnostics on
 
 `tests/firmware/test_thermostat_e2e.py` runs the real firmware against the mock unit with a
 thermal model of the cabin (`tools/mock_unit.py`) and a Govee advert that follows it. The cabin
-settles within 1 째C of the target, the burner starts once, and the level changes are at least
-`min_dwell_ms` apart. This tests the control logic in a loop; it does not tune the gains for a
+settles within 1 째C of the target, the burner starts once, and each step up comes at least
+`min_dwell_ms` after the last change. This tests the control logic in a loop; it does not tune the gains for a
 real van.
 
 ## Pi wake (`R_FW_PI_WAKE`)

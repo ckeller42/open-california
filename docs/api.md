@@ -104,8 +104,14 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.test_thermostat.test_no_step_down_below_the_target
 .. autofunction:: tests.test_thermostat.test_cooling_below_the_target_goes_to_level_10
 .. autofunction:: tests.test_thermostat.test_van_replay_holds_and_reaches_level_10
+.. autofunction:: tests.test_thermostat.test_van_replay_2026_11_22_kick_and_fast_step_down
+.. autofunction:: tests.test_thermostat.test_cooling_max_is_a_kick_that_keeps_the_pi_state
+.. autofunction:: tests.test_thermostat.test_kick_holds_level_10_then_returns_to_the_demand_or_the_level_before
+.. autofunction:: tests.test_thermostat.test_a_cabin_that_still_cools_kicks_again
+.. autofunction:: tests.test_thermostat.test_above_the_target_a_step_down_ignores_the_dwell
 .. autofunction:: tests.test_thermostat.test_steady_fall_of_0_3_k_per_5_min_reaches_the_threshold
 .. autofunction:: tests.test_thermostat.test_step_sends_level_10_on_a_cooling_cabin_inside_the_dwell
+.. autofunction:: tests.test_thermostat.test_step_keeps_the_kick_in_line_with_the_level_sent
 .. autofunction:: tests.test_thermostat.test_heater_state_table
 .. autofunction:: tests.test_thermostat.test_auto_from_off_sends_runtime_level_power_in_order
 .. autofunction:: tests.test_thermostat.test_adopt_goes_to_demand

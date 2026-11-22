@@ -59,6 +59,8 @@ static void track(cali_thermo_ctl_t *ctl, int32_t cur_level, int32_t t_ref, int3
     ctl->i = (int32_t)((int64_t)cur_level * 1000 - p - (ctl->u_out == NONE ? 0 : ctl->u_out));
     ctl->t_prev = NONE; /* no lead on the next step either */
     ctl->rate = 0;
+    ctl->kick_since_ms = NONE_MS; /* and no kick */
+    ctl->kick_from = NONE;
 }
 
 /* Python control(): updates ctl in place (every caller stores the new ctl); returns the level or NONE. */
@@ -76,7 +78,7 @@ static int32_t control(int32_t t_ref, int32_t t_out, int32_t target, int64_t dt_
     int64_t u_out = t_out == NONE ? NONE : mn(mx(rdiv(cfg->ka * mx(0, (int64_t)target - t_out), 100), 0), cfg->u_out_max);
     int64_t prev = ctl->u_out, ff = u_out == NONE ? 0 : u_out;
     int64_t i = ctl->i, u_old, u, level, dist, last_change = ctl->last_change_ms;
-    int frozen, hot;
+    int frozen, hot, kicking;
     if (cur_level != NONE && (prev == NONE) != (u_out == NONE))
         i += (prev == NONE ? 0 : prev) - ff; /* bumpless: the outside share moves into the integrator */
     u_old = p + i + ff;
@@ -99,19 +101,43 @@ static int32_t control(int32_t t_ref, int32_t t_out, int32_t target, int64_t dt_
         *why = "TARGET_EXCEEDED_AT_MIN_LEVEL";
         return NONE;
     }
+    kicking = ctl->kick_since_ms != NONE_MS && cur_level == 10; /* a kick lasts only while the heater is at 10 */
+    if (!kicking) {
+        ctl->kick_since_ms = NONE_MS;
+        ctl->kick_from = NONE;
+    }
     if (t_ref < target && rate <= -(int64_t)cfg->cool_rate) {
-        if (cur_level == 10) { /* still cooling: no step down from full heat */
-            *why = "HOLD";
+        if (cur_level == 10) {
+            if (kicking) ctl->kick_since_ms = now; /* still cooling: the kick starts again */
+            *why = "HOLD"; /* no step down from full heat */
             return NONE;
         }
-        /* the heater may sit in its own pause while the cabin cools: full heat now */
-        track(ctl, 10, t_ref, target, cfg);
-        ctl->u = 10000;
+        /* the heater may sit in its own pause while the cabin cools: a kick at full heat, the PI state kept */
+        if (!kicking) ctl->kick_from = cur_level;
+        ctl->kick_since_ms = now;
         ctl->last_change_ms = now;
         *why = "COOLING_MAX";
         return 10;
     }
     level = mn(mx(rdiv(u, 1000), cfg->min_level), 10);
+    if (kicking) {
+        int32_t from = ctl->kick_from;
+        if (now - ctl->kick_since_ms < cfg->kick_ms) {
+            *why = "HOLD";
+            return NONE;
+        }
+        /* the kick ends: back to the demand, never below the level before the kick */
+        ctl->kick_since_ms = NONE_MS;
+        ctl->kick_from = NONE;
+        if (from != NONE && from > level) level = from;
+        if (cur_level == NONE || level == cur_level) {
+            *why = "HOLD";
+            return NONE;
+        }
+        ctl->last_change_ms = now;
+        *why = level > cur_level ? "LEVEL_UP" : "LEVEL_DOWN";
+        return (int32_t)level;
+    }
     if (cur_level == NONE) {
         *why = "LEVEL_UP";
         return (int32_t)level;
@@ -119,7 +145,9 @@ static int32_t control(int32_t t_ref, int32_t t_out, int32_t target, int64_t dt_
     dist = u - (int64_t)cur_level * 1000;
     if (dist < 0) dist = -dist;
     if (level == cur_level || (level < cur_level && t_ref < (int64_t)target - cfg->band_lo) /* no step down while cold */
-        || dist < 500 + cfg->hyst || now - last_change < cfg->min_dwell_ms) {
+        || dist < 500 + cfg->hyst
+        /* the dwell; at or above the target a step down goes at once (the cabin overshoots while it waits) */
+        || (now - last_change < cfg->min_dwell_ms && !(level < cur_level && t_ref >= target))) {
         *why = "HOLD";
         return NONE;
     }
@@ -234,6 +262,8 @@ static void takeover(cali_thermo_state_t *st, const cali_thermo_snap_t *snap, in
     ctl0.u_out = 0;
     ctl0.t_prev = NONE;
     ctl0.rate = 0;
+    ctl0.kick_since_ms = NONE_MS;
+    ctl0.kick_from = NONE;
     st->ctl = ctl0;
     if (t_ref == NONE) return;
     lvl = control(t_ref, t_out, in->target, 0, &ctl0, cfg, NONE, now, &w);
@@ -328,6 +358,8 @@ void cali_thermo_init(cali_thermo_state_t *st) {
     st->ctl.hot_since_ms = NONE_MS;
     st->ctl.u_out = NONE; /* no outside reading in use yet */
     st->ctl.t_prev = NONE;
+    st->ctl.kick_since_ms = NONE_MS;
+    st->ctl.kick_from = NONE;
     st->batt_low_since_ms = NONE_MS;
     st->last_ctl_ms = NONE_MS;
     st->wait_until_ms = NONE_MS;
@@ -508,6 +540,8 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
         ctl0.u_out = 0;
         ctl0.t_prev = NONE;
         ctl0.rate = 0;
+        ctl0.kick_since_ms = NONE_MS;
+        ctl0.kick_from = NONE;
         st->mode = CALI_THERMO_AUTO;
         st->active = 0;
         st->has_pending = 0;
@@ -640,7 +674,8 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
     /* (8) control: once per period, frozen while a command is pending */
     if (st->has_pending || now - st->last_ctl_ms < cfg->period_ms) RET(reason ? reason : "AUTO_ON");
     {
-        int64_t old_change = st->ctl.last_change_ms;
+        int64_t old_change = st->ctl.last_change_ms, old_kick_since = st->ctl.kick_since_ms;
+        int32_t old_kick_from = st->ctl.kick_from;
         const char *why;
         int32_t lvl = control(act->value, t_out, target, now - st->last_ctl_ms, &st->ctl, cfg, level, now, &why);
         st->last_ctl_ms = now;
@@ -668,6 +703,10 @@ void cali_thermo_step(const cali_thermo_in_t *in, const cali_thermo_cfg_t *cfg, 
             RET(why);
         }
         st->ctl.last_change_ms = old_change; /* nothing sent: the dwell does not restart */
+        if (lvl != NONE) { /* a level not sent: a kick did not start or end */
+            st->ctl.kick_since_ms = old_kick_since;
+            st->ctl.kick_from = old_kick_from;
+        }
         RET(in->outside_on && t_out == NONE ? "OUTSIDE_INACTIVE" : "HOLD");
     }
 }

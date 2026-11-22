@@ -3327,7 +3327,7 @@ TH_DEFAULT_CFG = {
     "min_dwell_ms": 300000, "band_hi": 200, "hot_hold_ms": 900000, "overheat": 400, "min_level": 1,
     "stale_after_ms": 600000, "heater_stale_ms": 180000, "batt_min_dv": 119, "batt_hold_ms": 300000,
     "verify_ms": 10000, "runtime_min": 120, "night_wait_ms": 300000, "night_confirm_ms": 30000,
-    "band_lo": 30, "cool_rate": 5,
+    "band_lo": 30, "cool_rate": 5, "kick_ms": 300000,
 }  # fmt: skip
 
 
@@ -3462,6 +3462,26 @@ def test_v2_stored_config_survives_the_upgrade(web_cli):
     assert b["cfg"] == {**TH_DEFAULT_CFG, "kp": 2000, "runtime_min": 60, "night_wait_ms": 600000}
 
 
+def test_v3_stored_config_survives_the_upgrade(web_cli):
+    """A version-3 ``th_cfg`` (21 settings) loads with all it holds kept and ``kick_ms`` at its default.
+
+    .. test:: Thermostat config: a version-3 record survives the upgrade
+       :id: T_FW_THERMOSTAT_CFG_V3
+       :links: R_FW_THERMOSTAT_API
+    """
+    import struct
+
+    s21 = [TH_DEFAULT_CFG[k] for k in list(TH_DEFAULT_CFG)[:21]]
+    s21[1], s21[19], s21[20] = 2000, 40, 6  # kp, band_lo, cool_rate
+    blob = struct.pack("<B3x21ii17s17s17sxii", 3, *s21, 1700, b"dach", b"unten", b"outside", 1, 1)
+    assert len(blob) == 152
+    b, _ = th_get(web_cli, extra=["kvhex th_cfg " + blob.hex(), "thinit"])
+    assert (b["target"], b["ref"], b["backup"], b["out"], b["outside_on"], b["night"]) == (
+        1700, "dach", "unten", "outside", True, True,
+    )  # fmt: skip
+    assert b["cfg"] == {**TH_DEFAULT_CFG, "kp": 2000, "band_lo": 40, "cool_rate": 6}
+
+
 def test_auto_refused_while_disabled(web_cli):
     """AUTO is accepted by the API but refused by the step while the switch is off: nothing is sent."""
     rs, other = drive(
@@ -3582,7 +3602,7 @@ def test_cfg_needs_confirm_and_persists(web_cli):
     b = rs[2].json()
     assert (b["cfg"]["kp"], b["cfg"]["min_level"], b["target"], b["runtime_min"]) == (2000, 2, 2150, 60)
     assert b["cfg"]["runtime_min"] == 60
-    assert [ln for ln in other if ln.startswith("KV ")] == ["KV <missing>", "KV \x03"]  # the version byte
+    assert [ln for ln in other if ln.startswith("KV ")] == ["KV <missing>", "KV \x04"]  # the version byte
 
 
 def test_cfg_night_keys_are_accepted(web_cli):

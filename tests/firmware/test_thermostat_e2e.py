@@ -216,13 +216,13 @@ def test_sd_log_has_thermo_records(host_fw, hci_unit):
 def test_closed_loop_reaches_target(host_fw, rec_unit):
     """AUTO against the mock's cabin thermal model (9 C outside, time constant 240 s, 3 C per level): the
     cabin starts at 19.0 C, the Govee advert follows the model, and the regulation settles within 1 C of
-    the 21.0 C target. The burner starts once (no second ``power`` frame) and the level changes at least
-    ``min_dwell_ms`` apart. This tests the control logic in a loop; it does not tune it. The real clock
+    the 21.0 C target. The burner starts once (no second ``power`` frame) and the level steps up at least
+    ``min_dwell_ms`` after the last change (a step down at or above the target does not wait). This tests the control logic in a loop; it does not tune it. The real clock
     runs the model, and the runner rejects a reading that moves faster than 3 C per minute: the cabin is
     slow (time constant 240 s; from 19.0 C it moves 0.5 C per minute at level 4, 1.25 at level 5, 2.0 at level 6)
     so the loop, which stays at level 4, remains inside that rule.
 
-    .. test:: Thermostat closed loop on the host tier: the cabin settles, the dwell holds, the burner starts once
+    .. test:: Thermostat closed loop on the host tier: the cabin settles, the dwell holds before a step up, the burner starts once
        :id: T_THERMOSTAT_CLOSED_LOOP
        :links: R_FW_THERMOSTAT_RUN
     """
@@ -233,6 +233,7 @@ def test_closed_loop_reaches_target(host_fw, rec_unit):
     # The fast test cabin (tau 240 s) needs a higher ki; the shipped default ki 50 is not exercised closed-loop
     # here, and tuning is not covered.
     fw.send("thermo set ki 300")
+    fw.send("thermo set kick_ms %d" % DWELL_MS)  # a kick on the time scale of the test's dwell
     _auto(fw, hu)
     hu.loop.call_soon_threadsafe(
         lambda: hu.loop.create_task(hu.unit.clock())
@@ -257,7 +258,9 @@ def test_closed_loop_reaches_target(host_fw, rec_unit):
     assert _heater_writes(hu).count(_frame(hu, "power", "on")) == 1  # the START only
     levels = {_frame(hu, "level", n): n for n in range(1, 11)}
     rows = [json.loads(s) for s in rec.read_text().splitlines()]
-    at = [r["t"] for r in rows if r.get("ev") == "write" and r.get("hex") in {f.hex() for f in levels}]
+    hexes = {f.hex(): n for f, n in levels.items()}
+    at = [(r["t"], hexes[r["hex"]]) for r in rows if r.get("ev") == "write" and r.get("hex") in hexes]
     assert len(at) >= 2, rows[-10:]
-    # the dwell, less 0.5 s for the scheduling jitter of the host tier (owner tick, mock writes, recorder)
-    assert all(b - a >= DWELL_MS / 1000 - 0.5 for a, b in zip(at, at[1:])), at
+    # the dwell before a step up, less 0.5 s for the scheduling jitter of the host tier (owner tick, mock
+    # writes, recorder)
+    assert all(b[0] - a[0] >= DWELL_MS / 1000 - 0.5 for a, b in zip(at, at[1:]) if b[1] > a[1]), at
