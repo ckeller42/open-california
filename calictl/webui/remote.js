@@ -614,6 +614,30 @@ function rsScanner(onText) {
   return box;
 }
 
+/** The hub QR text in a satellite's app file (POST /api/hub_app: {"format":"oc-app/1","code":"OCH1*…"}), when
+ * parseHubQr takes it; "" for anything else. @param {any} d the parsed file @returns {string} */
+function rsAppFileCode(d) {
+  const code = d && d.format === "oc-app/1" && typeof d.code === "string" ? d.code.trim() : "";
+  return parseHubQr(code) ? code : "";
+}
+
+/** "Load from file" next to the scan: the satellite's oc-app-<van>.json, applied as a scanned van's code. */
+function rsAppFile() {
+  const file = h("input", { type: "file", accept: ".json", id: "rs-appfile", hidden: "" });
+  file.onchange = async () => {
+    const f = file.files && file.files[0];
+    file.value = "";
+    if (!f) return;
+    /** @type {any} */
+    let d = null;
+    try { d = JSON.parse(await f.text()); } catch (e) { /* not JSON: d stays null */ }
+    const code = rsAppFileCode(d);
+    if (!code) { rsMsg = "Not an app file of the satellite (oc-app-….json)."; rsRefresh(); return; }
+    rsRepairQr(code);   // the same path as a scanned van's code
+  };
+  return h("div", null, h("div", { class: "acts" }, h("label", { class: "btn", for: "rs-appfile", id: "rs-appload" }, T("Load from file"))), file);
+}
+
 /** @param {string} v @param {string} phase @returns {HTMLElement} */
 function rsBuild(v, phase) {
   const msg = h("p", { class: "warn", id: "rs-msg", "aria-live": "polite" });
@@ -621,7 +645,7 @@ function rsBuild(v, phase) {
   if (v === "remotescan")
     return card(h("p", null, T("On the satellite, tap the screen once to light it, then hold it 3 s, and again, until “The van's code” shows (without a remote hub: the LoRa code), then scan it here.")),
       h("p", { class: "note" }, T("The first code opens the app's web address (to install the app); the second is the van's code to scan in the app.")),
-      rsScanner(rsRepairQr), msg);
+      rsScanner(rsRepairQr), h("p", { class: "note" }, T("Or load the app file from the satellite's page (Remote hub › Download app file).")), rsAppFile(), msg);
   if (v === "remoteremove") {
     const ok = satBtn(T("Remove"), "danger"), no = satBtn(T("Cancel"));
     ok.onclick = rsRemove;

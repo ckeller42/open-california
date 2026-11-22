@@ -356,3 +356,39 @@ def test_new_key_resets_the_lora_counter():
         hubSaveCfg({json.dumps({**CFG, "key": "ff" * 16})}); return [a, remoteLoad(HUB_LORA_KEY)]; }})()"""
     )
     assert r == [5, {"ctr": 0, "devEui": EUI, "phone": "0badf00d"}]  # the phone id stays (R25)
+
+
+def test_the_satellites_app_file_applies_as_its_hub_qr(tmp_path_factory):
+    """The satellite's ``POST /api/hub_app`` file (built by the real web.c) gives the remote app's Load from file
+    a code parseHubQr takes with the van's broker, app user and key; any other file gives "".
+
+    .. test:: The satellite's app file round-trips into the remote app's hub configuration
+       :id: T_UI_HUB_APP_FILE
+       :links: R_FW_HUB_APP_FILE
+    """
+    from tests.firmware import test_web_handlers as w
+
+    cli = w._build(tmp_path_factory, "web_cli")
+    rs, other = w.script(
+        cli,
+        *w.STATION,
+        ("POST", "/api/hub", json.dumps(w.HUB_CFG)),
+        ("POST", "/api/hub_key", '{"new_key":true}'),
+        ("POST", "/api/hub_app", w.CONFIRM),
+        "kvx hub_key",
+    )
+    f = rs[-1].json()
+    r = js(
+        "[parseHubQr(rsAppFileCode(%s)), rsAppFileCode({format: 'oc-hub/1', code: %s}), rsAppFileCode(null),"
+        " rsAppFileCode({format: 'oc-app/1', code: 'OCR1*a*b*c*d*e'})]"
+        % (json.dumps(f), json.dumps(f["code"]))
+    )
+    key = next(x[4:] for x in other if x.startswith("KVX "))
+    assert r[0] == {
+        "van": "van-1",
+        "url": "wss://h.example:8884/mqtt",
+        "user": "appuser",
+        "pass": "apppass-secret",
+        "key": key,
+    }
+    assert r[1:] == ["", "", ""]

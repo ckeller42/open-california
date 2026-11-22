@@ -10,6 +10,7 @@ uncaught JS / console error (``error_gated_page``) unless it says otherwise.
    :links: R_FW_OTA, R_FW_AUTO_CAMPER, R_UX_TELEMETRY, R_FW_DISPLAY_WAKE, R_FW_TIME, R_FW_PI_WAKE, R_FW_PI_HALT
 """
 
+import base64
 import contextlib
 import json
 import re
@@ -277,7 +278,7 @@ def test_boxes_in_order_and_camper_unit_links_to_device_status(station, locale, 
                 )
             ]
             + ["LoRa"]  # a name, the same in every language
-            + [tr("Remote hub", lang)]
+            + [tr("Remote hub", lang), tr("Settings backup", lang)]
         )
         expect(pg.locator("#pair-status")).to_have_text(tr("Paired ✓", lang))
         pg.locator("#pair").get_by_role("button", name=tr("Device status ›", lang)).click()
@@ -926,3 +927,34 @@ def test_the_hub_card_loads_a_hub_file_and_save_posts_it(station, lora):
         expect(pg.locator("#hub-msg")).to_have_text("Saved")
     assert _posts(station, "/api/hub") == [HUB_FORM]
     assert _posts(station, "/api/experimental") == ([{"lora": True}] if lora else [])
+
+
+BACKUP = {
+    "format": "oc-backup/1",
+    "fw": "abcdef12",
+    "kv": {
+        "wifi_ssid": base64.b64encode(b"HomeNet").decode(),
+        "hub_cfg": base64.b64encode(b"van-1".ljust(24, b"\0") + bytes(256)).decode(),
+    },
+}
+
+
+def test_settings_backup_downloads_after_the_warning(station):
+    """Satellite settings › Settings backup: the confirm row says the file holds the passwords and keys in
+    plain text; Download posts {"confirm": true} and saves the answer as oc-backup-<van>.json.
+
+    .. test:: The settings backup is downloaded only after a plain-text warning, named after the van
+       :id: T_UX_SETTINGS_BACKUP
+       :links: R_FW_SETTINGS_BACKUP
+    """
+    station.post_reply["/api/backup"] = (200, BACKUP)
+    with _open(station, locale="en-US", viewport=PHONE) as pg:
+        pg.click("#bk-get")
+        acts = pg.locator("#bk-acts")
+        expect(acts).to_contain_text("WiFi password, the hub passwords and the sensor keys in plain text")
+        assert _posts(station, "/api/backup") == []  # nothing before the confirm
+        with pg.expect_download() as dl:
+            acts.get_by_role("button", name="Download", exact=True).click()
+        assert dl.value.suggested_filename == "oc-backup-van-1.json"
+        assert json.loads(Path(dl.value.path()).read_text()) == BACKUP
+    assert _posts(station, "/api/backup") == [{"confirm": True}]

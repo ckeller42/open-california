@@ -34,7 +34,9 @@ CONSTS = {
     "NET_CONNECT_TIMEOUT_MS": 8000,
     "NET_CONNECT_RETRY_MS": 3000,
     "NET_HTTP_PORT": 80,
-    "NET_HTTP_REQ_MAX": 2048,
+    # The whole request (headers + body). 4 KB since the settings restore (POST /api/restore, R_FW_SETTINGS_BACKUP):
+    # a full backup body is ~2.4 KB of base64 (sens_list alone 876 chars) plus a phone browser's headers.
+    "NET_HTTP_REQ_MAX": 4096,
     # The /device recovery page budget (tests/test_web_strings.py): the rendered index_gen.html must
     # fit. A flash-only budget (the page is a const array, no RAM buffer). 40 KB while /device was the
     # whole settings page; 8 KB since it is a WiFi-only recovery page (~6 KB; one-web-UI design, U2).

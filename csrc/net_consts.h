@@ -25,7 +25,7 @@
 #define NET_HOSTNAME "calictl-esp"
 #define NET_HTTP_BODY_MAX 8192
 #define NET_HTTP_PORT 80
-#define NET_HTTP_REQ_MAX 2048
+#define NET_HTTP_REQ_MAX 4096
 #define NET_JSON_MAX 8192
 #define NET_PAGE_POLL_MS 2000
 #define NET_PSK_MAX 63

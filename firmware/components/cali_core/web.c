@@ -1737,6 +1737,293 @@ static void api_hub_key(const cali_http_req_t *req, cali_http_resp_t *resp) {
     else SET_CONST(resp, 200, OK_BODY);
 }
 
+/* ---- POST /api/hub_app {"confirm":true}: the remote app's file oc-app/1 = the van's hub QR text (cali_hub_qr, the
+ * display's "The van's code"), so a phone imports it instead of scanning. Station only (403 setup_mode), a POST:
+ * over the hub 403 local_only (ruling R21); 409 no_hub when no QR text can be made. ---- */
+static void api_hub_app(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static const char *const NAMES[] = {"confirm"};
+    static const char ERR_NO_HUB[] = "{\"ok\":false,\"error\":\"no_hub\"}";
+    static char code[256];   /* OCH1 + the cali_hub_cfg_t fields + 32 hex: at most ~240 */
+    int yes = 0, seen;
+    cali_json_t j;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+        return;
+    }
+    if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+        return;
+    }
+    seen = parse_body(req->body, req->body_len, NAMES, 1, bool_field, &yes);
+    if (seen < 0) SET_CONST(resp, 400, ERR_BAD_JSON);
+    else if (!yes) SET_CONST(resp, 400, ERR_CONFIRM);
+    else if (cali_hub_qr(code, sizeof code) == 0) SET_CONST(resp, 409, ERR_NO_HUB);
+    else {
+        cali_json_begin(&j, s_json, sizeof s_json);
+        cali_json_key(&j, "format");
+        cali_json_str(&j, "oc-app/1");
+        cali_json_key(&j, "code");
+        cali_json_str(&j, code);
+        finish_json(&j, resp);
+    }
+    cali_wipe(code, sizeof code);
+}
+
+/* ---- POST /api/backup {"confirm":true} and POST /api/restore (R_FW_SETTINGS_BACKUP): the settings of one board
+ * onto a new one. The backup holds the allow-listed kv keys present, each value as base64; restore takes that
+ * JSON only on a fresh board (a first-time setup pending, or no WiFi stored), checks everything before it
+ * writes anything, then restarts. Never over the hub: POST writes there are 403 local_only (ruling R21). ---- */
+
+#define BACKUP_FORMAT "oc-backup/1"
+#define BACKUP_VAL_MAX 768   /* the largest value (sens_list, 657 B) fits */
+#define BACKUP_B64_MAX (BACKUP_VAL_MAX / 3 * 4)
+
+typedef struct {
+    const char *key;
+    uint16_t min, max;                      /* the value's length in bytes */
+    int lo, hi;                             /* a 1- or 2-byte value's range (2: little-endian; lo < 0: signed) */
+    int (*ok)(const void *raw, size_t n);   /* a record's own loader check, or NULL */
+} backup_key_t;
+
+#define FLAG(k) {k, 1, 1, 0, 1, NULL}
+/* The allow-list (docs/firmware.md "Settings backup"). Not in it, on purpose: ap_psk (per board), the bond
+ * (sec_*, cccd_*: keyed to this chip's BLE address), the LoRa keys (lora_*: keyed to the module's DevEUI),
+ * and runtime state (setup_qr, wifi_ok, boot_count, water_good, th_auto, ac_state, kvprobe). */
+static const backup_key_t BACKUP_KEYS[] = {
+    {CALI_WIFI_KEY_SSID, 1, NET_SSID_MAX, 0, 0, NULL},
+    {CALI_WIFI_KEY_PSK, NET_PSK_MIN, NET_PSK_MAX, 0, 0, NULL},
+    {CALI_HUB_CFG_KEY, sizeof(cali_hub_cfg_t), sizeof(cali_hub_cfg_t), 0, 0, NULL},
+    {CALI_HUB_KEY_KEY, 16, 16, 0, 0, NULL},
+    {CALI_LORA_CMD_CTR_KEY, 2, 2, 0, 0xffff, NULL},
+    {"sens_list", 1, BACKUP_VAL_MAX, 0, 0, cali_sensors_blob_ok},
+    {CALI_THERMO_CFG_KEY, 1, BACKUP_VAL_MAX, 0, 0, cali_thermo_blob_ok},
+    FLAG(CALI_THERMO_ON_KEY),
+    FLAG(CALI_PW_ON_KEY),
+    {CALI_PH_MIN_KEY, 2, 2, 0, CALI_PH_MIN_MAX, NULL},
+    {CALI_PH_SOC_KEY, 1, 1, 0, 100, NULL},
+    FLAG(CALI_EXP_SENSORS_KEY),
+    FLAG(CALI_EXP_LORA_KEY),
+    FLAG(CALI_UX_ON_KEY),
+    {CALI_BI_KEY, 1, 1, 0, CALI_BI_MAX_MIN, NULL},
+    {CALI_BR_KEY, 1, 1, 0, CALI_SESSION_REST_POLL_MAX_MIN, NULL},
+    FLAG("disp_auto"),
+    FLAG("disp_prox"),
+    {"disp_min", 1, 1, 1, 50, NULL},
+    {"disp_max", 1, 1, 20, 100, NULL},
+    {"disp_off", 1, 1, -50, 50, NULL},
+    FLAG("disp_motion"),
+    FLAG(CALI_AC_ON_KEY),
+    FLAG(CALI_OTA_CHANNEL_KEY),
+};
+#undef FLAG
+
+static const char B64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/* n bytes as padded base64 into out (room for 4 * ((n + 2) / 3) + 1 chars), NUL-terminated */
+static void b64_enc(const uint8_t *in, size_t n, char *out) {
+    size_t o = 0;
+    for (size_t i = 0; i < n; i += 3) {
+        uint32_t v = (uint32_t)in[i] << 16 | (i + 1 < n ? (uint32_t)in[i + 1] << 8 : 0) | (i + 2 < n ? in[i + 2] : 0);
+        out[o++] = B64[v >> 18 & 63];
+        out[o++] = B64[v >> 12 & 63];
+        out[o++] = i + 1 < n ? B64[v >> 6 & 63] : '=';
+        out[o++] = i + 2 < n ? B64[v & 63] : '=';
+    }
+    out[o] = 0;
+}
+
+/* padded base64 (no NUL inside) into out: the byte count, or -1 malformed or more than cap bytes */
+static int b64_dec(const char *in, size_t len, uint8_t *out, size_t cap) {
+    size_t o = 0;
+    if (len % 4) return -1;
+    for (size_t i = 0; i < len; i += 4) {
+        uint32_t v = 0;
+        int pad = 0;
+        for (int k = 0; k < 4; k++) {
+            const char *p = in[i + k] ? strchr(B64, in[i + k]) : NULL;
+            if (in[i + k] == '=' && k >= 2 && i + 4 == len) pad++;   /* only at the end: "x===" never decodes */
+            else if (!p || pad) return -1;
+            v = v << 6 | (pad ? 0 : (uint32_t)(p - B64));
+        }
+        if (o + 3 - (size_t)pad > cap) return -1;
+        out[o++] = (uint8_t)(v >> 16);
+        if (pad < 2) out[o++] = (uint8_t)(v >> 8);
+        if (pad < 1) out[o++] = (uint8_t)v;
+    }
+    return (int)o;
+}
+
+static int backup_value_ok(const backup_key_t *k, const uint8_t *b, size_t n) {
+    int v;
+    if (n < k->min || n > k->max) return 0;
+    if (k->ok) return k->ok(b, n);
+    if (k->max > 2) return 1;
+    v = n == 2 ? b[0] | b[1] << 8 : k->lo < 0 ? (int8_t)b[0] : b[0];
+    return v >= k->lo && v <= k->hi;
+}
+
+static uint8_t s_bk_raw[BACKUP_VAL_MAX];
+static char s_bk_b64[BACKUP_B64_MAX + 1];
+static uint64_t s_restart_at;   /* uptime ms of the restart after a restore; 0 none */
+
+/* Restart the chip. Weak: the ESP app overrides it; the host build and the tests only log. */
+__attribute__((weak)) void cali_restart(void) { cali_log("web: restart (none on this build)"); }
+
+static void api_backup(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static const char *const NAMES[] = {"confirm"};
+    int yes = 0, seen;
+    char fw[9];
+    cali_json_t j;
+    if (strcmp(req->method, "POST") != 0) {   /* never a GET: every GET under /api/ passes the hub (ruling R21) */
+        SET_CONST(resp, 405, ERR_METHOD);
+        return;
+    }
+    if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+        return;
+    }
+    seen = parse_body(req->body, req->body_len, NAMES, 1, bool_field, &yes);
+    if (seen < 0) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+        return;
+    }
+    if (!yes) {
+        SET_CONST(resp, 400, ERR_CONFIRM);
+        return;
+    }
+    snprintf(fw, sizeof fw, "%.8s", cali_fw_version());
+    cali_json_begin(&j, s_json, sizeof s_json);
+    cali_json_key(&j, "format");
+    cali_json_str(&j, BACKUP_FORMAT);
+    cali_json_key(&j, "fw");
+    cali_json_str(&j, fw);
+    cali_json_key(&j, "kv");
+    cali_json_obj_begin(&j);
+    for (size_t i = 0; i < N_OF(BACKUP_KEYS); i++) {
+        size_t n = sizeof s_bk_raw;
+        int rc = cali_kv_get(BACKUP_KEYS[i].key, s_bk_raw, &n);
+        if (rc == CALI_KV_MISSING) continue;
+        if (rc != CALI_KV_OK) {
+            cali_wipe(s_bk_raw, sizeof s_bk_raw);
+            cali_wipe(s_json, sizeof s_json);
+            SET_CONST(resp, 500, ERR_STORE);
+            return;
+        }
+        b64_enc(s_bk_raw, n, s_bk_b64);
+        cali_json_key(&j, BACKUP_KEYS[i].key);
+        cali_json_str(&j, s_bk_b64);
+    }
+    cali_json_obj_end(&j);
+    cali_wipe(s_bk_raw, sizeof s_bk_raw);
+    cali_wipe(s_bk_b64, sizeof s_bk_b64);
+    cali_log("backup: settings exported");
+    finish_json(&j, resp);
+}
+
+typedef struct {
+    int write, bad, store;   /* the pass writes; a value did not check; a write failed */
+    uint32_t seen;           /* bit i = BACKUP_KEYS[i] */
+    char fmt[16];
+} restore_t;
+
+/* the "kv" object {"<key>":"<base64>",...}: 0 that shape (r->bad: a key or value does not check), -1 not */
+static int restore_kv(cursor_t *c, restore_t *r) {
+    if (expect(c, '{') != 0) return -1;
+    if (expect(c, '}') == 0) return 0;
+    for (;;) {
+        char key[CALI_KV_KEY_MAX + 1];
+        size_t klen, vlen;
+        int k = -1, n = -1;
+        if (parse_str(c, key, sizeof key, &klen) != 0 || expect(c, ':') != 0 ||
+            parse_str(c, s_bk_b64, sizeof s_bk_b64, &vlen) != 0)
+            return -1;
+        for (size_t i = 0; klen < sizeof key && i < N_OF(BACKUP_KEYS); i++)
+            if (strcmp(key, BACKUP_KEYS[i].key) == 0) k = (int)i;
+        if (k < 0 || (r->seen >> k & 1) || vlen >= sizeof s_bk_b64 ||
+            (n = b64_dec(s_bk_b64, vlen, s_bk_raw, sizeof s_bk_raw)) < 0 ||
+            !backup_value_ok(&BACKUP_KEYS[k], s_bk_raw, (size_t)n)) {
+            r->bad = 1;
+        } else {
+            r->seen |= 1u << k;
+            if (r->write && cali_kv_set(BACKUP_KEYS[k].key, s_bk_raw, (size_t)n) != 0) r->store = 1;
+        }
+        if (expect(c, ',') == 0) continue;
+        return expect(c, '}');
+    }
+}
+
+static int restore_field(cursor_t *c, int i, void *ctx) {
+    restore_t *r = ctx;
+    char fw[16];
+    size_t len;
+    if (i == 0) return parse_str(c, r->fmt, sizeof r->fmt, &len);
+    if (i == 1) return parse_str(c, fw, sizeof fw, &len);   /* the exporting build: informative only */
+    return restore_kv(c, r);
+}
+
+/* A fresh board: a first-time setup is pending, or no WiFi was ever stored (a new board on its hotspot). */
+static int fresh(void) {
+    char ssid[NET_SSID_MAX];
+    size_t n = sizeof ssid;
+    return cali_setup_pending() || cali_kv_get(CALI_WIFI_KEY_SSID, ssid, &n) == CALI_KV_MISSING;
+}
+
+static void api_restore(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static const char *const NAMES[] = {"format", "fw", "kv"};
+    static const char ERR_NOT_FRESH[] = "{\"ok\":false,\"error\":\"not_fresh\"}";
+    restore_t r;
+    int seen, pass;
+    cali_json_t j;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+        return;
+    }
+    if (!fresh()) {
+        SET_CONST(resp, 409, ERR_NOT_FRESH);
+        return;
+    }
+    for (pass = 0; pass < 2; pass++) {   /* 0 checks everything, 1 writes: nothing is written unless all is valid */
+        if (pass == 1 && cali_setup_pending_set(1) != 0) {   /* a failed write below stays retryable (fresh) */
+            SET_CONST(resp, 500, ERR_STORE);
+            break;
+        }
+        memset(&r, 0, sizeof r);
+        r.write = pass;
+        seen = parse_body(req->body, req->body_len, NAMES, N_OF(NAMES), restore_field, &r);
+        if (seen < 0 || (seen & 5) != 5) {
+            SET_CONST(resp, 400, ERR_BAD_JSON);
+            break;
+        }
+        if (strcmp(r.fmt, BACKUP_FORMAT) != 0 || r.bad || !r.seen) {
+            SET_CONST(resp, 400, ERR_BAD_VALUE);
+            break;
+        }
+    }
+    cali_wipe(s_bk_raw, sizeof s_bk_raw);
+    cali_wipe(s_bk_b64, sizeof s_bk_b64);
+    if (pass < 2) return;
+    /* the WiFi of the backup joined on the old board: trusted (CALI_WIFI_KEY_OK), so a join that fails at the
+     * bench retries instead of dropping it; then the setup is done, as POST /api/setup does */
+    if (r.store || ((r.seen & 1) && cali_kv_set(CALI_WIFI_KEY_OK, "1", 1) != 0) || cali_setup_pending_set(0) != 0) {
+        cali_log("backup: restore not fully stored");
+        SET_CONST(resp, 500, ERR_STORE);
+        return;
+    }
+    cali_json_begin(&j, s_json, sizeof s_json);
+    cali_json_key(&j, "ok");
+    cali_json_bool(&j, 1);
+    cali_json_key(&j, "restored");
+    cali_json_arr_begin(&j);
+    for (size_t i = 0; i < N_OF(BACKUP_KEYS); i++)
+        if (r.seen >> i & 1) cali_json_str(&j, BACKUP_KEYS[i].key);
+    cali_json_arr_end(&j);
+    cali_json_key(&j, "reboot");
+    cali_json_bool(&j, 1);
+    cali_log("backup: settings restored, restarting");
+    s_restart_at = cali_uptime_ms() + 1000;   /* after the answer went out (cali_web_poll) */
+    finish_json(&j, resp);
+}
+
 /* ---- GET|POST /api/sensors: the Satellite settings Sensors box (R_FW_SENSORS), every mode, 404 while the flag is off ---- */
 
 enum { S_ADD = 1, S_REMOVE = 2, S_ID = 4, S_ALIAS = 8, S_KEY = 16 };
@@ -1896,6 +2183,18 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         api_hub_key(req, resp);
         return 1;
     }
+    if (strcmp(req->path, "/api/hub_app") == 0) {
+        api_hub_app(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/backup") == 0) {
+        api_backup(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/restore") == 0) {
+        api_restore(req, resp);
+        return 1;
+    }
     if (get && strcmp(req->path, "/device") == 0) {    /* the WiFi recovery page, in every mode */
         set_static(resp, HTML_TYPE, WEB_INDEX_HTML, WEB_INDEX_HTML_LEN, NO_CACHE);
         return 1;
@@ -1938,4 +2237,10 @@ int cali_web_init(const cali_net_t *net, const cali_transport_t *t, uint16_t por
     return cali_http_init(net, port, cali_web_handle, NULL);
 }
 
-void cali_web_poll(uint64_t now_ms) { cali_http_poll(now_ms); }
+void cali_web_poll(uint64_t now_ms) {
+    cali_http_poll(now_ms);
+    if (s_restart_at && now_ms >= s_restart_at) {
+        s_restart_at = 0;
+        cali_restart();
+    }
+}

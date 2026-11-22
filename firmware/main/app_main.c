@@ -574,6 +574,9 @@ static int cpu_pct(cpu_win_t *w) {
 #endif
 }
 
+/* Overrides web.c's weak log-only stub: the restart after a settings restore (R_FW_SETTINGS_BACKUP). */
+void cali_restart(void) { esp_restart(); }
+
 /* Overrides web.c's weak all-unknown stub: device.res in /api/state. */
 void cali_res_stats(cali_res_t *r) {
     r->heap_free_kb = (int)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024);

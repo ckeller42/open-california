@@ -418,24 +418,37 @@ static int cfg_from_v23(const void *raw, size_t len, cali_thermo_run_cfg_t *c) {
     return 0;
 }
 
+static const cali_thermo_run_cfg_t DEFAULTS = {.s = CALI_THERMO_DEFAULTS, .target = CALI_THERMO_TARGET_DEFAULT};
+
+/* A stored th_cfg record of any version this build loads into *c (an older one with the newer settings at
+ * their defaults); 0 when it is one and checks, -1 otherwise (*c is then unspecified). */
+static int cfg_decode(const void *raw, size_t bn, cali_thermo_run_cfg_t *c) {
+    th_blob_t blob;
+    if (bn > sizeof blob) return -1;
+    memcpy(&blob, raw, bn);
+    *c = DEFAULTS;
+    if (bn == sizeof blob && blob.ver == TH_BLOB_VER) *c = blob.c;
+    else if (cfg_from_v1(&blob, bn, c) != 0 && cfg_from_v23(&blob, bn, c) != 0) return -1;
+    return cfg_valid(c) ? 0 : -1;
+}
+
+int cali_thermo_blob_ok(const void *raw, size_t n) {
+    cali_thermo_run_cfg_t c;
+    return cfg_decode(raw, n, &c) == 0;
+}
+
 void cali_thermo_run_init(void) {
     uint8_t b;
     size_t n = 1;
     th_blob_t blob;
     size_t bn = sizeof blob;
-    cali_thermo_run_cfg_t old;   /* an older record, converted */
+    cali_thermo_run_cfg_t c;
     s_on = cali_kv_get(CALI_THERMO_ON_KEY, &b, &n) == CALI_KV_OK && n == 1 && b != 0;   /* missing = off */
     n = 1;
     s_auto_kv = cali_kv_get(CALI_THERMO_AUTO_KEY, &b, &n) == CALI_KV_OK && n == 1 && b != 0;   /* missing = off */
     s_resume_until = 0;
-    static const cali_thermo_run_cfg_t DEFAULTS = {.s = CALI_THERMO_DEFAULTS, .target = CALI_THERMO_TARGET_DEFAULT};
     C = DEFAULTS;
-    old = DEFAULTS;
-    if (cali_kv_get(CALI_THERMO_CFG_KEY, &blob, &bn) == CALI_KV_OK) {
-        if (bn == sizeof blob && blob.ver == TH_BLOB_VER && cfg_valid(&blob.c)) C = blob.c;
-        else if (cfg_from_v1(&blob, bn, &old) == 0 && cfg_valid(&old)) C = old;
-        else if (cfg_from_v23(&blob, bn, &old) == 0 && cfg_valid(&old)) C = old;
-    }
+    if (cali_kv_get(CALI_THERMO_CFG_KEY, &blob, &bn) == CALI_KV_OK && cfg_decode(&blob, bn, &c) == 0) C = c;
     s_rev = 0;
     s_reason = NULL;
     cali_thermo_init(&S);

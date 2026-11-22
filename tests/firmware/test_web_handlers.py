@@ -11,6 +11,7 @@ clock, log and the WiFi runtime. Every assertion is on the bytes the core sent.
    :links: R_FW_HTTP_STATUS
 """
 
+import base64
 import gzip
 import json
 import re
@@ -4015,3 +4016,454 @@ def test_slot_timeout_and_the_hub_give_up_at_the_same_instant(web_cli):
     limit the new command is accepted and the hub no longer resumes (504), never both."""
     assert _slot_boundary(web_cli, 1000 + 59_999) == (409, 200)
     assert _slot_boundary(web_cli, 1000 + 60_000) == (200, 504)
+
+
+# ---- /api/backup + /api/restore (R_FW_SETTINGS_BACKUP) -------------------------------------------
+
+BACKUP_KEYS = {
+    "wifi_ssid",
+    "wifi_psk",
+    "hub_cfg",
+    "hub_key",
+    "lora_cmd_ctr",
+    "sens_list",
+    "th_cfg",
+    "th_on",
+    "pw_ign",
+    "ph_min",
+    "ph_soc",
+    "exp_sensors",
+    "exp_lora",
+    "ux_on",
+    "ble_idle",
+    "ble_rest",
+    "disp_auto",
+    "disp_prox",
+    "disp_min",
+    "disp_max",
+    "disp_off",
+    "disp_motion",
+    "ac_on",
+    "ota_channel",
+}
+# never in a backup: per board (ap_psk), keyed to this chip / this module (bond, LoRa), runtime state
+NOT_BACKED_UP = {
+    "ap_psk": "41" * 14,
+    "sec_our_0": "01" * 40,
+    "sec_peer_0": "02" * 40,
+    "cccd_0": "03" * 8,
+    "lora_dev": "04" * 24,
+    "lora_tk": "05" * 16,
+    "lora_ttn": "06" * 8,
+    "lora_keys": "07" * 16,
+    "wifi_ok": "31",
+    "boot_count": "05000000",
+    "water_good": "08" * 6,
+    "th_auto": "01",
+    "ac_state": "0102",
+    "kvprobe": "01",
+}
+SMALL = {  # the 1- and 2-byte keys, each in range (ph_min little-endian, disp_off a signed byte: -20)
+    "th_on": "01",
+    "pw_ign": "01",
+    "ph_min": "3c00",
+    "ph_soc": "32",
+    "exp_sensors": "01",
+    "exp_lora": "01",
+    "ux_on": "00",
+    "ble_idle": "0a",
+    "ble_rest": "1e",
+    "disp_auto": "00",
+    "disp_prox": "01",
+    "disp_min": "0a",
+    "disp_max": "5a",
+    "disp_off": "ec",
+    "disp_motion": "00",
+    "ac_on": "01",
+    "ota_channel": "01",
+}
+# a sens_list blob: 1 entry (type 0, a public example address, a key, alias "innen"), 16 slots, 657 bytes
+SENS_ENTRY = bytes([0, 0]) + bytes.fromhex("AABBCCDDEEFF") + bytes(range(16)) + b"innen".ljust(17, b"\0")
+SENS_LIST = (bytes([1]) + SENS_ENTRY).ljust(1 + 16 * len(SENS_ENTRY), b"\0")
+# what a phone browser sends along: the restore must fit the request buffer with headers like these
+BROWSER_HEADERS = (
+    "User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 "
+    "(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1\r\n"
+    "Accept: */*\r\nAccept-Language: de-DE,de;q=0.9\r\nAccept-Encoding: gzip, deflate\r\n"
+    "Content-Type: application/json\r\nOrigin: http://192.168.4.1\r\nReferer: http://192.168.4.1/\r\n"
+    "Connection: keep-alive\r\n"
+)
+CONFIRM = '{"confirm":true}'
+
+
+def _full_store():
+    """Driver lines that fill a store with every backed-up key and every excluded one (station mode)."""
+    return [
+        *STATION,
+        ("POST", "/api/wifi", '{"ssid":"van-wlan","psk":"example-psk-1"}'),
+        ("POST", "/api/hub", json.dumps(HUB_CFG)),
+        ("POST", "/api/hub_key", '{"new_key":true}'),  # hub_key + lora_cmd_ctr
+        "thinit",
+        (
+            "POST",
+            "/api/thermostat",
+            '{"target":2150}',
+        ),  # th_cfg, the current version (2000 is the default: not stored)
+        "kvhex sens_list " + SENS_LIST.hex(),
+        *("kvhex %s %s" % kv for kv in SMALL.items()),
+        *("kvhex %s %s" % kv for kv in NOT_BACKED_UP.items()),
+    ]
+
+
+def _kvx(other):
+    return [x[4:] for x in other if x.startswith("KVX ")]
+
+
+def _export(cli):
+    rs, other = script(
+        cli, *_full_store(), ("POST", "/api/backup", CONFIRM), *("kvx " + k for k in sorted(BACKUP_KEYS))
+    )
+    assert [r.status for r in rs] == [200] * len(rs), [(r.status, r.body) for r in rs]
+    return rs[-1].json(), dict(zip(sorted(BACKUP_KEYS), _kvx(other)))
+
+
+def test_backup_needs_post_and_confirm(web_cli):
+    """The export is a POST with exactly ``{"confirm":true}``; a GET (which would pass the hub) is 405.
+
+    .. test:: POST /api/backup needs confirm:true and is never a GET
+       :id: T_FW_BACKUP_CONFIRM
+       :links: R_FW_SETTINGS_BACKUP
+    """
+    rs, _ = script(
+        web_cli,
+        *STATION,
+        ("POST", "/api/wifi", _CREDS),
+        ("POST", "/api/backup", "{}"),
+        ("POST", "/api/backup", '{"confirm":false}'),
+        ("POST", "/api/backup", '{"confirm":true,"x":1}'),
+        ("POST", "/api/backup", "nope"),
+        ("GET", "/api/backup"),
+        ("GET", "/api/restore"),
+    )
+    assert [(r.status, r.json().get("error")) for r in rs[1:]] == [
+        (400, "confirm_required"),
+        (400, "confirm_required"),
+        (400, "bad_json"),
+        (400, "bad_json"),
+        (405, "method"),
+        (405, "method"),
+    ]
+    assert not any(b"secret123" in r.body for r in rs)
+
+
+@pytest.mark.parametrize("state,joined", NOT_STATION)
+def test_backup_is_station_only(web_cli, state, joined):
+    """
+    .. test:: POST /api/backup answers 403 setup_mode outside station mode
+       :id: T_FW_BACKUP_STATION_ONLY
+       :links: R_FW_SETTINGS_BACKUP
+    """
+    rs, _ = script(
+        web_cli,
+        ("POST", "/api/wifi", _CREDS),
+        "wifi " + state,
+        "joined %d" % joined,
+        ("POST", "/api/backup", CONFIRM),
+    )
+    assert (rs[-1].status, rs[-1].json()) == (403, {"ok": False, "error": "setup_mode"})
+
+
+def test_backup_and_restore_never_pass_the_hub(web_cli):
+    """Ruling R21: over the hub (cali_hub_rpc) only GET /api/* and POST /api/command pass. The backup is a
+    POST, so a hub key holder gets 403 local_only; a GET reaches the handler and gets 405, no data.
+
+    .. test:: The settings backup and restore are refused through the hub RPC
+       :id: T_FW_BACKUP_NOT_OVER_HUB
+       :links: R_FW_SETTINGS_BACKUP
+    """
+    rpcs = [
+        {"id": 1, "m": "POST", "p": "/api/backup", "b": CONFIRM, "t": HUB_NOW},
+        {"id": 2, "m": "POST", "p": "/api/restore", "b": '{"format":"oc-backup/1","kv":{}}', "t": HUB_NOW},
+        {"id": 3, "m": "GET", "p": "/api/backup", "b": None, "t": HUB_NOW},
+        {"id": 4, "m": "GET", "p": "/api/restore", "b": None, "t": HUB_NOW},
+    ]
+    _, other = script(web_cli, *_full_store(), "ntp %d" % HUB_NOW, *("rpc " + json.dumps(x) for x in rpcs))
+    res = [json.loads(x[4:]) for x in other if x.startswith("RPC ")]
+    assert [(r["id"], r["s"]) for r in res] == [(1, 403), (2, 403), (3, 405), (4, 405)]
+    assert [json.loads(r["b"]) for r in res[:2]] == [{"error": "local_only"}] * 2
+    for r in res:
+        assert "example-psk" not in r["b"] and "secret" not in r["b"] and "kv" not in r["b"]
+
+
+def test_backup_holds_exactly_the_allow_listed_keys(web_cli):
+    """Every allow-listed key present, each value its stored bytes in base64; never the hotspot password,
+    the bond, the LoRa keys or the runtime state.
+
+    .. test:: POST /api/backup holds exactly the allow-listed keys present, never ap_psk, bond or LoRa keys
+       :id: T_FW_BACKUP_ALLOW_LIST
+       :links: R_FW_SETTINGS_BACKUP
+    """
+    body, stored = _export(web_cli)
+    assert set(body) == {"format", "fw", "kv"} and body["format"] == "oc-backup/1" and body["fw"] == "test"
+    assert set(body["kv"]) == BACKUP_KEYS
+    assert {k: base64.b64decode(v).hex() for k, v in body["kv"].items()} == stored
+    assert base64.b64decode(body["kv"]["sens_list"]) == SENS_LIST
+    for k in NOT_BACKED_UP:
+        assert k not in body["kv"]
+    # only the keys present: a store with WiFi alone backs up WiFi alone
+    rs, _ = script(web_cli, *STATION, ("POST", "/api/wifi", _CREDS), ("POST", "/api/backup", CONFIRM))
+    assert set(rs[-1].json()["kv"]) == {"wifi_ssid", "wifi_psk"}
+
+
+def test_restore_round_trip_onto_a_fresh_board(web_cli):
+    """Export from store A, restore into a fresh store B (its hotspot, nothing stored): the values are equal,
+    the WiFi is trusted, the setup is done, the thermostat loads the restored settings, and the board
+    restarts after the answer. The body with a phone browser's headers fits the request buffer.
+
+    .. test:: A settings backup restores onto a fresh board byte for byte, then the board restarts
+       :id: T_FW_RESTORE_ROUND_TRIP
+       :links: R_FW_SETTINGS_BACKUP
+    """
+    body, stored = _export(web_cli)
+    raw = json.dumps(body)
+    assert len(raw) + len(BROWSER_HEADERS) > 2048  # would not fit the old 2 KB request buffer
+    rs, other = script(
+        web_cli,
+        *_HOTSPOT,
+        ("POST", "/api/restore", raw, BROWSER_HEADERS),
+        *("kvx " + k for k in sorted(BACKUP_KEYS)),
+        "kv wifi_ok",
+        "kvx ap_psk",
+        "thinit",
+        ("GET", "/api/thermostat"),
+        ("GET", "/api/state"),
+        "now 100000000",
+        ("GET", "/api/state"),
+    )
+    assert (rs[0].status, rs[0].json()) == (
+        200,
+        {"ok": True, "restored": [k for k in RESTORE_ORDER], "reboot": True},
+    )
+    got = _kvx(other)
+    assert dict(zip(sorted(BACKUP_KEYS), got[:-1])) == stored
+    assert got[-1] != NOT_BACKED_UP["ap_psk"]  # B keeps its own hotspot password
+    assert "KV 1" in other  # wifi_ok: the restored WiFi joined on A
+    assert rs[1].json()["target"] == 2150
+    assert pending(rs[2]) is False
+    log = [x for x in other if x.startswith("LOG ")]
+    assert log.index("LOG backup: settings restored, restarting") < log.index(
+        "LOG web: restart (none on this build)"
+    )
+    assert sum(x == "LOG web: restart (none on this build)" for x in log) == 1
+
+
+RESTORE_ORDER = [  # web.c BACKUP_KEYS order: the "restored" list
+    "wifi_ssid",
+    "wifi_psk",
+    "hub_cfg",
+    "hub_key",
+    "lora_cmd_ctr",
+    "sens_list",
+    "th_cfg",
+    "th_on",
+    "pw_ign",
+    "ph_min",
+    "ph_soc",
+    "exp_sensors",
+    "exp_lora",
+    "ux_on",
+    "ble_idle",
+    "ble_rest",
+    "disp_auto",
+    "disp_prox",
+    "disp_min",
+    "disp_max",
+    "disp_off",
+    "disp_motion",
+    "ac_on",
+    "ota_channel",
+]
+
+
+def _wifi_backup(**kv):
+    return json.dumps(
+        {
+            "format": "oc-backup/1",
+            "fw": "test",
+            "kv": {
+                "wifi_ssid": base64.b64encode(b"van").decode(),
+                "wifi_psk": base64.b64encode(b"secret123").decode(),
+                **kv,
+            },
+        }
+    )
+
+
+def test_restore_only_on_a_fresh_board(web_cli):
+    """Fresh = a first-time setup pending, or no WiFi stored. A field unit that lost its WiFi also opens the
+    hotspot (setup_ap_retrying), with WiFi stored and no setup pending: 409, nothing written.
+
+    .. test:: POST /api/restore answers 409 not_fresh unless the board is fresh
+       :id: T_FW_RESTORE_NOT_FRESH
+       :links: R_FW_SETTINGS_BACKUP
+    """
+    nf = {"ok": False, "error": "not_fresh"}
+    other_wifi = '{"ssid":"old","psk":"old-psk-123"}'
+    for steps in (
+        [*STATION, ("POST", "/api/wifi", other_wifi)],
+        [*STATION, ("POST", "/api/wifi", other_wifi), "wifi setup_ap_retrying", "joined 1"],
+    ):
+        rs, other = script(web_cli, *steps, ("POST", "/api/restore", _wifi_backup()), "kv wifi_ssid")
+        assert (rs[-1].status, rs[-1].json()) == (409, nf) and "KV old" in other
+    # a setup begun on the hotspot (WiFi saved there, the wizard goes on in station mode): allowed
+    rs, other = script(
+        web_cli,
+        *_HOTSPOT,
+        ("POST", "/api/wifi", other_wifi),
+        *STATION,
+        ("POST", "/api/restore", _wifi_backup()),
+        "kv wifi_ssid",
+    )
+    assert rs[-1].status == 200 and "KV van" in other
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _wifi_backup(ap_psk=base64.b64encode(b"A" * 14).decode()),  # not in the allow-list
+        _wifi_backup(sec_our_0="AQID"),
+        _wifi_backup(lora_dev=base64.b64encode(bytes(24)).decode()),
+        _wifi_backup(hub_cfg=base64.b64encode(bytes(279)).decode()),  # one byte short of cali_hub_cfg_t
+        _wifi_backup(hub_key=base64.b64encode(bytes(15)).decode()),
+        _wifi_backup(sens_list=base64.b64encode(bytes([17]) + SENS_LIST[1:]).decode()),  # 17 entries
+        _wifi_backup(sens_list=base64.b64encode(SENS_LIST[:-1]).decode()),
+        _wifi_backup(th_cfg=base64.b64encode(bytes(40)).decode()),  # no version this build loads
+        _wifi_backup(ph_soc="ZQ=="),  # 101
+        _wifi_backup(disp_off="zQ=="),  # -51
+        _wifi_backup(disp_min="AA=="),  # 0
+        _wifi_backup(ble_idle="PQ=="),  # 61
+        _wifi_backup(th_on="Ag=="),  # a flag of 2
+        _wifi_backup(ph_min="oQU="),  # 1441, little-endian
+        _wifi_backup(ux_on="AQE="),  # two bytes for a one-byte key
+        _wifi_backup(ux_on="A=A="),  # bad base64
+        _wifi_backup(ux_on="AQ"),  # unpadded
+        _wifi_backup(wifi_psk=base64.b64encode(b"short").decode()),
+        _wifi_backup().replace("oc-backup/1", "oc-backup/2"),
+        '{"format":"oc-backup/1","kv":{}}',
+    ],
+)
+def test_restore_with_one_bad_key_writes_nothing(web_cli, body):
+    """Every key and value is checked before the first write: one bad one and nothing is stored.
+
+    .. test:: POST /api/restore with one bad key or value answers 400 bad_value and writes nothing
+       :id: T_FW_RESTORE_ALL_OR_NOTHING
+       :links: R_FW_SETTINGS_BACKUP
+    """
+    rs, other = script(
+        web_cli,
+        *_HOTSPOT,
+        ("POST", "/api/restore", body),
+        "kv wifi_ssid",
+        ("GET", "/api/state"),
+        "now 100000000",
+        ("GET", "/api/state"),
+    )
+    assert (rs[0].status, rs[0].json()) == (400, {"ok": False, "error": "bad_value"})
+    assert "KV <missing>" in other and "LOG web: restart (none on this build)" not in other
+    assert b"secret123" not in rs[0].body
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "nope",
+        "{}",
+        '{"kv":{}}',
+        '{"format":"oc-backup/1"}',
+        '{"format":"oc-backup/1","kv":[]}',
+        '{"format":"oc-backup/1","kv":{"ux_on":1}}',
+    ],
+)
+def test_restore_malformed_is_bad_json(web_cli, body):
+    rs, other = script(web_cli, *_HOTSPOT, ("POST", "/api/restore", body), "kv wifi_ssid")
+    assert (rs[0].status, rs[0].json()) == (
+        400,
+        {"ok": False, "error": "bad_json"},
+    ) and "KV <missing>" in other
+
+
+def test_restore_store_failure_is_500_and_stays_retryable(web_cli):
+    """A store failure answers 500; the board stays fresh (the setup is marked pending before the first
+    write), so the same file restores on the next try."""
+    rs, other = script(
+        web_cli,
+        *_HOTSPOT,
+        "kvfail 1",
+        ("POST", "/api/restore", _wifi_backup()),
+        "kvfail 0",
+        ("POST", "/api/restore", _wifi_backup()),
+        "kv wifi_ssid",
+    )
+    assert [(r.status, r.json().get("error")) for r in rs] == [
+        (500, "store"),
+        (200, None),
+    ] and "KV van" in other
+
+
+# ---- /api/hub_app: the remote app's file (the van's hub QR text) ------------------------------------------
+
+
+def test_hub_app_file_is_the_vans_hub_qr(web_cli):
+    """POST /api/hub_app {"confirm":true} answers the display's hub QR text as oc-app/1. Station only, needs
+    confirm, 409 no_hub without a hub config, never a GET.
+
+    .. test:: POST /api/hub_app gives the van's hub QR text after a confirm, station only
+       :id: T_FW_HUB_APP_FILE
+       :links: R_FW_HUB_APP_FILE
+    """
+    rs, other = script(
+        web_cli,
+        *STATION,
+        ("POST", "/api/hub_app", CONFIRM),
+        ("POST", "/api/hub", json.dumps(HUB_CFG)),
+        ("POST", "/api/hub_key", '{"new_key":true}'),
+        ("POST", "/api/hub_app", "{}"),
+        ("POST", "/api/hub_app", "nope"),
+        ("GET", "/api/hub_app"),
+        ("POST", "/api/hub_app", CONFIRM),
+        "kvx hub_key",
+        "wifi setup_ap",
+        "joined 0",
+        ("POST", "/api/hub_app", CONFIRM),
+    )
+    assert [(r.status, r.json().get("error")) for r in rs] == [
+        (409, "no_hub"),
+        (200, None),
+        (200, None),
+        (400, "confirm_required"),
+        (400, "bad_json"),
+        (405, "method"),
+        (200, None),
+        (403, "setup_mode"),
+    ]
+    key = _kvx(other)[0]
+    assert rs[6].json() == {
+        "format": "oc-app/1",
+        "code": "OCH1*van-1*wss://h.example:8884/mqtt*appuser*apppass-secret*" + key,
+    }
+
+
+def test_hub_app_file_never_passes_the_hub(web_cli):
+    """
+    .. test:: POST /api/hub_app is refused through the hub RPC (403 local_only)
+       :id: T_FW_HUB_APP_NOT_OVER_HUB
+       :links: R_FW_HUB_APP_FILE
+    """
+    rpcs = [
+        {"id": 1, "m": "POST", "p": "/api/hub_app", "b": CONFIRM, "t": HUB_NOW},
+        {"id": 2, "m": "GET", "p": "/api/hub_app", "b": None, "t": HUB_NOW},
+    ]
+    _, other = script(web_cli, *_full_store(), "ntp %d" % HUB_NOW, *("rpc " + json.dumps(x) for x in rpcs))
+    res = [json.loads(x[4:]) for x in other if x.startswith("RPC ")]
+    assert [(r["id"], r["s"]) for r in res] == [(1, 403), (2, 405)]
+    assert json.loads(res[0]["b"]) == {"error": "local_only"} and "OCH1" not in res[1]["b"]

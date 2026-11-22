@@ -36,7 +36,8 @@ flowchart LR
   (retained), `oc/<van>/req`, `oc/<van>/res`, `oc/<van>/lora/<fport>` (the bridge's sealed uplinks).
 - **Sealing:** every WiFi frame is AES-128-GCM with the van's **data key**: `ver | dir | nonce(12) |
   ciphertext | tag(16)`, nonce = `dir | random(7) | counter(4)`. The data key is made on the
-  satellite and travels only in the hub QR. The broker carries ciphertext.
+  satellite and travels only in the hub QR (or its file copy, the satellite page's **Download app file**:
+  `POST /api/hub_app`, local only). The broker carries ciphertext.
 - **Over the hub** only `GET /api/*` and `POST /api/command` work. Every write to the settings
   answers `403 local_only`: **settings change only in the van's WiFi.**
 - **LoRa commands** (heater on or off, camping mode on or off) are 15 bytes on FPort 20, sealed by

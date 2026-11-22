@@ -238,10 +238,12 @@ static int alias_ok(const char *alias, int self) {
 /* The list -> NVS, whole. */
 static int store(void) { return cali_kv_set(SENS_LIST_KEY, &s_cfg, sizeof s_cfg) == 0 ? 0 : CALI_SENS_E_STORE; }
 
+int cali_sensors_blob_ok(const void *raw, size_t n) { return n == sizeof s_cfg && ((const sens_list_t *)raw)->n <= SENS_MAX; }
+
 /* NVS -> the list; missing or damaged = empty. */
 static void load(void) {
     size_t n = sizeof s_cfg;
-    if (cali_kv_get(SENS_LIST_KEY, &s_cfg, &n) != CALI_KV_OK || n != sizeof s_cfg || s_cfg.n > SENS_MAX)
+    if (cali_kv_get(SENS_LIST_KEY, &s_cfg, &n) != CALI_KV_OK || !cali_sensors_blob_ok(&s_cfg, n))
         memset(&s_cfg, 0, sizeof s_cfg);
     int k = 0;   /* ponytail: a type this build lacks (a rolled-back OTA) is dropped, and lost on the next edit */
     for (int i = 0; i < s_cfg.n; i++) {

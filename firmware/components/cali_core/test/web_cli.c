@@ -47,7 +47,7 @@
  *   watergood <ms>   cali_session_water_good_ms() (baseline adopted at; 0 = not this boot)
  *   stamp <ms>       cali_session_last_update_ms()
  *   now <ms>         cali_uptime_ms()
- *   kv <key>         print "KV <value>" or "KV <missing>"
+ *   kv <key>         print "KV <value>" or "KV <missing>"; "kvx <key>" the same in hex ("KVX <hex>")
  *   kvfail 0|1       cali_kv_set fails
  *   kvhex <key> <hex>   store <hex> bytes under <key> (e.g. a stale auto-camper debt)
  *   acinit           cali_ac_init (the toggle + debt from the kv store, as at boot)
@@ -258,7 +258,7 @@ static const char *f_identity(void) { return s_bond ? "C0:FF:EE:CA:11:F0" : NULL
 static const cali_transport_t fake_t = {.has_bond = f_has_bond, .identity = f_identity};
 
 /* ---- the fake platform ---- */
-#define KV_N 12
+#define KV_N 64   /* a whole settings backup (24 keys) + the board's own keys */
 static struct { char key[CALI_KV_KEY_MAX + 1]; char val[1024]; size_t len; int used; } s_kv[KV_N];   /* val: the sens_list blob */
 static int s_kvfail;
 
@@ -580,11 +580,11 @@ int main(void) {
             cali_sdlog_init(put_rec);
         }
         else if (strcmp(w, "kvhex") == 0) {
-            static char hex[1025];   /* the 3rd token whole: a2 holds only 63 chars (th_cfg is 144 bytes) */
-            unsigned char b[512];
+            static char hex[2049];   /* the 3rd token whole: a2 holds only 63 chars (sens_list is 657 bytes) */
+            unsigned char b[1024];
             size_t k = 0;
             memset(hex, 0, sizeof hex);   /* an odd-length token must not decode the previous token's digits */
-            (void)sscanf(line, "%*s %*s %1024s", hex);
+            (void)sscanf(line, "%*s %*s %2048s", hex);
             while (k < sizeof b && hex[2 * k] && sscanf(hex + 2 * k, "%2hhx", &b[k]) == 1) k++;
             (void)cali_kv_set(a1, b, k);
         }
@@ -645,6 +645,13 @@ int main(void) {
                 (void)sscanf(line, "%*s %*s %*s %n", &off);
                 snprintf(s_done_reason, sizeof s_done_reason, "%s", off ? line + off : "");
             }
+        } else if (strcmp(w, "kvx") == 0) {   /* kvx <key>: "KVX <hex>" or "KVX <missing>" (binary values) */
+            unsigned char buf[1024];
+            size_t len = sizeof buf;
+            if (cali_kv_get(a1, buf, &len) != CALI_KV_OK) { printf("KVX <missing>\n"); continue; }
+            printf("KVX ");
+            for (size_t i = 0; i < len; i++) printf("%02x", buf[i]);
+            printf("\n");
         } else if (strcmp(w, "kv") == 0) {
             char buf[512];
             size_t len = sizeof buf;

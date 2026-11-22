@@ -2597,13 +2597,24 @@ function buildSat(v) {
     h("div", { id: "lora-on" }, ...LORA_ROWS.map(([id, label]) => h("div", { class: "row" }, h("span", { class: "lbl" }, T(label)), h("span", { class: "val", id: "lora-" + id }))),
       h("p", { class: "note" }, T("Set up: hold the satellite's screen 3 s until the LoRa code shows (with a remote hub: the third screen), and scan it in the remote app (OC Remote).")), lacts),
     satMsg("lora-msg")));
+  const apGet = satBtn(T("Download app file"), "", "hub-appfile");
+  const apacts = h("div", { class: "btnrow", id: "hub-appacts" }, apGet);
+  apGet.onclick = () => satAsk(apacts, [h("span", null, T("The file holds the app password and the data key in plain text: load it in the remote app (⋮ › Scan the van's code › Load from file), then delete it."))],
+    T("Download"), "primary", satHubAppFile, "hub-msg");
   const newKey = satBtn(T("New data key"), "danger", "hub-newkey");
   const hkacts = h("div", { class: "btnrow", id: "hub-keyacts" }, newKey);
   newKey.onclick = () => satAsk(hkacts, [h("span", null, T("Make a new data key? Every phone must scan the van's code again, and the bridge needs the new key (HUB_KEY)."))],
     T("New data key"), "danger", satHubNewKey, "hub-msg");
   root.append(satCard("hub", T("Remote hub"), h("p", { class: "note" }, T("The satellite sends its state to your MQTT broker and takes commands from the remote app through it. Then hold the satellite's screen 3 s for the app's code, and 3 s again for “The van's code”, and scan that one in the remote app.") + " "
     + T("Hold the phone about 10 cm in front of the satellite's screen.")),
-    h("p", { id: "hub-app" }, T("Install the remote app, then scan the van's code in it") + ": ", appLink()), ...hubForm(), hkacts));
+    h("p", { id: "hub-app" }, T("Install the remote app, then scan the van's code in it") + ": ", appLink()), apacts, ...hubForm(), hkacts));
+  const bkGet = satBtn(T("Download settings backup"), "", "bk-get");
+  const bkacts = h("div", { class: "btnrow", id: "bk-acts" }, bkGet);
+  bkGet.onclick = () => satAsk(bkacts, [h("span", null, T("The file holds the WiFi password, the hub passwords and the sensor keys in plain text. Keep it private and delete it when the new satellite runs."))],
+    T("Download"), "primary", satBackup, "bk-msg");
+  root.append(satCard("bk", T("Settings backup"),
+    h("p", { class: "note" }, T("One file with this satellite's settings, for a new satellite: its setup wizard restores it. Not in it: the pairing with the camper and the LoRa keys.")),
+    bkacts, satMsg("bk-msg")));
   satHubLoad();
   toggle("ac", "/api/auto_camper", "Couldn't change auto camper", "enabled", "ac-msg");
   toggle("pw", "/api/pi_wake_setting", "Couldn't change the Pi wake", "enabled", "pw-msg");
@@ -2723,7 +2734,12 @@ function buildSetup() {
       p(T("After the sensors, the step Remote access sets up control from anywhere: the remote app over your own remote hub, or LoRa. Both are optional.")),
       setupBtns(setupNext("Next", "wifi", "primary")));
   } else if (step === "wifi") {
-    card.append(p(T("No router in the van? Use your phone's hotspot. iPhone: Settings → Personal Hotspot → Maximize Compatibility on.")));
+    const file = h("input", { id: "restore-file", type: "file", accept: ".json", hidden: "" });
+    file.onchange = setupRestore;
+    card.append(p(T("No router in the van? Use your phone's hotspot. iPhone: Settings → Personal Hotspot → Maximize Compatibility on.")),
+      p(T("Replacing a satellite? Restore the backup file of the old one instead: WiFi and every setting come with it.")),
+      h("div", { class: "btnrow" }, h("label", { class: "btn", for: "restore-file" }, T("Restore from backup file"))), file,
+      h("p", { class: "note", id: "restore-msg", "aria-live": "polite" }));
     // the join's result under the box, where Connect was tapped
     root.append(satWifiBox(), h("p", { class: "card dcard", id: "setup-next-addr", "aria-live": "polite", hidden: "" }));
   } else if (step === "pair") {
@@ -2974,6 +2990,7 @@ function satUpdate() {
   sq("lora").hidden = s.lora_on == null;   // a firmware without the switch: no switch that cannot work
   satRenderLora(s.lora || null, st);
   satRenderHub(s.hub || null, st);
+  sq("bk-acts").hidden = !st;   // station only (403 setup_mode over the hotspot)
   sq("sens").hidden = !s.experimental;
   if (s.experimental && !sensOn) { sensOn = true; satSensPoll(); }
 }
@@ -3392,6 +3409,57 @@ function satRenderLora(l, st) {
   sq("lora-forget").hidden = !st;   // station only (403 setup_mode over the hotspot)
 }
 
+/** POST /api/backup {confirm: true}: the settings saved as oc-backup-<van>.json (R_FW_SETTINGS_BACKUP). @param {() => void} close */
+async function satBackup(close) {
+  const msg = sq("bk-msg");
+  /** @type {{status: number, body: any}|null} */
+  let r = null;
+  try { r = await satFetch("/api/backup", { confirm: true }); } catch (e) { /* r stays null */ }
+  close();
+  if (!r || r.status !== 200 || !r.body || r.body.format !== "oc-backup/1") { msg.textContent = T("Couldn't make the backup"); return; }
+  // the van name: the first field of hub_cfg (24 bytes, NUL-padded); no hub: "satellite"
+  const van = r.body.kv.hub_cfg ? atob(r.body.kv.hub_cfg).slice(0, 24).split("\0")[0].replace(/[^A-Za-z0-9_-]/g, "") : "";
+  satSave(r.body, "oc-backup-" + (van || "satellite") + ".json");
+}
+
+/** Save a JSON answer as a file. @param {any} body @param {string} name */
+function satSave(body, name) {
+  const a = /** @type {HTMLAnchorElement} */ (h("a", { href: URL.createObjectURL(new Blob([JSON.stringify(body)], { type: "application/json" })), download: name }));
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+/** POST /api/hub_app {confirm: true}: the van's code as oc-app-<van>.json, for the remote app's Load from file. @param {() => void} close */
+async function satHubAppFile(close) {
+  /** @type {{status: number, body: any}|null} */
+  let r = null;
+  try { r = await satFetch("/api/hub_app", { confirm: true }); } catch (e) { /* r stays null */ }
+  close();
+  if (!r || r.status !== 200 || !r.body || r.body.format !== "oc-app/1") { hubSay(false, "Couldn't make the app file"); return; }
+  satSave(r.body, "oc-app-" + (String(r.body.code).split("*")[1] || "van").replace(/[^A-Za-z0-9_-]/g, "") + ".json");
+}
+
+/** The setup wizard's Restore from backup file (a fresh satellite): checks the file, POST /api/restore; the
+ * satellite then restarts on the backup's WiFi (R_FW_SETTINGS_BACKUP). */
+async function setupRestore() {
+  const inp = sqInput("restore-file"), f = inp.files && inp.files[0], msg = sq("restore-msg");
+  inp.value = "";
+  /** @type {any} */
+  let d = null;
+  try { d = f && JSON.parse(await f.text()); } catch (e) { /* not JSON: d stays null */ }
+  if (!f) return;
+  /** @param {boolean} ok @param {string} text */
+  const say = (ok, text) => { msg.className = ok ? "note" : "warn"; msg.textContent = T(text); };
+  if (!d || d.format !== "oc-backup/1" || !d.kv || typeof d.kv !== "object") { say(false, "Not a settings backup (oc-backup-….json)"); return; }
+  /** @type {{status: number, body: any}|null} */
+  let r = null;
+  try { r = await satFetch("/api/restore", d); } catch (e) { /* r stays null */ }
+  if (r && r.status === 200 && r.body.ok) say(true, "Restarting… then pair with the camper (one passkey: the bond cannot be copied) and set up LoRa again.");
+  else say(false, r && r.body && r.body.error === "not_fresh" ? "This satellite is set up already: a backup restores only onto a new one." : "Couldn't restore the backup");
+}
+
 /** The Hub card's inputs: [/api/hub key, label, input type]. */
 const HUB_FIELDS = [["url", "Broker address (wss://…)", "url"], ["van", "Van name", "text"], ["user", "Van user", "text"],
   ["pass", "Van password", "password"], ["app_user", "App user", "text"], ["app_pass", "App password", "password"]];
@@ -3456,6 +3524,8 @@ function satRenderHub(hb, st) {
   sq("hub-save").hidden = !st;   // station only (403 setup_mode over the hotspot)
   const nk = /** @type {NonNullable<typeof satDom>} */ (satDom).root.querySelector("#hub-keyacts");   // the card only
   if (nk) /** @type {HTMLElement} */ (nk).hidden = !st || !hb.configured;
+  const ap = /** @type {NonNullable<typeof satDom>} */ (satDom).root.querySelector("#hub-appacts");   // the card only
+  if (ap) /** @type {HTMLElement} */ (ap).hidden = !st || !hb.configured;
   for (const a of /** @type {NonNullable<typeof satDom>} */ (satDom).root.querySelectorAll("a.app-url")) {
     if (hb.app_url && a.getAttribute("href") !== hb.app_url) { a.setAttribute("href", hb.app_url); a.textContent = hb.app_url; }
   }

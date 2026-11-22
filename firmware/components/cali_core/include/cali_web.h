@@ -76,6 +76,35 @@
  *    no control characteristic.
  * @endverbatim
  *
+ * @verbatim embed:rst:leading-asterisk
+ * .. req:: The satellite's settings move to a new board as one file
+ *    :id: R_FW_SETTINGS_BACKUP
+ *    :status: implemented
+ *    :tags: esp32, web, setup
+ *
+ *    ``POST /api/backup`` with exactly ``{"confirm":true}`` (station mode only, a local request: over the hub
+ *    every POST but ``/api/command`` is ``local_only``) shall answer ``{"format":"oc-backup/1","fw","kv"}``
+ *    with every allow-listed kv key that is stored, its value in base64 — the one deliberate way the WiFi
+ *    password, the hub passwords and data key and the sensor keys leave the board. ``POST /api/restore``
+ *    with that JSON shall work only on a fresh board (a first-time setup pending, or no WiFi stored; else 409
+ *    ``not_fresh``), check every key against the allow-list and every value against what this build loads
+ *    before it writes anything (400 ``bad_value``, nothing written), then write them all, end the first-time
+ *    setup and restart. Never in the file: the hotspot password (per board), the BLE bond (keyed to the
+ *    chip's address) and the LoRa keys (keyed to the module's DevEUI).
+ * @endverbatim
+ *
+ * @verbatim embed:rst:leading-asterisk
+ * .. req:: The remote app connects from a file of the van's hub code
+ *    :id: R_FW_HUB_APP_FILE
+ *    :status: implemented
+ *    :tags: esp32, web, hub
+ *
+ *    ``POST /api/hub_app`` with exactly ``{"confirm":true}`` (station mode only, a local request: over the hub
+ *    it is ``local_only``) shall answer ``{"format":"oc-app/1","code":<the display's hub QR text>}``, 409
+ *    ``no_hub`` when there is no such text; the remote app's "Load from file" applies that code like a
+ *    scanned van's code and refuses any other file.
+ * @endverbatim
+ *
  * @section web_caching Caching and errors
  *
  * Static answers (`/`, `/app`, `/device`, the PWA assets) carry a strong ETag (FNV-1a 64 of the
@@ -335,6 +364,25 @@
  *   a non-bool flag, a non-integer percent), 400 `bad_value` (min 1..50, max 20..100, min < max,
  *   offset -50..50), 500 `store`, 405.
  *
+ * - `POST /api/hub_app` (R_FW_HUB_APP_FILE): body exactly `{"confirm":true}`; station mode only (403
+ *   `setup_mode`); 400 `bad_json`, 400 `confirm_required`, 409 `no_hub` (cali_hub_qr gives no text), 405 for
+ *   another method. 200 `{"format":"oc-app/1","code":"OCH1*…"}`: the display's hub QR text. Over the hub: 403
+ *   `local_only`.
+ * - `POST /api/backup` (R_FW_SETTINGS_BACKUP): body exactly `{"confirm":true}`; station mode only (403
+ *   `setup_mode`); 400 `bad_json` (another shape), 400 `confirm_required` (confirm false); 500 `store` (a
+ *   key unreadable); 405 for another method (never a GET: every GET under /api/ passes the hub). 200
+ *   `{"format":"oc-backup/1","fw":"<the first 8 chars of cali_fw_version()>","kv":{"<key>":"<base64>",...}}`
+ *   with the allow-listed keys present (web.c BACKUP_KEYS, docs/firmware.md "Settings backup"). Over the
+ *   hub: 403 `local_only`.
+ * - `POST /api/restore` (R_FW_SETTINGS_BACKUP): that JSON (`format` and `kv` required, `fw` optional), in
+ *   every WiFi mode, but only while a first-time setup is pending or no `wifi_ssid` is stored (else 409
+ *   `not_fresh`). 400 `bad_json` (not that shape), 400 `bad_value` (another format, an empty `kv`, a key
+ *   not in the allow-list or twice, bad base64, a value of a length or range this build does not load);
+ *   nothing is written unless every key checks. Then it writes every key (with WiFi also `wifi_ok` "1"),
+ *   erases `setup_qr`, answers 200 `{"ok":true,"restored":[<keys>],"reboot":true}` and calls cali_restart()
+ *   about 1 s later from cali_web_poll. 500 `store` when a write fails (the setup stays pending: try again).
+ *   405 for another method. Over the hub: 403 `local_only`.
+ *
  * **BLE**
  *
  * - `GET /api/ble`: 200 the device.ble object above (R_FW_BLE_EXP).
@@ -436,6 +484,12 @@ void cali_res_stats(cali_res_t *r);
  * @param now_ms The current time in milliseconds.
  */
 void cali_web_poll(uint64_t now_ms);
+
+/**
+ * @brief Restart the chip: cali_web_poll calls it about 1 s after a settings restore answered
+ *        (R_FW_SETTINGS_BACKUP). web.c's weak default only logs (host, tests); the ESP app overrides it.
+ */
+void cali_restart(void);
 
 /**
  * @brief The HTTP handler for every route in this file.
