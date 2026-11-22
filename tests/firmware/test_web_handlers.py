@@ -4512,7 +4512,6 @@ def test_secret_routes_need_a_json_content_type(web_cli, path, body, ct):
         "evil.example:80",
         "calictl-esp.local.evil.example",
         "1.2.3.4.evil.example",
-        "localhost",
     ],
 )
 def test_secret_routes_refuse_a_foreign_host(web_cli, path, body, host):
@@ -4541,7 +4540,7 @@ def test_secret_routes_refuse_a_foreign_host(web_cli, path, body, host):
 )
 def test_secret_routes_take_the_boards_own_names(web_cli, host):
     """
-    .. test:: The secret-bearing routes take an IPv4 literal, a .local name, a .ts.net name or no Host
+    .. test:: The secret-bearing routes take an IPv4 literal, a single-label name, a .local name, a .ts.net name or no Host
        :id: T_FW_SECRET_ROUTES_HOST_OK
        :links: R_FW_SETTINGS_BACKUP, R_FW_HUB_APP_FILE
     """

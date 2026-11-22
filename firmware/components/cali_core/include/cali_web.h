@@ -366,7 +366,7 @@
  *
  * - `POST /api/hub_app`, `POST /api/backup`, `POST /api/restore` check first, after the method: Content-Type
  *   `application/json` (parameters allowed; else 415 `content_type`, so a cross-site page needs a CORS preflight,
- *   never answered) and a Host that is an IPv4 literal, `*.local`, `*.ts.net` or absent (else 403 `host`: DNS
+ *   never answered) and a Host that is an IPv4 literal, one label (no dot), `*.local`, `*.ts.net` or absent (else 403 `host`: DNS
  *   rebinding). cali_http_req_t carries both headers.
  * - `POST /api/hub_app` (R_FW_HUB_APP_FILE): body exactly `{"confirm":true}`; station mode only (403
  *   `setup_mode`); 400 `bad_json`, 400 `confirm_required`, 409 `no_hub` (cali_hub_qr gives no text), 405 for

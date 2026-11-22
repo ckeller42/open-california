@@ -1739,8 +1739,8 @@ static void api_hub_key(const cali_http_req_t *req, cali_http_resp_t *resp) {
 
 /* ---- the secret-bearing POSTs (/api/hub_app, /api/backup, /api/restore): more than the trusted-LAN stance ----
  * A JSON Content-Type: a cross-site page can send that only after a CORS preflight, which the board never
- * answers (no CSRF with a "simple" text/plain POST). A Host of the board's own kind (an IPv4 literal, *.local,
- * *.ts.net for the tailnet proxy, or none): a page on a rebound DNS name sends its own name (no DNS rebinding). */
+ * answers (no CSRF with a "simple" text/plain POST). A Host of the board's own kind (an IPv4 literal, one label,
+ * *.local, *.ts.net for the tailnet proxy, or none): a page on a rebound DNS name sends its own name (no DNS rebinding). */
 
 static int ieq_n(const char *a, const char *b, size_t n) {   /* a[0..n) == b[0..n), ASCII case-insensitive */
     for (size_t i = 0; i < n; i++) {
@@ -1756,6 +1756,7 @@ static int host_ok(const char *h) {
     n = strcspn(h, ": \t");
     for (i = 0; i < n && ((h[i] >= '0' && h[i] <= '9') || h[i] == '.'); i++) dots += h[i] == '.';
     if (i == n && n >= 7 && dots == 3) return 1;   /* an IPv4 literal */
+    if (n > 0 && memchr(h, '.', n) == NULL) return 1;   /* one label (busnet, calictl-esp): not in public DNS */
     return (n > 6 && ieq_n(h + n - 6, ".local", 6)) || (n > 7 && ieq_n(h + n - 7, ".ts.net", 7));
 }
 
