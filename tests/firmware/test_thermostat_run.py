@@ -418,7 +418,12 @@ def test_auto_resumes_after_a_reboot_while_the_heater_heats(cli, tmp_path):
 
 def test_resume_waits_for_the_reference_then_times_out(cli, tmp_path):
     """After the boot the reference reading comes later than the heater read: the resume waits for it. Without
-    it the resume ends after CALI_THERMO_RESUME_WAIT_MS, AUTO stays off and the flag is cleared."""
+    it the resume ends after CALI_THERMO_RESUME_WAIT_MS, AUTO stays off and the flag is cleared.
+
+    .. test:: Thermostat runner: a resume waits for a late reference, then times out
+       :id: T_FW_THERMOSTAT_RUN_RESUME_WAIT
+       :links: R_FW_THERMOSTAT_RUN
+    """
     base = [*ADOPTED, *REBOOT, "sensor cabin -", CONT6, "tick", "state"]
     out = run(cli, tmp_path, [*base, "now 101000", "sensor cabin 1480", "now 161000", "tick", "state"])
     states = [json.loads(s[7:])["thermostat"] for s in out if s.startswith("THERMO ")]
@@ -445,7 +450,12 @@ def test_resume_waits_for_the_reference_then_times_out(cli, tmp_path):
 )
 def test_no_resume_after_an_auto_end_or_an_off_heater(cli, tmp_path, before, at_boot):
     """An off heater after the boot ends the resume without a command; an AUTO that ended before the boot
-    (here an owner OFF) is not resumed."""
+    (here an owner OFF) is not resumed.
+
+    .. test:: Thermostat runner: no resume after an AUTO end or with an off heater
+       :id: T_FW_THERMOSTAT_RUN_NO_RESUME
+       :links: R_FW_THERMOSTAT_RUN
+    """
     out = run(cli, tmp_path, [*ADOPTED, *before, *REBOOT, *at_boot, "tick", "state"])
     st = state(out)
     assert st["mode"] == "OFF" and st["reason"] != "AUTO_RESUMED", st

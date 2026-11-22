@@ -1100,7 +1100,12 @@ def test_takeover_below_the_target_sends_no_lower_level():
 
 
 def test_night_preset_on_an_off_heater_is_unchanged():
-    """The night pre-set of an off heater sends the demand, whatever the stored level: nothing pauses."""
+    """The night pre-set of an off heater sends the demand, whatever the stored level: nothing pauses.
+
+    .. test:: Night pre-set of an off heater sends the demand
+       :id: T_THERMO_NIGHT_PRESET_OFF_HEATER
+       :links: R_THERMOSTAT_NIGHT
+    """
     out, _ = _night({**OFF_H, "HeatingLevel": 6}, ref=_ref(1500), target=1600)
     assert out["cmds"] == [("level", 2)]
 
@@ -1131,7 +1136,12 @@ def test_resume_takes_over_a_heating_heater_after_a_reboot():
 
 def test_resume_waits_for_its_inputs_and_drops_on_an_off_heater():
     """The resume waits for a fresh heater and the entry checks, never starts an off heater, and ends
-    on an owner request or the feature switched off."""
+    on an owner request or the feature switched off.
+
+    .. test:: A resume waits for its inputs and never starts an off heater
+       :id: T_THERMO_RESUME_WAIT_DROP
+       :links: R_THERMOSTAT_SESSION
+    """
     for kw in ({"heater": None}, {"heater_age_ms": CFG["heater_stale_ms"] + 1}, {"ref": None},
                {"link_ready": False}, {"ignition_on": None}, {"camping_on": False}):  # fmt: skip
         out, st = _resume(**kw)
