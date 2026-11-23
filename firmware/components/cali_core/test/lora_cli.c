@@ -2,8 +2,8 @@
  *   frame <function> <hex>   mppt <7 floats|->   bsense <volts|->   sensat <at_ms>   ctr <solar> <load> <net>   boot <n>
  *   snap <now_ms>
  * Packers:   pack2 | pack4 <fw> | trk_init | trk_update <now_s> | trk_pack <max> | trk_commit <now_s>
- * Radio:     parse <line> | redact <line> | outcome <kind> <tx_done> | airtime <phy_len> <sf> | maxpl <sf>
- * Budget:    up <t_s> <ms> <confirmed> | used <t> | conf <t> | room <t> | dl <t> | interval <t> <sf> <len> <share> | backoff <n>
+ * Radio:     parse <line> | redact <line> | outcome <kind> <tx_done> | airtime <phy_len> <sf> | maxpl <sf> | port3max <sf>
+ * Budget:    up <t_s> <ms> <confirmed> | used <t> | conf <t> | room <t> | dl <t> | interval <t> <sf> <len> <share> | round <t> <sf> <refused> | backoff <n>
  * Status:    stjson <module> <joined> <unanswered> <sf> <last_s> <air> <charged> <unconf> <dl> <now_s>
  * Setup:     stsetup <setup> <ttn> <eui> | setupopen | setupstate | forget | kvset <key> <hex> | kv <key>
  *            qr <exp_on> <present> <eui|-> [max] (prints "QR <text>", "QR -" when none and the buffer is
@@ -215,6 +215,8 @@ int main(void) {
             printf("%u\n", (unsigned)cali_lora_airtime_ms(u1, u2));
         } else if (!strcmp(cmd, "maxpl") && sscanf(rest, "%u", &u1) == 1) {
             printf("%u\n", cali_lora_max_payload(u1));
+        } else if (!strcmp(cmd, "port3max") && sscanf(rest, "%u", &u1) == 1) {
+            printf("%u\n", cali_lora_port3_max(u1));
         } else if (!strcmp(cmd, "up") && sscanf(rest, "%u %u %u", &u1, &u2, &u3) == 3) {
             cali_lora_uplink_add(&bud, u1, u2, u3 != 0);
         } else if (!strcmp(cmd, "used") && sscanf(rest, "%u", &u1) == 1) {
@@ -228,6 +230,10 @@ int main(void) {
             printf("%d %u\n", took, cali_lora_downlinks_used(&bud, u1));
         } else if (!strcmp(cmd, "interval") && sscanf(rest, "%u %u %u %u", &u1, &u2, &u3, &u4) == 4) {
             printf("%u\n", (unsigned)cali_lora_next_interval_s(&bud, u1, u2, u3, u4));
+        } else if (!strcmp(cmd, "round") && sscanf(rest, "%u %u %u", &u1, &u2, &u3) == 3) {
+            static int retried;
+            uint32_t w = cali_lora_next_round_s(&bud, u1, u2, (int)u3, &retried);
+            printf("%u %d\n", (unsigned)w, retried);
         } else if (!strcmp(cmd, "budget_reset")) {
             cali_lora_budget_init(&bud);
         } else if (!strcmp(cmd, "backoff") && sscanf(rest, "%u", &u1) == 1) {

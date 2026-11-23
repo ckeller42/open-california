@@ -19,7 +19,8 @@
  *   counters (R_FW_ENERGY_COUNTERS) as three 24-bit deci-Wh values: solar, load, battery net (signed).
  *   A missing frame, or a sensor without a reading in the last 60 s, reads 0xFF bytes.
  * - port 3: the functions whose frame changed, or was not sent for CALI_LORA_REFRESH_S, oldest first:
- *   [char index in CODEC_CHARS][length][frame]..., whole entries only. Energy, water and general are
+ *   [char index in CODEC_CHARS][length][frame]..., whole entries only, at most cali_lora_port3_max (the
+ *   regional limit less CALI_LORA_FOPTS_MAX for the stack's MAC answers). Energy, water and general are
  *   never in it (ports 2 and 4 carry them).
  * - port 4 (CALI_LORA_DAILY_LEN = 24 B), once a day and after each join: [0] version 1, [1..2] boot,
  *   [3..6] uptime s, [7..15] the general frame (9 B), [16..23] the firmware version, NUL-padded.
@@ -42,7 +43,11 @@
  *    GPIO5): reset it, detect it by ``AT``, join by OTAA (EU868, class C, ADR) with the module's own DevEUI
  *    and the JoinEUI/AppKey of the setup (``lora_dev``; R_FW_LORA_SETUP), or else the DevEUI/JoinEUI/AppKey
  *    stored by ``lora keys`` (NVS, never printed; written to the module before each join attempt), not join without either, and send port 2 at the interval the airtime
- *    budget allows (at least 600 s), port 3 when a function changed, and port 4 daily. Uplink airtime and
+ *    budget allows (at least 600 s), port 3 when a function changed, and port 4 daily. When the module
+ *    refuses the port-2 send (``AT_BUSY_ERROR``, ``AT_ERROR``), the firmware shall log it, report the note
+ *    ``send refused`` until the next confirmed send, hold ports 3 and 4, and try the round once more after
+ *    CALI_LORA_RETRY_S (120 s); a second refusal in a row waits the normal interval. Port 3 leaves
+ *    CALI_LORA_FOPTS_MAX (15 B) of the regional limit free for the stack's MAC answers. Uplink airtime and
  *    downlinks (every downlink counts) stay within 25 s and 8 per rolling 24 h, join requests included: no uplink goes out once either is used up. A send counts as airtime in ``/api/state`` only
  *    after ``+EVT:TX_DONE``. After 3 AT commands in a row without any answer the firmware shall reset the
  *    module, report it not joined, and try again every 10 min while it stays silent. With the switch off,
@@ -105,6 +110,10 @@ extern "C" {
 #define CALI_LORA_DAILY_LEN 24
 /** @brief every tracked function at least every 12 h */
 #define CALI_LORA_REFRESH_S 43200u
+/** @brief MAC commands (FOpts) the stack may add to an uplink, at most; port 3 leaves them free */
+#define CALI_LORA_FOPTS_MAX 15u
+/** @brief the one retry after the module refused a port-2 send, s */
+#define CALI_LORA_RETRY_S 120u
 /** @brief LoRaWAN bytes around the payload: MHDR 1 + FHDR 7 + FPort 1 + MIC 4 */
 #define CALI_LORA_OVERHEAD 13u
 /** @brief the budgets' rolling window, s */
@@ -237,6 +246,14 @@ uint32_t cali_lora_airtime_ms(unsigned phy_len, unsigned sf);
  */
 unsigned cali_lora_max_payload(unsigned sf);
 
+/**
+ * @brief Port 3's limit: the regional maximum less CALI_LORA_FOPTS_MAX, so a MAC answer the stack has
+ *        queued (DevStatusAns, DeviceTimeReq, ...) never makes it refuse the send.
+ * @param sf Spreading factor.
+ * @return Bytes.
+ */
+unsigned cali_lora_port3_max(unsigned sf);
+
 /** @brief The rolling 24-h budgets. */
 typedef struct {
     /** @brief One charged uplink. */
@@ -312,6 +329,20 @@ unsigned cali_lora_downlinks_used(cali_lora_budget_t *b, uint32_t now_s);
  * @return Seconds.
  */
 uint32_t cali_lora_next_interval_s(cali_lora_budget_t *b, uint32_t now_s, unsigned sf, unsigned len, unsigned share);
+
+/**
+ * @brief Seconds until the next port-2 round: CALI_LORA_RETRY_S once after the module refused the
+ *        port-2 send, else cali_lora_next_interval_s for port 2. A refusal sends none of our data, but
+ *        the stack may put its own MAC answers on air (port 0), so a second refusal in a row waits the
+ *        normal interval.
+ * @param b       Budget.
+ * @param now_s   Uptime s.
+ * @param sf      Spreading factor.
+ * @param refused 1: the module refused this round's port-2 send (AT_BUSY_ERROR, AT_ERROR).
+ * @param retried In/out: 1 while the next round is the retry.
+ * @return Seconds.
+ */
+uint32_t cali_lora_next_round_s(cali_lora_budget_t *b, uint32_t now_s, unsigned sf, int refused, int *retried);
 /**
  * @brief The wait after the n-th failed join: 60 s doubling, at most 1 h.
  * @param attempt 0..
@@ -407,7 +438,7 @@ typedef struct {
     unsigned unconfirmed;    /**< sends without TX_DONE since boot */
     unsigned downlinks;      /**< downlinks in the last 24 h */
     unsigned uplinks[3];     /**< confirmed uplinks since boot: ports 2, 3, 4 */
-    const char *note;        /**< "joining", "join failed", "module silent", ... or NULL */
+    const char *note;        /**< "joining", "join failed", "module silent", "send refused" (until the next confirmed send), ... or NULL */
     int setup;               /**< CALI_LORA_SETUP_NONE .. CALI_LORA_SETUP_TTN_KEYS; JOINED when joined and the state is KEYS_MADE */
     int has_ttn_keys;        /**< 1 when the TTN keys are stored (the keys themselves are never reported) */
     char dev_eui[17];        /**< the DevEUI as 16 hex digits, "" while unknown (the board task fills it) */

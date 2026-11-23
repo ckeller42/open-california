@@ -169,6 +169,26 @@ def test_port2_interval_keeps_its_share_in_every_rolling_day(cli):
     assert run(cli, "interval 0 12 50 60") == [str(86400 // (15000 // 2793))]  # SF12: 5 a day, 17280 s
 
 
+def test_refused_port2_retries_once_soon(cli):
+    """The module refused the port-2 send (AT_BUSY_ERROR, AT_ERROR: nothing of ours went out, but
+    the stack may have sent its own MAC answers on port 0): one retry after 120 s, not the whole
+    SF12 interval; a second refusal in a row waits the normal interval (no retry loop on air)."""
+    assert run(cli, "round 0 12 1", "round 120 12 1", "round 17400 12 1", "round 17520 12 0") == [
+        "120 1",
+        "17280 0",
+        "120 1",
+        "17280 0",
+    ]
+    assert run(cli, "round 0 12 0", "round 17280 12 0") == ["17280 0", "17280 0"]
+
+
+def test_port3_leaves_room_for_mac_commands(cli):
+    """Port 3 fills up to the regional limit less 15 B of FOpts, so a queued MAC answer never
+    makes the stack refuse it; the largest entry (2 + CODEC_FRAME_MAX 32) still fits at SF12."""
+    assert run(cli, "port3max 12", "port3max 9", "port3max 7") == ["36", "100", "207"]
+    assert int(run(cli, "port3max 12")[0]) >= 2 + 32
+
+
 def test_downlinks_and_backoff(cli):
     out = run(cli, *(f"dl {k}" for k in range(9)), "dl 86400")
     assert out[:8] == [f"1 {k + 1}" for k in range(8)] and out[8] == "0 8" and out[9] == "1 8"

@@ -474,7 +474,8 @@ static void join(void) {
     }
 }
 
-/* One AT+SEND: 0 refused, 1 taken without +EVT:TX_DONE, 2 confirmed by +EVT:TX_DONE. Only while the switch is on and
+/* One AT+SEND: -1 refused by the module, 0 not tried (switch off, budget, not joined), 1 taken without
+ * +EVT:TX_DONE, 2 confirmed by +EVT:TX_DONE. Only while the switch is on and
  * within both budgets (at the SF the module reports now); airtime counts as on air only after +EVT:TX_DONE. */
 static int send(uint8_t port, const uint8_t *buf, size_t len) {
     char cmd[16 + 2 * 222];
@@ -493,7 +494,12 @@ static int send(uint8_t port, const uint8_t *buf, size_t len) {
         return 0;
     }
     cali_rak_kind_t status = e.kind;
-    if (!cali_lora_outcome(status, 0).charged) return 0;   /* refused: nothing went out */
+    if (!cali_lora_outcome(status, 0).charged) {   /* refused: none of our data went out */
+        cali_log("lora: port %u refused", (unsigned)port);   /* the module's answer is the "<<" line above */
+        s_st.note = "send refused";
+        publish();
+        return -1;
+    }
     bool tx_done = false;
     s_in_send = true;
     TickType_t end = xTaskGetTickCount() + pdMS_TO_TICKS(TX_DONE_MS);
@@ -510,7 +516,7 @@ static int send(uint8_t port, const uint8_t *buf, size_t len) {
     cali_lora_outcome_t o = cali_lora_outcome(status, tx_done);
     uint32_t now = (uint32_t)(cali_uptime_ms() / 1000);
     cali_lora_uplink_add(&s_bud, now, cali_lora_airtime_ms((unsigned)len + CALI_LORA_OVERHEAD, (unsigned)s_st.sf), o.confirmed);
-    if (o.confirmed) s_st.last_confirmed_s = now;
+    if (o.confirmed) s_st.last_confirmed_s = now, s_st.note = NULL;
     else s_st.unconfirmed++;
     publish();
     return o.confirmed ? 2 : status == CALI_RAK_OK;
@@ -565,6 +571,7 @@ static void lora_task(void *arg) {
     (void)arg;
     uint32_t next_energy = 0, daily_at = 0;
     bool daily_due = true, ready = false;
+    int retried = 0;   /* the next port-2 round is the one retry after a refusal */
     char fw[9] = "";
     memcpy(fw, esp_app_get_description()->version, sizeof fw - 1);   /* the first 8 characters */
     cali_lora_budget_init(&s_bud);
@@ -630,22 +637,26 @@ static void lora_task(void *arg) {
         if (now >= next_energy) {
             uint8_t buf[222];
             size_t n = cali_lora_pack_energy(buf, &s_snap);
-            if (send(CALI_LORA_PORT_ENERGY, buf, n) == 2) s_st.uplinks[0]++;
-            /* then the changed functions; consumed only after a confirmed send */
-            uint32_t picked;
-            cali_lora_tracker_update(&s_trk, &s_snap, now);
-            n = cali_lora_pack_changed(&s_trk, &s_snap, buf, cali_lora_max_payload((unsigned)s_st.sf), &picked);
-            if (n && send(CALI_LORA_PORT_CHANGED, buf, n) == 2) {
-                cali_lora_tracker_commit(&s_trk, &s_snap, picked, now);
-                s_st.uplinks[1]++;
-            }
-            if (daily_due || now - daily_at >= CALI_LORA_DAY_S) {
-                n = cali_lora_pack_daily(buf, &s_snap, fw);
-                if (send(CALI_LORA_PORT_DAILY, buf, n) == 2) s_st.uplinks[2]++, daily_at = now, daily_due = false;
+            int r = send(CALI_LORA_PORT_ENERGY, buf, n);
+            if (r == 2) s_st.uplinks[0]++;
+            /* refused: the module is busy, or the stack sent its own MAC answers instead; ports 3 and 4
+             * stay pending (tracker uncommitted, daily_due) and go with the retry */
+            if (r >= 0) {
+                /* then the changed functions; consumed only after a confirmed send */
+                uint32_t picked;
+                cali_lora_tracker_update(&s_trk, &s_snap, now);
+                n = cali_lora_pack_changed(&s_trk, &s_snap, buf, cali_lora_port3_max((unsigned)s_st.sf), &picked);
+                if (n && send(CALI_LORA_PORT_CHANGED, buf, n) == 2) {
+                    cali_lora_tracker_commit(&s_trk, &s_snap, picked, now);
+                    s_st.uplinks[1]++;
+                }
+                if (daily_due || now - daily_at >= CALI_LORA_DAY_S) {
+                    n = cali_lora_pack_daily(buf, &s_snap, fw);
+                    if (send(CALI_LORA_PORT_DAILY, buf, n) == 2) s_st.uplinks[2]++, daily_at = now, daily_due = false;
+                }
             }
             now = (uint32_t)(cali_uptime_ms() / 1000);
-            next_energy = now + cali_lora_next_interval_s(&s_bud, now, (unsigned)s_st.sf, CALI_LORA_ENERGY_LEN,
-                                                         CALI_LORA_ENERGY_SHARE);
+            next_energy = now + cali_lora_next_round_s(&s_bud, now, (unsigned)s_st.sf, r < 0, &retried);
         }
         cali_rak_event_t e;
         while (xQueueReceive(s_event_q, &e, 0) == pdTRUE) handle_event(&e);

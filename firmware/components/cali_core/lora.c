@@ -96,6 +96,8 @@ uint32_t cali_lora_airtime_ms(unsigned phy_len, unsigned sf) {
 
 unsigned cali_lora_max_payload(unsigned sf) { return sf >= 10 ? 51 : sf == 9 ? 115 : 222; }
 
+unsigned cali_lora_port3_max(unsigned sf) { return cali_lora_max_payload(sf) - CALI_LORA_FOPTS_MAX; }
+
 void cali_lora_budget_init(cali_lora_budget_t *b) { memset(b, 0, sizeof *b); }
 
 static void up_expire(cali_lora_budget_t *b, uint32_t now_s) {
@@ -174,6 +176,12 @@ uint32_t cali_lora_next_interval_s(cali_lora_budget_t *b, uint32_t now_s, unsign
         if (until > wait) wait = until;
     }
     return wait;
+}
+
+uint32_t cali_lora_next_round_s(cali_lora_budget_t *b, uint32_t now_s, unsigned sf, int refused, int *retried) {
+    if (refused && !*retried) return *retried = 1, CALI_LORA_RETRY_S;
+    *retried = 0;
+    return cali_lora_next_interval_s(b, now_s, sf, CALI_LORA_ENERGY_LEN, CALI_LORA_ENERGY_SHARE);
 }
 
 uint32_t cali_lora_join_backoff_s(unsigned attempt) { return attempt >= 6 ? 3600 : 60u << attempt; }
