@@ -2071,7 +2071,8 @@ within seconds; a downlink that switches camping mode on (and with it the router
   join is sent, `note` "no keys: console lora keys"), and its port 3 functions
   and port 4 stay pending. A send the module refuses (`AT_BUSY_ERROR` or another `AT_…ERROR` — for
   example when it sent a queued MAC answer alone on port 0 because the data would not fit beside it)
-  logs `lora: port N refused` and sets `note` "send refused" until the next confirmed send; a refused
+  logs `lora: port N refused` and sets `note` "send refused" until the next confirmed send or a rejoin, whose own `note` replaces it
+  (the log line stays); a refused
   port 2 holds ports 3 and 4 and the round is tried once more after 120 s, then the normal interval
   applies. `AT_NO_NETWORK_JOINED` is not a refusal: it clears `joined`, and the task joins again.
   With 8 downlinks in the last 24 h no uplink goes out until one ages out. Three AT commands in a
