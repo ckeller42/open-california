@@ -2060,14 +2060,22 @@ within seconds; a downlink that switches camping mode on (and with it the router
   at most as many a day as fit in 60 % of 25 s at the current spreading factor, in any rolling 24 h
   (with 13 B of LoRaWAN overhead: 118 ms on air at SF7 = every 681 s, 698 ms at SF10 = every 69 min,
   2793 ms at SF12 = 5 a day, every 4.8 h; never below 10 min); port 3 (the
-  functions whose raw frame changed, every one at least every 12 h); port 4 (the general frame, uptime
+  functions whose raw frame changed, every one at least every 12 h while the airtime and downlink
+  budgets allow; filled to the data-rate limit
+  less 15 B, so a queued MAC answer still fits: 36 B at SF12); port 4 (the general frame, uptime
   and firmware version) daily and after each join. The formatter returns raw fields only, so the
   reader interprets them with `semantics.js` like the WiFi path.
 - **Honest status:** airtime counts as on air only when the module confirms a send with
   `+EVT:TX_DONE`; a send without it is charged to the budget but shown apart (so is each join request: 23 B, 1482 ms
   at SF12; with no room the join waits, `note` "join waits: airtime budget"; without stored keys no
   join is sent, `note` "no keys: console lora keys"), and its port 3 functions
-  and port 4 stay pending. With 8 downlinks in the last 24 h no uplink goes out until one ages out. Three AT commands in a
+  and port 4 stay pending. A send the module refuses (`AT_BUSY_ERROR` or another `AT_…ERROR` — for
+  example when it sent a queued MAC answer alone on port 0 because the data would not fit beside it)
+  logs `lora: port N refused` and sets `note` "send refused" until the next confirmed send or a rejoin, whose own `note` replaces it
+  (the log line stays); a refused
+  port 2 holds ports 3 and 4 and the round is tried once more after 120 s, then the normal interval
+  applies. `AT_NO_NETWORK_JOINED` is not a refusal: it clears `joined`, and the task joins again.
+  With 8 downlinks in the last 24 h no uplink goes out until one ages out. Three AT commands in a
   row without an answer reset the module and drop `joined`; while it stays silent the task retries every
   10 min. A spike bench run showed why: a hung module that the old firmware counted as "sending"
   looked joined for three days while nothing reached the network.
