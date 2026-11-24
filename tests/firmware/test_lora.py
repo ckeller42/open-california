@@ -172,7 +172,12 @@ def test_port2_interval_keeps_its_share_in_every_rolling_day(cli):
 def test_refused_port2_retries_once_soon(cli):
     """The module refused the port-2 send (AT_BUSY_ERROR, AT_ERROR: nothing of ours went out, but
     the stack may have sent its own MAC answers on port 0): one retry after 120 s, not the whole
-    SF12 interval; a second refusal in a row waits the normal interval (no retry loop on air)."""
+    SF12 interval; a second refusal in a row waits the normal interval (no retry loop on air).
+
+    .. test:: lora refused port 2: one retry after 120 s, then the normal interval
+       :id: T_FW_LORA_REFUSED_RETRY
+       :links: R_FW_LORA
+    """
     assert run(cli, "round 0 12 1", "round 120 12 1", "round 17400 12 1", "round 17520 12 0") == [
         "120 1",
         "17280 0",
@@ -184,7 +189,12 @@ def test_refused_port2_retries_once_soon(cli):
 
 def test_port3_leaves_room_for_mac_commands(cli):
     """Port 3 fills up to the regional limit less 15 B of FOpts, so a queued MAC answer never
-    makes the stack refuse it; the largest entry (2 + CODEC_FRAME_MAX 32) still fits at SF12."""
+    makes the stack refuse it; the largest entry (2 + CODEC_FRAME_MAX 32) still fits at SF12.
+
+    .. test:: lora port 3 leaves 15 B for MAC answers in FOpts
+       :id: T_FW_LORA_PORT3_FOPTS
+       :links: R_FW_LORA
+    """
     assert run(cli, "port3max 12", "port3max 9", "port3max 7") == ["36", "100", "207"]
     assert int(run(cli, "port3max 12")[0]) >= 2 + 32
 
