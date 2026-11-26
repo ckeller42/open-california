@@ -55,6 +55,7 @@
 #include "cali_platform.h"
 #include "cali_sensors.h"
 #include "cali_transport.h"
+#include "cali_web.h"
 #include "codec.h"
 #include "codec_chars.h"
 
@@ -1113,4 +1114,14 @@ void cali_ble_nimble_init(void (*sync_cb)(void)) {
 
     cali_ble_store_init();                    /* persistent bonds (not RAM-only ble_store_config) */
     cali_sensors_set_aes(aes128_ecb);         /* the Victron decoders' keystream */
+}
+
+/* The settings backup's "dev" (R_FW_SETTINGS_BACKUP): the address this chip pairs with (the type
+ * ble_hs_id_infer_auto chose: the public one on the ESP32-S3), most significant byte first; -1 before sync. */
+int cali_ble_own_addr(uint8_t out[6]) {
+    uint8_t a[6];
+    if (ble_hs_id_copy_addr(s_own_addr_type == BLE_OWN_ADDR_RANDOM ? BLE_ADDR_RANDOM : BLE_ADDR_PUBLIC, a, NULL) != 0)
+        return -1;
+    for (int i = 0; i < 6; i++) out[i] = a[5 - i];
+    return 0;
 }

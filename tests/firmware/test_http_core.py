@@ -142,7 +142,7 @@ def test_unhandled_404(http_cli):
 
 
 def test_oversized_body_413(http_cli):
-    out = run(http_cli, ["POST /echo HTTP/1.1\r\nContent-Length: 5000\r\n\r\n"])
+    out = run(http_cli, ["POST /echo HTTP/1.1\r\nContent-Length: %d\r\n\r\n" % (REQ_MAX + 1)])
     assert out.startswith("HTTP/1.1 413 ")
 
 
@@ -158,7 +158,7 @@ def test_body_filling_the_buffer_exactly_is_accepted(http_cli):
 
 def test_oversized_header_431(http_cli):
     frag = "GET /hello HTTP/1.1\r\n" + "X-Pad: " + "p" * 900 + "\r\n"
-    out = run(http_cli, [frag, frag, frag])
+    out = run(http_cli, [frag] * (REQ_MAX // len(frag) + 1))  # more than the buffer, no end of the headers
     assert out.startswith("HTTP/1.1 431 ")
 
 

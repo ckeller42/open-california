@@ -566,14 +566,17 @@ replies for a client that sends `Accept-Encoding: gzip` (`Vary: Accept-Encoding`
 | `POST /api/lora` | `{"forget":true,"confirm":true}` (exactly these two keys, in any order; no other body, no key upload: keys come by QR and downlink): Satellite settings' "Forget LoRa" (`R_FW_LORA_SETUP`) -> `cali_lora_forget()` switches `exp_lora` off, then erases `lora_dev`, `lora_tk`, `lora_ttn` and `lora_keys` -> 200 `{"ok":true}`; `device.lora` is gone from the next `GET /api/state`. 400 `confirm_required` (`confirm` missing or false), 400 `bad_json` (any other shape, also `forget` false), 403 `setup_mode` (station mode only), 404 `disabled` while `exp_lora` is off, 500 `store`. |
 | `GET /api/ble` | 200 the `device.ble` object `{"mode","probing","exp","idle_min","rest_poll_min","unit_adv_seen_ms_ago"}` (`R_FW_BLE_EXP`, `R_FW_BLE_IDLE`, `R_FW_BLE_REST`, [BLE modes](#ble-modes-r_fw_ble_mode)). |
 | `POST /api/ble` | any of `{"mode":"hold"\|"quiet"\|"off"}`, `{"probe":true}`, `{"exp_min":1..720,"from"?:0..23,"to"?:0..23}` (the night experiment; window default 22-06 Berlin time), `{"exp_min":0}` (stop it, back to `hold`), `{"idle_min":0..60}` (the idle policy, stored in NVS: `R_FW_BLE_IDLE`), `{"warm_ms":0..5000}` (the read pass's heartbeat warm-up, not stored: `R_FW_BLE_WARM`), `{"rest_poll_min":0..240}` (the power-save rest's probe interval, stored in NVS: `R_FW_BLE_REST`), `{"connect":true}` (leave the rest and reconnect after the 7 s cooldown: `R_FW_BLE_REST`); keys combinable, each once -> 200 the new `device.ble`. Station mode only (403 `setup_mode`), 400 `bad_json` (an unknown or repeated key, a wrong type, none of `mode`/`probe`/`exp_min`/`idle_min`/`warm_ms`/`rest_poll_min`/`connect`), 400 `bad_value` (another mode, a number out of range), 409 `no_time` (`exp_min` without a wall clock: no SNTP and no unit clock; nothing applied), 409 `busy` (a probe already runs or no bond), 409 `not_paired` (`connect` without a bond), 500 `store` (`idle_min` or `rest_poll_min` not stored). |
-| `GET /api/hub` / `POST /api/hub` | The Satellite settings' Remote hub card (cali_hub.h). GET (every mode): 200 `{"van","url","user","app_user","configured","online","last_pub_s","error"}` (`error`: `"key"` while the data key cannot be stored, else null), never the two passwords. POST (station only, else 403 `setup_mode`): `{"url","van","user","app_user"[,"pass"][,"app_pass"]}`, a left-out password keeps the stored one -> stores KV `hub_cfg`, restarts the MQTT client, 200 `{"ok":true}`. Through the hub (`cali_hub_rpc`) only `GET /api/*` and `POST /api/command` pass; this and every other write answer 403 `{"error":"local_only"}` (ruling R21). 400 `bad_json` (another shape), 400 `bad_value` (a field empty or too long, a `*`, `url` not `wss://`, `van` not `[A-Za-z0-9_-]`), 500 `store`. |
-| other method on `/api/state`, `/api/wifi`, `/api/command`, `/api/ota`, `/api/auto_camper`, `/api/thermostat` (GET/POST only), `/api/pi_wake`, `/api/pi_halt`, `/api/ble` (GET/POST only), `/api/pi_wake_setting`, `/api/display`, `/api/ux`, `/api/ux_setting`, `/api/experimental`, `/api/sensors`, `/api/lora`, `/api/hub` (GET/POST only) or `/api/pairing` | 405 `{"ok":false,"error":"method"}` |
+| `GET /api/hub` / `POST /api/hub` | The Satellite settings' Remote hub card (cali_hub.h). GET (every mode): 200 `{"van","url","user","app_user","configured","online","last_pub_s","error"}` (`error`: `"key"` while the data key cannot be stored, else null), never the two passwords (only the settings backup carries them, and `POST /api/hub_app` the app password). POST (station only, else 403 `setup_mode`): `{"url","van","user","app_user"[,"pass"][,"app_pass"]}`, a left-out password keeps the stored one -> stores KV `hub_cfg`, restarts the MQTT client, 200 `{"ok":true}`. Through the hub (`cali_hub_rpc`) only `GET /api/*` and `POST /api/command` pass; this and every other write answer 403 `{"error":"local_only"}` (ruling R21). 400 `bad_json` (another shape), 400 `bad_value` (a field empty or too long, a `*`, `url` not `wss://`, `van` not `[A-Za-z0-9_-]`), 500 `store`. |
+| `POST /api/hub_app` | The remote app's file (`R_FW_HUB_APP_FILE`): body exactly `{"confirm":true}` -> 200 `{"format":"oc-app/1","code":"OCH1*<van>*<url>*<app user>*<app pass>*<key>"}`, the same text as the display's hub QR (`cali_hub_qr`). The Hub card's **Download app file** saves it as `oc-app-<van>.json`; the remote app's **Scan the van's code** › **Load from file** applies it as a scanned code. Station mode only (403 `setup_mode`), 400 `bad_json`/`confirm_required`, 409 `no_hub` (no config or no key: no QR text); never a GET (405); through the hub 403 `local_only`. Also needs `Content-Type: application/json` (else 415 `content_type`: a cross-site page cannot send that without a CORS preflight, which the board never answers) and a Host that is an IPv4 literal, a single-label name, a `*.local` or `*.ts.net` name or absent (else 403 `host`: no DNS rebinding). |
+| `POST /api/backup` | The settings backup ([Settings backup](#settings-backup-r_fw_settings_backup)): body exactly `{"confirm":true}` -> 200 `{"format":"oc-backup/1","fw":"<8 chars>","dev":"<12 hex>","kv":{"<key>":"<base64>",…}}` with every allow-listed key that is stored and the used bond slots (LTK, IRK). Station mode only (403 `setup_mode`), 400 `bad_json` (another shape), 400 `confirm_required`, 500 `store`; never a GET (405), because every `GET /api/*` passes the hub; through the hub a POST is 403 `local_only`. Also needs `Content-Type: application/json` (else 415 `content_type`: a cross-site page cannot send that without a CORS preflight, which the board never answers) and a Host that is an IPv4 literal, a single-label name, a `*.local` or `*.ts.net` name or absent (else 403 `host`: no DNS rebinding). |
+| `POST /api/restore` | That file, on a fresh board only (a first-time setup pending, or no `wifi_ssid` stored; else 409 `not_fresh`), every WiFi mode. 400 `bad_json` (not that shape), 400 `bad_value` (another `format`, an empty `kv`, a key not in the allow-list or twice, bad base64, a length or range this build does not load): nothing is written unless every key checks. Then writes every key (with WiFi also `wifi_ok` `1`), ends the setup like `POST /api/setup`, 200 `{"ok":true,"restored":[<keys>],"skipped":[<bond keys>],"bond":"restored"|"other_device"|"none","reboot":true}` (the bond only onto the board `dev` names), and restarts about 1 s later. 500 `store` when a write fails (the setup stays pending: the same file again). Through the hub: 403 `local_only`. Also needs `Content-Type: application/json` (else 415 `content_type`: a cross-site page cannot send that without a CORS preflight, which the board never answers) and a Host that is an IPv4 literal, a single-label name, a `*.local` or `*.ts.net` name or absent (else 403 `host`: no DNS rebinding). |
+| other method on `/api/state`, `/api/wifi`, `/api/command`, `/api/ota`, `/api/auto_camper`, `/api/thermostat` (GET/POST only), `/api/pi_wake`, `/api/pi_halt`, `/api/ble` (GET/POST only), `/api/pi_wake_setting`, `/api/display`, `/api/ux`, `/api/ux_setting`, `/api/experimental`, `/api/sensors`, `/api/lora`, `/api/hub` (GET/POST only), `/api/hub_key`, `/api/hub_app`, `/api/backup`, `/api/restore` or `/api/pairing` | 405 `{"ok":false,"error":"method"}` |
 | an OS captive-portal probe path (setup mode) | 302 `Location: http://192.168.4.1/` — `/generate_204`, `/gen_204` (Android), `/hotspot-detect.html`, `/library/test/success.html` (Apple), `/connecttest.txt`, `/ncsi.txt` (Windows), `/canonical.html`, `/success.txt` (Firefox) |
 | any other path | setup mode: 302 `Location: /`; station mode: 404 |
 
 **HTTP core** (`include/cali_http.h`):
 one connection at a time, one request per connection, every response `Connection: close`;
-requests up to `NET_HTTP_REQ_MAX` (2048 B) of headers, no chunked bodies (400), 413/431 on
+requests up to `NET_HTTP_REQ_MAX` (6144 B) of headers and body, no chunked bodies (400), 413/431 on
 oversize; the response is streamed across as many ticks as the socket needs (`tcp_send` "would
 block" = retry next poll — never blocks, never spins); a connection idle for `CALI_HTTP_IDLE_MS`
 (5000 ms) is closed — one that has sent no byte yet after `CALI_HTTP_FIRST_BYTE_MS` (1000 ms), so a
@@ -1940,6 +1943,63 @@ The status screen has one hidden second screen, for the LoRa setup ([LoRaWAN tel
   cannot be read or the mask writes nothing, no frame is sent
   (`LOG display: screenshot failed (lora screen)`). No log line carries any part of the text.
 
+## Settings backup (`R_FW_SETTINGS_BACKUP`)
+
+A new satellite takes the settings of the old one from one file: scan the new board's setup QR, choose
+**Restore from backup file** in the setup wizard's WiFi step, and after the restart it joins the home WiFi
+with every setting of the old board. Two steps stay: pair with the camper (one passkey) and set up LoRa again.
+Restored onto the same board (after a wipe or a reflash), the file also keeps the camper pairing.
+
+- **Export:** Satellite settings › Settings backup › **Download settings backup**. The confirm row says that
+  the file holds the WiFi password, the hub passwords and data key, the sensor keys and the bond's LTK and IRK
+  in plain text. The
+  page posts `POST /api/backup {"confirm":true}` and saves the answer as `oc-backup-<van>.json`. Station
+  mode only, and a local request only: through the hub (`cali_hub_rpc`) every POST but `/api/command` is
+  403 `local_only` (ruling R21), and the route never answers a GET. This is the one deliberate way these
+  secrets leave the board.
+- **Restore:** `POST /api/restore` with the file, only on a fresh board: a first-time setup pending (kv
+  `setup_qr`), or no `wifi_ssid` stored (a new board on its hotspot). A field unit that lost its WiFi also
+  opens the hotspot, but it has WiFi stored and no setup pending: 409 `not_fresh`. Every key and value is
+  checked first, against what this build loads; one bad key and nothing is written. Then the keys are
+  written, `wifi_ok` is `1` (the WiFi joined on the old board), the setup is done, and the board restarts.
+- **Against other web pages:** `/api/backup`, `/api/restore` and `/api/hub_app` take only `Content-Type:
+  application/json` (415 `content_type` otherwise: a cross-site "simple" POST cannot carry it, and the CORS
+  preflight it forces is never answered) and only a Host that is an IPv4 literal, a `*.local` or `*.ts.net`
+  name, or none (403 `host` otherwise: a DNS-rebinding page sends its own name).
+  A single-label name (`busnet:8443`, `calictl-esp`) passes too: it cannot be registered in public DNS.
+- **The file:** `{"format":"oc-backup/1","fw":"<the exporting build, 8 chars>","dev":"<12 hex>","kv":{"<key>":"<base64>",…}}`,
+  only the keys present. `dev` is the board's own BLE address (`cali_ble_own_addr`: the chip's public address,
+  which NimBLE pairs with). The allow-list is `BACKUP_KEYS` in `web.c`, plus the bond:
+
+| Key | Content | Restore check |
+|---|---|---|
+| `wifi_ssid`, `wifi_psk` | The home WiFi | 1–32 / 8–63 bytes |
+| `hub_cfg` | Remote hub: URL, van, both users and passwords | `sizeof(cali_hub_cfg_t)` (280 B) |
+| `hub_key` | The hub data key (AES-128) | 16 B |
+| `lora_cmd_ctr` | The last accepted LoRa command counter (sealed with `hub_key`) | 2 B |
+| `sens_list` | The external sensors: type, address, key, alias | this build's size, at most 16 entries |
+| `th_cfg` | The thermostat settings | the current or an older version the loader converts, every value in range |
+| `th_on`, `pw_ign`, `exp_sensors`, `exp_lora`, `ux_on`, `ac_on`, `ota_channel`, `disp_auto`, `disp_prox`, `disp_motion` | Switches | 1 B, 0 or 1 |
+| `ph_min`, `ph_soc` | Pi halt timer, battery guard | 2 B LE 0–1440 / 1 B 0–100 |
+| `ble_idle`, `ble_rest` | BLE idle policy, rest read interval | 1 B 0–60 / 0–240 |
+| `disp_min`, `disp_max`, `disp_off` | Screen brightness | 1 B 1–50 / 20–100 / signed −50…50 |
+| `sec_our_<n>`, `sec_peer_<n>`, `cccd_<n>` | The camper bond (`ble_store_kv.c`: LTK, IRK, CCCDs), used slots only | a slot of this build, the size of the struct the store reads (`cali_bond_rec_size`); written only when `dev` is this board |
+
+- **The same-board rule:** the camper unit bonded with the chip's public BLE address, so a bond is good only on
+  that chip. Restore writes the bond keys only when `dev` equals this board's address (`"bond":"restored"`);
+  another or a missing `dev` skips them, never an error, and lists them under `"skipped"`
+  (`"bond":"other_device"`; `"none"` when the file has no bond).
+
+- **Not in the file, on purpose:**
+  - `ap_psk`: the setup hotspot's password belongs to the board (its sticker and its display QR).
+  - The LoRa keys (`lora_dev`, `lora_tk`, `lora_ttn`, `lora_keys`): the DevEUI comes from the RAK module,
+    so the keys belong to that module. Set up LoRa again in the remote app.
+  - Runtime state: `setup_qr`, `wifi_ok`, `boot_count`, `water_good`, `th_auto`, `ac_state`, `kvprobe`.
+- **Size:** a full backup is about 2.4 KB, up to 3.6 KB with three bonds and eight CCCDs; the request buffer `NET_HTTP_REQ_MAX` is 6144 B for it.
+- **Test (host tier):** `tests/firmware/test_web_handlers.py` (`T_FW_BACKUP_*`, `T_FW_RESTORE_*`) and the
+  page in `tests/e2e/test_satsettings.py` / `test_first_setup.py` (`T_UX_SETTINGS_BACKUP`,
+  `T_UX_SETTINGS_RESTORE`). Not yet tried on a board.
+
 ## Remote hub (`cali_hub`)
 
 The satellite can publish its state to an MQTT broker and take API requests from the remote app
@@ -2161,12 +2221,13 @@ to the sensors and never to the pairing SM or the session.
   checks the key's first byte against the last advert's check byte (`key_mismatch`); a key with the
   right first byte but a wrong rest decodes to garbage — the protocol offers no other check, so
   compare the first values with VictronConnect. The key lives only in `sens_list`: never returned
-  (`has_key` only), never logged.
+  (`has_key` only) except in the [settings backup](#settings-backup-r_fw_settings_backup), never logged.
 - **Seen table:** an unconfigured advert of a known type fills one of 16 rows (type, model = the
   local name without its last `_…` part, never the MAC; rssi); a full table replaces the oldest
   row; rows older than 10 min are not reported. Never logged.
 - **Ids:** boot-local, `(crc32(address) & 0xffff) | 1` — never 0, the same for one address all boot
-  (and across boots, as long as the address stays); the MAC itself never leaves the ESP.
+  (and across boots, as long as the address stays); the MAC itself never leaves the ESP except in the
+  [settings backup](#settings-backup-r_fw_settings_backup) (`sens_list` whole).
 - **Configured list:** NVS blob `sens_list` (`n` + 16 × `{type, addr_type, addr[6], key[16],
   alias[17]}`), rewritten whole on every change; `forget`/unpair never touch it, nor does the flag.
   Alias `[a-z0-9_-]{1,16}`, unique; omitted = the type's id as its alias, refused when that type is
@@ -2822,6 +2883,13 @@ collected here. `firmware/README.md` has the human-readable version of the same 
   string drawable with the generated fonts) and on the board by `tools/esplab_display_walk.sh`
   (screenshots of the spec's seven states + dimming, decoded by `tools/esp_shot.py`, `tests/test_esp_shot.py`; BOARD rows
   in `docs/business-logic/evidence-ledger.md`).
+- **`R_FW_HUB_APP_FILE`** — verified by `T_FW_HUB_APP_FILE`, `T_FW_HUB_APP_NOT_OVER_HUB`
+  (`tests/firmware/test_web_handlers.py`) and `T_UI_HUB_APP_FILE` (`tests/test_hub_js.py`: the real web.c's file through
+  `rsAppFileCode` and `parseHubQr`).
+- **`R_FW_SETTINGS_BACKUP`** — verified by `T_FW_BACKUP_CONFIRM`, `T_FW_BACKUP_STATION_ONLY`,
+  `T_FW_BACKUP_NOT_OVER_HUB`, `T_FW_BACKUP_ALLOW_LIST`, `T_FW_RESTORE_ROUND_TRIP`, `T_FW_RESTORE_NOT_FRESH`,
+  `T_FW_RESTORE_ALL_OR_NOTHING` (`tests/firmware/test_web_handlers.py`, host tier) and `T_UX_SETTINGS_BACKUP`,
+  `T_UX_SETTINGS_RESTORE` (`tests/e2e`).
 - **`R_SOAK_REPORT`** — verified by `T_SOAK_REPORT` (`tests/test_soak_report.py`: the 7 criteria against
   fixture rows, the report text and `esp_soak` point, the journal summary parser).
 

@@ -74,7 +74,7 @@ _CONTENT_TYPES = {
 
 
 # ---- UX telemetry (POST /api/ux, R_UX_TELEMETRY) -----------------------------------------------
-UX_MAX_BODY = 2048  # the satellite's whole request buffer is 2 KB (NET_HTTP_REQ_MAX); same cap here
+UX_MAX_BODY = 2048  # the satellite's POST /api/ux cap (CALI_UX_BODY_MAX); same cap here
 UX_MAX_EVENTS = 16
 UX_MSG_MAX = 200
 UX_ENUMS = {"ua_class": ("ios", "android", "mac", "other"), "origin": ("lan", "busnet", "buspi")}

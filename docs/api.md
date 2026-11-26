@@ -224,6 +224,8 @@ traceability is generated from the source, not maintained separately.
 .. autofunction:: tests.e2e.test_satellite.test_beacons_carry_views_controls_values_errors
 .. autofunction:: tests.e2e.test_satellite.test_a_control_without_a_value_omits_the_key_and_a_number_is_a_string
 .. autofunction:: tests.e2e.test_satellite.test_secrets_never_reach_a_beacon
+.. autofunction:: tests.e2e.test_satsettings.test_settings_backup_downloads_after_the_warning
+.. autofunction:: tests.e2e.test_first_setup.test_the_wifi_step_restores_a_backup_file
 .. autofunction:: tests.test_web.test_ux_control_value_is_optional_printable_ascii_up_to_32
 .. automodule:: tests.e2e.test_satsettings
 .. automodule:: tests.e2e.test_satsettings_sensors

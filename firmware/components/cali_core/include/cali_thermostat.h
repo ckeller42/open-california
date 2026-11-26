@@ -473,6 +473,13 @@ void cali_thermo_state_json(cali_json_t *j);
 
 /** @brief kv key of the stored configuration (settings, target, aliases, outside_on). */
 #define CALI_THERMO_CFG_KEY "th_cfg"
+/**
+ * @brief Whether a th_cfg record would load: the current version or an older one cali_thermo_run_init
+ *        converts, with every value in range (the settings restore's check, R_FW_SETTINGS_BACKUP).
+ * @param raw The record. @param n Its length in bytes.
+ * @return 1 it loads, 0 it does not.
+ */
+int cali_thermo_blob_ok(const void *raw, size_t n);
 /** @brief Number of settings in cali_thermo_cfg_t (the keys of the `cfg` object). */
 #define CALI_THERMO_CFG_N 22
 /** @brief Lowest target, centi-degrees C. */

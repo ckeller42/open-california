@@ -700,3 +700,52 @@ def test_a_late_hub_answer_after_leaving_the_step_is_harmless(station_pending):
         expect(pg.locator("#setup-check")).to_be_visible()
         held[0].continue_()  # the late answer arrives now
         pg.wait_for_timeout(500)
+
+
+def _restore_file(pg, body, name="oc-backup-van-1.json"):
+    pg.set_input_files(
+        "#restore-file",
+        files=[{"name": name, "mimeType": "application/json", "buffer": json.dumps(body).encode()}],
+    )
+
+
+@pytest.mark.parametrize("locale,lang", LOCALES)
+def test_the_wifi_step_restores_a_backup_file(setup, locale, lang):
+    """A fresh satellite's WiFi step takes the old one's backup file: another file is refused in the page
+    (nothing sent); a backup is posted to /api/restore as it is, and the page says what is left to do (pair,
+    LoRa). A satellite that is set up already answers 409 not_fresh, and the page says why.
+
+    .. test:: The setup wizard restores a settings backup file on a fresh satellite
+       :id: T_UX_SETTINGS_RESTORE
+       :links: R_FW_SETTINGS_BACKUP
+    """
+    backup = {"format": "oc-backup/1", "fw": "abcdef12", "kv": {"wifi_ssid": "SG9tZU5ldA=="}}
+    with _page(setup, "/#setup/wifi", locale, allow=("409",)) as pg:  # the not_fresh answer at the end
+        msg = pg.locator("#restore-msg")
+        expect(pg.locator('label[for="restore-file"]')).to_have_text(tr("Restore from backup file", lang))
+        _restore_file(pg, {"format": "oc-hub/1"}, name="oc-hub.json")
+        expect(msg).to_have_text(tr("Not a settings backup (oc-backup-….json)", lang))
+        expect(msg).to_have_class("warn")
+        assert _posts(setup, "/api/restore") == []
+        _restore_file(pg, backup)
+        expect(msg).to_have_text(
+            tr(
+                "Restarting… then pair with the camper (one passkey: the bond cannot be copied) and set up LoRa again.",
+                lang,
+            )
+        )
+        expect(msg).to_have_class("note")
+        setup.post_reply["/api/restore"] = (
+            200,
+            {"ok": True, "restored": ["wifi_ssid"], "bond": "restored", "reboot": True},
+        )
+        _restore_file(pg, backup)  # the same satellite: the camper pairing came back
+        expect(msg).to_have_text(
+            tr("Restarting… The camper pairing was kept (the same satellite); set up LoRa again.", lang)
+        )
+        setup.post_reply["/api/restore"] = (409, {"ok": False, "error": "not_fresh"})
+        _restore_file(pg, backup)
+        expect(msg).to_have_text(
+            tr("This satellite is set up already: a backup restores only onto a new one.", lang)
+        )
+    assert _posts(setup, "/api/restore") == [backup, backup, backup]

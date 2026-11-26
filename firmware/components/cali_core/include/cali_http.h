@@ -82,6 +82,8 @@ typedef struct cali_http_req {
     size_t body_len;            /**< Length of body in bytes. */
     int resume;                 /**< 0 on the first call for a request, 1 on every re-ask after CALI_HTTP_PENDING. */
     const char *if_none_match;  /**< The If-None-Match header's value, NULL when absent. */
+    const char *host;           /**< The Host header's value, NULL when absent. */
+    const char *content_type;   /**< The Content-Type header's value, NULL when absent. */
 } cali_http_req_t;
 
 /**

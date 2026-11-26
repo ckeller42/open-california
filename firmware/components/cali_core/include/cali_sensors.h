@@ -12,7 +12,8 @@
  *    connect is pending or a pairing flow runs) delivers manufacturer-data adverts; configured
  *    addresses decode by type (govee, victron_mppt, victron_battery) into /api/state ext.<alias> and
  *    an ext SD record at most once a minute; unconfigured ones fill a 16-row seen table with
- *    boot-local ids. The list (<= 16, NVS sens_list) survives the flag; keys never leave the ESP.
+ *    boot-local ids. The list (<= 16, NVS sens_list) survives the flag; keys never leave the ESP except in the
+ *    settings backup (R_FW_SETTINGS_BACKUP: a local POST with confirm, never over the hub).
  * @endverbatim
  *
  * The transport opens the window (`cali_transport_t.scan_window`) and delivers CALI_TEV_ADV through
@@ -20,7 +21,8 @@
  * table in sensors.c). A configured address decodes into a reading (fields per type; NaN means "not
  * available" and becomes JSON null or is left out of the record). An unconfigured one fills the seen
  * table (type, model = the local name without its "_XXXX" suffix, rssi; never logged). Ids are
- * boot-local: (crc32 of the 6 address bytes and 0xffff) OR 1, never 0. The MAC never leaves the ESP.
+ * boot-local: (crc32 of the 6 address bytes and 0xffff) OR 1, never 0. The MAC never leaves the ESP
+ * except in the settings backup (POST /api/backup, which copies sens_list whole).
  *
  * C99, no malloc, no ESP-IDF or NimBLE headers, no clock of its own (callers pass `now_ms`).
  * Everything runs on the owner task, the one that delivers transport events. Proven by
@@ -60,6 +62,14 @@ typedef struct {
 
 /** @brief Load `sens_list` from the kv store and empty the seen table and the readings. */
 void cali_sensors_init(void);
+
+/**
+ * @brief Whether a sens_list record would load: this build's size and at most 16 entries (the settings
+ *        restore's check, R_FW_SETTINGS_BACKUP).
+ * @param raw The record (its first byte is the entry count). @param n Its length in bytes.
+ * @return 1 it loads, 0 it does not.
+ */
+int cali_sensors_blob_ok(const void *raw, size_t n);
 
 /**
  * @brief Run the window cadence: one window of 5 s every 60 s (or 15 s after a kick) while enabled and no pairing flow runs.

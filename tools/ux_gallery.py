@@ -565,6 +565,9 @@ _SETTINGS = {
     "/api/lora": _lora_forget,
     "/api/hub": _hub,
     "/api/hub_key": lambda dev, body: None,  # a new data key: nothing in device changes
+    "/api/hub_app": lambda dev, body: None,  # R_FW_HUB_APP_FILE: a test's post_reply carries the file
+    "/api/backup": lambda dev, body: None,  # R_FW_SETTINGS_BACKUP: a test's post_reply carries the file
+    "/api/restore": lambda dev, body: None,  # the satellite would restart now
 }
 
 

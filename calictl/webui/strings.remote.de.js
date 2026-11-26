@@ -31,6 +31,8 @@ Object.assign(window.STRINGS_DE, {
   "This phone no longer shows the van.": "Dieses Telefon zeigt das Fahrzeug nicht mehr an.",
   "No code found in the photo.": "Im Foto wurde kein Code gefunden.",
   "Take a photo of the code": "Code fotografieren",
+  "Or load the app file from the satellite's page (Remote hub › Download app file).": "Oder lade die App-Datei von der Seite des Satelliten (Fern-Hub › App-Datei herunterladen).",
+  "Not an app file of the satellite (oc-app-….json).": "Keine App-Datei des Satelliten (oc-app-….json).",
   "Use the camera": "Kamera verwenden",
   "The camera does not start: take a photo instead.": "Die Kamera startet nicht: Fotografiere den Code stattdessen.",
   "The camera did not start. Tap Use the camera again, or take a photo of the code.": "Die Kamera ist nicht gestartet. Tippe noch einmal auf Kamera verwenden, oder fotografiere den Code.",
