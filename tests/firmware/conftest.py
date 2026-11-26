@@ -2,7 +2,6 @@
 NimBLE socket transport connects to it), linked to the fake unit's controller."""
 
 import asyncio
-import fcntl
 import importlib.util
 import json
 import os
@@ -562,6 +561,8 @@ def build_host(binary="cali-host"):
     (``rm -rf`` + clone) and ``make`` run under an exclusive lock on ``firmware/host/.build.lock``,
     so a second worker waits and then finds everything built."""
     if binary not in _BUILT:
+        import fcntl  # POSIX only: the conftest must still load (and skip linux_only) elsewhere
+
         with open(HOST_DIR / ".build.lock", "w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)  # released when the file closes
             subprocess.run(["bash", str(HOST_DIR / "fetch_nimble.sh")], check=True)

@@ -472,7 +472,10 @@ jobs:
           fetch-depth: 2   # a PR checks out its merge commit and main gets squash merges: HEAD^1 is the base
       - id: filter
         run: |
-          git diff --name-only HEAD^1 HEAD | python3 -m tools.ci_changes | tee -a "$GITHUB_OUTPUT"
+          # --no-renames: a renamed file lists its old path too. A failed diff stops here, so the
+          # outputs stay missing and every filtered job runs.
+          git diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+          python3 -m tools.ci_changes < "$RUNNER_TEMP/changed.txt" | tee -a "$GITHUB_OUTPUT"
 
   # The iPhone app (docs/ios-app.md): the Swift package tests (plain, ASan, UBSan), the app's unit,
   # snapshot and UI tests on the simulator, then SwiftLint + swift-format. The xcode-27 image has
