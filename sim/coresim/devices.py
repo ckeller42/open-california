@@ -135,6 +135,7 @@ class Rak3172:
     tx_released: bool = False
     rst_released: bool = False
     resets: int = 0
+    power_losses: int = 0  # times its 5 V went away
     cured: list = field(default_factory=list)  # t_ms of each latch cure
     cmds: list = field(default_factory=list)  # (t_ms, line) every line written to it, answered or not
     sends: list = field(default_factory=list)  # (t_ms, port, hex, answer)
@@ -166,6 +167,7 @@ class Rak3172:
         self.on_restart()
 
     def lost_power(self):
+        self.power_losses += 1
         self.reboot()  # the module starts over when its 5 V comes back
         if self.latch_on_dip:
             self.latched = True
