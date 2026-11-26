@@ -398,7 +398,7 @@ jobs:
       - name: coresim's own tests, then lora_esp.c against the fake RAK3172, AW9523 and AXP2101
         shell: bash
         run: |
-          python -m pytest sim/tests tests/firmware/test_lora_esp_sim.py -v -rs 2>&1 | tee sim.log
+          python -m pytest sim/tests tests/firmware/test_lora_esp_sim.py tests/firmware/test_lora_scenarios.py -v -rs 2>&1 | tee sim.log
           ! grep -q SKIPPED sim.log
 
   # The esp32s3 (M5Stack CoreS3) image: compile-only (no hardware in CI). Proves cali_core,

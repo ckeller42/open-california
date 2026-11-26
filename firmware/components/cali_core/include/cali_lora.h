@@ -638,6 +638,20 @@ void cali_lora_port_forgotten(void);
  *        configures the module and joins again when the AppKey is new. A no-op without a module driver.
  */
 void cali_lora_port_setup_request(void);
+/**
+ * @brief The module settings the console may read (`lora at <name>`): the RX windows and the join delays for
+ *        a join-accept diagnosis, plus the band, class, ADR, data rate, mode and join state. Never a key.
+ * @param name The setting's AT name without `AT+` and `=?`, e.g. `RX2DR`.
+ * @return 1 when `name` is one of them, else 0.
+ */
+int cali_lora_at_query_ok(const char *name);
+/**
+ * @brief Queue one module query `AT+<name>=?` (cali_lora_at_query_ok) for the LoRa task; any task. The task runs it
+ *        at its next pass with the module set up and logs both directions (`lora: >>` / `lora: <<`).
+ * @param name The setting's AT name (cali_lora_at_query_ok), copied.
+ * @return 0 queued, -1 another query still waits or no module driver (host, QEMU).
+ */
+int cali_lora_port_at(const char *name);
 
 #ifdef __cplusplus
 }

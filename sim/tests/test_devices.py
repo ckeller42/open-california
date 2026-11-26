@@ -49,7 +49,7 @@ def test_rak3172_queries_settings_join_send():
     assert r.sends == [(0, 2, "00", "AT_NO_NETWORK_JOINED"), (0, 2, "00", "OK")]
 
 
-@pytest.mark.parametrize("line", ["AT+FOO=1", "AT+FOO=?", "ATZ", "AT+RX1DL=?"])
+@pytest.mark.parametrize("line", ["AT+FOO=1", "AT+FOO=?", "ATZ", "AT+NWKSKEY=?"])
 def test_rak3172_unmodelled_command_fails_loudly(line):
     with pytest.raises(Unmodelled):
         Rak3172().uart(0, line)
@@ -109,3 +109,11 @@ def test_axp2101_unmodelled_register_fails_loudly(op):
 
     with pytest.raises(Unmodelled):
         Axp2101().read(0x90, 1) if op == "read" else Axp2101().write(bytes([0x90, 0xBF]))
+
+
+def test_rak3172_rx_settings_and_join_state():
+    r = Rak3172()
+    assert [t for _, t in ev(r.uart(0, "AT+RX2DR=?"))] == ["AT+RX2DR=0", "OK"]
+    assert [t for _, t in ev(r.uart(0, "AT+NJS=?"))][0] == "AT+NJS=0"
+    r.joined = True
+    assert [t for _, t in ev(r.uart(0, "AT+NJS=?"))][0] == "AT+NJS=1"

@@ -84,3 +84,75 @@ python -m pytest sim/tests -q
 
 A firmware's sim build links `shims/sim_rtos.c` and `shims/sim_hw.c` with `-I sim/shims/include` and a
 `main` that defines `sim_event()`. The satellite's sim build is `make -C firmware/host lora-sim`.
+
+## HIL: the same scenarios on a real board
+
+The satellite repository runs its dual-target scenarios (`tests/firmware/test_lora_scenarios.py`) on the
+simulated board in CI and on a real CoreS3 on a bench (`tools/esplab/hil.sh`). Each board run also runs on
+the sim. The differences of the two AT transcripts are written as `drift-<scenario>.txt`: "fake drift",
+the input for a correction of a fake, with the board's capture as its evidence.
+
+### Bench setup
+
+- **Hardware:** an M5Stack CoreS3 and the Module LoRaWAN-EU868 (SKU M148, RAK3172) on the M-Bus. Set the
+  module's DIP switches to RX G18, TX G43 and RST G5. Fit the antenna before the first join.
+- **Connection:** USB-C from the CoreS3 to odelly. The board is named only by its
+  `/dev/serial/by-id/usb-Espressif_..._<MAC>-if00` path in `HIL_PORT`. `hil.sh` refuses to run without
+  it, and it never opens `/dev/ttyUSB0` (odelly's node32).
+- **Network:** a TTN device for the bench board. The owner creates it; its keys go onto the board with the
+  console command `lora keys` or the LoRa setup screen. The scenarios read TTN only through read-only
+  APIs, and they never write to TTN.
+- **No GitHub runner:** the repository is public, so a self-hosted runner would run code from fork PRs on
+  odelly. Run `hil.sh` by hand, or by a systemd user timer that you install yourself. Example
+  (not installed by anything in the repository):
+
+  ```ini
+  # ~/.config/systemd/user/hil.service
+  [Service]
+  Type=oneshot
+  WorkingDirectory=%h/src/open-california
+  Environment=HIL_PORT=/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_<MAC>-if00
+  ExecStart=%h/src/open-california/tools/esplab/hil.sh scenarios
+
+  # ~/.config/systemd/user/hil.timer
+  [Timer]
+  OnCalendar=daily
+  [Install]
+  WantedBy=timers.target
+  ```
+
+### HIL session
+
+Each step is one command. All steps are read-only, except the ones under "With the owner present". The
+output goes to `$HIL_OUT` (default `~/hil/<date-time>`).
+
+1. Once per machine: make a Python environment with the test tools and coresim, and select it:
+   `python3 -m venv ~/hil-venv && ~/hil-venv/bin/pip install -r requirements-dev.txt && export PY=~/hil-venv/bin/python`.
+   The drift report also needs the 32-bit host build of the sim (`gcc-multilib g++-multilib`). Without it,
+   `hil.sh scenarios` runs only on the board and says so.
+2. Find the board's by-id path: `ls -l /dev/serial/by-id/`.
+3. Set the board's port: `export HIL_PORT=/dev/serial/by-id/usb-Espressif_..._<MAC>-if00`.
+4. Identify the board (the MAC is in the by-id name; `status`, `lora status`, `wifi status`):
+   `tools/esplab/hil.sh identify`.
+5. Record the console for 2 min (the AT traffic, among it the liveness probe): `tools/esplab/hil.sh tail 120`.
+6. Read the RX settings for the join-accept diagnosis (`RX1DL`, `RX2DL`, `RX2DR`, `RX2FQ`, `JN1DL`,
+   `JN2DL`, `BAND`, `CLASS`, `ADR`, `DR`, `NJS`): `tools/esplab/hil.sh diag`.
+7. Run the read-only dual-target scenarios on the board and on the sim, with a JUnit report and the drift
+   reports: `tools/esplab/hil.sh scenarios`.
+8. Read the drift reports: `cat $HIL_OUT/drift-*.txt`.
+
+**With the owner present** (these steps change the board):
+
+1. Record a raw AT transcript of a module setup, a join and the uplinks (LoRa off and on again):
+   `tools/esplab/hil.sh capture-join`.
+2. Run all the scenarios, the real join with uplinks included: `tools/esplab/hil.sh scenarios --actions`.
+3. Only if the board needs other firmware: `HIL_FLASH=owner-present tools/esplab/hil.sh flash <CI run id>`.
+   This writes the board's flash. Give an explicit run id (`gh run list --workflow ci.yml`), never `main`.
+
+After the session, copy the new captures (`capture-join.log`, `rx-diag.log`, the console tails) into
+`sim/tests/data/` as `rak3172-<what>.log`, with only the `lora:` lines kept. `tests/test_replay.py` then
+replays them, and a fake that does not match fails.
+
+**Not yet possible:** a dump of the AW9523 and AXP2101 registers. The firmware has no console command for
+that, so the session reads only what `status` reports (`battery`). A read-only `i2c` dump command is a
+follow-up.
