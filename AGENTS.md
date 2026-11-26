@@ -132,6 +132,10 @@ not required yet), the firmware jobs, and — on push to `main` only — `docs.y
 `screenshots.yml` (renders the web-UI shots over the mock and commits them to the `screenshots`
 branch; the docs and README reference them from there by raw URL, so none is committed to `main`).
 The `docs` job (doxygen + the `sphinx -W` site build on every PR) runs locally as `tools/ci.sh docs`.
+`.github/workflows/images.yml` (not required, path-filtered) builds + smoke-tests the `oc-linux` and `oc-docs`
+images and publishes them from `main` to `ghcr.io/ckeller42/open-california/`; `tools/ci.sh linux|docs`
+pull them when the Dockerfile + requirements equal those of the image's source commit
+(its `org.opencontainers.image.revision` label).
 Test layers + harnesses: `docs/simulation-and-testing.md`.
 
 **Required checks — the branch ruleset is the source of truth, verify from the API not from memory**
