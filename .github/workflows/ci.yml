@@ -391,7 +391,7 @@ jobs:
         # g++-multilib too: the linux_only skip check (tests/firmware/conftest.py) links a C++ probe
         run: |
           sudo apt-get update && sudo apt-get install -y gcc-multilib g++-multilib
-          pip install -r requirements-dev.txt
+          pip install -r requirements-dev.txt -e ./sim
       - name: coresim's own tests, then lora_esp.c against the fake RAK3172 + AW9523
         shell: bash
         run: |

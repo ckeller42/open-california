@@ -5,8 +5,14 @@ tick, and the USB state handed over as an event (``lora_sim_main.c``)."""
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 
-import coresim
+try:
+    import coresim
+except ImportError:  # not installed (pip install -e sim): this checkout's copy
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sim"))
+    import coresim
 
 KEYS = "lora keys 70B3D57ED0000001 0000000000000001 000102030405060708090A0B0C0D0E0F"
 

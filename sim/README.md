@@ -76,7 +76,7 @@ esp-stable.
 ## Running
 
 ```sh
-pip install -e sim
+pip install -e sim   # or nothing: tests/firmware/esp_sim.py falls back to this checkout's sim/
 python -m pytest sim/tests -q
 ```
 
