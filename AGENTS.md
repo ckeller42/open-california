@@ -152,7 +152,7 @@ as the only merge method, and no branch deletion / no force-push. `no-vendor-mat
 `pairing-real-stack` and `ios` on a PR that touches none of their paths (a skipped required check
 counts as passed). A new import or build input of one of these jobs needs its path in that file.
 A push to `main` runs every job but `ios`. `pairing-real-stack` has `continue-on-error` (the
-runner has no Bluetooth kernel module for its VM). The `ci-ok` job is the gate: it needs every job
+runner has no Bluetooth kernel module for its VM). `firmware-host-e2e` collects the three groups of `firmware-host-e2e-split` (pytest-split over `tests/firmware/.test_durations`). The `ci-ok` job is the gate: it needs every job
 except `pairing-real-stack` and `ios` and fails when one of them failed or was cancelled. Never rename a job key in `ci.yml` (or give the matrix job a `name:`); branch
 protection matches these strings. Workflows: every `uses:` is SHA-pinned with a `# vX.Y.Z` comment,
 `persist-credentials: false` on checkout (except `screenshots.yml`, which pushes), a
