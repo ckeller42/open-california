@@ -113,41 +113,51 @@ def test_latched_module_rst_fails_bus_power_cycle_cures(sim):
     assert b.rak.resets >= 1  # the RST pulse came first and did not help
     assert b.logged("lora: module silent after reset: bus power cycle")
     on = [t for t, bits in b.bus_history if bits == (1, 1)]
-    assert on[0] == cure
+    assert (
+        on[0] < cure and cure in on
+    )  # 1/1 at the LoRa start (TX and RST driven: no cure), then the cycle's step
     off_since = max([0] + [t for t, bits in b.bus_history if bits == (0, 0) and t < cure])
     assert cure - off_since >= 5000  # BUS_OFF_MS
     assert [p for t, p in sends(b, "OK") if t > cure][:3] == [2, 3, 4]
-    # on USB the steady state is 0/0 again afterwards (bus_follow_usb)
-    assert b.aw.bus == (0, 0) and b.bus_history[-1][1] == (0, 0)
+    assert b.aw.bus == (1, 1)  # and it stays on: the steady state in every supply state
 
 
 def test_module_silent_mid_run_watchdog_resets_and_cures(sim):
-    """Latched after a dip while joined: the AT timeouts of the next port-2 rounds count up to
-    CALI_LORA_SILENT_MAX (3), the watchdog resets, RST does not help, the bus power cycle does. At SF12 a
-    round is about every 4.8 h and one round adds 2 (AT+DR=? and AT+SEND), so the reset comes in the
-    second silent round: about 10 h after the dip."""
+    """Latched while joined: the idle liveness probe (a plain AT every LIVENESS_S, every PROBE_RETRY_S
+    while unanswered) counts 3 unanswered ATs within minutes, the watchdog resets, RST does not help, the
+    bus power cycle does, the task joins again and sends port 2 soon after. Before the probe the
+    timeouts came only with the port-2 rounds (about every 4.8 h at SF12): the reset came about 10 h
+    after the latch."""
     b = esp_sim.Board()
     b.at(HOUR, lambda board: setattr(board.rak, "latched", True))
-    b = sim(b, 12 * HOUR)
+    b = sim(b, 3 * HOUR)
     assert sends(b, "OK")[0][0] < HOUR
     reset = b.logged("lora: module silent: reset")
-    assert reset and reset[0] > HOUR
+    assert reset and HOUR < reset[0] <= HOUR + 5 * MIN, reset
     assert b.rak.cured and b.rak.cured[0] > reset[0]
     assert b.logged("lora: module silent after reset: bus power cycle")
-    assert [t for t, c in b.rak.cmds if t > b.rak.cured[0] and c.startswith("AT+JOIN=")], (
-        "no join after the cure"
-    )
-    silent = [s["at_unanswered"] for t, s in b.states if HOUR < t < reset[0]]
-    assert max(silent) >= 2
-    st = state_at(b, 12 * HOUR)
+    joins = [t for t, c in b.rak.cmds if t > b.rak.cured[0] and c.startswith("AT+JOIN=")]
+    assert joins, "no join after the cure"
+    after = [(t, p) for t, p in sends(b, "OK") if t > joins[0]]
+    assert after and after[0][1] == 2 and after[0][0] - joins[0] <= MIN
+    st = state_at(b, 3 * HOUR)
     assert st["joined"] is True and st["at_unanswered"] == 0 and st["module"] == "present"
+
+
+def test_liveness_probe_is_cheap(sim):
+    """The probe is a plain AT (no airtime): one per LIVENESS_S while the module answers."""
+    b = sim(esp_sim.Board(), 2 * HOUR)
+    first_send = sends(b)[0][0]
+    probes = [t for t, c in b.rak.cmds if c == "AT" and t > first_send]
+    assert 2 * HOUR / (5 * MIN) - 2 <= len(probes) <= 2 * HOUR / (5 * MIN) + 1, len(probes)
+    assert len(sends(b)) == 3  # no extra uplink
 
 
 def test_aw9523_absent_no_abort_module_on_usb_works(sim):
     """Without the AW9523 the display does not start (its init probes 0x34 and 0x58), so the battery is never
-    read, the supply stays unknown and bus_follow_usb() leaves the bus alone; the module on VBUS works."""
+    read; the LoRa start's bus power on fails at the probe (logged, no abort); the module on VBUS works."""
     b = sim(esp_sim.Board(aw9523=False), 3 * MIN)
-    assert b.logged("display: unavailable (aw9523)")
+    assert b.logged("display: unavailable (aw9523)") and b.logged("lora: bus power on failed")
     assert not [
         r for _, r in b.hw if r.startswith("I2C W 58")
     ]  # no board-package init: it would abort on the NACK
@@ -168,18 +178,18 @@ def test_aw9523_absent_latched_module_stays_silent(sim):
     assert any(later - first >= 600_000 for first, later in zip(ats, ats[1:]))
 
 
-def test_bus_power_follows_usb(sim):
+def test_bus_power_steady_on_in_every_supply_state(sim):
+    """The LoRa start sets both bus bits to 1 and they stay there on USB and on the battery: unplugging USB
+    never takes the module's 5 V away (with the bits following USB it lost them until the next battery
+    read, up to CALI_BATT_READ_MS)."""
     b = esp_sim.Board(usb=True)
     b.at(3 * MIN, lambda board: board.set_usb(False))
     b.at(6 * MIN, lambda board: board.set_usb(True))
     b = sim(b, 9 * MIN)
-    on_usb = [bits for t, bits in b.bus_history if t < 3 * MIN]
-    assert not on_usb or on_usb[-1] == (0, 0)
-    assert [bits for t, bits in b.bus_history if 3 * MIN <= t < 6 * MIN] == [(1, 1)]
-    assert [bits for t, bits in b.bus_history if t >= 6 * MIN] == [(0, 0)]
-    battery = next(t for t, bits in b.bus_history if bits == (1, 1))
-    assert battery - 3 * MIN <= 1000  # the next pass of the LoRa task
-    assert b.logged("lora: bus power on (battery)") and b.logged("lora: bus power off (usb)")
+    assert [bits for _, bits in b.bus_history] == [(1, 1)]
+    assert b.bus_history[0][0] < sends(b)[0][0]  # on before the first uplink
+    assert b.rak.power_losses == 0
+    assert b.logged("lora: bus power on")
 
 
 # ---- the AXP2101 (display.c's battery read, axp2101_read.h) ----
@@ -196,44 +206,35 @@ def test_battery_from_axp2101_registers(sim):
 def test_axp2101_absent_battery_unknown_bus_untouched(sim):
     b = sim(esp_sim.Board(axp2101=False), 3 * MIN)
     assert b.logged("display: unavailable (axp2101)")
-    assert b.battery[-1][1]["usb"] is None and not b.logged("lora: bus power")
+    assert b.battery[-1][1]["usb"] is None and b.aw.bus == (1, 1)  # the bus does not need the supply state
     assert [p for _, p in sends(b, "OK")][:3] == [2, 3, 4]
 
 
-def test_supply_dip_battery_keeps_the_module_powered(sim):
-    """USB gone (the van's 12 V dip): on 0/0 the module loses its 5 V until the next battery read (every
-    CALI_BATT_READ_MS) shows no VBUS and the bus goes to 1/1; from then on it keeps power, also when USB
-    comes back (0/0 again, fed by VBUS). The restarted module answers the next send with
-    AT_NO_NETWORK_JOINED, and the task joins again."""
+def test_supply_dip_module_keeps_its_5_v(sim):
+    """USB gone (the van's 12 V dip) and back: the module keeps its 5 V throughout (1/1 from the boost),
+    stays joined and never has to join again."""
     b = esp_sim.Board()
     unplug, plug = 3 * MIN, 6 * MIN
     b.at(unplug, lambda board: board.set_usb(False))
     b.at(plug, lambda board: board.set_usb(True))
     b = sim(b, 6 * HOUR)
-    on = next(t for t, bits in b.bus_history if bits == (1, 1))
-    assert unplug < on <= unplug + 10_000 + 1_000
-    assert [bits for t, bits in b.bus_history if t > plug] == [(0, 0)]
-    off = next(t for t, bits in b.bus_history if t > plug)
-    assert plug < off <= plug + 10_000 + 1_000
     assert next(bat for t, bat in b.battery if unplug + 11_000 < t < plug)["usb"] is False
-    assert sends(b, "AT_NO_NETWORK_JOINED"), "the restarted module never refused a send"
-    joins = [t for t, c in b.rak.cmds if c.startswith("AT+JOIN=")]
-    assert len(joins) == 2 and joins[1] > plug
+    assert b.rak.power_losses == 0 and not sends(b, "AT_NO_NETWORK_JOINED")
+    assert len([c for _, c in b.rak.cmds if c.startswith("AT+JOIN=")]) == 1
     assert state_at(b, 6 * HOUR)["joined"] is True
 
 
-def test_supply_dip_latches_the_module_power_cycle_cures(sim):
-    """The 2026-11-22 incident: the dip leaves the module latched silent; back on USB the watchdog's reset
-    does not help, the bus power cycle does, and the module joins again."""
+def test_rejoin_sends_port_2_and_4_soon(sim):
+    """The module lost its join (it restarted on its own): the next send gets AT_NO_NETWORK_JOINED, the
+    task joins again and sends port 2 (and the daily port 4) right after the join, as after the first
+    one, instead of waiting for the old schedule (about 4.8 h at SF12)."""
     b = esp_sim.Board()
-    b.rak.latch_on_dip = True
-    b.at(HOUR, lambda board: board.set_usb(False))
-    b.at(2 * HOUR, lambda board: board.set_usb(True))
-    b = sim(b, 12 * HOUR)
-    assert b.rak.latched is False and b.rak.cured and b.rak.cured[0] > 2 * HOUR
-    assert b.logged("lora: module silent: reset") and b.logged(
-        "lora: module silent after reset: bus power cycle"
-    )
-    joins = [t for t, c in b.rak.cmds if c.startswith("AT+JOIN=")]
-    assert joins[-1] > b.rak.cured[0]
-    assert state_at(b, 12 * HOUR)["joined"] is True
+    b.at(HOUR, lambda board: board.rak.reboot())
+    b = sim(b, 8 * HOUR)
+    refused = sends(b, "AT_NO_NETWORK_JOINED")
+    assert refused
+    joins = [t for t, c in b.rak.cmds if c.startswith("AT+JOIN=") and t > refused[0][0]]
+    assert joins
+    after = [(t, p) for t, p in sends(b, "OK") if t > joins[0]]
+    assert [p for _, p in after[:3]] in ([2, 3, 4], [2, 4]), after[:3]
+    assert after[0][0] - joins[0] <= MIN
