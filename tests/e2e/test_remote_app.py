@@ -384,3 +384,23 @@ def test_a_phone_without_a_van_is_sent_to_the_vans_code(site, error_gated_page):
         expect(pg.get_by_text("Ignition off")).to_have_count(0)
         pg.get_by_role("button", name="Scan the van's code").click()
         expect(pg.locator("#title")).to_have_text("Scan the van's code")
+
+
+NOHUB = (
+    "No remote hub set up on this phone: values come only over LoRa. Scan the van's code to see live data."
+)
+
+
+def test_lora_only_phone_says_why_the_values_are_old(site, ttn, error_gated_page):
+    """2026-11-26: a phone without a remote hub showed two-day-old LoRa values ("LoRa — display only") without a
+    word why, and the owner took MQTT for broken. The banner names the missing hub and leads to "Scan the van's
+    code"; the key stays off the screen."""
+    _, secret = ttn.make_key("read")
+    ttn.add_uplink(DEV, 2, port2(), datetime.now(UTC) - timedelta(days=2))
+    with error_gated_page(site, init_script=_init(ttn, secret), service_workers="block") as pg:
+        expect(pg.locator(".summary")).to_contain_text("11 / 29 l")
+        expect(pg.locator("#conn")).to_contain_text(NOHUB)
+        assert secret not in pg.content()
+        pg.locator("#conn").get_by_role("button", name="Scan the van's code").click()
+        expect(pg.locator("#title")).to_have_text("Scan the van's code")
+        expect(pg.locator("#conn")).not_to_contain_text(NOHUB)  # the scan screen itself needs no pointer

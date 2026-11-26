@@ -178,3 +178,6 @@ To remove everything, do both and then delete the device and the application in 
 - The Things Network has a fair use policy: a device may use about 30 seconds of uplink airtime
   and receive 10 messages a day. The app sends at most 8 setup messages to the van in 24 hours.
 - The remote app needs a network connection. It opens offline and shows the last data with its age.
+- Without a remote hub on the phone, all values come over LoRa and can be hours old. The app says so
+  above the values. To see live data, tap **Scan the van's code** there and scan the van's hub code
+  ([Remote hub](howto-remote-hub.md)).

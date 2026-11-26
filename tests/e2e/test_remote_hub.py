@@ -303,6 +303,7 @@ def test_live_then_lora_and_a_command_by_lora(world):
         expect(pg.locator("#status")).to_have_text("WLAN · just now")
         expect(_tile(pg, "Cooler")).to_be_visible()
         assert pg.locator(".tile.stale").count() == 0
+        expect(pg.locator("#conn")).to_have_text("")  # a hub: neither the LoRa-only nor the no-broker notice
         assert broker.logins[0][0][-2:] == ["app", "app-pass"]
         pg.locator("#menu").click()  # hub mode: the settings are named as local only, no Device status
         expect(pg.get_by_role("menuitem", name="Settings: only in the van's WiFi")).to_be_disabled()
@@ -440,3 +441,20 @@ def test_camping_mode_over_the_hub(world, on):
         (q["m"], json.loads(q["b"])["function"], json.loads(q["b"])["what"], json.loads(q["b"])["value"])
         for q in cmds
     ] == [("POST", "campingmode", "master", "on" if on else "off")]
+
+
+def test_unreachable_broker_is_named_after_a_while(world):
+    """A hub on this phone whose broker does not answer: after HUB_DOWN_MS (20 s, longer than MQTT.js's 15 s
+    connect timeout, so a page load never flashes it) the banner says "No connection to the hub", not silence;
+    the LoRa-only notice does not show (the phone has a hub)."""
+    broker, _, url, init = world
+    broker.close()
+    with _error_gated_page(
+        url, init_script=init, service_workers="block", allow_errors=("WebSocket", "ERR_CONNECTION_REFUSED")
+    ) as pg:
+        pg.clock.install()
+        expect(pg.locator("#status")).to_have_text("offline")
+        expect(pg.locator("#conn")).not_to_contain_text("No connection to the hub")
+        pg.clock.fast_forward(25000)
+        expect(pg.locator("#conn")).to_have_text("No connection to the hub: try again in a moment.")
+        expect(pg.locator("#conn")).not_to_contain_text("No remote hub")

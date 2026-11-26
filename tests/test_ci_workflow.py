@@ -73,3 +73,11 @@ def test_push_trigger_is_main_only():
     """The gated jobs' ``github.event_name == 'push'`` override means "push to main" only while this holds."""
     on = yaml.safe_load(CI.read_text())[True]  # YAML 1.1 reads the key `on` as True
     assert on["push"]["branches"] == ["main"]
+
+
+def test_every_change_area_gates_a_job():
+    """An area of tools/ci_changes.py that no job reads is a heavy job that lost its gate (or a dead filter)."""
+    from tools.ci_changes import AREAS
+
+    conds = " ".join(str(j.get("if", "")) for j in JOBS.values())
+    assert [a for a in AREAS if "needs.changes.outputs.%s " % a not in conds] == []

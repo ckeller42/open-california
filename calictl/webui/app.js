@@ -1276,6 +1276,8 @@ function paintLink() {
     else if (remoteProblem === "key") tmpl = HUB_KEY_MSG;
     else if (remoteProblem === "ttn") tmpl = clock ? "The Things Stack does not answer. Last data {clock} ({ago})."
       : "The Things Stack does not answer.";
+    else if (hubCfg() && hubDown()) tmpl = HUB_NOCONN_MSG;   // hub.js: the broker unreachable for a while
+    else if (!hubCfg() && remoteCfg() && !REMOTE_VIEWS.includes(view)) tmpl = REMOTE_NOHUB_MSG;   // LoRa only: say why
   } else if (s === "unpaired" && view !== "wifisetup" && view !== "setup") {   // WiFi setup: its unpaired banner says it once
     cls += " unpaired";   // neutral: nothing is broken, the setup is not done yet
     tmpl = "Not paired yet — no data.";
@@ -1325,6 +1327,16 @@ function paintLink() {
       b.onclick = restConnect;
       acts.append(cm, b);
       connEl.append(" ", nx, once, acts);
+    }
+    if (REMOTE && tmpl === REMOTE_NOHUB_MSG) {   // remote.js (remote build only): the way to the live data
+      const acts = document.createElement("div");
+      acts.className = "acts";
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn"; b.id = "nohub-scan";
+      b.textContent = /** @type {string} */ (t("Scan the van's code"));
+      b.onclick = () => remoteOpen("remotescan");
+      acts.append(b);
+      connEl.append(" ", acts);
     }
     if (focused != null) ((focused && document.getElementById(focused)) || titleEl).focus({ preventScroll: true });
   }
