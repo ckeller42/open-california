@@ -2,6 +2,9 @@
 
 * :class:`Aw9523` — the IO expander (I2C 0x58): a register file, output 0x02/0x03, direction 0x04/0x05
   (0 = output), 0x7F soft reset. :attr:`Aw9523.bus` = (P0_1 BUS_OUT_EN, P1_7 BOOST_EN), the M-Bus 5 V.
+* :class:`Axp2101` — the power chip (I2C 0x34): 0x00 (bit 5 VBUS good, bit 3 battery present), 0x01 (bits
+  6:5 charge state), 0x34/0x35 battery mV (14 bit), 0xA4 fuel-gauge percent, and the enable registers 0x18
+  (bit 3 fuel gauge) and 0x30 (bit 0 battery voltage ADC).
 * :class:`Rak3172` — the RAK3172 LoRaWAN module (RUI3 AT firmware) on a UART: ``AT``, ``AT+<X>=?``,
   ``AT+<X>=<v>``, ``AT+JOIN``, ``AT+SEND``, ``+EVT`` events with a delay, and these fault modes: refused
   sends (``AT_BUSY_ERROR``), a join accept that fails or never comes, and *latched silent* (no answer at
@@ -71,6 +74,41 @@ class Aw9523:
     def bus(self) -> tuple[int, int]:
         """(BUS_OUT_EN P0_1, BOOST_EN P1_7)."""
         return self.out(0, 1), self.out(1, 7)
+
+
+@dataclass
+class Axp2101:
+    """Register meanings: M5Unified ``AXP2101_Class.inl`` and XPowersLib (the AXP2101 datasheet's map).
+    The power-on values of 0x18 and 0x30 are assumed 0 (unverified: no saved register dump of the board)."""
+
+    addr = 0x34
+    READ = {0x00, 0x01, 0x18, 0x30, 0x34, 0x35, 0xA4}
+    WRITE = {0x18, 0x30}
+    present: bool = True
+    vbus: bool = True
+    battery: bool = True
+    mv: int = 4012
+    pct: int = 87
+    charging: bool = False
+    regs: dict = field(default_factory=lambda: {0x18: 0x00, 0x30: 0x00})
+
+    def read(self, reg, n):
+        if not set(range(reg, reg + n)) <= self.READ:
+            raise Unmodelled(f"AXP2101 read {reg:#04x}+{n}")
+        live = {
+            0x00: (0x20 if self.vbus else 0) | (0x08 if self.battery else 0),
+            0x01: (0b01 if self.charging else 0b10) << 5,
+            0x34: self.mv >> 8 & 0x3F,
+            0x35: self.mv & 0xFF,
+            0xA4: self.pct,
+        }
+        return bytes(live.get(r, self.regs.get(r, 0)) for r in range(reg, reg + n))
+
+    def write(self, data: bytes):
+        if not set(range(data[0], data[0] + len(data) - 1)) <= self.WRITE:
+            raise Unmodelled(f"AXP2101 write {data.hex()}")
+        for i, b in enumerate(data[1:]):
+            self.regs[data[0] + i] = b
 
 
 @dataclass

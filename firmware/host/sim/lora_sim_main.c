@@ -3,9 +3,9 @@
  * Driven by tests/firmware/esp_sim.py (coresim's fake RAK3172 + AW9523) over stdin/stdout (sim/shims/sim_hw.c).
  *
  * Usage: lora-sim [--store <dir>] [--until <virtual ms>]
- * Events the fakes can schedule besides RX (sim_event): "USB 0|1" (the AXP2101's VBUS reading into
- * cali_battery_update, as display.c does on the board), "TICK" (answered with "HW <t> TICK <lora json>"),
- * "CONSOLE <line>" (a console line: "lora on", "lora keys ...").
+ * The battery reading comes from the fake AXP2101 through display.c's own read code (axp_sim.c).
+ * Events the fakes can schedule besides RX (sim_event): "TICK" (answered with "HW <t> TICK <json>", the
+ * json holding device.lora and device.battery), "CONSOLE <line>" (a console line: "lora on", "lora keys ...").
  *
  * The camper side is a stub: two fixed frames as the session's (so ports 3/4 have content), no sensors,
  * zero counters, boot 1, and cali_ctl_submit only logs. */
@@ -22,6 +22,8 @@
 #include "sim_idf.h"
 
 int sim_hw_req(const char *fmt, ...);
+void sim_axp_start(void);
+void sim_axp_tick(uint64_t now_ms);
 
 /* The virtual clock for every caller outside platform_host.c (linked with --wrap=cali_uptime_ms). */
 uint64_t __wrap_cali_uptime_ms(void) { return sim_now_ms(); }
@@ -53,17 +55,14 @@ int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t
 /* ---- events from the fakes ---- */
 
 void sim_event(const char *ev) {
-    if (!strncmp(ev, "USB ", 4)) {
-        cali_batt_t b = CALI_BATT_UNKNOWN;
-        b.usb = atoi(ev + 4) != 0;
-        b.pct = 80, b.mv = 4000, b.charging = 0;
-        cali_battery_update(&b, sim_now_ms());
-    } else if (!strcmp(ev, "TICK")) {
+    if (!strcmp(ev, "TICK")) {
         char buf[1024];
         cali_json_t j;
         cali_json_begin(&j, buf, sizeof buf);
         cali_json_key(&j, "lora");
         cali_lora_json(&j);
+        cali_json_key(&j, "battery");
+        cali_battery_json(&j);
         sim_hw_req("TICK %s", cali_json_end(&j) < 0 ? "{\"overflow\":1}" : buf);
     } else if (!strncmp(ev, "CONSOLE lora ", 13)) {
         (void)cali_lora_console(ev + 13);
@@ -92,8 +91,10 @@ int main(int argc, char **argv) {
     sim_start(until);
     sim_hw_req("BOOT");      /* the fakes schedule their first events */
     vTaskDelay(0);           /* ... and those due now fire before the firmware starts */
-    cali_lora_esp_start();   /* app_main.c: idle, no pin touched, until exp_lora is on */
-    for (;;) {               /* the owner task's tick (app_main.c runs cali_lora_tick on it) */
+    sim_axp_start();         /* app_main.c: cali_display_init before the LoRa task */
+    cali_lora_esp_start();   /* idle, no pin touched, until exp_lora is on */
+    for (;;) {               /* the owner task's tick: cali_display_tick (the battery read), cali_lora_tick */
+        sim_axp_tick(sim_now_ms());
         cali_lora_tick(sim_now_ms());
         vTaskDelay(pdMS_TO_TICKS(1000));
     }

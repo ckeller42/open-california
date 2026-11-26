@@ -7,7 +7,7 @@ answered in lockstep while the virtual clock stands still (:mod:`coresim.link`).
 """
 
 from .board import CoreS3
-from .devices import Aw9523, Rak3172
+from .devices import Aw9523, Axp2101, Rak3172
 from .link import run
 
-__all__ = ["Aw9523", "CoreS3", "Rak3172", "run"]
+__all__ = ["Aw9523", "Axp2101", "CoreS3", "Rak3172", "run"]

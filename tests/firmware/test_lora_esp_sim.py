@@ -3,11 +3,12 @@
 ``lora-sim`` builds the real, unchanged ``lora_esp.c`` (the RAK3172 AT driver, the LoRa task, the AW9523 bus
 power) and cali_core's ``lora.c`` for the Linux host over a virtual-clock FreeRTOS (``firmware/host/sim``);
 the fake RAK3172 and AW9523 of :mod:`tests.firmware.esp_sim` answer every UART line, pin change and I2C
-write. A virtual hour runs in well under a second, and every run repeats exactly.
+write, and the fake AXP2101 feeds the battery reading through display.c's own read code
+(``cali_display/axp2101_read.h``). A virtual hour runs in well under a second, and every run repeats exactly.
 
-.. test:: LoRa driver on simulated hardware: join, uplinks, refusal retry, latched module, watchdog, bus power
+.. test:: LoRa driver on simulated hardware: join, uplinks, refusal retry, latched module, watchdog, bus power, supply dip
    :id: T_FW_LORA_ESP_SIM
-   :links: R_FW_LORA
+   :links: R_FW_LORA, R_FW_BATTERY
 """
 
 import pytest
@@ -47,7 +48,8 @@ def sends(board, answer=None):
 
 def test_switch_off_touches_no_pin(sim):
     b = sim(esp_sim.Board(lora_on=False), 2 * MIN)
-    assert not [r for _, r in b.hw if r.split()[0] in ("UART", "GPIO", "PINS", "I2C")]
+    assert not [r for _, r in b.hw if r.split()[0] in ("UART", "GPIO", "PINS")]
+    assert not [r for _, r in b.hw if r.startswith("I2C W 58")]  # only the display's probe of the AW9523
     assert "lora" not in b.states[-1] or b.states[-1] == {}  # device.lora only while exp_lora is on
 
 
@@ -142,11 +144,14 @@ def test_module_silent_mid_run_watchdog_resets_and_cures(sim):
 
 
 def test_aw9523_absent_no_abort_module_on_usb_works(sim):
+    """Without the AW9523 the display does not start (its init probes 0x34 and 0x58), so the battery is never
+    read, the supply stays unknown and bus_follow_usb() leaves the bus alone; the module on VBUS works."""
     b = sim(esp_sim.Board(aw9523=False), 3 * MIN)
-    assert b.logged("lora: bus power off failed")
+    assert b.logged("display: unavailable (aw9523)")
     assert not [
-        r for _, r in b.hw if r.startswith("I2C W")
-    ]  # the probe failed: no write, no board-package init
+        r for _, r in b.hw if r.startswith("I2C W 58")
+    ]  # no board-package init: it would abort on the NACK
+    assert b.battery[-1][1]["usb"] is None
     assert [p for _, p in sends(b, "OK")][:3] == [2, 3, 4]
     assert b.states[-1][0] >= 3 * MIN - 10_000  # still running at the end
 
@@ -155,7 +160,7 @@ def test_aw9523_absent_latched_module_stays_silent(sim):
     b = esp_sim.Board(aw9523=False)
     b.rak.latched = True
     b = sim(b, 25 * MIN)
-    assert b.logged("lora: bus power on failed")
+    assert b.logged("lora: bus power off failed") and b.logged("lora: bus power on failed")
     assert not b.rak.cured and not b.rak.sends
     assert state_at(b, 25 * MIN)["module"] == "absent" and state_at(b, 25 * MIN)["note"] == "module silent"
     # the next check comes after SILENT_RETRY_S (600 s): an "AT" again after the wait
@@ -175,3 +180,60 @@ def test_bus_power_follows_usb(sim):
     battery = next(t for t, bits in b.bus_history if bits == (1, 1))
     assert battery - 3 * MIN <= 1000  # the next pass of the LoRa task
     assert b.logged("lora: bus power on (battery)") and b.logged("lora: bus power off (usb)")
+
+
+# ---- the AXP2101 (display.c's battery read, axp2101_read.h) ----
+
+
+def test_battery_from_axp2101_registers(sim):
+    b = esp_sim.Board()
+    b.axp.mv, b.axp.pct, b.axp.charging = 3876, 64, True
+    b = sim(b, 1 * MIN)
+    assert b.battery[-1][1] == {"pct": 64, "mv": 3876, "usb": True, "charging": True, "runtime_min": None}
+    assert b.axp.regs[0x30] & 0x01 and b.axp.regs[0x18] & 0x08  # the ADC and fuel-gauge enable bits
+
+
+def test_axp2101_absent_battery_unknown_bus_untouched(sim):
+    b = sim(esp_sim.Board(axp2101=False), 3 * MIN)
+    assert b.logged("display: unavailable (axp2101)")
+    assert b.battery[-1][1]["usb"] is None and not b.logged("lora: bus power")
+    assert [p for _, p in sends(b, "OK")][:3] == [2, 3, 4]
+
+
+def test_supply_dip_battery_keeps_the_module_powered(sim):
+    """USB gone (the van's 12 V dip): on 0/0 the module loses its 5 V until the next battery read (every
+    CALI_BATT_READ_MS) shows no VBUS and the bus goes to 1/1; from then on it keeps power, also when USB
+    comes back (0/0 again, fed by VBUS). The restarted module answers the next send with
+    AT_NO_NETWORK_JOINED, and the task joins again."""
+    b = esp_sim.Board()
+    unplug, plug = 3 * MIN, 6 * MIN
+    b.at(unplug, lambda board: board.set_usb(False))
+    b.at(plug, lambda board: board.set_usb(True))
+    b = sim(b, 6 * HOUR)
+    on = next(t for t, bits in b.bus_history if bits == (1, 1))
+    assert unplug < on <= unplug + 10_000 + 1_000
+    assert [bits for t, bits in b.bus_history if t > plug] == [(0, 0)]
+    off = next(t for t, bits in b.bus_history if t > plug)
+    assert plug < off <= plug + 10_000 + 1_000
+    assert next(bat for t, bat in b.battery if unplug + 11_000 < t < plug)["usb"] is False
+    assert sends(b, "AT_NO_NETWORK_JOINED"), "the restarted module never refused a send"
+    joins = [t for t, c in b.rak.cmds if c.startswith("AT+JOIN=")]
+    assert len(joins) == 2 and joins[1] > plug
+    assert state_at(b, 6 * HOUR)["joined"] is True
+
+
+def test_supply_dip_latches_the_module_power_cycle_cures(sim):
+    """The 2026-11-22 incident: the dip leaves the module latched silent; back on USB the watchdog's reset
+    does not help, the bus power cycle does, and the module joins again."""
+    b = esp_sim.Board()
+    b.rak.latch_on_dip = True
+    b.at(HOUR, lambda board: board.set_usb(False))
+    b.at(2 * HOUR, lambda board: board.set_usb(True))
+    b = sim(b, 12 * HOUR)
+    assert b.rak.latched is False and b.rak.cured and b.rak.cured[0] > 2 * HOUR
+    assert b.logged("lora: module silent: reset") and b.logged(
+        "lora: module silent after reset: bus power cycle"
+    )
+    joins = [t for t, c in b.rak.cmds if c.startswith("AT+JOIN=")]
+    assert joins[-1] > b.rak.cured[0]
+    assert state_at(b, 12 * HOUR)["joined"] is True

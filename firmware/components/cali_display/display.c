@@ -74,21 +74,6 @@ static const uint8_t LTR_INIT[][2] = {
 #define IMU_ACC_X 0x0C
 static const uint8_t IMU_INIT[][2] = {{0x41, 0x02}, {0x7D, 0x04}};
 
-/* AXP2101 battery read (R_FW_BATTERY), on the same bus. Register meanings as M5Stack's own drivers:
- * M5Unified src/utility/power/AXP2101_Class.inl (isVBUS: 0x00 bit 5 VBUS good; getBatState: 0x00
- * bit 3 battery present; getChargeStatus: 0x01 bits 6:5 = 01 charging / 10 discharging / 00 standby;
- * getBatteryLevel: 0xA4 percent; getBatteryVoltage: readRegister14(0x34) = (0x34 & 0x3F) << 8 | 0x35,
- * mV) and m5stack/esphome-yaml components/axp2101/axp2101.cpp (XPowersLib's register map:
- * enableBattVoltageMeasure = 0x30 bit 0 ADC channel; enableGauge = 0x18 bit 3 fuel gauge).
- * Only those two enable bits are ever written (read-modify-write, once at init); no power-rail
- * register. M5Unified's CoreS3 setup also writes 0x30 = 0x0F; BSP 4.1.0 touches neither. */
-#define AXP_STATUS1 0x00
-#define AXP_STATUS2 0x01
-#define AXP_GAUGE_CTRL 0x18   /* bit 3: fuel gauge enable */
-#define AXP_ADC_CTRL 0x30     /* bit 0: battery voltage ADC enable */
-#define AXP_VBAT_H 0x34
-#define AXP_PCT 0xA4
-
 /* FT5x06 touch controller (I2C 0x38, behind the BSP's esp_lcd_touch handle), registers as the
  * esp_lcd_touch_ft5x06 driver names them: ID_G_PMODE 0xA5 (0 active, 1 monitor, 3 hibernate),
  * ID_G_FIRMID 0xA6, ID_G_FT5201ID 0xA8 (vendor). Read through the handle's panel io (the driver's
@@ -158,11 +143,9 @@ static char s_qr_foot_now[CALI_ROW_TEXT_MAX];
 static char s_qr_text_now[3 * CALI_ROW_TEXT_MAX + 4];
 static int s_brightness = -1;
 static i2c_master_dev_handle_t s_ltr;   /* NULL: no light/proximity sensor */
-static i2c_master_dev_handle_t s_axp;   /* NULL: no power chip handle (battery stays unknown) */
 static bmi270_handle_t *s_imu;          /* NULL: no accelerometer (motion wake off, device.display.motion null) */
 static uint64_t s_last_batt;
 static int s_batt_read;                 /* a battery read has happened (the first one is due at once) */
-static int s_axp_enabled;               /* both enable bits confirmed set (else retried with each read) */
 static esp_lcd_touch_handle_t s_tp;     /* NULL: touch off (the port's own read is never called) */
 static uint32_t s_touch_errs;           /* LVGL task -> owner task, __atomic */
 static const char *s_touch_err;         /* the last one's esp_err_to_name, __atomic */
@@ -557,50 +540,7 @@ static int imu_read(int32_t acc[3]) {
     return 0;
 }
 
-static int axp_get(uint8_t reg, uint8_t *v, size_t n) {   /* LTR_IO_MS per transfer, as the LTR reads */
-    return io_ok(BUS_AXP, i2c_master_transmit_receive(s_axp, &reg, 1, v, n, LTR_IO_MS)) ? 0 : -1;
-}
-
-/* Read-modify-write, only when the bit is clear. 0 = the bit is set (now or already), -1 = a failed transfer. */
-static int axp_set_bit(uint8_t reg, uint8_t bit) {
-    uint8_t v, w[2];
-    if (axp_get(reg, &v, 1) != 0) return -1;
-    if (v & bit) return 0;
-    w[0] = reg;
-    w[1] = (uint8_t)(v | bit);
-    if (i2c_master_transmit(s_axp, w, 2, PROBE_MS) == ESP_OK) return 0;
-    cali_log("battery: axp2101 enable 0x%02x failed", reg);
-    return -1;
-}
-
-static void axp_enable(void) {   /* at init, then with each read until both bits are confirmed */
-    int adc = axp_set_bit(AXP_ADC_CTRL, 0x01), gauge = axp_set_bit(AXP_GAUGE_CTRL, 0x08);
-    s_axp_enabled = adc == 0 && gauge == 0;
-}
-
-static void axp_init(void) {   /* the chip answered the probe in cali_display_init */
-    i2c_device_config_t cfg = {.dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = AXP2101_ADDR, .scl_speed_hz = 400000};
-    if (i2c_master_bus_add_device(bsp_i2c_get_handle(), &cfg, &s_axp) != ESP_OK) {
-        s_axp = NULL;
-        cali_log("battery: axp2101 not added, battery unknown");
-        return;
-    }
-    axp_enable();
-}
-
-/* One reading: a failed status read -> all unknown; no battery (or a failed read of it) -> pct / mv unknown. */
-static void axp_read(cali_batt_t *b) {
-    uint8_t s1, s2, v[2], pct;
-    const cali_batt_t unknown = CALI_BATT_UNKNOWN;
-    *b = unknown;
-    if (s_axp && !s_axp_enabled) axp_enable();
-    if (!s_axp || axp_get(AXP_STATUS1, &s1, 1) != 0 || axp_get(AXP_STATUS2, &s2, 1) != 0) return;
-    b->usb = (s1 & 0x20) != 0;
-    b->charging = ((s2 >> 5) & 0x03) == 0x01;
-    if (!(s1 & 0x08)) return;   /* no battery present */
-    if (axp_get(AXP_VBAT_H, v, 2) == 0) b->mv = (v[0] & 0x3F) << 8 | v[1];
-    if (axp_get(AXP_PCT, &pct, 1) == 0 && pct <= 100) b->pct = pct;
-}
+#include "axp2101_read.h"   /* axp_init, axp_read: the AXP2101 battery read (shared with the sim tier) */
 
 int cali_display_init(const cali_transport_t *t) {
 #if CONFIG_CALI_DISPLAY_FORCE_FAIL  /* test-only: the failure path without unplugging anything */

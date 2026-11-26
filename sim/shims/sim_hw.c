@@ -4,11 +4,13 @@
  * Every hardware action is one request line on stdout, "HW <now_ms> <what...>"; the fakes answer with
  * zero or more lines and "END", while the virtual clock stands still:
  *   ACK | NACK              the I2C device acknowledged (or not) the address
+ *   DATA <hex>              the bytes an I2C read returns (with ACK)
  *   EV <delay_ms> RX <text> the module sends <text>\r\n on UART1 after <delay_ms>
  *   EV <delay_ms> <other>   handed to sim_event() of the firmware's sim main (its own events)
  *   QUIT                    end the run (exit 0)
  * Requests: BOOT | UART <line the firmware wrote> | GPIO <pin> DIR in|out | GPIO <pin> LVL 0|1 |
  *   PINS <tx> <rx> (uart_set_pin) | I2C PROBE <addr> | I2C W <addr> <hex> (one write transaction) |
+ *   I2C R <addr> <written hex> <n> (a write, a repeated start, n bytes read) |
  *   whatever the firmware's sim main sends with sim_hw_req().
  *
  * The AW9523 driver here follows espressif/esp_io_expander_aw9523 + esp_io_expander (board package
@@ -31,6 +33,8 @@ void sim_event(const char *ev);   /* the firmware's sim main: an EV line other t
 static char s_rx[RX_CAP];
 static size_t s_rx_head, s_rx_n;
 static char s_tx[512];
+static uint8_t s_data[64];   /* the last DATA answer */
+static size_t s_data_n;
 static size_t s_tx_n;
 
 static void rx_fire(void *arg) {
@@ -67,6 +71,9 @@ int sim_hw_req(const char *fmt, ...) {
         if (!strcmp(line, "ACK")) ack = 1;
         else if (!strcmp(line, "NACK")) ack = 0;
         else if (!strcmp(line, "QUIT")) exit(0);
+        else if (!strncmp(line, "DATA ", 5))
+            for (s_data_n = 0; s_data_n < sizeof s_data && sscanf(line + 5 + 2 * s_data_n, "%2hhx", &s_data[s_data_n]) == 1;)
+                s_data_n++;
         else if (sscanf(line, "EV %llu %n", &delay, &off) == 1 && off) {
             const char *what = line + off;
             if (!strncmp(what, "RX ", 3)) {
@@ -171,10 +178,46 @@ esp_err_t i2c_master_probe(i2c_master_bus_handle_t bus, uint16_t addr, int timeo
     return sim_hw_req("I2C PROBE %02x", addr) == 1 ? ESP_OK : ESP_ERR_NOT_FOUND;
 }
 
+static void hex(char *out, const uint8_t *b, size_t n) {
+    out[0] = 0;
+    for (size_t i = 0; i < n && i < 16; i++) sprintf(out + 2 * i, "%02x", b[i]);
+}
+
 static esp_err_t i2c_write(uint16_t addr, const uint8_t *data, size_t n) {
-    char hex[2 * 16 + 1];
-    for (size_t i = 0; i < n && i < 16; i++) sprintf(hex + 2 * i, "%02x", data[i]);
-    return sim_hw_req("I2C W %02x %s", addr, hex) == 1 ? ESP_OK : ESP_FAIL;
+    char h[2 * 16 + 1];
+    hex(h, data, n);
+    return sim_hw_req("I2C W %02x %s", addr, h) == 1 ? ESP_OK : ESP_FAIL;
+}
+
+struct sim_i2c_dev {
+    uint16_t addr;
+};
+
+esp_err_t i2c_master_bus_add_device(i2c_master_bus_handle_t bus, const i2c_device_config_t *cfg,
+                                    i2c_master_dev_handle_t *out) {
+    if (!bus || !bus->up || !(*out = calloc(1, sizeof **out))) return ESP_FAIL;
+    (*out)->addr = cfg->device_address;
+    return ESP_OK;
+}
+
+esp_err_t i2c_master_transmit(i2c_master_dev_handle_t dev, const uint8_t *buf, size_t n, int timeout_ms) {
+    (void)timeout_ms;
+    return i2c_write(dev->addr, buf, n);
+}
+
+esp_err_t i2c_master_transmit_receive(i2c_master_dev_handle_t dev, const uint8_t *wr, size_t wn, uint8_t *rd,
+                                      size_t rn, int timeout_ms) {
+    char h[2 * 16 + 1];
+    (void)timeout_ms;
+    hex(h, wr, wn);
+    s_data_n = 0;
+    if (sim_hw_req("I2C R %02x %s %u", dev->addr, h, (unsigned)rn) != 1) return ESP_FAIL;
+    if (s_data_n != rn) {
+        printf("SIM bad answer: I2C R %02x wants %u bytes, got %u\n", dev->addr, (unsigned)rn, (unsigned)s_data_n);
+        exit(4);
+    }
+    memcpy(rd, s_data, rn);
+    return ESP_OK;
 }
 
 /* ---- the AW9523 behind esp_io_expander ---- */

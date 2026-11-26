@@ -371,7 +371,8 @@ jobs:
           [ "$RESULT" = success ] || [ "$RESULT" = skipped ]
 
   # The simulated-hardware tier (docs/firmware.md, "Sim"): the real ESP-only LoRa driver (lora_esp.c, unchanged)
-  # on coresim's virtual-clock FreeRTOS (sim/shims) against its fake RAK3172 + AW9523 (sim/coresim; the satellite
+  # on coresim's virtual-clock FreeRTOS (sim/shims) and display.c's AXP2101 read against its fake RAK3172, AW9523 and
+  # AXP2101 (sim/coresim; the satellite
   # adapter is tests/firmware/esp_sim.py). coresim's own unit tests (sim/tests) run here too.
   # firmware-host-e2e collects these tests too; this job is the fast signal and fails on a skip (no 32-bit
   # toolchain or no bumble would skip every test), so it never passes empty.
@@ -394,7 +395,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y gcc-multilib g++-multilib
           pip install -r requirements-dev.txt -e ./sim
-      - name: coresim's own tests, then lora_esp.c against the fake RAK3172 + AW9523
+      - name: coresim's own tests, then lora_esp.c against the fake RAK3172, AW9523 and AXP2101
         shell: bash
         run: |
           python -m pytest sim/tests tests/firmware/test_lora_esp_sim.py -v -rs 2>&1 | tee sim.log

@@ -86,3 +86,26 @@ def test_rak3172_latch_on_dip():
     up[0] = False
     r.bus_changed(0, (0, 0), (0, 0), True)
     assert r.latched and not r.joined
+
+
+def test_axp2101_status_registers():
+    from coresim.devices import Axp2101
+
+    a = Axp2101(vbus=True, battery=True, charging=True, mv=3876, pct=64)
+    assert (
+        a.read(0x00, 2) == bytes([0x28, 0x20])
+        and a.read(0x34, 2) == bytes([0x0F, 0x24])
+        and a.read(0xA4, 1) == b"\x40"
+    )
+    a.vbus, a.battery, a.charging = False, False, False
+    assert a.read(0x00, 2) == bytes([0x00, 0x40])
+    a.write(bytes([0x30, 0x01]))
+    assert a.read(0x30, 1) == b"\x01"
+
+
+@pytest.mark.parametrize("op", ["read", "write"])
+def test_axp2101_unmodelled_register_fails_loudly(op):
+    from coresim.devices import Axp2101
+
+    with pytest.raises(Unmodelled):
+        Axp2101().read(0x90, 1) if op == "read" else Axp2101().write(bytes([0x90, 0xBF]))
