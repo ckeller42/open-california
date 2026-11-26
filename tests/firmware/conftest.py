@@ -525,12 +525,13 @@ class QemuFirmware(Firmware):
 def qemu(tmp_path):
     """``qemu.boot()`` -> a running :class:`QemuFirmware`. Every boot of one test uses the same flash
     file (``tmp_path/"flash.bin"``, merged from the build on the first boot), so a second boot is a
-    reboot with the NVS written by the first. Skipped unless ``CALI_QEMU=1``, and when
-    ``qemu-system-xtensa`` is not on PATH (ESP-IDF's ``export.sh`` puts it there)."""
+    reboot with the NVS written by the first. Skipped unless ``CALI_QEMU=1``; with it, a missing
+    ``qemu-system-xtensa`` (ESP-IDF's ``export.sh`` puts it on PATH) fails instead of skipping, so
+    the ``firmware-qemu`` job cannot pass without booting anything."""
     if os.environ.get("CALI_QEMU") != "1":
         pytest.skip("QEMU boot tier: set CALI_QEMU=1 (CI job firmware-qemu)")
     if shutil.which("qemu-system-xtensa") is None:
-        pytest.skip("qemu-system-xtensa not found (source $IDF_PATH/export.sh)")
+        pytest.fail("CALI_QEMU=1 but qemu-system-xtensa not found (source $IDF_PATH/export.sh)")
     if not (QEMU_BUILD / "flash_args").is_file():
         pytest.fail("no QEMU-probe build in %s (see firmware/README.md)" % QEMU_BUILD)
     started: list[QemuFirmware] = []
