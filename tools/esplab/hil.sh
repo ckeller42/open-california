@@ -68,8 +68,7 @@ case "$step" in
   tail)
     cmd --tail "${1:-60}" | tee "$out/console-tail.log" ;;
   diag)
-    run_steps 45 "lora status" "lora at RX1DL" "lora at RX2DL" "lora at RX2DR" "lora at RX2FQ" "lora at JN1DL" \
-      "lora at JN2DL" "lora at BAND" "lora at CLASS" "lora at ADR" "lora at DR" "lora at NJS" | tee "$out/rx-diag.log"
+    run_steps 30 "lora status" "lora at RX1DL,RX2DL,RX2DR,RX2FQ,JN1DL,JN2DL,BAND,CLASS,ADR,DR,NJS" | tee "$out/rx-diag.log"
     run_steps 12 "i2c dump 0x58" "i2c dump 0x34" | tee "$out/i2c-dump.log" ;;
   scenarios)
     actions=0; [ "${1:-}" = --actions ] && actions=1

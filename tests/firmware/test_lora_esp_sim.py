@@ -296,3 +296,29 @@ def test_i2c_dump_of_a_missing_chip(sim):
     b.at(MIN, lambda board: board.emit("EV 0 CONSOLE i2c dump 0x58"))
     b = sim(b, 2 * MIN)
     assert b.logged("i2c: 0x58 does not answer")
+
+
+def test_lora_at_is_answered_during_the_join_backoff(sim):
+    """The field case: the join fails (no accept), and the RX settings are needed exactly then. A `lora at`
+    list queued during the backoff wait is answered within seconds, between joins (never during an AT)."""
+    b = esp_sim.Board()
+    b.rak.join = "fail"
+    b.rak.join_ms = 6000
+    asked = 50_000  # the first join fails at ~8 s, its 60 s backoff runs until ~68 s
+    b.at(asked, lambda board: board.emit("EV 0 CONSOLE lora at RX1DL,RX2DL,RX2DR,JN1DL"))
+    b = sim(b, 2 * MIN)
+    for name in ("RX1DL", "RX2DL", "RX2DR", "JN1DL"):
+        t = [t for t, c in b.rak.cmds if c == f"AT+{name}=?"]
+        assert t and asked <= t[0] <= asked + 10_000, (name, t)
+    joins = [t for t, c in b.rak.cmds if c.startswith("AT+JOIN=")]
+    assert joins[0] < asked < joins[1]  # it was the backoff, not a pass of the main loop
+
+
+def test_lora_at_list_is_checked_whole(sim):
+    b = esp_sim.Board()
+    b.at(MIN, lambda board: board.emit("EV 0 CONSOLE lora at RX1DL,APPKEY"))
+    b = sim(b, 2 * MIN)
+    assert b.logged("lora: at: not a readable setting: APPKEY")
+    assert "AT+RX1DL=?" not in [
+        c for _, c in b.rak.cmds
+    ]  # nothing of a list with a bad name (apply_keys reads APPKEY itself)

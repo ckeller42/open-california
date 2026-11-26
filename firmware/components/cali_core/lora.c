@@ -574,6 +574,23 @@ int cali_lora_at_query_ok(const char *name) {
     return 0;
 }
 
+int cali_lora_at_list_ok(const char *list, const char **bad) {
+    char name[8];
+    size_t len = strlen(list);
+    if (bad) *bad = NULL;
+    if (!len || len > CALI_LORA_AT_LIST_MAX) return 0;
+    for (const char *p = list;;) {
+        size_t n = strcspn(p, ",");
+        snprintf(name, sizeof name, "%.*s", (int)(n < sizeof name ? n : sizeof name - 1), p);
+        if (!n || n >= sizeof name || !cali_lora_at_query_ok(name)) {
+            if (bad) *bad = p;
+            return 0;
+        }
+        if (!p[n]) return 1;
+        p += n + 1;
+    }
+}
+
 int cali_lora_console(const char *args) {
     char op[8] = "", a[24] = "", b[24] = "", c[40] = "";
     int n = sscanf(args, "%7s %23s %23s %39s", op, a, b, c);
@@ -594,10 +611,13 @@ int cali_lora_console(const char *args) {
         else cali_log("lora: keys stored (used at the next join attempt)");
         cali_wipe(k, sizeof k);
     } else if (n == 2 && !strcmp(op, "at")) {
-        if (!cali_lora_at_query_ok(a)) cali_log("lora: at: not a readable setting: %s", a);
-        else if (cali_lora_port_at(a) != 0) cali_log("lora: at: not queued (busy or no module driver)");
+        const char *list = strstr(args, "at") + 2, *bad;   /* the whole list: a[] holds only 23 characters */
+        list += strspn(list, " ");
+        if (!cali_lora_at_list_ok(list, &bad))
+            cali_log("lora: at: not a readable setting: %.*s", bad ? (int)strcspn(bad, ",") : 8, bad ? bad : list);
+        else if (cali_lora_port_at(list) != 0) cali_log("lora: at: not queued (busy or no module driver)");
     } else {
-        cali_log("lora: usage: lora on|off|status|forget|keys <deveui> <joineui> <appkey>|at <setting>");
+        cali_log("lora: usage: lora on|off|status|forget|keys <deveui> <joineui> <appkey>|at <setting>[,<setting>...]");
     }
     return 0;
 }
