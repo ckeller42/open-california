@@ -1,6 +1,6 @@
 /* lora_sim_main.c — lora-sim: the real cali_lora/lora_esp.c (the RAK3172 driver and the LoRa task) on the
- * simulated hardware of sim_idf.h, with the real cali_core lora.c on an owner task as app_main runs it.
- * Driven by tests/firmware/esp_sim.py (the fake RAK3172 + AW9523) over stdin/stdout (sim_hw.c).
+ * simulated CoreS3 (coresim: sim/shims, sim/coresim), with the real cali_core lora.c on an owner task as app_main runs it.
+ * Driven by tests/firmware/esp_sim.py (coresim's fake RAK3172 + AW9523) over stdin/stdout (sim/shims/sim_hw.c).
  *
  * Usage: lora-sim [--store <dir>] [--until <virtual ms>]
  * Events the fakes can schedule besides RX (sim_event): "USB 0|1" (the AXP2101's VBUS reading into

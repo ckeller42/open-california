@@ -1,15 +1,15 @@
 /* sim_hw.c — the pins, the UART, the I2C bus and the board package of sim_idf.h, wired to the hardware
- * fakes in Python (tests/firmware/esp_sim.py) over stdin/stdout, in lockstep.
+ * fakes in Python (the coresim package, sim/coresim) over stdin/stdout, in lockstep.
  *
  * Every hardware action is one request line on stdout, "HW <now_ms> <what...>"; the fakes answer with
  * zero or more lines and "END", while the virtual clock stands still:
  *   ACK | NACK              the I2C device acknowledged (or not) the address
  *   EV <delay_ms> RX <text> the module sends <text>\r\n on UART1 after <delay_ms>
- *   EV <delay_ms> <other>   handed to sim_event() of the sim's main (USB 0|1, TICK, ...)
+ *   EV <delay_ms> <other>   handed to sim_event() of the firmware's sim main (its own events)
  *   QUIT                    end the run (exit 0)
  * Requests: BOOT | UART <line the firmware wrote> | GPIO <pin> DIR in|out | GPIO <pin> LVL 0|1 |
  *   PINS <tx> <rx> (uart_set_pin) | I2C PROBE <addr> | I2C W <addr> <hex> (one write transaction) |
- *   whatever the sim's main sends with sim_hw_req().
+ *   whatever the firmware's sim main sends with sim_hw_req().
  *
  * The AW9523 driver here follows espressif/esp_io_expander_aw9523 + esp_io_expander (board package
  * 4.1.0): bsp_io_expander_init() creates it once (reset: 0x7F=00, 0x11=10, direction 0x04/05 = 0000,
@@ -26,7 +26,7 @@
 #define AW9523_ADDR 0x58
 #define RX_CAP 4096
 
-void sim_event(const char *ev);   /* the sim's main: an EV line other than RX */
+void sim_event(const char *ev);   /* the firmware's sim main: an EV line other than RX */
 
 static char s_rx[RX_CAP];
 static size_t s_rx_head, s_rx_n;

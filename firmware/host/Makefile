@@ -370,14 +370,14 @@ hub_run_cli: $(HUB_RUN_SRC) $(CORE_H)/cali_hub.h $(CORE_H)/cali_http.h $(MBEDTLS
 		-I$(CSRC) -o $@ $(HUB_RUN_SRC) $(MBEDTLS_LIBS)
 
 # The simulated-hardware tier (docs/firmware.md "Sim"): the real ESP-only LoRa driver (cali_lora/lora_esp.c,
-# unchanged) over a virtual-clock FreeRTOS and the UART/GPIO/I2C/board-package shims of sim/, against the
-# Python fakes of tests/firmware/esp_sim.py (test_lora_esp_sim.py). cali_uptime_ms is wrapped onto the
+# unchanged) over coresim's virtual-clock FreeRTOS and UART/GPIO/I2C/board-package shims (sim/shims), against
+# its Python fakes (sim/coresim; the satellite adapter is tests/firmware/esp_sim.py, test_lora_esp_sim.py). cali_uptime_ms is wrapped onto the
 # virtual clock for every object but platform_host.c.
-SIM_INC := -Isim/include -I$(CORE_H) -I$(COMPONENTS)/cali_lora/include -I$(COMPONENTS)/cali_display/include \
+SIM_INC := -I../../sim/shims/include -I$(CORE_H) -I$(COMPONENTS)/cali_lora/include -I$(COMPONENTS)/cali_display/include \
 	-I$(COMPONENTS)/platform/include -I$(CSRC) -I$(MBEDTLS_ROOT)/include
-LORA_SIM_SRC := sim/lora_sim_main.c sim/sim_rtos.c sim/sim_hw.c $(COMPONENTS)/cali_lora/lora_esp.c \
+LORA_SIM_SRC := sim/lora_sim_main.c ../../sim/shims/sim_rtos.c ../../sim/shims/sim_hw.c $(COMPONENTS)/cali_lora/lora_esp.c \
 	$(COMPONENTS)/cali_lora/lora_aead.c $(COMPONENTS)/cali_core/lora.c $(COMPONENTS)/cali_core/lora_setup.c \
 	$(COMPONENTS)/cali_core/json.c $(COMPONENTS)/cali_core/battery.c $(COMPONENTS)/platform/host/platform_host.c
-lora-sim: $(LORA_SIM_SRC) sim/include/sim_idf.h $(CORE_H)/cali_lora.h $(MBEDTLS_LIBS)
+lora-sim: $(LORA_SIM_SRC) ../../sim/shims/include/sim_idf.h $(CORE_H)/cali_lora.h $(MBEDTLS_LIBS)
 	$(CC) -m32 -std=gnu11 -g -Wall -Wextra -Werror -D_GNU_SOURCE $(SIM_INC) -o $@ $(LORA_SIM_SRC) \
 		-Wl,--wrap=cali_uptime_ms $(MBEDTLS_LIBS) -lpthread -lm

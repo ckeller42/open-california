@@ -149,6 +149,14 @@ repos:
         pass_filenames: false
         files: ^(calictl/.*\.py|pyproject\.toml)$
 
+      # coresim (sim/): its own unit tests (the fakes, the virtual clock, the isolation guard)
+      - id: coresim
+        name: coresim unit tests (sim/tests)
+        entry: sh -c '"${PY:-python3}" -m pytest sim/tests -q -p no:cacheprovider'
+        language: system
+        pass_filenames: false
+        files: ^sim/
+
       # --- pre-push: the slow gates ---
       - id: pytest
         name: full test suite

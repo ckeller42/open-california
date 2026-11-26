@@ -110,13 +110,13 @@ def test_latched_module_rst_fails_bus_power_cycle_cures(sim):
     cure = b.rak.cured[0]
     assert b.rak.resets >= 1  # the RST pulse came first and did not help
     assert b.logged("lora: module silent after reset: bus power cycle")
-    on = [t for t, bits in b.aw.history if bits == (1, 1)]
+    on = [t for t, bits in b.bus_history if bits == (1, 1)]
     assert on[0] == cure
-    off_since = max([0] + [t for t, bits in b.aw.history if bits == (0, 0) and t < cure])
+    off_since = max([0] + [t for t, bits in b.bus_history if bits == (0, 0) and t < cure])
     assert cure - off_since >= 5000  # BUS_OFF_MS
     assert [p for t, p in sends(b, "OK") if t > cure][:3] == [2, 3, 4]
     # on USB the steady state is 0/0 again afterwards (bus_follow_usb)
-    assert b.aw.bus == (0, 0) and b.aw.history[-1][1] == (0, 0)
+    assert b.aw.bus == (0, 0) and b.bus_history[-1][1] == (0, 0)
 
 
 def test_module_silent_mid_run_watchdog_resets_and_cures(sim):
@@ -168,10 +168,10 @@ def test_bus_power_follows_usb(sim):
     b.at(3 * MIN, lambda board: board.set_usb(False))
     b.at(6 * MIN, lambda board: board.set_usb(True))
     b = sim(b, 9 * MIN)
-    on_usb = [bits for t, bits in b.aw.history if t < 3 * MIN]
+    on_usb = [bits for t, bits in b.bus_history if t < 3 * MIN]
     assert not on_usb or on_usb[-1] == (0, 0)
-    assert [bits for t, bits in b.aw.history if 3 * MIN <= t < 6 * MIN] == [(1, 1)]
-    assert [bits for t, bits in b.aw.history if t >= 6 * MIN] == [(0, 0)]
-    battery = next(t for t, bits in b.aw.history if bits == (1, 1))
+    assert [bits for t, bits in b.bus_history if 3 * MIN <= t < 6 * MIN] == [(1, 1)]
+    assert [bits for t, bits in b.bus_history if t >= 6 * MIN] == [(0, 0)]
+    battery = next(t for t, bits in b.bus_history if bits == (1, 1))
     assert battery - 3 * MIN <= 1000  # the next pass of the LoRa task
     assert b.logged("lora: bus power on (battery)") and b.logged("lora: bus power off (usb)")

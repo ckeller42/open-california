@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coresim"
+version = "0.1.0"
+description = "Simulated M5Stack CoreS3 (ESP32-S3) hardware for host builds of its firmware: device fakes, a lockstep link, FreeRTOS/IDF shims"
+requires-python = ">=3.11"
+dependencies = []
+license = {text = "MIT"}
+
+[tool.setuptools]
+packages = ["coresim"]

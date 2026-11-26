@@ -1,4 +1,4 @@
-/* sim_rtos.c — FreeRTOS on a virtual clock, for the simulated-hardware host build (sim_idf.h).
+/* sim_rtos.c — FreeRTOS on a virtual clock, for a host build on simulated hardware (sim_idf.h, coresim).
  *
  * Every task is a pthread, but only one runs at a time (one global lock, handed from task to task like
  * a single-core scheduler without preemption). A task gives the CPU away only when it blocks (a delay,

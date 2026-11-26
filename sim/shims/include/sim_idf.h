@@ -1,5 +1,6 @@
 /* sim_idf.h — the slice of ESP-IDF, FreeRTOS and the m5stack_core_s3 board package that the ESP-only
- * drivers use, for the simulated-hardware host build (firmware/host/sim, docs/firmware.md "Sim" tier).
+ * drivers use, for a Linux host build of ESP32-S3 / M5Stack CoreS3 firmware on simulated hardware (coresim,
+ * sim/README.md).
  * Every header the drivers include (freertos/..., driver/..., bsp/esp-bsp.h, esp_*.h) is a one-line
  * include of this file. The declarations follow the IDF v6.1 / board package 4.1.0 signatures; only
  * what the drivers call is here. sim_rtos.c and sim_hw.c implement it. */

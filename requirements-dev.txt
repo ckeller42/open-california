@@ -8,3 +8,4 @@ ruff==0.16.9        # keep in step with the ruff-pre-commit rev in .pre-commit-c
 mypy
 bumble==0.0.236
 pre-commit==4.7.0   # runs .pre-commit-config.yaml (tools/ci.sh dev installs the hooks; CI pre-commit job)
+-e ./sim             # coresim, the simulated CoreS3 (sim/README.md): tests/firmware's sim tier imports it
