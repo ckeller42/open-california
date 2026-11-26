@@ -21,6 +21,7 @@
 #include "cali_lora_aead.h"
 #include "cali_lora_setup.h"
 #include "bsp/esp-bsp.h"
+#include "cali_battery.h"
 #include "cali_display.h"
 #include "cali_platform.h"
 #include "driver/gpio.h"
@@ -181,9 +182,9 @@ static void rak_reset(void) {
     s_silent = 0;
 }
 
-/* Both bits to `on`. 1/1 feeds the bus from the battery boost too, so the module keeps its 5 V while
- * the USB supply is gone (van 12 V dip, 2026-11-24). The expander write is a read-modify-write of the
- * output register that the SD power switch shares, so it holds bsp_display_lock as the SD mount does. */
+/* Both bits to `on`. 1/1 feeds the bus from the battery boost; 0/0 leaves it on VBUS. The expander write
+ * is a read-modify-write of the output register that the SD power switch shares, so it holds
+ * bsp_display_lock as the SD mount does. */
 static int bus_power(uint32_t on) {
     /* the board package aborts on an expander fault (BSP_ERROR_CHECK=y): probe first, as cali_display does */
     (void)bsp_i2c_init();
@@ -206,12 +207,31 @@ static int bus_power(uint32_t on) {
 /* A module still silent after RST is latched: only an off/on of its 5 V clears it (bench 2026-11-22:
  * RST, USB cuts and ESP resets did not). TX and RST are inputs while the bus is off, so they cannot
  * feed the module through its pins; the UART driver stays installed and gets its pins back. */
+/* -1 = not set by this task (the boot's expander reset leaves 0/0). */
+static int s_bus_on = -1;
+
+/* The steady state follows the supply: on USB 0/0, the state every join before 2026-11-26 ran in (the
+ * boost stays off: with 1/1 on USB six join accepts in a row were lost on 2026-11-26); on the battery
+ * 1/1, so the module keeps its 5 V when the USB supply is gone (van 12 V dip, 2026-11-24). While the
+ * supply is unknown nothing changes. */
+static void bus_follow_usb(void) {
+    cali_batt_t b;
+    cali_battery_get(&b);
+    if (b.usb < 0) return;
+    int want = b.usb ? 0 : 1;
+    if (want != s_bus_on && bus_power((uint32_t)want) == 0) {
+        s_bus_on = want;
+        cali_log("lora: bus power %s (%s)", want ? "on" : "off", want ? "battery" : "usb");
+    }
+}
+
 static bool bus_power_cycle(void) {
     cali_log("lora: module silent after reset: bus power cycle");
     gpio_set_direction(RAK_TX, GPIO_MODE_INPUT);
     gpio_set_direction(RAK_RST, GPIO_MODE_INPUT);
     if (bus_power(0) == 0) vTaskDelay(pdMS_TO_TICKS(BUS_OFF_MS));
     if (bus_power(1) != 0 && bus_power(1) != 0) return false;   /* no 5 V: the pins stay released */
+    s_bus_on = 1;   /* the cure is the 0/0 -> 1/1 step; bus_follow_usb() settles it on the next pass */
     vTaskDelay(pdMS_TO_TICKS(500));
     (void)uart_set_pin(RAK_UART, RAK_TX, RAK_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     gpio_set_level(RAK_RST, 1);   /* high before it drives: no extra reset pulse */
@@ -233,7 +253,6 @@ static bool uart_up(void) {
     }
     gpio_set_level(RAK_RST, 1);
     gpio_set_direction(RAK_RST, GPIO_MODE_OUTPUT);
-    (void)bus_power(1);   /* the boot leaves 0/0; 1/1 also holds the module up on the battery */
     s_uart_up = true;
     return true;
 }
@@ -637,6 +656,7 @@ static void lora_task(void *arg) {
             if (atomic_exchange(&s_forgot, false) && cali_lora_erase_keys() != 0) cali_log("lora: forget: store failed");
             continue;
         }
+        bus_follow_usb();   /* a write only when the supply changed */
         if (!ready || s_silent >= CALI_LORA_SILENT_MAX) {
             /* first use, or a module that stopped answering: a timed-out AT+SEND still counts as charged,
              * so without this a hung module would look joined and keep using up the budget */
