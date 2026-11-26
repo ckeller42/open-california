@@ -2,7 +2,7 @@ pytest
 pyyaml
 pytest-xdist
 pytest-split==0.11.0   # CI firmware-host-e2e-split: --splits 3 over tests/firmware/.test_durations
-coverage==7.17.2     # tools/ci.sh cov + CI `test` (3.13): floor in pyproject.toml [tool.coverage.report]
+coverage==7.17.3     # tools/ci.sh cov + CI `test` (3.13): floor in pyproject.toml [tool.coverage.report]
 pytest-cov==7.1.0
 ruff==0.16.9        # keep in step with the ruff-pre-commit rev in .pre-commit-config.yaml
 mypy
