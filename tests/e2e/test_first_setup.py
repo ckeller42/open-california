@@ -410,7 +410,8 @@ def _hub(stub, **over):
 
 
 def test_the_remote_step_comes_after_sensors_and_can_be_skipped(station_pending):
-    with _page(station_pending, "/#setup/sensors", "en-US") as pg:
+    # ends on the home step, whose calictl-esp.local probe fails without mDNS (NO_MDNS)
+    with _page(station_pending, "/#setup/sensors", "en-US", allow=NO_MDNS) as pg:
         pg.get_by_role("button", name="Skip").click()
         expect(pg).to_have_url(re.compile(r"#setup/remote$"))
         expect(pg.locator("#setup-step")).to_contain_text("Step 6 of 8")
@@ -430,7 +431,8 @@ def test_the_remote_step_saves_the_hub_then_shows_the_app(station_pending, local
     come back) shows only once the hub is connected."""
     station_pending.fixtures["station"]["/api/state"]["device"]["experimental"]["lora"] = False
     station_pending.fixtures["station"]["/api/hub"]["van"] = "old-van"  # to see the GET land before typing
-    with _page(station_pending, "/#setup/remote", locale) as pg:
+    # ends on the home step, whose calictl-esp.local probe fails without mDNS (NO_MDNS)
+    with _page(station_pending, "/#setup/remote", locale, allow=NO_MDNS) as pg:
         app = pg.locator("#setup-app")
         expect(pg.locator("#hub-status")).to_have_text(tr("Not set up", lang))
         expect(app).to_be_hidden()
