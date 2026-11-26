@@ -15,6 +15,7 @@
 
 #include "cali_battery.h"
 #include "cali_control.h"
+#include "cali_display.h"
 #include "cali_json.h"
 #include "cali_lora.h"
 #include "cali_lora_esp.h"
@@ -66,6 +67,8 @@ void sim_event(const char *ev) {
         sim_hw_req("TICK %s", cali_json_end(&j) < 0 ? "{\"overflow\":1}" : buf);
     } else if (!strncmp(ev, "CONSOLE lora ", 13)) {
         (void)cali_lora_console(ev + 13);
+    } else if (!strncmp(ev, "CONSOLE i2c ", 12)) {
+        (void)cali_i2c_dump_line(ev + 8);   /* cali_display/i2c_dump.c, the board's own */
     } else {
         printf("SIM unknown event: %s\n", ev);
         exit(4);

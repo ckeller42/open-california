@@ -3,7 +3,7 @@
 set(srcs "")
 set(frags "")
 if(CONFIG_CALI_DISPLAY)
-    set(srcs "display.c" "shot.c" "font_latin1_16.c" "font_latin1_24.c" "lv_mem_psram.c")
+    set(srcs "display.c" "shot.c" "i2c_dump.c" "font_latin1_16.c" "font_latin1_24.c" "lv_mem_psram.c")
     set(frags "linker.lf")
 endif()
 idf_component_register(SRCS ${srcs}
