@@ -79,6 +79,7 @@ firmware/host/lora_aead_cli
 firmware/host/hub_cli
 firmware/host/hub_run_cli
 firmware/host/.build.lock
+firmware/host/lora-sim
 firmware/build/
 firmware/build-qemu/
 # ESP-IDF generated config (sdkconfig.defaults is the committed source)

@@ -1,5 +1,6 @@
 /* lora_esp.c — the RAK3172 on UART1 and the LoRa task (R_FW_LORA). Board package only (CONFIG_CALI_DISPLAY);
- * the host build and QEMU link cali_core's lora_port_none.c instead.
+ * cali-host and QEMU link cali_core's lora_port_none.c instead; firmware/host's lora-sim runs this file unchanged
+ * over simulated hardware (firmware/host/sim, tests/firmware/test_lora_esp_sim.py).
  *
  * The owner task hands a snapshot over every 10 s (cali_lora_port_post, a 1-deep queue: the newest wins);
  * this task packs and sends from that copy and never reads session state. It publishes its status under

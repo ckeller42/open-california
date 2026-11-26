@@ -370,6 +370,32 @@ jobs:
           echo "firmware-host-e2e-split: $RESULT"
           [ "$RESULT" = success ] || [ "$RESULT" = skipped ]
 
+  # The simulated-hardware tier (docs/firmware.md, "Sim"): the real ESP-only LoRa driver (lora_esp.c, unchanged)
+  # on a virtual-clock FreeRTOS (firmware/host/sim) against the fake RAK3172 + AW9523 (tests/firmware/esp_sim.py).
+  # firmware-host-e2e collects these tests too; this job is the fast signal and fails on a skip (no 32-bit
+  # toolchain or no bumble would skip every test), so it never passes empty.
+  firmware-sim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install deps (32-bit toolchain, pytest + bumble)
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-multilib
+          pip install -r requirements-dev.txt
+      - name: lora_esp.c against the fake RAK3172 + AW9523
+        shell: bash
+        run: |
+          python -m pytest tests/firmware/test_lora_esp_sim.py -v -rs 2>&1 | tee sim.log
+          ! grep -q SKIPPED sim.log
+
   # The esp32s3 (M5Stack CoreS3) image: compile-only (no hardware in CI). Proves cali_core,
   # cali_ble_nimble (unchanged) and the NVS platform build against ESP-IDF's esp-nimble.
   # Pin: firmware/README.md.
