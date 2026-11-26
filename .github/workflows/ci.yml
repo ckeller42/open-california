@@ -298,11 +298,18 @@ jobs:
           path: ~/debs
           key: realstack-debs-v1-${{ steps.rig.outputs.debs_key }}
 
-  firmware-host-e2e:
+  # tests/firmware in 3 groups of about equal run time (pytest-split over the committed
+  # tests/firmware/.test_durations), each on its own runner with 4 xdist workers. The required check
+  # is `firmware-host-e2e` (below), which only collects the three results.
+  firmware-host-e2e-split:
     needs: changes
     if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.host_e2e != 'false') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3]
     runs-on: ubuntu-latest
-    timeout-minutes: 60   # ~37 min serial (2026-11-26, #567), the longest file (thermostat) ~8 min on 4 workers + install/Chromium (0.5–18 min on a slow mirror); a hang must not burn 6 h
+    timeout-minutes: 40   # ~37 min serial (2026-11-26, #567), a third of it on 4 workers + install/Chromium (0.5–18 min on a slow mirror); a hang must not burn 6 h
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -331,12 +338,37 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ env.PW_VERSION }}
       - name: Install Chromium (browser from cache when present; apt --with-deps only on miss)
         run: python -m playwright install ${{ steps.pw-cache.outputs.cache-hit == 'true' && 'chromium' || '--with-deps chromium' }}
+      # The pinned NimBLE + Mbed TLS checkouts and the 32-bit Mbed TLS libraries the Makefile builds
+      # in them (fetch_nimble.sh keeps a checkout whose tag matches the pin; make rebuilds what is stale).
+      - name: Cache firmware/host/_deps (NimBLE, Mbed TLS)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: firmware/host/_deps
+          key: host-deps-v1-${{ hashFiles('firmware/host/fetch_nimble.sh', 'firmware/host/Makefile') }}
       - name: Firmware tests incl. host tier (BLE e2e + bond store over NimBLE/Bumble, WiFi/web e2e + status page in Chromium)
         env:
           CALI_REQUIRE_CHROMIUM: "1"   # the status-page test fails, not skips, without a browser
-        # 4 xdist workers (ubuntu-latest has 4 vCPUs), each test file whole on one worker; build_host()
-        # (conftest.py) locks the shared firmware/host build.
-        run: python -m pytest tests/firmware -v -rs -n 4 --dist loadfile
+        # 4 xdist workers (ubuntu-latest has 4 vCPUs), each test file of the group whole on one worker;
+        # build_host() (conftest.py) locks the shared firmware/host build. A test missing from
+        # .test_durations gets the average time; refresh the file with --store-durations after big changes.
+        run: >-
+          python -m pytest tests/firmware -v -rs -n 4 --dist loadfile
+          --splits 3 --group ${{ matrix.group }} --splitting-algorithm least_duration
+          --durations-path tests/firmware/.test_durations
+
+  # The required check: green when every group of firmware-host-e2e-split passed (or the filter
+  # skipped them), red when one failed or was cancelled.
+  firmware-host-e2e:
+    needs: firmware-host-e2e-split
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULT: ${{ needs.firmware-host-e2e-split.result }}
+        run: |
+          echo "firmware-host-e2e-split: $RESULT"
+          [ "$RESULT" = success ] || [ "$RESULT" = skipped ]
 
   # The esp32s3 (M5Stack CoreS3) image: compile-only (no hardware in CI). Proves cali_core,
   # cali_ble_nimble (unchanged) and the NVS platform build against ESP-IDF's esp-nimble.
@@ -351,11 +383,26 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # ccache (the IDF image sets IDF_CCACHE_ENABLE=1). A PR build starts from the newest cache; a
+      # push to main (the image firmware-release ships) always compiles from scratch and only saves
+      # its cache for the PRs. compiler_check content: the default (mtime) also hashes the mtime of the
+      # toolchain's specs file, which differs in every container, so nothing would hit.
+      - if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.ccache
+          key: ccache-fw-${{ github.sha }}
+          restore-keys: ccache-fw-
       - name: Build esp32s3 image
         working-directory: firmware
+        env:
+          CCACHE_DIR: /github/home/.ccache
+          CCACHE_COMPILERCHECK: content
         run: |
           . "$IDF_PATH/export.sh"
+          ccache -z
           idf.py build
+          ccache -s
           { echo '```'; idf.py size; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
           # Flash safety (docs/firmware.md "CI jobs"): resolved config vs sdkconfig.defaults, the built
           # partition table, flasher_args.json offsets (never NVS), app <= 90 % of its OTA slot, version.
@@ -363,6 +410,10 @@ jobs:
           # First-flash image for new boards (docs/howto-esp-first-flash.md): every image at the
           # build's own offsets, gaps 0xFF — so it ERASES NVS (bonds, WiFi). Never used by OTA.
           (cd build && python -m esptool --chip esp32s3 merge-bin -o cali_fw_full.bin @flash_args)
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.ccache
+          key: ccache-fw-${{ github.sha }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: firmware-esp32s3
@@ -442,11 +493,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # ccache, as in firmware-build (this image never ships, so main restores the cache too).
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.ccache
+          key: ccache-qemu-${{ github.sha }}
+          restore-keys: ccache-qemu-
       - name: Build the QEMU probe variant
         working-directory: firmware
+        env:
+          CCACHE_DIR: /github/home/.ccache
+          CCACHE_COMPILERCHECK: content
         run: |
           . "$IDF_PATH/export.sh"
+          ccache -z
           idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build
+          ccache -s
       - name: Boot in QEMU + NVS persistence
         run: |
           . "$IDF_PATH/export.sh"
@@ -579,7 +641,8 @@ jobs:
   ci-ok:
     if: always()
     needs: [changes, test, pre-commit, no-vendor-material, install-script, docs, codec-parity, gui-e2e,
-            firmware-host-e2e, firmware-build, firmware-qemu, coverage-badge, firmware-release]
+            firmware-host-e2e-split, firmware-host-e2e, firmware-build, firmware-qemu, coverage-badge,
+            firmware-release]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
