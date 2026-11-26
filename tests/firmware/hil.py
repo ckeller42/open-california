@@ -140,15 +140,19 @@ class SimTarget:
         return Result("sim", [(t - start, line) for t, line in board.log if t >= start])
 
 
+I2C = re.compile(r"LOG i2c: (0x[0-9a-f]{2}) reg (0x[0-9a-f]{2}) = (0x[0-9a-f]{2})")
+
+
 def drift(sim: Result, board: Result, slack_ms=1000):
-    """Differences between the AT transcripts: the commands in order, each command's answer kinds, and an
-    answer's delay beyond ``slack_ms`` plus 50 %. Payload values differ by nature and are not compared."""
+    """Differences between the runs: the AT commands in order, each command's answers (a setting's value
+    included; uplink payloads differ by nature and are not compared), an answer's delay beyond ``slack_ms``
+    plus 50 %, and every register an ``i2c dump`` read on both."""
 
     def command(text):
         return re.sub(r"^(AT\+SEND=\d+):.*$", r"\1:…", text)
 
     def shape(text):
-        return re.sub(r"=.*$", "=…", text)
+        return text if re.match(r"^AT\+[A-Z0-9]+=", text) else re.sub(r"=.*$", "=…", text)
 
     def blocks(r):
         out = []
@@ -169,4 +173,12 @@ def drift(sim: Result, board: Result, slack_ms=1000):
         for (ds, a), (db, _) in zip(sa, ba):
             if abs(ds - db) > slack_ms + 0.5 * max(ds, db):
                 diffs.append(f"{cmd} -> {a}: after {ds} ms in the sim, {db} ms on the board")
+
+    def regs(r):
+        return {(m.group(1), m.group(2)): m.group(3) for _, line in r.log if (m := I2C.search(line))}
+
+    rs, rb = regs(sim), regs(board)
+    for key in sorted(rs.keys() & rb.keys()):
+        if rs[key] != rb[key]:
+            diffs.append(f"i2c {key[0]} reg {key[1]}: sim {rs[key]}, board {rb[key]}")
     return diffs

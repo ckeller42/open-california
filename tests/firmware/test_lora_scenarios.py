@@ -3,10 +3,10 @@
 forced latch, a missing AW9523, refusals) are in ``test_lora_esp_sim.py``, because a board cannot be put
 into those states on purpose.
 
-On the board, every run is also run on the sim; the differences go to ``$HIL_OUT/drift-<scenario>.txt``
-("fake drift") and fail nothing by themselves.
+``tools/esplab/hil.sh scenarios`` runs them on the board, then on the sim in the oc-linux container; the
+differences go to ``$HIL_OUT/drift-<scenario>.txt`` ("fake drift") and fail nothing by themselves.
 
-.. test:: LoRa scenarios on sim and board: RX settings readable, liveness probe, rejoin with uplinks
+.. test:: LoRa scenarios on sim and board: RX settings readable, register dumps, liveness probe, rejoin with uplinks
    :id: T_FW_LORA_SCENARIOS
    :links: R_FW_LORA
 """
@@ -21,7 +21,7 @@ from .conftest import build_host
 
 RX_SETTINGS = ["RX1DL", "RX2DL", "RX2DR", "RX2FQ", "JN1DL", "JN2DL", "BAND", "CLASS", "ADR", "NJS"]
 BOARD = os.environ.get("HIL_TARGET", "sim") == "board"
-# the sim target needs the 32-bit host build; the board target does not (its drift run uses HIL_SIM_BIN)
+# the sim target needs the 32-bit host build (the oc-linux container on odelly); the board target does not
 pytestmark = [] if BOARD else [pytest.mark.linux_only]
 
 
@@ -32,25 +32,30 @@ def target(tmp_path):
     return hil.SimTarget(build_host("lora-sim"), tmp_path / "store")
 
 
+def _write(path, log):
+    path.write_text("".join(f"{t} {line}\n" for t, line in log))
+
+
+def _read(path):
+    return [(int(t), line) for t, _, line in (raw.partition(" ") for raw in path.read_text().splitlines())]
+
+
 @pytest.fixture
 def run(target, tmp_path, request):
-    """``run(steps, duration_s)`` -> Result; on the board also the sim run and its drift report."""
+    """``run(steps, duration_s)`` -> Result. With ``HIL_OUT`` set, the run's log goes to
+    ``$HIL_OUT/<test>.<target>.log``. A sim run that finds the board's log there (``hil.sh scenarios``: the board
+    half on the host, then the sim half in a container) writes the drift report ``drift-<test>.txt``."""
 
     def go(steps, duration_s):
         res = target.run(steps, duration_s)
-        if BOARD:
-            out = Path(os.environ.get("HIL_OUT", tmp_path))
+        if os.environ.get("HIL_OUT"):
+            out, name = Path(os.environ["HIL_OUT"]), request.node.name
             out.mkdir(parents=True, exist_ok=True)
-            name = request.node.name
-            (out / f"{name}.board.log").write_text("\n".join(f"{t} {line}" for t, line in res.log) + "\n")
-            sim_bin = os.environ.get("HIL_SIM_BIN")  # hil.sh builds lora-sim when it can
-            if not sim_bin or not Path(sim_bin).exists():
-                (out / f"drift-{name}.txt").write_text("no sim binary (HIL_SIM_BIN): no drift report\n")
-                return res
-            sim = hil.SimTarget(sim_bin, tmp_path / "sim-store").run(steps, duration_s)
-            (out / f"{name}.sim.log").write_text("\n".join(f"{t} {line}" for t, line in sim.log) + "\n")
-            diffs = hil.drift(sim, res)
-            (out / f"drift-{name}.txt").write_text("\n".join(diffs) + "\n" if diffs else "no drift\n")
+            _write(out / f"{name}.{res.target}.log", res.log)
+            board_log = out / f"{name}.board.log"
+            if not BOARD and board_log.exists():
+                diffs = hil.drift(res, hil.Result("board", _read(board_log)))
+                (out / f"drift-{name}.txt").write_text("\n".join(diffs) + "\n" if diffs else "no drift\n")
         return res
 
     return go
@@ -78,6 +83,15 @@ def test_not_a_readable_setting_is_refused(run):
     res = run([(1, "lora at APPKEY")], 4)
     assert not res.answers("AT+APPKEY=?")
     assert [line for _, line in res.log if "lora: at: not a readable setting: APPKEY" in line]
+
+
+def test_register_dumps(run):
+    """Read-only. `i2c dump` of the AW9523 and the AXP2101: every listed register answers (the captures that
+    replace the fakes' assumed values)."""
+    res = run([(1, "i2c dump 0x58"), (4, "i2c dump 0x34")], 8)
+    lines = [line for _, line in res.log if line.startswith("LOG i2c: ")]
+    assert len([x for x in lines if x.startswith("LOG i2c: 0x58 reg") and "failed" not in x]) == 12, lines
+    assert len([x for x in lines if x.startswith("LOG i2c: 0x34 reg") and "failed" not in x]) == 14, lines
 
 
 def test_liveness_probe_while_idle(run):

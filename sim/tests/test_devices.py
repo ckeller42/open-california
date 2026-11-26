@@ -27,7 +27,7 @@ def test_aw9523_unmodelled_write_fails_loudly(data):
 
 def test_aw9523_unmodelled_read_fails_loudly():
     with pytest.raises(Unmodelled):
-        Aw9523().read(0x10, 1)
+        Aw9523().read(0x20, 1)  # a write-only dimming register
 
 
 def ev(lines):
@@ -113,7 +113,7 @@ def test_axp2101_unmodelled_register_fails_loudly(op):
     from coresim.devices import Axp2101
 
     with pytest.raises(Unmodelled):
-        Axp2101().read(0x90, 1) if op == "read" else Axp2101().write(bytes([0x90, 0xBF]))
+        Axp2101().read(0x91, 1) if op == "read" else Axp2101().write(bytes([0x90, 0xBF]))
 
 
 def test_rak3172_restart_drops_its_pending_output():

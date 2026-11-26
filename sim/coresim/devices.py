@@ -33,8 +33,9 @@ class Unmodelled(AssertionError):
 class Aw9523:
     addr = 0x58
     # Registers this model has (AW9523B datasheet): input 0x00/0x01, output 0x02/0x03, direction 0x04/0x05,
-    # global control 0x11 (P0 push-pull bit 4), soft reset 0x7F.
-    READ = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x11}
+    # interrupt enable 0x06/0x07, ID 0x10 (0x23), global control 0x11 (P0 push-pull bit 4), LED mode 0x12/0x13,
+    # soft reset 0x7F (write only).
+    READ = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x10, 0x11, 0x12, 0x13}
     WRITE = {0x02, 0x03, 0x04, 0x05, 0x11, 0x7F}
     # The real board's output registers before any driver write: out0 0x11, out1 0x03, so both bus bits
     # 0 (the owner's register probe on the bench CoreS3, 2026-11-22). Direction 0x00 is the datasheet's
@@ -44,6 +45,7 @@ class Aw9523:
     def __init__(self, present=True):
         self.present = present
         self.regs = [0] * 256
+        self.regs[0x10] = 0x23  # the AW9523B's ID (datasheet)
         for r, v in self.POWER_ON.items():
             self.regs[r] = v
 
@@ -56,6 +58,7 @@ class Aw9523:
             # soft reset: every pin an output driving 0 (assumed: the datasheet's output reset value depends
             # on the AD pins; the board package's init writes output and direction right after it anyway)
             self.regs = [0] * 256
+            self.regs[0x10] = 0x23
             return
         for i, b in enumerate(data[1:]):
             self.regs[reg + i] = b
@@ -82,8 +85,10 @@ class Axp2101:
     The power-on values of 0x18 and 0x30 are assumed 0 (unverified: no saved register dump of the board)."""
 
     addr = 0x34
-    READ = {0x00, 0x01, 0x18, 0x30, 0x34, 0x35, 0xA4}
+    READ = {0x00, 0x01, 0x18, 0x30, 0x34, 0x35, 0xA4} | {0x02, 0x10, 0x26, 0x27, 0x68, 0x80, 0x90}
     WRITE = {0x18, 0x30}
+    # 0x02 0x10 0x26 0x27 0x68 0x80 0x90: only the console's register dump reads them (`i2c dump 0x34`). Their
+    # values here are placeholders (0), unverified: replace them with the first HIL dump of the bench board.
     present: bool = True
     vbus: bool = True
     battery: bool = True

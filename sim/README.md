@@ -129,15 +129,15 @@ output goes to `$HIL_OUT` (default `~/hil/<date-time>`).
 
 1. Once per machine: make a Python environment with the test tools and coresim, and select it:
    `python3 -m venv ~/hil-venv && ~/hil-venv/bin/pip install -r requirements-dev.txt && export PY=~/hil-venv/bin/python`.
-   The drift report also needs the 32-bit host build of the sim (`gcc-multilib g++-multilib`). Without it,
-   `hil.sh scenarios` runs only on the board and says so.
+   The sim half of `hil.sh scenarios` runs in a container (podman): the GHCR `oc-linux` image when it pulls,
+   else a local build of `tools/docker/linux.Dockerfile`. The host needs no 32-bit toolchain.
 2. Find the board's by-id path: `ls -l /dev/serial/by-id/`.
 3. Set the board's port: `export HIL_PORT=/dev/serial/by-id/usb-Espressif_..._<MAC>-if00`.
 4. Identify the board (the MAC is in the by-id name; `status`, `lora status`, `wifi status`):
    `tools/esplab/hil.sh identify`.
 5. Record the console for 2 min (the AT traffic, among it the liveness probe): `tools/esplab/hil.sh tail 120`.
 6. Read the RX settings for the join-accept diagnosis (`RX1DL`, `RX2DL`, `RX2DR`, `RX2FQ`, `JN1DL`,
-   `JN2DL`, `BAND`, `CLASS`, `ADR`, `DR`, `NJS`): `tools/esplab/hil.sh diag`.
+   `JN2DL`, `BAND`, `CLASS`, `ADR`, `DR`, `NJS`) and the register dumps: `tools/esplab/hil.sh diag`.
 7. Run the read-only dual-target scenarios on the board and on the sim, with a JUnit report and the drift
    reports: `tools/esplab/hil.sh scenarios`.
 8. Read the drift reports: `cat $HIL_OUT/drift-*.txt`.
@@ -155,6 +155,6 @@ After the session, copy the new captures (`capture-join.log`, `rx-diag.log`, the
 replays them (both line formats: the console tail's clock times and `hil.sh`'s elapsed milliseconds), and a
 fake that does not match fails. A capture without a parsed AT command fails too.
 
-**Not yet possible:** a dump of the AW9523 and AXP2101 registers. The firmware has no console command for
-that, so the session reads only what `status` reports (`battery`). A read-only `i2c` dump command is a
-follow-up.
+The register dumps (`i2c-dump.log`, `identify.txt`) replace the fakes' assumed register values: the AW9523
+power-on state and the AXP2101 registers that only the dump reads (`coresim/devices.py` marks them as
+placeholders).
