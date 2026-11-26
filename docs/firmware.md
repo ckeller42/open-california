@@ -2079,8 +2079,8 @@ within seconds; a downlink that switches camping mode on (and with it the router
   row without an answer reset the module and drop `joined`; a module still silent after the reset gets a
   power cycle of the M-Bus 5 V (AW9523 `BUS_OUT_EN`/`BOOST_EN` 0/0 for 5 s, TX and RST released, then 1/1:
   `lora: module silent after reset: bus power cycle`), the cure for a module latched by a supply dip. Otherwise the
-  bits follow the supply (`device.battery.usb`): 0/0 on USB (the boost stays off; with 1/1 on USB six join
-  accepts in a row were lost on 2026-11-26), 1/1 on the battery so the module keeps its 5 V; unknown changes
+  bits follow the supply (`device.battery.usb`): 0/0 on USB (the boost stays off; with 1/1 on USB a bench satellite
+  lost six join accepts in a row), 1/1 on the battery so the module keeps its 5 V; unknown changes
   nothing (`lora: bus power on|off (battery|usb)`). While it stays silent
   the task retries every
   10 min. A spike bench run showed why: a hung module that the old firmware counted as "sending"
