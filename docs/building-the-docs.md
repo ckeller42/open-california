@@ -169,3 +169,5 @@ In short: the behaviour goes on the page, the proof goes into an evidence-ledger
 `tests/test_docs_style.py` holds the exact patterns for rules 2 and 3 and checks the pages in its
 `CHECKED_PAGES` list. Add a page to that list when it passes. Before a commit, build the site with
 `sh docs/build_site.sh` (warnings are errors) and run the full pytest suite.
+
+<!-- CI filter probe (throwaway PR, not for merge) -->
