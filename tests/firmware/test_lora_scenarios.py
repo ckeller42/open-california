@@ -22,7 +22,7 @@ from .conftest import build_host
 RX_SETTINGS = ["RX1DL", "RX2DL", "RX2DR", "RX2FQ", "JN1DL", "JN2DL", "BAND", "CLASS", "ADR", "NJS"]
 BOARD = os.environ.get("HIL_TARGET", "sim") == "board"
 # the sim target needs the 32-bit host build; the board target does not (its drift run uses HIL_SIM_BIN)
-pytestmark = [] if BOARD else [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
+pytestmark = [] if BOARD else [pytest.mark.linux_only]
 
 
 @pytest.fixture
