@@ -17,10 +17,12 @@
 # Only GitHub runs: `install-script` (sh -n + shellcheck install.sh), `firmware-build` + `firmware-qemu` (ESP-IDF container),
 # `pairing-real-stack` (real BlueZ in a VM, tests/realstack/vm.sh; not a required check), and the
 # push-to-main workflows: docs.yml (the same build + Pages deploy) and screenshots.yml
-# (re-renders docs/screenshots and commits them to main with [skip ci]).
+# (re-renders docs/screenshots and commits them to main with [skip ci]), and images.yml (builds +
+# smoke-tests the oc-linux / oc-docs images on PRs that touch them; publishes them to GHCR from main).
 #
 # `tools/ci.sh docs` runs ci.yml's `docs` job locally in Docker (doxygen + sphinx -W site build;
-# the Mac has no sphinx); not part of the default gate.
+# the Mac has no sphinx); not part of the default gate. `linux` and `docs` pull the GHCR image when
+# its Dockerfile + requirements equal origin/main, else build it locally.
 #
 #   tools/ci.sh              # run the local gate (see above for what it does NOT cover)
 #   tools/ci.sh test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|linux|docs|screenshots|import-clean|vendor-check
@@ -109,14 +111,25 @@ vendor_check() {   # whole tracked tree: vendor paths, the real vehicle MAC, VIN
   "$PY" tools/check_vendor_material.py --all
   echo "no vendor material, vehicle MAC, or VIN committed"
 }
+oc_image() {   # oc_image NAME PLATFORM DOCKERFILE INPUTS...: tag NAME from the GHCR image images.yml publishes
+               # (amd64 only) when the Dockerfile + inputs equal origin/main, else build it locally as before.
+               # Empty PLATFORM = native build; the amd64 pull is then tried only on an x86_64 host.
+  local name=$1 platform=$2 file=$3; shift 3
+  local ghcr=ghcr.io/ckeller42/open-california/$name:latest
+  if { [ -n "$platform" ] || [ "$(uname -m)" = x86_64 ]; } && git diff --quiet origin/main -- "$file" "$@" 2>/dev/null \
+     && docker pull -q --platform linux/amd64 "$ghcr" >/dev/null 2>&1; then
+    docker tag "$ghcr" "$name"
+  else
+    tar -c "$file" "$@" | docker build -q ${platform:+--platform "$platform"} -t "$name" -f "$file" - >/dev/null
+  fi
+}
 linux() {   # CI's C toolchain (tools/docker/linux.Dockerfile: Linux amd64, gcc + -m32 multilib) via Docker:
             # the gcc -Werror builds Apple clang lets through. Default: every test that compiles C
             # (tests/firmware without the host tier, the csrc parity); args replace the pytest args,
             # e.g. `tools/ci.sh linux tests/firmware/test_diag.py`. The image builds once (~2 min), then
             # a run takes ~30 s under emulation on Apple Silicon.
   command -v docker >/dev/null || { echo "linux: needs Docker" >&2; exit 1; }
-  tar -c tools/docker/linux.Dockerfile requirements-dev.txt \
-    | docker build -q --platform linux/amd64 -t oc-linux -f tools/docker/linux.Dockerfile - >/dev/null
+  oc_image oc-linux linux/amd64 tools/docker/linux.Dockerfile requirements-dev.txt
   local run=(docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" -v "$PWD":/w -w /w oc-linux
     python3 -m pytest -q -p no:cacheprovider)
   if [ $# -gt 0 ]; then "${run[@]}" "$@"; return; fi
@@ -126,7 +139,7 @@ linux() {   # CI's C toolchain (tools/docker/linux.Dockerfile: Linux amd64, gcc 
 docs() {   # ci.yml's `docs` job in Docker (image oc-docs = docs/Dockerfile: doxygen + sphinx + breathe):
            # doxygen firmware/Doxyfile, then the -W site build. Ends with `site -> docs/_build/site`.
   command -v docker >/dev/null || { echo "docs: needs Docker" >&2; exit 1; }
-  tar -c docs/Dockerfile docs/requirements.txt | docker build -q -t oc-docs -f docs/Dockerfile - >/dev/null
+  oc_image oc-docs '' docs/Dockerfile docs/requirements.txt
   docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e OC_COMMIT="$(git rev-parse HEAD 2>/dev/null || true)" \
     -v "$PWD":/w -w /w oc-docs \
     sh -c 'doxygen --version && sh docs/build_site.sh docs/_build/site'

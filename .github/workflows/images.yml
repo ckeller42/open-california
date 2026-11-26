@@ -1,0 +1,108 @@
+name: images
+
+# The repo's two Docker images: oc-linux (tools/docker/linux.Dockerfile, CI's C toolchain for
+# `tools/ci.sh linux`) and oc-docs (docs/Dockerfile, the docs gate for `tools/ci.sh docs`).
+# Every run builds both and smoke-tests them; a PR does not publish. Push to main, the weekly
+# rebuild (fresh base image + apt security fixes) and a manual dispatch on main also publish to
+# ghcr.io/ckeller42/open-california/{oc-linux,oc-docs} as `latest` + the short sha.
+# Path-filtered, so NOT a required check.
+on:
+  pull_request:
+    paths: [tools/docker/linux.Dockerfile, requirements-dev.txt, docs/Dockerfile, docs/requirements.txt, .github/workflows/images.yml]
+  push:
+    branches: [main]
+    paths: [tools/docker/linux.Dockerfile, requirements-dev.txt, docs/Dockerfile, docs/requirements.txt, .github/workflows/images.yml]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: oc-linux
+            file: tools/docker/linux.Dockerfile
+            smoke: >-
+              printf '#include <stdio.h>\nint main(void){puts("hi");return 0;}\n' > /tmp/h.c
+              && gcc -m32 -Werror -o /tmp/h /tmp/h.c && /tmp/h
+              && python3 -c "import pytest, xdist"
+          - image: oc-docs
+            file: docs/Dockerfile
+            smoke: doxygen --version && python -c "import sphinx; print(sphinx.__version__)"
+    env:
+      IMAGE: ghcr.io/ckeller42/open-california/${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build (loaded locally for the smoke test)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          load: true
+          push: false
+          no-cache: ${{ github.event_name == 'schedule' }}  # weekly: fresh apt + pip layers
+          tags: ${{ env.IMAGE }}:ci
+          labels: org.opencontainers.image.source=https://github.com/ckeller42/open-california
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - name: Smoke test
+        env:
+          SMOKE: ${{ matrix.smoke }}
+        run: docker run --rm "$IMAGE:ci" sh -c "$SMOKE"
+
+  publish:
+    # Same build from the layer cache the build job just wrote, pushed. The only job with write scope.
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: oc-linux
+            file: tools/docker/linux.Dockerfile
+          - image: oc-docs
+            file: docs/Dockerfile
+    env:
+      IMAGE: ghcr.io/ckeller42/open-california/${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Short sha
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build + push latest and the short sha
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ env.SHORT_SHA }}
+          labels: org.opencontainers.image.source=https://github.com/ckeller42/open-california
+          cache-from: type=gha,scope=${{ matrix.image }}

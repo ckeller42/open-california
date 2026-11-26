@@ -39,7 +39,13 @@ for how strongly each fact is proven.
 `tools/ci.sh` runs most of this locally. It skips `gui-e2e` without Playwright and the C tests
 without a compiler, and it never runs the real-BlueZ VM job. `tools/ci.sh linux` runs the C tests
 in CI's own toolchain (Linux amd64, gcc with the `-m32` multilib) in Docker, so a gcc-only warning
-that Apple clang lets through fails on the Mac too. The git hooks (`tools/ci.sh dev`
+that Apple clang lets through fails on the Mac too. The `images` workflow
+(`.github/workflows/images.yml`) builds that image (`tools/docker/linux.Dockerfile`) and the docs
+image (`docs/Dockerfile`) and smoke-tests them on every PR that changes a Dockerfile or its
+requirements file. On main, weekly and on a manual run it also publishes them as
+`ghcr.io/ckeller42/open-california/oc-linux` and `.../oc-docs` (tags `latest` and the short commit
+sha). `tools/ci.sh linux` and `tools/ci.sh docs` pull the published image when the local Dockerfile
+and requirements file equal `origin/main`, and build the image locally otherwise. The git hooks (`tools/ci.sh dev`
 installs them from `.pre-commit-config.yaml`) run the fast guards and linters on every commit and
 the full suite plus the signal audit on every push. The notes on the `tools/ci.sh` line
 in the repo's [`AGENTS.md`](https://github.com/ckeller42/open-california/blob/main/AGENTS.md) list exactly what only GitHub runs.
