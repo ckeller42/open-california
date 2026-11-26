@@ -12,8 +12,8 @@
 # Steps that change the board, each only with the owner present:
 #   scenarios --actions   also the scenarios that join and send uplinks (HIL_ACTIONS=1)
 #   capture-join          lora off, lora on, then 150 s of console: a raw AT transcript of setup, join, uplinks
-#   flash-esp-latest      flash the latest main CI build to HIL_PORT (tools/esplab/flash_ci.sh); needs
-#                         HIL_FLASH=owner-present as well
+#   flash RUN_ID          flash the firmware of that CI run to HIL_PORT (tools/esplab/flash_ci.sh, an explicit
+#                         run id as AGENTS.md requires, never "main"); needs HIL_FLASH=owner-present as well
 #
 # Output: $HIL_OUT (default ~/hil/<YYYYmmdd-HHMMSS>). Only the board named by HIL_PORT is ever opened:
 # a /dev/serial/by-id/usb-Espressif_... path that exists and is not /dev/ttyUSB0 (odelly's node32).
@@ -65,9 +65,10 @@ case "$step" in
   capture-join)
     echo "changes the board: LoRa off and on, a real join and uplinks"
     run_steps 160 "lora off" "lora status" "lora on" | tee "$out/capture-join.log" ;;
-  flash-esp-latest)
-    [ "${HIL_FLASH:-}" = owner-present ] || die "flash-esp-latest writes the board's flash: set HIL_FLASH=owner-present"
-    exec bash "$here/flash_ci.sh" main "$port" ;;
-  *) die "usage: HIL_PORT=... $0 identify|tail S|diag|scenarios [--actions]|capture-join|flash-esp-latest" ;;
+  flash)
+    [ "${HIL_FLASH:-}" = owner-present ] || die "flash writes the board's flash: set HIL_FLASH=owner-present"
+    [[ "${1:-}" =~ ^[0-9]+$ ]] || die "flash needs an explicit CI run id (never main: AGENTS.md)"
+    exec bash "$here/flash_ci.sh" "$1" "$port" ;;
+  *) die "usage: HIL_PORT=... $0 identify|tail S|diag|scenarios [--actions]|capture-join|flash RUN_ID" ;;
 esac
 echo "output: $out"

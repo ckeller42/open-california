@@ -146,8 +146,8 @@ output goes to `$HIL_OUT` (default `~/hil/<date-time>`).
 1. Record a raw AT transcript of a module setup, a join and the uplinks (LoRa off and on again):
    `tools/esplab/hil.sh capture-join`.
 2. Run all the scenarios, the real join with uplinks included: `tools/esplab/hil.sh scenarios --actions`.
-3. Only if the board needs the current firmware: `HIL_FLASH=owner-present tools/esplab/hil.sh flash-esp-latest`.
-   This writes the board's flash.
+3. Only if the board needs other firmware: `HIL_FLASH=owner-present tools/esplab/hil.sh flash <CI run id>`.
+   This writes the board's flash. Give an explicit run id (`gh run list --workflow ci.yml`), never `main`.
 
 After the session, copy the new captures (`capture-join.log`, `rx-diag.log`, the console tails) into
 `sim/tests/data/` as `rak3172-<what>.log`, with only the `lora:` lines kept. `tests/test_replay.py` then
