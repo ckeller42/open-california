@@ -1,6 +1,7 @@
 """The satellite on the simulated CoreS3 (``coresim``, sim/README.md): what ``lora-sim`` needs besides the
-generic board — the console lines at boot (bench keys, the LoRa switch), ``device.lora`` in each scheduled
-tick, and the USB state handed over as an event (``lora_sim_main.c``)."""
+generic board — the console lines at boot (bench keys, the LoRa switch) and ``device.lora`` +
+``device.battery`` in each scheduled tick (``lora_sim_main.c``). The supply state reaches the firmware only
+through the fake AXP2101."""
 
 from __future__ import annotations
 
@@ -18,18 +19,19 @@ KEYS = "lora keys 70B3D57ED0000001 0000000000000001 000102030405060708090A0B0C0D
 
 
 class Board(coresim.CoreS3):
-    def __init__(self, usb=True, aw9523=True, lora_on=True, keys=True):
-        super().__init__(vbus=usb, aw9523=aw9523)
+    def __init__(self, usb=True, aw9523=True, axp2101=True, lora_on=True, keys=True):
+        super().__init__(vbus=usb, aw9523=aw9523, axp2101=axp2101)
         self.lora_on = lora_on
         self.keys = keys
         self.states: list[tuple[int, dict]] = []  # (t_ms, device.lora) at every scheduled tick
+        self.battery: list[tuple[int, dict]] = []  # (t_ms, device.battery) at every scheduled tick
 
     @property
     def usb(self):
         return self.vbus
 
     def boot(self):
-        out = [f"EV 0 USB {int(self.vbus)}"]
+        out = []
         if self.keys:
             out.append(f"EV 0 CONSOLE {KEYS}")
         if self.lora_on:
@@ -37,11 +39,12 @@ class Board(coresim.CoreS3):
         return out
 
     def tick(self, t, payload):
-        self.states.append((t, json.loads(payload)["lora"]))
+        doc = json.loads(payload)
+        self.states.append((t, doc["lora"]))
+        self.battery.append((t, doc["battery"]))
 
     def set_usb(self, on):
         self.set_vbus(on)
-        self.emit(f"EV 0 USB {int(on)}")
 
 
 def run(binary, board: Board, until_ms: int, store, wall_s=60) -> Board:

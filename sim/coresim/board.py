@@ -1,21 +1,22 @@
 """The CoreS3 wiring: the I2C devices on the internal bus, a module on UART1 + its GPIOs, the M-Bus 5 V.
 
-The M-Bus module has power while VBUS (USB) is there or both AW9523 bus bits are 1 (the boost).
+The M-Bus module has power while VBUS (USB, as the AXP2101 reports it) is there or both AW9523 bus bits
+are 1 (the boost).
 Firmware-specific behaviour (what to answer at ``BOOT``, what a scheduled ``TICK`` carries) goes into a
 subclass: :meth:`CoreS3.boot` and :meth:`CoreS3.tick`.
 """
 
 from __future__ import annotations
 
-from .devices import Aw9523, Rak3172
+from .devices import Aw9523, Axp2101, Rak3172
 
 
 class CoreS3:
-    def __init__(self, vbus=True, aw9523=True):
-        self.vbus = vbus
+    def __init__(self, vbus=True, aw9523=True, axp2101=True):
         self.aw = Aw9523(aw9523)
+        self.axp = Axp2101(present=axp2101, vbus=vbus)
         self.rak = Rak3172(powered=self.powered)
-        self.i2c = {self.aw.addr: self.aw}
+        self.i2c = {self.aw.addr: self.aw, self.axp.addr: self.axp}
         self.t = 0
         self.log: list[tuple[int, str]] = []  # (virtual t_ms, line)
         self.hw: list[tuple[int, str]] = []  # every request
@@ -34,6 +35,10 @@ class CoreS3:
 
     # ---- the scenario side ----
 
+    @property
+    def vbus(self):
+        return self.axp.vbus
+
     def powered(self):
         return bool(self.vbus) or self.aw.bus == (1, 1)
 
@@ -51,8 +56,9 @@ class CoreS3:
             self.at(t, lambda b: None)
 
     def set_vbus(self, on):
+        """Plug or unplug USB: the AXP2101 shows it at the firmware's next read."""
         powered = self.powered()
-        self.vbus = on
+        self.axp.vbus = on
         if powered and not self.powered():
             self.rak.lost_power()
 
