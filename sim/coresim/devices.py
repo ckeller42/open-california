@@ -193,7 +193,7 @@ class Rak3172:
         if line.startswith("AT+") and line.endswith("=?"):
             name = line[3:-2]
             if name == "NJS":  # the join state
-                return [rx(f"AT+NJS={int(self.joined)}"), rx("OK")]
+                return [rx(f"AT+NJS={int(self.is_joined(t))}"), rx("OK")]
             if name not in self.values:
                 raise Unmodelled(f"RAK3172 query {line}")
             return [rx(f"AT+{name}={self.values[name]}"), rx("OK")]
