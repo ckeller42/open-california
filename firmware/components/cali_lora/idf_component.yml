@@ -1,0 +1,5 @@
+## ESP-IDF component manager manifest for cali_lora (R_FW_LORA): the board package's AW9523 handle
+## (bsp_io_expander_init) for the M-Bus 5 V of the RAK3172. Same exact pin as cali_display's and
+## cali_sdcard's manifests — keep the three in step.
+dependencies:
+  espressif/m5stack_core_s3: "==4.1.0"
