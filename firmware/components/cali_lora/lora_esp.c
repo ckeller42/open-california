@@ -21,6 +21,7 @@
 #include "cali_lora_aead.h"
 #include "cali_lora_setup.h"
 #include "bsp/esp-bsp.h"
+#include "cali_display.h"
 #include "cali_platform.h"
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
@@ -181,14 +182,21 @@ static void rak_reset(void) {
 }
 
 /* Both bits to `on`. 1/1 feeds the bus from the battery boost too, so the module keeps its 5 V while
- * the USB supply is gone (van 12 V dip, 2026-11-24). The expander's read-modify-write is not locked
- * against the SD and LCD switches: those change only at boot and at a card mount. */
+ * the USB supply is gone (van 12 V dip, 2026-11-24). The expander write is a read-modify-write of the
+ * output register that the SD power switch shares, so it holds bsp_display_lock as the SD mount does. */
 static int bus_power(uint32_t on) {
     /* the board package aborts on an expander fault (BSP_ERROR_CHECK=y): probe first, as cali_display does */
     (void)bsp_i2c_init();
     esp_io_expander_handle_t io = i2c_master_probe(bsp_i2c_get_handle(), AW9523_ADDR, 50) == ESP_OK ? bsp_io_expander_init() : NULL;
-    if (!io || esp_io_expander_set_dir(io, BUS_PINS, IO_EXPANDER_OUTPUT) != ESP_OK ||
-        esp_io_expander_set_level(io, BUS_PINS, on) != ESP_OK) {
+    bool ok = false;
+    if (io) {
+        int lock = cali_display_ready();   /* no screen: no LVGL lock to take, and no SD task either */
+        if (lock) bsp_display_lock(0);     /* 0 = wait */
+        ok = esp_io_expander_set_dir(io, BUS_PINS, IO_EXPANDER_OUTPUT) == ESP_OK &&
+             esp_io_expander_set_level(io, BUS_PINS, on) == ESP_OK;
+        if (lock) bsp_display_unlock();
+    }
+    if (!ok) {
         cali_log("lora: bus power %s failed", on ? "on" : "off");
         return -1;
     }
@@ -198,16 +206,17 @@ static int bus_power(uint32_t on) {
 /* A module still silent after RST is latched: only an off/on of its 5 V clears it (bench 2026-11-22:
  * RST, USB cuts and ESP resets did not). TX and RST are inputs while the bus is off, so they cannot
  * feed the module through its pins; the UART driver stays installed and gets its pins back. */
-static void bus_power_cycle(void) {
+static bool bus_power_cycle(void) {
     cali_log("lora: module silent after reset: bus power cycle");
     gpio_set_direction(RAK_TX, GPIO_MODE_INPUT);
     gpio_set_direction(RAK_RST, GPIO_MODE_INPUT);
     if (bus_power(0) == 0) vTaskDelay(pdMS_TO_TICKS(BUS_OFF_MS));
-    (void)bus_power(1);
+    if (bus_power(1) != 0 && bus_power(1) != 0) return false;   /* no 5 V: the pins stay released */
     vTaskDelay(pdMS_TO_TICKS(500));
     (void)uart_set_pin(RAK_UART, RAK_TX, RAK_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     gpio_set_level(RAK_RST, 1);   /* high before it drives: no extra reset pulse */
     gpio_set_direction(RAK_RST, GPIO_MODE_OUTPUT);
+    return true;
 }
 
 static bool uart_up(void) {
@@ -641,9 +650,10 @@ static void lora_task(void *arg) {
             rak_reset();
             ready = module_setup();
             if (!ready) {   /* RST alone did not help: cut its 5 V, then try once more */
-                bus_power_cycle();
-                rak_reset();
-                ready = module_setup();
+                if (bus_power_cycle()) {
+                    rak_reset();
+                    ready = module_setup();
+                }
             }
             if (!ready) {
                 s_silent = CALI_LORA_SILENT_MAX;   /* the next pass resets and checks again */
