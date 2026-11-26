@@ -43,7 +43,7 @@ from .test_host_e2e import _beats_seen, _funcs, _pair, _serve_raw, _served_frame
 from .test_sensors import GOVEE_H5074
 
 # One xdist worker: the host_fw fixture runs `make` in firmware/host (like test_host_e2e.py).
-pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
+pytestmark = pytest.mark.linux_only
 
 PSK = "test-psk-1234"
 PAGE = Path(__file__).resolve().parents[2] / "firmware" / "web" / "index_gen.html"

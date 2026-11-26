@@ -28,7 +28,7 @@ from .conftest import FakeAdvertiser
 from .test_host_e2e import _pair
 from .test_sensors_e2e import _first_seen
 
-pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
+pytestmark = pytest.mark.linux_only
 
 ARM_S = 3.5  # CODEC_ARM_DELAY_MS + margin
 GOVEE_ADDR = "A4:C1:38:00:00:02"

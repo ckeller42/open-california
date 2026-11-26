@@ -14,7 +14,7 @@ import pytest
 
 from .test_host_e2e import _pair
 
-pytestmark = [pytest.mark.xdist_group("firmware-host-build"), pytest.mark.linux_only]
+pytestmark = pytest.mark.linux_only
 
 # min 0, T 10 min (never reached here), W 30 s, gone 90 s (> the 60 s between two scan windows)
 VERIFY = "otaverify 0 600000 30000 90000"

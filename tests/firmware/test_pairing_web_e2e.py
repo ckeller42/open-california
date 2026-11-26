@@ -22,7 +22,7 @@ from .conftest import HciUnit
 from .test_web_e2e import AP_UP, PSK, _request, _require_chromium, _wifi_script, get_json
 
 # One xdist worker: the host_fw fixture runs `make` in firmware/host (like test_host_e2e.py).
-pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
+pytestmark = pytest.mark.linux_only
 
 IDENTITY = "C0:FF:EE:CA:11:F0"
 WIFI = "ap minsel -55 1\njoin minsel ok 192.168.1.42\n"

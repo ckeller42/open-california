@@ -46,15 +46,16 @@ except Exception as _e:  # noqa: BLE001 — any launch failure (missing executab
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # These tests share one module-scoped daemon + a real browser, so they must not be spread across
-# xdist workers: keep the whole module on a single worker (`--dist loadgroup`, set by tools/ci.sh
-# test (also the pre-push hook) and CI). Without it each worker started its OWN daemon, the module fixture below
+# xdist workers: keep the whole module on a single worker (`--dist loadfile`, set by tools/ci.sh
+# test (also the pre-push hook) and CI; the mark documents the intent, tests/test_xdist_groups.py
+# pins that the dist mode honours it). Without it each worker started its OWN daemon, the module fixture below
 # deleted the shared cache files out from under a peer mid-run, and the latency assertion competed
 # with N browsers — two GUI tests flaked under `-n auto` while passing serially.
 pytestmark = pytest.mark.xdist_group("e2e")
 
 
 # Cache files the e2e daemon writes, namespaced per xdist worker (`PYTEST_XDIST_WORKER` is unset when
-# running serially). Belt-and-braces alongside the loadgroup marker: it also keeps two CONCURRENT
+# running serially). Belt-and-braces alongside the single worker: it also keeps two CONCURRENT
 # pytest runs (e.g. the pre-push hook while a manual run is open) from clobbering each other.
 def _cache(name):
     worker = os.environ.get("PYTEST_XDIST_WORKER", "")

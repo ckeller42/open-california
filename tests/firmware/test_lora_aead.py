@@ -10,7 +10,7 @@ import pytest
 
 from .conftest import HOST_DIR, build_host
 
-pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
+pytestmark = pytest.mark.linux_only
 
 VEC = json.loads((HOST_DIR.parents[1] / "tests/firmware/data/lora_xfer_vector.json").read_text())
 

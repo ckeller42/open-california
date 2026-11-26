@@ -14,7 +14,7 @@ import pytest
 
 from .conftest import build_host
 
-pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
+pytestmark = pytest.mark.linux_only
 
 
 def _run(*lines):

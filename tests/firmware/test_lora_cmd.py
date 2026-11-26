@@ -9,7 +9,7 @@ import pytest
 
 from .conftest import build_host
 
-pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
+pytestmark = pytest.mark.linux_only
 
 KEY = "000102030405060708090a0b0c0d0e0f"
 PHONE = "a1b2c3d4"  # the phone's 4 random bytes (ruling R25)

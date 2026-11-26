@@ -19,7 +19,7 @@ from .test_auto_camper_e2e import _tick
 from .test_control_e2e import _online
 from .test_web_e2e import get_json
 
-pytestmark = [pytest.mark.xdist_group("firmware-host-build"), pytest.mark.linux_only]
+pytestmark = pytest.mark.linux_only
 
 
 @pytest.fixture(autouse=True)
