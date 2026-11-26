@@ -375,6 +375,7 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: calictl.esp_ingest
 .. automodule:: tests.test_esp_ingest
 .. automodule:: tests.test_esplab_sensors_setup
+.. automodule:: tests.test_esplab_bench
 .. automodule:: tests.test_camper_dashboard
 .. automodule:: tests.test_wifi_sm_ref
 .. automodule:: tests.test_web_strings

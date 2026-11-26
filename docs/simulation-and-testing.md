@@ -396,6 +396,27 @@ Limits:
 - The Victron adverts carry only the fields that the satellite decodes plus plausible
   battery-monitor extras; they are not a capture of a real device.
 
+## The satellite bench in one command (`tools/esplab/bench.sh`)
+
+The bench is the test board on the laptop's USB, the fake camper unit on a Pi
+(`tools/applab/fake_unit_ble.py`, a transient `oc-fakeunit` unit started by `~/fakeunit.sh` there)
+and the fake BLE sensors on the laptop's adapter (above).
+
+```bash
+tools/esplab/bench.sh up        # the fake unit fresh (new pairing state), the fake sensors on
+tools/esplab/bench.sh status    # each part; the board's bond and WiFi from its console
+tools/esplab/bench.sh down      # both off; hci0 goes back to bluetoothd on the Pi
+tools/esplab/bench.sh release ~/calictl-esp/ci-<sha>-<run>   # before the board leaves the bench
+```
+
+`status` reads the fake unit's addresses live and says when the board is still bonded to it. A
+board bonded to the bench cannot pair with a real unit and keeps only the bench's WiFi, so
+`release` erases the **whole** flash (bond, WiFi, hub, LoRa keys: a new LoRa device needs the
+remote app's "Set up LoRa" again) and flashes a build directory (`flasher_args.json`, as
+`flash_ci.sh` downloads it). It asks for the board's MAC to be typed back first and checks the
+clean state after the boot. Not covered: the camera feed and the Android emulator.
+`tests/test_esplab_bench.py` runs the script against stubs.
+
 ## Which CI job runs what
 
 | Workflow / job | When | Runs |
