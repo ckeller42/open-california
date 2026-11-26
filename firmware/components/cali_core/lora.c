@@ -566,6 +566,14 @@ static int unhex(const char *h, uint8_t *out, size_t n) {
     return 0;
 }
 
+int cali_lora_at_query_ok(const char *name) {
+    static const char *const OK[] = {"RX1DL", "RX2DL", "RX2DR", "RX2FQ", "JN1DL", "JN2DL", "BAND",
+                                     "CLASS", "ADR",   "DR",    "NWM",   "NJM",   "NJS",   "CFM"};
+    for (size_t i = 0; i < sizeof OK / sizeof OK[0]; i++)
+        if (!strcmp(name, OK[i])) return 1;
+    return 0;
+}
+
 int cali_lora_console(const char *args) {
     char op[8] = "", a[24] = "", b[24] = "", c[40] = "";
     int n = sscanf(args, "%7s %23s %23s %39s", op, a, b, c);
@@ -585,8 +593,11 @@ int cali_lora_console(const char *args) {
         else if (cali_kv_set(CALI_LORA_KEYS_KEY, k, sizeof k) != 0) cali_log("lora: keys: store failed");
         else cali_log("lora: keys stored (used at the next join attempt)");
         cali_wipe(k, sizeof k);
+    } else if (n == 2 && !strcmp(op, "at")) {
+        if (!cali_lora_at_query_ok(a)) cali_log("lora: at: not a readable setting: %s", a);
+        else if (cali_lora_port_at(a) != 0) cali_log("lora: at: not queued (busy or no module driver)");
     } else {
-        cali_log("lora: usage: lora on|off|status|forget|keys <deveui> <joineui> <appkey>");
+        cali_log("lora: usage: lora on|off|status|forget|keys <deveui> <joineui> <appkey>|at <setting>");
     }
     return 0;
 }

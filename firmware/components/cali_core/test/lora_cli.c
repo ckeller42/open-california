@@ -124,6 +124,7 @@ void cali_log(const char *fmt, ...) {
 void cali_lora_port_post(const cali_lora_snap_t *s) { printf("POST %d\n", s->enabled); }
 int cali_lora_port_status(cali_lora_status_t *out) { (void)out; return 0; }
 void cali_lora_port_forgotten(void) {}
+int cali_lora_port_at(const char *name) { return printf("AT %s\n", name), 0; }
 
 static size_t unhex(const char *h, uint8_t *out, size_t cap) {
     size_t n = 0;
