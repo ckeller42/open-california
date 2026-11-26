@@ -146,8 +146,14 @@ CI"). The required status checks are: `test (3.11)`, `test (3.12)`, `test (3.13)
 an unresolved review thread does. The same ruleset holds `required_review_thread_resolution: true`,
 `required_approving_review_count: 0`, `require_extra_approval_for_unattributed_changes: true`, squash
 as the only merge method, and no branch deletion / no force-push. `no-vendor-material`,
-`install-script`, `codec-parity`, `firmware-qemu` and `pairing-real-stack` run on every PR but are
-**not** required. Never rename a job key in `ci.yml` (or give the matrix job a `name:`); branch
+`install-script`, `codec-parity`, `firmware-qemu` and `pairing-real-stack` are **not** required.
+**Path filters:** the `changes` job (`tools/ci_changes.py`, the only place for the regexes; tested by
+`tests/test_ci_changes.py`) skips `firmware-build`, `firmware-qemu`, `firmware-host-e2e`, `gui-e2e`,
+`pairing-real-stack` and `ios` on a PR that touches none of their paths (a skipped required check
+counts as passed). A new import or build input of one of these jobs needs its path in that file.
+A push to `main` runs every job but `ios`. `pairing-real-stack` has `continue-on-error` (the
+runner has no Bluetooth kernel module for its VM). The `ci-ok` job is the gate: it needs every job
+except `pairing-real-stack` and `ios` and fails when one of them failed or was cancelled. Never rename a job key in `ci.yml` (or give the matrix job a `name:`); branch
 protection matches these strings. Workflows: every `uses:` is SHA-pinned with a `# vX.Y.Z` comment,
 `persist-credentials: false` on checkout (except `screenshots.yml`, which pushes), a
 `timeout-minutes` on every job, and write scopes only on the job that needs them.

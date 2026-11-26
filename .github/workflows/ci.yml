@@ -232,6 +232,8 @@ jobs:
         run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py tests/test_ports_parity.py tests/test_wifi_sm_ref.py tests/firmware/test_wifi_sm_parity.py tests/test_semantics_js_parity.py tests/test_app_bundle.py tests/test_control_vectors.py tests/firmware/test_control_parity.py -q
 
   gui-e2e:
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.gui != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -244,7 +246,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-e2e.txt
       - name: Install deps
-        run: pip install -r requirements-e2e.txt
+        run: pip install -r requirements-e2e.txt pytest-xdist
       - name: Playwright version (for the browser cache key)
         run: echo "PW_VERSION=$(python -m playwright --version | awk '{print $2}')" >> "$GITHUB_ENV"
       - name: Cache Playwright browsers
@@ -256,13 +258,21 @@ jobs:
       - name: Install Chromium (browser from cache when present; apt --with-deps only on miss)
         run: python -m playwright install ${{ steps.pw-cache.outputs.cache-hit == 'true' && 'chromium' || '--with-deps chromium' }}
       - name: GUI end-to-end (web UI over the mock unit)
-        run: python -m pytest tests/e2e -q
+        # 4 xdist workers (ubuntu-latest has 4 vCPUs). loadgroup keeps test_gui.py (one module-scoped
+        # daemon + browser, xdist_group "e2e") on one worker and spreads the other tests.
+        run: python -m pytest tests/e2e -q -n 4 --dist loadgroup
 
   pairing-real-stack:
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.realstack != 'false') }}
     # calictl's real BluezTransport pairs with the fake unit over real BlueZ inside a VM (GitHub's
     # runner kernel has no Bluetooth). Not a required check until it has been reliably green.
     # No setup-python on purpose: the VM boots off the runner's root filesystem and runs the SYSTEM
     # python3, so vm.sh installs the rig's deps (bumble, bleak, dbus-fast) for that interpreter.
+    # continue-on-error: the runner image lacks linux-modules-extra-<kernel> (no Bluetooth module
+    # for the VM), so this job fails on every run; a red job here must not make main's run red
+    # (flash_ci.sh main, promote_stable.sh and esp-stable.yml look for a successful CI run).
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 30   # ~14 min (2026-10-22 morning); >20 on slow runners the same evening
     steps:
@@ -287,8 +297,10 @@ jobs:
           key: realstack-debs-v1-${{ steps.rig.outputs.debs_key }}
 
   firmware-host-e2e:
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.host_e2e != 'false') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60   # ~28 min of tests (2026-10-22) + the thermostat closed loop (~6 min, measured emulated) + install/Chromium (0.5–18 min on a slow mirror); a hang must not burn 6 h
+    timeout-minutes: 60   # ~37 min serial (2026-11-26, #567), the longest file (thermostat) ~8 min on 4 workers + install/Chromium (0.5–18 min on a slow mirror); a hang must not burn 6 h
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -320,12 +332,16 @@ jobs:
       - name: Firmware tests incl. host tier (BLE e2e + bond store over NimBLE/Bumble, WiFi/web e2e + status page in Chromium)
         env:
           CALI_REQUIRE_CHROMIUM: "1"   # the status-page test fails, not skips, without a browser
-        run: python -m pytest tests/firmware -v -rs
+        # 4 xdist workers (ubuntu-latest has 4 vCPUs), each test file whole on one worker; build_host()
+        # (conftest.py) locks the shared firmware/host build.
+        run: python -m pytest tests/firmware -v -rs -n 4 --dist loadfile
 
   # The esp32s3 (M5Stack CoreS3) image: compile-only (no hardware in CI). Proves cali_core,
   # cali_ble_nimble (unchanged) and the NVS platform build against ESP-IDF's esp-nimble.
   # Pin: firmware/README.md.
   firmware-build:
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.firmware != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15   # observed 3.0-4.2 min on the probe runs; a hang must not burn 6 h
     container: espressif/idf:v6.1
@@ -415,6 +431,8 @@ jobs:
   # fails its build if "kvprobe" reaches the ELF. Proves boot, the console line protocol on the
   # no-controller path, and NVS (the bond store) surviving a reboot. No Bluetooth in QEMU.
   firmware-qemu:
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.firmware != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15   # observed 2.7-3.1 min on the probe runs; a hang must not burn 6 h
     container: espressif/idf:v6.1
@@ -433,14 +451,19 @@ jobs:
           pip install pytest
           CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v
 
-  # Which PRs touch the iOS app: its Swift sources, the C codec + control planner the Swift package
-  # links (Package.swift), the golden vectors and semantics.js it runs, and this workflow. Runs on a
-  # Linux runner, so a PR without iOS changes never pays for a macOS runner. A push to main always
-  # runs the iOS job.
-  ios-changes:
+  # Which heavy jobs a PR needs: tools/ci_changes.py holds one path filter per area (what each job
+  # builds, imports or serves; ci.yml itself runs everything) and prints one output per area. A push
+  # to main runs every job but `ios` regardless (each job's `if:`). A job whose output is missing
+  # (this job failed) runs: `!= 'false'`, so an error here never skips a required check. `ios` keeps
+  # the filter on main pushes too, so a merge without iOS changes never pays for a macOS runner.
+  changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      firmware: ${{ steps.filter.outputs.firmware }}
+      host_e2e: ${{ steps.filter.outputs.host_e2e }}
+      gui: ${{ steps.filter.outputs.gui }}
+      realstack: ${{ steps.filter.outputs.realstack }}
       ios: ${{ steps.filter.outputs.ios }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -448,12 +471,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 2   # a PR checks out its merge commit and main gets squash merges: HEAD^1 is the base
       - id: filter
-        env:
-          EVENT: ${{ github.event_name }}
         run: |
-          paths='^(ios/|Package\.(swift|resolved)$|csrc/(codec\.c|ports\.c|[^/]*\.h|swiftpm/)|firmware/components/cali_core/(control\.c$|include/|swiftpm/)|tests/vectors/|calictl/webui/semantics[^/]*\.js$|tools/(swift_needs\.py|ios_sanitize\.sh)$|\.github/workflows/ci\.yml$)'
-          if git diff --name-only HEAD^1 HEAD | grep -Eq "$paths"; then ios=true; else ios=false; fi
-          echo "ios=$ios" | tee -a "$GITHUB_OUTPUT"
+          git diff --name-only HEAD^1 HEAD | python3 -m tools.ci_changes | tee -a "$GITHUB_OUTPUT"
 
   # The iPhone app (docs/ios-app.md): the Swift package tests (plain, ASan, UBSan), the app's unit,
   # snapshot and UI tests on the simulator, then SwiftLint + swift-format. The xcode-27 image has
@@ -461,8 +480,8 @@ jobs:
   # simulator with iOS 27.0, its only iPhone 17 runtime. The references use perceptualPrecision 0.98
   # for the rendering of a different host. Not a required check.
   ios:
-    needs: ios-changes
-    if: needs.ios-changes.outputs.ios == 'true'
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     runs-on: xcode-27
     timeout-minutes: 90
     env:
@@ -547,3 +566,20 @@ jobs:
             ${{ runner.temp }}/AppUITests.xcresult
             ${{ runner.temp }}/sanitize-sample-*.txt
           if-no-files-found: ignore
+
+  # The one check a PR needs (the ruleset can require this job alone): fails when a job it needs
+  # failed or was cancelled; a job its `if:` skipped (the path filters above, the main-only jobs)
+  # counts as passed. `pairing-real-stack` (continue-on-error) and `ios` are not required, so it
+  # does not wait for them.
+  ci-ok:
+    if: always()
+    needs: [changes, test, pre-commit, no-vendor-material, install-script, docs, codec-parity, gui-e2e,
+            firmware-host-e2e, firmware-build, firmware-qemu, coverage-badge, firmware-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "needed jobs: $RESULTS"
+          case " $RESULTS " in *" failure "* | *" cancelled "*) exit 1;; esac
