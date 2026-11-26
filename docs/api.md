@@ -383,6 +383,7 @@ traceability is generated from the source, not maintained separately.
 .. automodule:: tests.firmware.test_display_model
 .. automodule:: tests.test_display_font
 .. automodule:: tests.test_display_touch
+.. automodule:: tests.test_fw_flash_safety
 .. automodule:: tests.test_esp_shot
 .. automodule:: tools.esplab.soak_report
 .. automodule:: tests.test_soak_report

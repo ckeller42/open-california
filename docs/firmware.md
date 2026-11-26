@@ -88,7 +88,7 @@ would write, and fails the job on any of these:
 |---|---|
 | Every line of `sdkconfig.defaults` holds in the resolved config (`build/config/sdkconfig.json`), and rollback (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`) is on | An option that an IDF or component update renamed or that a dependency forces off: `idf.py` drops it with only a warning. Locally also a stale `firmware/sdkconfig`, which wins over the defaults. |
 | The built `partition-table.bin` equals `partitions.csv` | A table that differs from the one the docs and the tests describe. |
-| `flasher_args.json`: the flash size holds the table, otadata and the app sit at the `otadata` and `ota_0` offsets, no image overlaps `nvs` or `phy_init` | A USB flash (`flash.sh`, `flash_ci.sh`) that erases the bonds and WiFi credentials, or that leaves an old otadata pointing at the other slot. |
+| `flasher_args.json`: the flash size holds the table, the bootloader and the checked table sit at 0x0 and 0x8000, otadata and the app at the `otadata` and `ota_0` offsets, no image overlaps `nvs` or `phy_init`, no `--erase-all` | A USB flash (`flash.sh`, `flash_ci.sh`) that erases the bonds and WiFi credentials, or that leaves an old otadata pointing at the other slot. |
 | `cali_fw.bin` uses at most 90 % of its OTA slot | An image that the next OTA cannot install. |
 | The image's version (`esp_app_desc_t`) is the commit's sha prefix, not `-dirty` | An OTA check that never reads `up_to_date`. |
 

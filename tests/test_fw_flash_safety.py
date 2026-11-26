@@ -5,6 +5,14 @@ app slot and nothing else, so a board that was updated over OTA keeps the table 
 of its last USB flash. These tests read the committed files (no ESP-IDF needed) and fail on the
 changes that can leave a board in a boot loop, with an image that cannot roll back, or with a
 silently different build. The checks on the build output are in ``tools/check_fw_build.py``.
+
+.. test:: The committed partition table, sdkconfig, component pins and release gate keep a flash or OTA safe
+   :id: T_FW_FLASH_SAFETY_REPO
+   :links: R_FW_OTA
+
+.. test:: The build-output check fails on a dropped config line, a wrong flash layout, an NVS overwrite or an erase-all
+   :id: T_FW_FLASH_SAFETY_BUILD
+   :links: R_FW_OTA
 """
 
 import csv
@@ -206,6 +214,11 @@ def test_build_check_fails_on_what_breaks_a_board(tmp_path):
             "overwrites nvs",
         ),
         ({**args, "app": {"offset": "0x320000", "file": "cali_fw.bin"}}, "app at 0x320000"),
+        ({**args, "write_flash_args": ["--flash-size", "16MB", "--erase-all"]}, "erase NVS"),
+        (
+            {**args, "flash_files": {**args["flash_files"], "0x8000": "ota_data_initial.bin"}},
+            "0x8000 maps to",
+        ),
     ):
         fa.write_text(json.dumps(broken))
         assert any(why in b for b in c.check(tmp_path)[0]), why

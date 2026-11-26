@@ -11,7 +11,8 @@ Checks, each against the files the build wrote:
   only a warning, and a stale local ``firmware/sdkconfig`` wins over the defaults; rollback is on;
 - the built partition table (the binary that is flashed) equals ``firmware/partitions.csv``;
 - ``flasher_args.json`` (what flash.sh / flash_ci.sh write): the flash size holds the table, the
-  otadata and app images sit at their partitions' offsets, and no image touches ``nvs``/``phy_init``;
+  bootloader and the checked table sit at 0x0 / 0x8000, the otadata and app images at their
+  partitions' offsets, no image touches ``nvs``/``phy_init``, and no ``--erase-all``;
 - the app fits its OTA slot with 10 % to spare;
 - with ``--sha``: the image's version (``esp_app_desc_t``) is that commit's prefix, not ``-dirty``
   (the OTA check compares it with the release manifest's sha).
@@ -106,6 +107,12 @@ def check(build: Path, sha: str | None = None) -> tuple[list[str], list[str]]:
     if end > size_mb << 20:
         bad.append(f"flasher_args: flash size {size_mb} MB is smaller than the table's end {end:#x}")
     files = {int(off, 16): f for off, f in fa["flash_files"].items()}
+    erase = {"--erase-all", "--erase_all", "-e"} & set(fa.get("write_flash_args", []))
+    if erase:
+        bad.append(f"flasher_args: write_flash_args has {sorted(erase)}: a USB flash would erase NVS")
+    for off, want in ((0x0, "bootloader/bootloader.bin"), (0x8000, "partition_table/partition-table.bin")):
+        if files.get(off) != want:
+            bad.append(f"flasher_args: {off:#x} maps to {files.get(off)!r}, not {want}")
     for role, name in (("otadata", "otadata"), ("app", "ota_0")):
         off = int(fa[role]["offset"], 16)
         if name not in part or off != part[name][3] or files.get(off) != fa[role]["file"]:
