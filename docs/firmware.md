@@ -2076,7 +2076,11 @@ within seconds; a downlink that switches camping mode on (and with it the router
   port 2 holds ports 3 and 4 and the round is tried once more after 120 s, then the normal interval
   applies. `AT_NO_NETWORK_JOINED` is not a refusal: it clears `joined`, and the task joins again.
   With 8 downlinks in the last 24 h no uplink goes out until one ages out. Three AT commands in a
-  row without an answer reset the module and drop `joined`; while it stays silent the task retries every
+  row without an answer reset the module and drop `joined`; a module still silent after the reset gets a
+  power cycle of the M-Bus 5 V (AW9523 `BUS_OUT_EN`/`BOOST_EN` 0/0 for 5 s, TX and RST released, then 1/1:
+  `lora: module silent after reset: bus power cycle`), the cure for a module latched by a supply dip; the
+  LoRa start sets both bits to 1, so the module also keeps its 5 V on the battery. While it stays silent
+  the task retries every
   10 min. A spike bench run showed why: a hung module that the old firmware counted as "sending"
   looked joined for three days while nothing reached the network.
 - **Forget LoRa:** Satellite settings shows a LoRa box while the switch is on (the module, joined, the last

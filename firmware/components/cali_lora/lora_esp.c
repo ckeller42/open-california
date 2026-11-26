@@ -20,8 +20,11 @@
 #include "cali_lora.h"
 #include "cali_lora_aead.h"
 #include "cali_lora_setup.h"
+#include "bsp/esp-bsp.h"
+#include "cali_display.h"
 #include "cali_platform.h"
 #include "driver/gpio.h"
+#include "driver/i2c_master.h"
 #include "driver/uart.h"
 #include "esp_app_desc.h"
 #include "esp_random.h"
@@ -41,6 +44,10 @@
 #define NO_KEYS_NOTE "no keys: open the LoRa screen"
 #define JOIN_REQUEST_LEN 23u   /* PHY bytes of a LoRaWAN 1.0.x join request */
 #define SILENT_RETRY_S 600
+/* The M-Bus 5 V for the module: AW9523 P0_1 BUS_OUT_EN and P1_7 BOOST_EN (M5Unified's ext output). */
+#define BUS_PINS (IO_EXPANDER_PIN_NUM_1 | IO_EXPANDER_PIN_NUM_15)
+#define BUS_OFF_MS 5000
+#define AW9523_ADDR 0x58   /* BSP_IO_EXPANDER_ADDRESS, as in cali_display */
 #define CONFIRM_RETRY_S 60   /* the wait after a confirmation send without +EVT:TX_DONE */
 #define CONFIRM_TRIES 5      /* sends without +EVT:TX_DONE before a confirmation is dropped */
 #define TASK_STACK 8192   /* PR #492 ran with 6144; the PSA AES-GCM open under send() needs more */
@@ -174,6 +181,44 @@ static void rak_reset(void) {
     s_silent = 0;
 }
 
+/* Both bits to `on`. 1/1 feeds the bus from the battery boost too, so the module keeps its 5 V while
+ * the USB supply is gone (van 12 V dip, 2026-11-24). The expander write is a read-modify-write of the
+ * output register that the SD power switch shares, so it holds bsp_display_lock as the SD mount does. */
+static int bus_power(uint32_t on) {
+    /* the board package aborts on an expander fault (BSP_ERROR_CHECK=y): probe first, as cali_display does */
+    (void)bsp_i2c_init();
+    esp_io_expander_handle_t io = i2c_master_probe(bsp_i2c_get_handle(), AW9523_ADDR, 50) == ESP_OK ? bsp_io_expander_init() : NULL;
+    bool ok = false;
+    if (io) {
+        int lock = cali_display_ready();   /* no screen: no LVGL lock to take, and no SD task either */
+        if (lock) bsp_display_lock(0);     /* 0 = wait */
+        ok = esp_io_expander_set_dir(io, BUS_PINS, IO_EXPANDER_OUTPUT) == ESP_OK &&
+             esp_io_expander_set_level(io, BUS_PINS, on) == ESP_OK;
+        if (lock) bsp_display_unlock();
+    }
+    if (!ok) {
+        cali_log("lora: bus power %s failed", on ? "on" : "off");
+        return -1;
+    }
+    return 0;
+}
+
+/* A module still silent after RST is latched: only an off/on of its 5 V clears it (bench 2026-11-22:
+ * RST, USB cuts and ESP resets did not). TX and RST are inputs while the bus is off, so they cannot
+ * feed the module through its pins; the UART driver stays installed and gets its pins back. */
+static bool bus_power_cycle(void) {
+    cali_log("lora: module silent after reset: bus power cycle");
+    gpio_set_direction(RAK_TX, GPIO_MODE_INPUT);
+    gpio_set_direction(RAK_RST, GPIO_MODE_INPUT);
+    if (bus_power(0) == 0) vTaskDelay(pdMS_TO_TICKS(BUS_OFF_MS));
+    if (bus_power(1) != 0 && bus_power(1) != 0) return false;   /* no 5 V: the pins stay released */
+    vTaskDelay(pdMS_TO_TICKS(500));
+    (void)uart_set_pin(RAK_UART, RAK_TX, RAK_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    gpio_set_level(RAK_RST, 1);   /* high before it drives: no extra reset pulse */
+    gpio_set_direction(RAK_RST, GPIO_MODE_OUTPUT);
+    return true;
+}
+
 static bool uart_up(void) {
     if (s_uart_up) return true;
     const uart_config_t cfg = {.baud_rate = RAK_BAUD, .data_bits = UART_DATA_8_BITS, .parity = UART_PARITY_DISABLE,
@@ -186,7 +231,9 @@ static bool uart_up(void) {
         uart_driver_delete(RAK_UART);   /* else the next try fails to install: "no UART" for good */
         return false;
     }
+    gpio_set_level(RAK_RST, 1);
     gpio_set_direction(RAK_RST, GPIO_MODE_OUTPUT);
+    (void)bus_power(1);   /* the boot leaves 0/0; 1/1 also holds the module up on the battery */
     s_uart_up = true;
     return true;
 }
@@ -602,6 +649,12 @@ static void lora_task(void *arg) {
             if (ready) cali_log("lora: module silent: reset");
             rak_reset();
             ready = module_setup();
+            if (!ready) {   /* RST alone did not help: cut its 5 V, then try once more */
+                if (bus_power_cycle()) {
+                    rak_reset();
+                    ready = module_setup();
+                }
+            }
             if (!ready) {
                 s_silent = CALI_LORA_SILENT_MAX;   /* the next pass resets and checks again */
                 s_st.note = "module silent";
