@@ -13,7 +13,14 @@ loads the bond store (``ble_store_kv.c``) from NVS at boot, so a record damaged 
 Skipped unless ``CALI_QEMU=1`` (CI job ``firmware-qemu``; locally see firmware/README.md).
 """
 
+import binascii
+import json
+import struct
+import subprocess
+import sys
 import time
+
+from .conftest import QEMU_BUILD
 
 BOOT_BANNER = "ESP-ROM:"  # the ROM's first line on every (re)boot of the chip
 
@@ -116,3 +123,54 @@ def test_boots_with_sensors_flag_on(qemu):
     s2.send("sensors")
     assert s2.expect("SENSORS")["seen"] == []
     assert sum(line.startswith(BOOT_BANNER) for line in s2.log) == 1, "rebooted:\n" + "\n".join(s2.log)
+
+
+def _otadata_entry(seq, state):
+    """One ``esp_ota_select_entry_t`` (esp_flash_partitions.h): seq, 20 label bytes, state, CRC32 of
+    seq as the bootloader computes it (``esp_rom_crc32_le(UINT32_MAX, &seq, 4)``, = otatool.py)."""
+    crc = binascii.crc32(struct.pack("<I", seq), 0xFFFFFFFF)
+    return struct.pack("<I20sII", seq, b"\xff" * 20, state, crc)
+
+
+def test_unconfirmed_ota_image_rolls_back_on_reset(qemu):
+    """The bootloader side of the rollback, on the real image and bootloader (R_FW_OTA). The flash
+    holds what an OTA install leaves: the confirmed image in ota_0 (otadata seq 1, VALID) and the new
+    one in ota_1 (seq 2, NEW, what ``esp_ota_set_boot_partition`` writes). The bootloader must boot
+    ota_1 as pending verify, the image must see that and not confirm itself (QEMU has no web server,
+    so the verdict stays pending), and the next reset must boot ota_0 again. Fails when rollback is
+    off in the bootloader, when the image confirms itself at boot, or when it misreads its state.
+
+    .. test:: An OTA image that has not confirmed itself boots the previous slot after a reset (QEMU tier)
+       :id: T_FW_OTA_ROLLBACK_QEMU
+       :links: R_FW_OTA
+    """
+    fa = json.loads((QEMU_BUILD / "flasher_args.json").read_text())
+    parts = {"otadata": int(fa["otadata"]["offset"], 16), "ota_0": int(fa["app"]["offset"], 16)}
+    ota_1 = 0x320000  # partitions.csv (tests/test_fw_flash_safety.py pins the layout)
+    subprocess.run(
+        [sys.executable, "-m", "esptool", "--chip", "esp32s3", "merge-bin", "--pad-to-size",
+         fa["flash_settings"]["flash_size"], "-o", str(qemu.flash), "@flash_args",
+         hex(ota_1), fa["app"]["file"]],
+        cwd=QEMU_BUILD, check=True, capture_output=True,
+    )  # fmt: skip
+    img = bytearray(qemu.flash.read_bytes())
+    sector = 0x1000
+    img[parts["otadata"] : parts["otadata"] + 32] = _otadata_entry(1, 2)  # ota_0, ESP_OTA_IMG_VALID
+    img[parts["otadata"] + sector : parts["otadata"] + sector + 32] = _otadata_entry(2, 0)  # ota_1, NEW
+    qemu.flash.write_bytes(bytes(img))
+
+    s = qemu.boot()
+    s.expect("LOG ota: ota_1 awaits its verdict", timeout=90)
+    s.expect("STATE", lambda v: v["state"] == "idle", timeout=90)
+    s.send("ota status")
+    st = s.expect("LOG ota: fw=")
+    assert " slot=ota_1 img_state=1 " in st, st  # ESP_OTA_IMG_PENDING_VERIFY
+    time.sleep(3)
+    s.stop()  # a reset before any verdict
+
+    s2 = qemu.boot()
+    s2.expect("STATE", lambda v: v["state"] == "idle", timeout=90)
+    s2.send("ota status")
+    st = s2.expect("LOG ota: fw=")
+    assert " slot=ota_0 img_state=2 " in st, st  # back on the confirmed image
+    assert not any("awaits its verdict" in line for line in s2.log), "\n".join(s2.log)

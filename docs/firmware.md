@@ -72,14 +72,34 @@ are the DEVICE rows of the [evidence ledger](business-logic/evidence-ledger.md).
 | `test` (the normal matrix) | `tests/firmware`'s pure-C tests (pairing + WiFi SM parity, runner fake, session fake incl. the control sequencer, HTTP core, captive DNS, web handlers incl. `POST /api/command`, JSON, host `cali_net`, the control twin's vector parity + allow-list scan) via `-m "not linux_only"` — no BLE, runs on every Python version; plus the control vectors' freshness (`tests/test_control_vectors.py`) and the satellite UI e2e over a stub (`tests/e2e/test_satellite.py`) |
 | `codec-parity` | `gen_c_dict` / `gen_codec_vectors` / `gen_control_vectors --check` and the C parity modules (`test_control_parity.py` among them) with `gcc` |
 | `firmware-host-e2e` | The NimBLE-Linux + Bumble end-to-end tier, incl. the WiFi/web e2e, the control path (`test_control_e2e.py`) and the page in Chromium with a live fridge toggle reaching the fake unit (`tools/ci.sh firmware`) |
-| `firmware-build` | Compiles the release esp32s3 image against ESP-IDF's real esp-nimble; uploads the flashable images |
-| `firmware-release` | Push to `main` only: uploads `cali_fw.bin` + `manifest.json` to the `esp-latest` prerelease (the `latest` OTA channel, `R_FW_OTA`; the `stable` channel's `esp-stable` release comes from the separate `esp-stable.yml`, run by `promote_stable.sh`), plus the first-flash `cali_fw_full.bin` and `cali_fw.elf` (symbols for a panic backtrace, `R_FW_PANIC_CAPTURE`); with `coverage-badge` the only ci.yml jobs with `contents: write` (`esp-stable.yml`'s job has it too) |
-| `firmware-qemu` | Builds the QEMU-probe variant (no WiFi driver) and boots it in QEMU |
+| `firmware-build` | Compiles the release esp32s3 image against ESP-IDF's real esp-nimble, checks the build output (`tools/check_fw_build.py`, below); uploads the flashable images |
+| `firmware-release` | Push to `main` only, after `firmware-build` **and** `firmware-qemu` passed: uploads `cali_fw.bin` + `manifest.json` to the `esp-latest` prerelease (the `latest` OTA channel, `R_FW_OTA`; the `stable` channel's `esp-stable` release comes from the separate `esp-stable.yml`, run by `promote_stable.sh`), plus the first-flash `cali_fw_full.bin` and `cali_fw.elf` (symbols for a panic backtrace, `R_FW_PANIC_CAPTURE`); with `coverage-badge` the only ci.yml jobs with `contents: write` (`esp-stable.yml`'s job has it too) |
+| `firmware-qemu` | Builds the QEMU-probe variant (no WiFi driver) and boots it in QEMU, including the bootloader rollback of an unconfirmed OTA image (`test_unconfirmed_ota_image_rolls_back_on_reset`) |
 
 `firmware-build` (container `espressif/idf:v6.1`, uploads the images + `flasher_args.json`) does
 not run the image anywhere. It proves that `cali_core` + `cali_ble_nimble` (unchanged from the host
 build) compile clean against ESP-IDF's real esp-nimble under the host's `-Wall -Wextra -Werror`
 strictness.
+
+After the build, `tools/check_fw_build.py build --sha "$GITHUB_SHA"` checks what a flash or an OTA
+would write, and fails the job on any of these:
+
+| Check | The failure it stops |
+|---|---|
+| Every line of `sdkconfig.defaults` holds in the resolved config (`build/config/sdkconfig.json`), and rollback (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`) is on | An option that an IDF or component update renamed or that a dependency forces off: `idf.py` drops it with only a warning. Locally also a stale `firmware/sdkconfig`, which wins over the defaults. |
+| The built `partition-table.bin` equals `partitions.csv` | A table that differs from the one the docs and the tests describe. |
+| `flasher_args.json`: the flash size holds the table, the bootloader and the checked table sit at 0x0 and 0x8000, otadata and the app at the `otadata` and `ota_0` offsets, no image overlaps `nvs` or `phy_init`, no `--erase-all` | A USB flash (`flash.sh`, `flash_ci.sh`) that erases the bonds and WiFi credentials, or that leaves an old otadata pointing at the other slot. |
+| `cali_fw.bin` uses at most 90 % of its OTA slot | An image that the next OTA cannot install. |
+| The image's version (`esp_app_desc_t`) is the commit's sha prefix, not `-dirty` | An OTA check that never reads `up_to_date`. |
+
+Locally, after the podman build: `python3 tools/check_fw_build.py firmware/build` (leave out `--sha`:
+the worktree's git is not in the container, so the version reads `unknown`).
+`tests/test_fw_flash_safety.py` (the normal `test` job, no ESP-IDF) guards the committed files: the
+partition table is the field layout (an OTA never rewrites the table or the bootloader, so a board
+keeps those of its last USB flash), the docs' partition table matches it, `sdkconfig.defaults` keeps
+rollback, the custom table and 16 MB flash, `firmware/sdkconfig` is not tracked, every
+`idf_component.yml` pin is exact and equal across components, and `firmware-release` waits for
+`firmware-qemu`.
 
 ## Console line protocol
 
@@ -873,7 +893,7 @@ The satellite updates itself, **only on request** (no automatic update), from th
 | `stable` (default) | [`esp-stable`](https://github.com/ckeller42/open-california/releases/tag/esp-stable) | the build the moving git tag `esp-stable` points at: a main commit that passed its soak | `tools/esplab/promote_stable.sh <sha>` (moves + force-pushes the tag, runs the `esp-stable` workflow; `R_SOAK_REPORT`) |
 | `latest` | the prerelease [`esp-latest`](https://github.com/ckeller42/open-california/releases/tag/esp-latest) | every main merge | CI, on every merge |
 
-CI's `firmware-release` job (push to `main` only, after `firmware-build`) uploads the merge commit's
+CI's `firmware-release` job (push to `main` only, after `firmware-build` and the QEMU boot `firmware-qemu`) uploads the merge commit's
 `cali_fw.bin` and then `manifest.json` (`{"sha","size","sha256","run_id","built_at"}`) to
 `esp-latest`, each with `--clobber`; `[skip ci]` commits never run it, so `esp-latest` is always a
 real merge commit.
@@ -979,7 +999,7 @@ itself hangs, the web server is gone with it and no way over the LAN helps: a cr
 and so goes back by itself; a hang needs power — `busnet` carries no power switch for the ESP, so that
 case means `uhubctl` from buspi (woken first) or physical access.
 A crash or reset while the verdict is pending boots the previous slot too, as long as that slot still
-holds an image. `ota status` logs `device.ota` and the
+holds an image (the QEMU tier checks this on the real bootloader: `test_unconfirmed_ota_image_rolls_back_on_reset`). `ota status` logs `device.ota` and the
 running slot.
 
 **USB flashing.** `tools/esplab/flash_ci.sh <run-id>` writes the bootloader, the partition table,

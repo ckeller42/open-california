@@ -7,7 +7,7 @@ sensor scan windows (one a minute), which run while a verdict is pending even wi
 off — the firmware here never turns the sensors on.
 
 The decision table itself (every input, the shipped 1 / 15 / 40 / 5 min): ``test_ota.py``. The
-bootloader side (an unconfirmed image rolls back on the next reset) is ESP-only: the bench run.
+bootloader side (an unconfirmed image rolls back on the next reset): ``test_qemu_boot.py``.
 """
 
 import pytest
