@@ -258,9 +258,11 @@ jobs:
       - name: Install Chromium (browser from cache when present; apt --with-deps only on miss)
         run: python -m playwright install ${{ steps.pw-cache.outputs.cache-hit == 'true' && 'chromium' || '--with-deps chromium' }}
       - name: GUI end-to-end (web UI over the mock unit)
-        # 4 xdist workers (ubuntu-latest has 4 vCPUs). loadgroup keeps test_gui.py (one module-scoped
-        # daemon + browser, xdist_group "e2e") on one worker and spreads the other tests.
-        run: python -m pytest tests/e2e -q -n 4 --dist loadgroup
+        # 4 xdist workers (ubuntu-latest has 4 vCPUs), each test file whole on one worker, in order:
+        # test_gui.py's tests share one module-scoped daemon and build on each other's state. Not
+        # loadgroup: with pytest 9 and pytest-xdist 3.8 the xdist_group mark has no effect (xdist
+        # renames item._nodeid, pytest 9 reads item._id), so test_gui.py got spread over the workers.
+        run: python -m pytest tests/e2e -q -n 4 --dist loadfile
 
   pairing-real-stack:
     needs: changes
