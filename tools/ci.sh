@@ -22,7 +22,7 @@
 #
 # `tools/ci.sh docs` runs ci.yml's `docs` job locally in Docker (doxygen + sphinx -W site build;
 # the Mac has no sphinx); not part of the default gate. `linux` and `docs` pull the GHCR image when
-# its Dockerfile + requirements equal origin/main, else build it locally.
+# its Dockerfile + requirements equal those of the commit it was built from, else build it locally.
 #
 #   tools/ci.sh              # run the local gate (see above for what it does NOT cover)
 #   tools/ci.sh test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|needs-trace|linux|docs|screenshots|import-clean|vendor-check
@@ -112,12 +112,16 @@ vendor_check() {   # whole tracked tree: vendor paths, the real vehicle MAC, VIN
   echo "no vendor material, vehicle MAC, or VIN committed"
 }
 oc_image() {   # oc_image NAME PLATFORM DOCKERFILE INPUTS...: tag NAME from the GHCR image images.yml publishes
-               # (amd64 only) when the Dockerfile + inputs equal origin/main, else build it locally as before.
+               # (amd64 only) when the Dockerfile + inputs here equal those of the commit the image was built
+               # from (its org.opencontainers.image.revision label), else build it locally as before.
                # Empty PLATFORM = native build; the amd64 pull is then tried only on an x86_64 host.
   local name=$1 platform=$2 file=$3; shift 3
   local ghcr=ghcr.io/ckeller42/open-california/$name:latest
-  if { [ -n "$platform" ] || [ "$(uname -m)" = x86_64 ]; } && git diff --quiet origin/main -- "$file" "$@" 2>/dev/null \
-     && docker pull -q --platform linux/amd64 "$ghcr" >/dev/null 2>&1; then
+  local rev=
+  if { [ -n "$platform" ] || [ "$(uname -m)" = x86_64 ]; } && docker pull -q --platform linux/amd64 "$ghcr" >/dev/null 2>&1; then
+    rev=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$ghcr" 2>/dev/null)
+  fi
+  if [ -n "$rev" ] && git diff --quiet "$rev" -- "$file" "$@" 2>/dev/null; then
     docker tag "$ghcr" "$name"
   else
     tar -c "$file" "$@" | docker build -q ${platform:+--platform "$platform"} -t "$name" -f "$file" - >/dev/null

@@ -45,7 +45,7 @@ image (`docs/Dockerfile`) and smoke-tests them on every PR that changes a Docker
 requirements file. On main, weekly and on a manual run it also publishes them as
 `ghcr.io/ckeller42/open-california/oc-linux` and `.../oc-docs` (tags `latest` and the short commit
 sha). `tools/ci.sh linux` and `tools/ci.sh docs` pull the published image when the local Dockerfile
-and requirements file equal `origin/main`, and build the image locally otherwise. The git hooks (`tools/ci.sh dev`
+and requirements file equal those of the commit that the image was built from, and build the image locally otherwise. The git hooks (`tools/ci.sh dev`
 installs them from `.pre-commit-config.yaml`) run the fast guards and linters on every commit and
 the full suite plus the signal audit on every push. The notes on the `tools/ci.sh` line
 in the repo's [`AGENTS.md`](https://github.com/ckeller42/open-california/blob/main/AGENTS.md) list exactly what only GitHub runs.
