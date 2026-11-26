@@ -6,7 +6,9 @@ import SwiftUI
 /// greyed (the planner refuses ON under ErrorCode 5, with the reason); continuous heating can only be
 /// turned off here; the run time is locked during continuous heating. Only a start asks first (fuel
 /// burner, not live-verified), with the run time and the level; a run time change while it heats
-/// asks as the app does. The departure timer is not in this app yet.
+/// asks as the app does. The departure timer sets a start time and arms/stops it; arming asks the
+/// fuel-burner question (and, under continuous heating, that it will end), the start time is locked
+/// while armed, and the status line shows the armed timer.
 ///
 /// - Requirement: R_IOS_FUNCTIONS, R_IOS_SIRI_NO_HEATER, R_AIRHEATER_APP_GATES, R_IOS_I18N
 struct AirHeaterView: View {
@@ -31,6 +33,9 @@ struct AirHeaterView: View {
     static let permanentOff = Command(function: "airheater", what: "permanent", value: "off")
     static func level(_ n: Int) -> Command { Command(function: "airheater", what: "level", value: String(n)) }
     static func runtime(_ min: Int) -> Command { Command(function: "airheater", what: "runtime", value: String(min)) }
+    static func timer(_ hhmm: String) -> Command { Command(function: "airheater", what: "timer", value: hhmm) }
+    static let timerStart = Command(function: "airheater", what: "timer_start", value: nil)
+    static let timerCancel = Command(function: "airheater", what: "timer_cancel", value: nil)
 
     /// "Level 3" / "HI" (the app's scale: 1–9 and HI for 10); nil outside it.
     static func levelText(_ n: Int?) -> LocalizedStringResource? {
@@ -51,11 +56,29 @@ struct AirHeaterView: View {
     private func flag(_ key: String) -> Bool { store.value("airheater", key)?.bool == true }
     private func num(_ key: String) -> Int? { store.value("airheater", key)?.number.map(Int.init) }
 
-    /// The heater's own status line (app.js `summary`, without the timer).
+    /// The configured departure time `HH:MM` (`TimerHour`/`TimerMin`), or nil if not reported.
+    private var timerTime: String? {
+        guard let h = num("timer_hour"), let m = num("timer_min") else { return nil }
+        return String(format: "%02d:%02d", h, m)
+    }
+    /// The armed departure time — only while the timer is armed (the app drops it after "Stop").
+    private var armedTime: String? { flag("timer_armed") ? timerTime : nil }
+
+    /// The heater's own status line (app.js `summary`): the armed timer appears as "• Timer …".
     private var status: LocalizedStringResource {
-        guard flag("running") else { return "Inactive" }
-        if flag("permanent") { return "Active • Continuous heating" }
-        if let n = num("running_time_remaining") { return "Active • \(n) min remaining" }
+        let timer = armedTime
+        guard flag("running") else {
+            if let t = timer { return "Inactive • Timer: \(t)" }
+            return "Inactive"
+        }
+        if flag("permanent") {
+            if let t = timer { return "Active • Continuous heating • Timer starts in \(t)" }
+            return "Active • Continuous heating"
+        }
+        if let n = num("running_time_remaining") {
+            if let t = timer { return "Active • Remaining time: \(n) min • Timer starts: \(t)" }
+            return "Active • \(n) min remaining"
+        }
         return "Active"
     }
 
@@ -123,6 +146,28 @@ struct AirHeaterView: View {
                                         : nil
                                 ])
                         })
+                }
+                ControlRow(disabledBecause: flag("timer_armed") ? "Stop the timer first" : nil) {
+                    TimeRow(
+                        id: "heater.timer", label: Text("Start heating at"), current: timerTime,
+                        send: { run(Self.timer($0)) })
+                }
+                ControlRow {
+                    TimerButtons(label: Text("Timer")) {
+                        Button("Start timer") {
+                            run(
+                                Self.timerStart,
+                                confirm: [
+                                    "Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?",
+                                    permanent
+                                        ? "Continuous heating will turn off when the timer ends. Would you like to proceed?"
+                                        : nil,
+                                ])
+                        }
+                        .accessibilityIdentifier("heater.timerStart")
+                        Button("Stop timer") { run(Self.timerCancel) }
+                            .accessibilityIdentifier("heater.timerCancel")
+                    }
                 }
             }
         }

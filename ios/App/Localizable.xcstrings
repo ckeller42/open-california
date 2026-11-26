@@ -86,6 +86,23 @@
         }
       }
     },
+    "%@? Not yet verified on the van. Continue?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@? Am Fahrzeug noch nicht verifiziert. Fortfahren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@? Not yet verified on the van. Continue?"
+          }
+        }
+      }
+    },
     "%lld d ago": {
       "extractionState": "manual",
       "localizations": {
@@ -357,6 +374,40 @@
         }
       }
     },
+    "Active • Continuous heating • Timer starts in %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiv • Dauerbetrieb • Timer startet in %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active • Continuous heating • Timer starts in %@"
+          }
+        }
+      }
+    },
+    "Active • Remaining time: %lld min • Timer starts: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiv • Restlaufzeit: %lld min • Timer startet: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active • Remaining time: %lld min • Timer starts: %@"
+          }
+        }
+      }
+    },
     "Additional battery: charging required. Power consumers will switch off.": {
       "extractionState": "manual",
       "localizations": {
@@ -540,6 +591,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Automatic"
+          }
+        }
+      }
+    },
+    "Automatic quiet mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatischer Flüstermodus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic quiet mode"
           }
         }
       }
@@ -900,6 +968,23 @@
         }
       }
     },
+    "Cancel timer": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timer abbrechen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel timer"
+          }
+        }
+      }
+    },
     "Charging current is limited. Ambient temperature is too high.": {
       "extractionState": "manual",
       "localizations": {
@@ -1138,6 +1223,23 @@
         }
       }
     },
+    "Continuous heating will turn off when the timer ends. Would you like to proceed?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Dauerbetrieb endet, wenn der Timer abläuft. Möchten Sie fortfahren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuous heating will turn off when the timer ends. Would you like to proceed?"
+          }
+        }
+      }
+    },
     "Cooking": {
       "extractionState": "manual",
       "localizations": {
@@ -1185,6 +1287,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cooling level"
+          }
+        }
+      }
+    },
+    "Cooling starts at": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kühlen startet um"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cooling starts at"
           }
         }
       }
@@ -1950,6 +2069,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inactive"
+          }
+        }
+      }
+    },
+    "Inactive • Timer: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inaktiv • Timer: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inactive • Timer: %@"
           }
         }
       }
@@ -2820,6 +2956,40 @@
         }
       }
     },
+    "Quiet mode ends at": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flüstermodus endet um"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quiet mode ends at"
+          }
+        }
+      }
+    },
+    "Quiet mode starts at": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flüstermodus startet um"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quiet mode starts at"
+          }
+        }
+      }
+    },
     "Reading light": {
       "extractionState": "manual",
       "localizations": {
@@ -3160,6 +3330,40 @@
         }
       }
     },
+    "Set the automatic quiet mode end to %@:00? Not verified on the van. Continue?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ende des automatischen Flüstermodus auf %@:00 setzen? Am Fahrzeug nicht verifiziert. Fortfahren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the automatic quiet mode end to %@:00? Not verified on the van. Continue?"
+          }
+        }
+      }
+    },
+    "Set the automatic quiet mode start to %@:00? Not verified on the van. Continue?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start des automatischen Flüstermodus auf %@:00 setzen? Am Fahrzeug nicht verifiziert. Fortfahren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the automatic quiet mode start to %@:00? Not verified on the van. Continue?"
+          }
+        }
+      }
+    },
     "Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?": {
       "extractionState": "manual",
       "localizations": {
@@ -3190,6 +3394,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Set the refrigerator box's quiet mode? Not yet verified on the van. Continue?"
+          }
+        }
+      }
+    },
+    "Set the timer so cooling starts at %@? Not yet verified on the van. Continue?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timer setzen, damit das Kühlen um %@ startet? Am Fahrzeug noch nicht verifiziert. Fortfahren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the timer so cooling starts at %@? Not yet verified on the van. Continue?"
           }
         }
       }
@@ -3296,6 +3517,23 @@
         }
       }
     },
+    "Start heating at": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heizen startet um"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start heating at"
+          }
+        }
+      }
+    },
     "Start the fuel-burning air heater now for %lld min at %@? It is not live-verified.": {
       "extractionState": "manual",
       "localizations": {
@@ -3326,6 +3564,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Start the fuel-burning air heater now? It is not live-verified."
+          }
+        }
+      }
+    },
+    "Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kraftstoffbetriebene Luftstandheizung starten? Nicht live-verifiziert. Fortfahren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start the fuel-burning auxiliary air heater? It is not live-verified. Continue?"
+          }
+        }
+      }
+    },
+    "Start timer": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timer starten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start timer"
           }
         }
       }
@@ -3428,6 +3700,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop the timer first"
+          }
+        }
+      }
+    },
+    "Stop timer": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timer stoppen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop timer"
           }
         }
       }
@@ -4091,6 +4380,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Time remaining"
+          }
+        }
+      }
+    },
+    "Timer": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timer"
           }
         }
       }
