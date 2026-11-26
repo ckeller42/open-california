@@ -2470,6 +2470,10 @@ collected here. `firmware/README.md` has the human-readable version of the same 
    answer stays counted; 10 min without a confirmation it pushes the last
    fragment again as a probe; while it asks for a new scan, the van's repair QR with the stored keys
    ends the setup as a success, and a repair QR always ends a setup that waits.
+   A phone with LoRa set up and no remote hub says so in the banner above the values ("No remote hub
+   set up on this phone: values come only over LoRa. Scan the van's code to see live data.") with a
+   button to "Scan the van's code". A phone with a remote hub whose broker has not accepted it for
+   20 s (longer than the 15 s connect timeout) says "No connection to the hub" there instead.
 
 .. req:: The web UI tells a sleeping van from an unreachable backend
    :id: R_UI_LINK_STATE
@@ -2488,7 +2492,7 @@ collected here. `firmware/README.md` has the human-readable version of the same 
    state. The state poll aborts after 8 s (above the satellite's 4 s command stall) so a hung
    connection is retried; the first good answer clears the red banner. The banner's text changes
    only with the state; its age ticks in an ``aria-hidden`` child. No buttons, except on the
-   satellite's rest card (``R_UI_REST_CARD``).
+   satellite's rest card (``R_UI_REST_CARD``) and the remote app's no-hub notice (``R_UI_REMOTE_APP``).
 
 .. req:: The web UI keeps a failed write visible and takes one write per tap
    :id: R_UI_VISIBLE_FAILURES

@@ -60,6 +60,7 @@ Object.assign(window.STRINGS_DE, {
   "Over LoRa only the heater and camping mode can be switched.": "Über LoRa lassen sich nur die Heizung und der Campingmodus schalten.",
   "Sent over LoRa.": "Über LoRa gesendet.",
   "No connection to the hub: try again in a moment.": "Keine Verbindung zum Hub: Versuche es gleich noch einmal.",
+  "No remote hub set up on this phone: values come only over LoRa. Scan the van's code to see live data.": "Auf diesem Telefon ist kein Fern-Hub eingerichtet: Die Werte kommen nur über LoRa. Scanne den Code des Fahrzeugs, um Live-Daten zu sehen.",
   "Result unknown: the van may still carry out the command.": "Ergebnis unbekannt: Das Fahrzeug führt den Befehl vielleicht noch aus.",
   "The van refused the command: set this phone's clock to the network time.": "Das Fahrzeug hat den Befehl abgelehnt: Stelle die Uhr dieses Telefons auf die Netzzeit.",
   "The van has no network time yet: try again in a minute.": "Das Fahrzeug hat noch keine Netzzeit: Versuche es in einer Minute noch einmal.",

@@ -1909,6 +1909,47 @@ def test_wifi_scan_list_has_one_entry_per_ssid(fake):
     assert out[-1] == "LOG wifi: setup ssid=- ip=- rssi=- scan=2"
 
 
+def test_wifi_long_ap_outage_rejoins_without_a_reboot(fake):
+    """2026-11-24: the router's 2.4 GHz radio hung for hours, every station scan found nothing, and
+    the satellite sat in ``setup`` (``wifi: setup ssid=minsel ip=- scan=0``, ``joining minsel``
+    about every 60 s) until the router came back. Pin that recovery: saved credentials, the network
+    gone for 3 h (far past the 60 s backoff cap and the 5 min hotspot delay), the setup hotspot up
+    with an empty scan; the station keeps retrying at least every ``NET_RETRY_MAX_MS`` the whole
+    time (the hotspot never blocks it), and once the network is back the next retry joins in
+    station mode, in the same boot, and the hotspot closes ``NET_AP_CLOSE_MS`` later."""
+    retry_max, setup_after = CONSTS["NET_RETRY_MAX_MS"], CONSTS["NET_SETUP_AFTER_MS"]
+    outage_end = 3 * 3600 * 1000
+    window = 2 * retry_max
+    script = ["kvset wifi_ssid minsel", "kvset wifi_psk " + PSK, "wifi_boot", "NET_GOT_IP 192.168.1.42"]
+    script += ["tick 100", "NET_LOST"]
+    for t in range(1000, outage_end, 1000):  # every join attempt of the outage fails: no network
+        script += ["tick %d" % t, "NET_FAILED 1"]
+        if t == setup_after + 1000:
+            script += ["NET_AP_STARTED", "NET_SCAN_DONE"]  # hotspot up, the scan finds nothing
+        if t % window == 0:
+            script.append("> wifi status")  # one marker per window
+    script.append("> wifi status")  # the network is back from here on
+    script += ["tick %d" % t for t in range(outage_end, outage_end + retry_max + 1000, 1000)]
+    script += ["NET_GOT_IP 192.168.1.43", "> wifi status"]
+    script += ["tick %d" % (outage_end + retry_max + 2000), "tick %d" % (outage_end + 2 * retry_max + 2000)]
+    out = run(fake, *script)
+    assert "LOG wifi: setup ssid=minsel ip=- rssi=- scan=0" in out  # the field state of 2026-11-24
+    # every window of the outage (hotspot up or not) has at least one station retry
+    windows, n = [], 0
+    for line in after(out, "LOG wifi: lost"):
+        if line.startswith(("LOG wifi: setup ssid=", "LOG wifi: station ssid=")):
+            windows.append(n)
+            n = 0
+        n += line == "NET sta_start minsel " + PSK
+    assert len(windows) == outage_end // window + 1
+    assert min(windows) >= 1, windows
+    assert windows[-1] >= 1  # the network is back: a retry ran (no reboot) before the GOT_IP
+    assert out.count("NET ap_start %s %s" % (AP_SSID, AP_PSK)) == 1
+    tail = after(out, "LOG wifi: online 192.168.1.43")
+    assert tail[0].startswith("LOG wifi: station ssid=minsel ip=192.168.1.43 ")
+    assert "LOG wifi: setup hotspot closed" in tail
+
+
 def test_wifi_failed_scan_keeps_the_last_list(fake):
     """M2: a scan the radio refused or aborted (a join in flight: SCAN_DONE with nscan -1) keeps
     the last good list instead of blanking it ("No networks found"), and ends the in-flight scan so

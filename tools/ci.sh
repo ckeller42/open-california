@@ -48,11 +48,12 @@ fi
 
 test_suite() {   # parallel when pytest-xdist is present (tools/ci.sh dev), else serial
   if "$PY" -c 'import xdist' 2>/dev/null; then
-    # --dist loadgroup: the e2e module is one xdist_group (shared daemon + browser) -> single worker.
+    # --dist loadfile: a test file stays on one worker (test_gui.py shares one daemon + browser). Not
+    # loadgroup: with pytest 9 + pytest-xdist 3.8 it ignores xdist_group (tests/test_xdist_groups.py).
     # Tests marked linux_only (the NimBLE host e2e + bond store) need a 32-bit toolchain + a NimBLE
     # build — their own job (firmware-host-e2e / `tools/ci.sh firmware`); the rest of tests/firmware
     # (pure-C SM parity, runner and session fakes) runs here too, on any host with a C compiler.
-    "$PY" -m pytest tests/ -q -n auto --dist loadgroup -m "not linux_only"
+    "$PY" -m pytest tests/ -q -n auto --dist loadfile -m "not linux_only"
   else
     "$PY" -m pytest tests/ -q -m "not linux_only"
   fi
@@ -62,7 +63,7 @@ cov() {   # = test_suite under pytest-cov (CI `test`, 3.13 leg). The floor ([too
           # run and printed as an informational number. Writes coverage.xml + htmlcov/ (calictl/).
           # --cov-fail-under=0: pytest-cov would otherwise apply fail_under to calictl+tools combined.
   rm -f .coverage .coverage.*
-  "$PY" -m pytest tests/ -q -n auto --dist loadgroup -m "not linux_only" \
+  "$PY" -m pytest tests/ -q -n auto --dist loadfile -m "not linux_only" \
     --cov=calictl --cov=tools --cov-report= --cov-fail-under=0
   echo "tools/ coverage (informational, not gated): $("$PY" -m coverage report --include='tools/*' --format=total --fail-under=0)%"
   "$PY" -m coverage xml -q --include='calictl/*' --fail-under=0 -o coverage.xml
@@ -138,7 +139,7 @@ linux() {   # CI's C toolchain (tools/docker/linux.Dockerfile: Linux amd64, gcc 
   local run=(docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" -v "$PWD":/w -w /w oc-linux
     python3 -m pytest -q -p no:cacheprovider)
   if [ $# -gt 0 ]; then "${run[@]}" "$@"; return; fi
-  "${run[@]}" -n auto -m "not linux_only" tests/firmware tests/test_codec_parity.py tests/test_ports_parity.py
+  "${run[@]}" -n auto --dist loadfile -m "not linux_only" tests/firmware tests/test_codec_parity.py tests/test_ports_parity.py
   "${run[@]}" -m linux_only tests/firmware/test_control_parity.py tests/firmware/test_thermostat_parity.py   # their -m32 legs (no NimBLE needed)
 }
 docs() {   # ci.yml's `docs` job in Docker (image oc-docs = docs/Dockerfile: doxygen + sphinx + breathe):

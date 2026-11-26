@@ -44,7 +44,7 @@ jobs:
         # toolchain + a NimBLE build: their own job (firmware-host-e2e). The rest of tests/firmware
         # (the pure-C SM parity, runner and session fakes) has no BLE dependency and runs here too.
         if: matrix.python != '3.13'
-        run: python -m pytest tests/ -q -n auto --dist loadgroup -m "not linux_only"
+        run: python -m pytest tests/ -q -n auto --dist loadfile -m "not linux_only"
       # 3.13 runs the same suite under coverage instead (tools/ci.sh cov): the floor gates calictl/
       # only ([tool.coverage.report] fail_under in pyproject.toml, a ratchet); tools/ is informational.
       - name: Test suite + coverage floor (calictl/)

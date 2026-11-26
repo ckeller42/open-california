@@ -9,7 +9,7 @@ from .conftest import FakeAdvertiser
 from .test_host_e2e import _pair
 from .test_sensors import GOVEE_H5074, KEY, SOLAR
 
-pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
+pytestmark = pytest.mark.linux_only
 
 
 def _first_seen(fw, tries=90):

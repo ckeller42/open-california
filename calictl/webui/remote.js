@@ -15,6 +15,8 @@ const REMOTE_ENERGY_KEY = "oc.remote.energy"; // [{at, boot, solar_wh, load_wh, 
 // ponytail: one counter point per hour (a new boot: at once, but >= 60 s apart), 90 days (~2200 points); finer or longer when a view needs it
 const REMOTE_ENERGY_STEP_MS = 3600000;
 const REMOTE_ENERGY_KEEP_MS = 90 * 86400000;
+// No hub on this phone: the values are LoRa only, often hours old. The banner says so and links the hub QR scan.
+const REMOTE_NOHUB_MSG = "No remote hub set up on this phone: values come only over LoRa. Scan the van's code to see live data.";
 
 /** @param {string} key @returns {any} the parsed value, null when absent, unreadable or blocked */
 function remoteLoad(key) {

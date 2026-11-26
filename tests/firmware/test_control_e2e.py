@@ -32,7 +32,6 @@ from .test_host_e2e import _beats_seen, _funcs, _pair, _serve_raw
 from .test_web_e2e import PSK, _request, _wifi_script, get_json
 
 # The walker's own logic runs anywhere; the host-tier tests carry linux_only themselves.
-pytestmark = [pytest.mark.xdist_group("firmware-host-build")]
 HOST = pytest.mark.linux_only
 
 ARM_S = 3.5  # CODEC_ARM_DELAY_MS + margin

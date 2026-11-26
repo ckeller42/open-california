@@ -15,8 +15,8 @@ import pytest
 
 from .conftest import build_host
 
-# Under `--dist loadgroup` one xdist worker; build_host() locks the shared firmware/host build for `--dist loadfile` (CI).
-pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
+# build_host() locks the shared firmware/host build: xdist workers (`--dist loadfile`) wait for one build.
+pytestmark = pytest.mark.linux_only
 
 MAX_BONDS = 3  # firmware/host/syscfg/syscfg.h BLE_STORE_MAX_BONDS
 MAX_CCCDS = 8  # ... BLE_STORE_MAX_CCCDS

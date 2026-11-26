@@ -479,7 +479,7 @@ O->>P: scan it with the camera, install the app, icon OC Remote
 O->>E: hold 3 s again
 E-->>O: hub QR: OCH1*van*url*app user*app pass*key
 O->>P: Scan the van's code
-P->>B: connect wss as app, subscribe oc/‹van›/#
+P->>B: connect wss as app, subscribe oc/‹van›/online, state, res, lora/+
 B-->>P: retained sealed state
 P->>P: open with the data key
 P-->>O: van shows WLAN, short age
@@ -494,8 +494,10 @@ B-->>P: res, app shows the answer
 ## Smoke test per link
 
 1. **Satellite → broker.** The Hub card says **Connected**. In the EMQX console (or the test client
-   logged in as `app`) subscribe to `oc/<van>/#`: `oc/<van>/online` shows `1` and `oc/<van>/state`
-   arrives about every 30 s as binary (sealed). Fail: wrong address, wrong `van` credentials (the card
+   logged in as `app`) subscribe to `oc/<van>/online` and `oc/<van>/state`. Then `oc/<van>/online`
+   shows `1` and `oc/<van>/state` arrives about every 30 s as binary (sealed). The `app` user has only
+   the topics of its row in step 6. The broker refuses a wildcard such as `oc/<van>/#` for it without
+   an error, and the client then gets no messages. Fail: wrong address, wrong `van` credentials (the card
    says **Not connected**) or the broker is stopped (see [Recovery](#recovery)).
 2. **TTN → bridge → broker.**
    1. Open `npx wrangler tail` in a terminal (see [Bridge logs](#bridge-logs)).

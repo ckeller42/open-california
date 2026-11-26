@@ -31,6 +31,7 @@ const HUB_UNKNOWN_MSG = "Result unknown: the van may still carry out the command
 const HUB_CLOCK_MSG = "The van refused the command: set this phone's clock to the network time.";
 const HUB_NOTIME_MSG = "The van has no network time yet: try again in a minute.";
 const HUB_NOCONN_MSG = "No connection to the hub: try again in a moment.";
+const HUB_DOWN_MS = 20000;            // no broker this long (> MQTT.js's 15 s connectTimeout): the banner says so
 /** @type {Record<string, number>} the LoRa command codes (cali_lora_cmd MAP) by "function what value" */
 const HUB_LORA_CODES = { "airheater power on": 1, "airheater power off": 2, "campingmode master on": 3, "campingmode master off": 4 };
 
@@ -41,6 +42,8 @@ const hub = {
   /** @type {Uint8Array|null} */ sess: null,  // this page's 7-byte session; the counter goes on from `ctr`
   ctr: 0,
   /** @type {string|null} the clear online flag: "1", "0", null = not yet known */ online: null,
+  up: false,                                  // the broker accepted the login and the link holds
+  downAt: 0,                                  // since when the link is not up (ms; the client's start or its close)
   /** @type {Promise<void>} the frames are opened one after the other (the replay ring) */ chain: Promise.resolve(),
   /** @type {any} oc.hub.seen, loaded once (hubSeen) */ seen: null,
   /** @type {Map<number, (r: {s: number, b: string}) => void>} */ pending: new Map(),
@@ -167,11 +170,17 @@ function hubStart() {
   if (hub.client && hub.conn === conn) return;
   hubStop();
   hub.conn = conn;
+  hub.downAt = Date.now();
   const t = hubTopic(cfg, "");
   const c = hub.client = M.connect(cfg.url, { username: cfg.user, password: cfg.pass, protocolVersion: 4, clean: true,
     reconnectPeriod: 5000, connectTimeout: 15000, queueQoSZero: false });   // a req is never sent late (after LoRa)
-  c.on("connect", () => c.subscribe([t + "online", t + "state", t + "res", t + "lora/+"]));
-  c.on("close", () => { hub.online = null; });   // not known until the broker answers again
+  // the exact topics of the app user's broker permissions (docs/howto-remote-hub.md, tests/test_hub_topics.py)
+  c.on("connect", () => { hub.up = true; c.subscribe([t + "online", t + "state", t + "res", t + "lora/+"]); });
+  c.on("close", () => {   // also after each failed attempt: the time counts from the last link that held
+    if (hub.up) hub.downAt = Date.now();
+    hub.up = false;
+    hub.online = null;   // not known until the broker answers again
+  });
   c.on("message", (/** @type {string} */ topic, /** @type {Uint8Array} */ payload, /** @type {any} */ packet) => {
     if (topic.startsWith(t)) hubMessage(cfg, topic.slice(t.length), new Uint8Array(payload), !!(packet && packet.retain));
   });
@@ -181,7 +190,7 @@ function hubStart() {
 /** Close the client and forget what it brought (a new configuration, "Remove this van"). */
 function hubStop() {
   if (hub.client) try { hub.client.end(true); } catch (e) { /* already closed */ }
-  Object.assign(hub, { client: null, conn: "", online: null, seen: null, problem: "", stale: [], last: "" });
+  Object.assign(hub, { client: null, conn: "", online: null, up: false, downAt: 0, seen: null, problem: "", stale: [], last: "" });
   for (const done of hub.pending.values()) done({ s: 0, b: "" });
   hub.pending.clear();
 }
@@ -354,6 +363,9 @@ function hubPoll() {
   hub.last = j;
   return h.state;
 }
+
+/** The broker has not been reachable for HUB_DOWN_MS (the banner says HUB_NOCONN_MSG). @param {number} [now] */
+const hubDown = (now = Date.now()) => !!hub.client && !hub.up && now - hub.downAt > HUB_DOWN_MS;
 
 /** The pill: "WLAN · <age>" while live, "LoRa · <age>" with LoRa data, else "offline". */
 function hubPill() {

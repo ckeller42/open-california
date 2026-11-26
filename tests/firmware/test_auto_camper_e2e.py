@@ -26,7 +26,7 @@ from calictl import control
 from .test_control_e2e import ARM_S, WIFI, _online
 from .test_web_e2e import _request, _wifi_script, get_json
 
-pytestmark = [pytest.mark.xdist_group("firmware-host-build"), pytest.mark.linux_only]
+pytestmark = pytest.mark.linux_only
 
 
 @pytest.fixture(autouse=True)

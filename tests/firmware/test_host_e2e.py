@@ -34,7 +34,7 @@ import pytest
 from calictl import overrides, protocol, semantics
 
 # One xdist worker: the host_fw fixture runs `make` in firmware/host (like test_ble_store_kv.py).
-pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
+pytestmark = pytest.mark.linux_only
 
 
 async def _served_frames(unit):
