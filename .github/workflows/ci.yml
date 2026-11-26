@@ -376,6 +376,8 @@ jobs:
   # firmware-host-e2e collects these tests too; this job is the fast signal and fails on a skip (no 32-bit
   # toolchain or no bumble would skip every test), so it never passes empty.
   firmware-sim:
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.firmware != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -669,7 +671,7 @@ jobs:
   ci-ok:
     if: always()
     needs: [changes, test, pre-commit, no-vendor-material, install-script, docs, codec-parity, gui-e2e,
-            firmware-host-e2e-split, firmware-host-e2e, firmware-build, firmware-qemu, coverage-badge,
+            firmware-host-e2e-split, firmware-host-e2e, firmware-build, firmware-qemu, firmware-sim, coverage-badge,
             firmware-release]
     runs-on: ubuntu-latest
     timeout-minutes: 5
