@@ -17,10 +17,13 @@ AREAS = {
     # firmware-build + firmware-qemu: the ESP-IDF build of firmware/ (csrc/ is its codec component;
     # the generated headers in csrc/ and firmware/web/ come from protocol/ and calictl/webui/, whose
     # freshness codec-parity checks on every PR), the build check and the QEMU boot test.
-    "firmware": r"firmware/|csrc/|protocol/|tools/check_fw_build\.py$|tests/firmware/(conftest|test_qemu_boot)\.py$",
+    # firmware-sim: coresim (sim/: fakes, shims, its tests), the satellite's sim build (firmware/host/sim)
+    # and its adapter + scenarios in tests/firmware.
+    "firmware": r"firmware/|csrc/|protocol/|sim/|tools/check_fw_build\.py$"
+    r"|tests/firmware/(conftest|test_qemu_boot|esp_sim|hil|test_lora_esp_sim|test_lora_scenarios)\.py$",
     # firmware-host-e2e: firmware/host builds firmware/components, csrc/ and firmware/web; the tests
     # import calictl and tools (the fake unit, mock, vectors) and tests/test_semantics_js_parity.py.
-    "host_e2e": r"firmware/|csrc/|protocol/|calictl/|tools/|tests/(firmware|vectors)/|tests/conftest\.py$"
+    "host_e2e": r"firmware/|csrc/|protocol/|sim/|calictl/|tools/|tests/(firmware|vectors)/|tests/conftest\.py$"
     r"|tests/test_semantics_js_parity\.py$|" + PY_DEPS,
     # gui-e2e: the daemon + web UI (calictl, protocol, the ui/ screens build_web reads), the remote app
     # and PWA (calictl/webui), the satellite page (firmware/web/app_bundle_gen.h via tools.ux_gallery).

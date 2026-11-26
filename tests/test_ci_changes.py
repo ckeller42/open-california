@@ -30,6 +30,12 @@ def hits(*paths):
         (["tests/e2e/test_gui.py"], {"gui"}),
         (["tests/firmware/test_thermostat_e2e.py"], {"host_e2e"}),
         (["tests/firmware/test_qemu_boot.py"], {"firmware", "host_e2e"}),
+        (
+            ["sim/coresim/devices.py"],
+            {"firmware", "host_e2e"},
+        ),  # firmware-sim; tests/firmware imports coresim
+        (["firmware/host/sim/lora_sim_main.c"], {"firmware", "host_e2e"}),
+        (["tests/firmware/test_lora_esp_sim.py"], {"firmware", "host_e2e"}),
         (["tests/realstack/rig.py"], {"realstack"}),
         (["ui/screens/air-heater.yaml"], {"gui"}),
         (["requirements-e2e.txt"], {"gui", "host_e2e"}),

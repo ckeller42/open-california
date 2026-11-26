@@ -370,6 +370,37 @@ jobs:
           echo "firmware-host-e2e-split: $RESULT"
           [ "$RESULT" = success ] || [ "$RESULT" = skipped ]
 
+  # The simulated-hardware tier (docs/firmware.md, "Sim"): the real ESP-only LoRa driver (lora_esp.c, unchanged)
+  # on coresim's virtual-clock FreeRTOS (sim/shims) and display.c's AXP2101 read against its fake RAK3172, AW9523 and
+  # AXP2101 (sim/coresim; the satellite
+  # adapter is tests/firmware/esp_sim.py). coresim's own unit tests (sim/tests) run here too.
+  # firmware-host-e2e collects these tests too; this job is the fast signal and fails on a skip (no 32-bit
+  # toolchain or no bumble would skip every test), so it never passes empty.
+  firmware-sim:
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.firmware != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install deps (32-bit toolchain, pytest + bumble)
+        # g++-multilib too: the linux_only skip check (tests/firmware/conftest.py) links a C++ probe
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-multilib g++-multilib
+          pip install -r requirements-dev.txt -e ./sim
+      - name: coresim's own tests, then lora_esp.c against the fake RAK3172, AW9523 and AXP2101
+        shell: bash
+        run: |
+          python -m pytest sim/tests tests/firmware/test_lora_esp_sim.py -v -rs 2>&1 | tee sim.log
+          ! grep -q SKIPPED sim.log
+
   # The esp32s3 (M5Stack CoreS3) image: compile-only (no hardware in CI). Proves cali_core,
   # cali_ble_nimble (unchanged) and the NVS platform build against ESP-IDF's esp-nimble.
   # Pin: firmware/README.md.
@@ -641,7 +672,7 @@ jobs:
   ci-ok:
     if: always()
     needs: [changes, test, pre-commit, no-vendor-material, install-script, docs, codec-parity, gui-e2e,
-            firmware-host-e2e-split, firmware-host-e2e, firmware-build, firmware-qemu, coverage-badge,
+            firmware-host-e2e-split, firmware-host-e2e, firmware-build, firmware-qemu, firmware-sim, coverage-badge,
             firmware-release]
     runs-on: ubuntu-latest
     timeout-minutes: 5
