@@ -555,10 +555,18 @@ _BUILT: dict[str, Path] = {}
 
 
 def build_host(binary="cali-host"):
-    """Build a firmware/host Makefile target once per session (fetching the pinned NimBLE first)."""
+    """Build a firmware/host Makefile target once per session (fetching the pinned NimBLE first).
+
+    xdist workers (CI runs tests/firmware with ``--dist loadfile``) share firmware/host: the fetch
+    (``rm -rf`` + clone) and ``make`` run under an exclusive lock on ``firmware/host/.build.lock``,
+    so a second worker waits and then finds everything built."""
     if binary not in _BUILT:
-        subprocess.run(["bash", str(HOST_DIR / "fetch_nimble.sh")], check=True)
-        subprocess.run(["make", "-C", str(HOST_DIR), binary], check=True)
+        import fcntl  # POSIX only: the conftest must still load (and skip linux_only) elsewhere
+
+        with open(HOST_DIR / ".build.lock", "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)  # released when the file closes
+            subprocess.run(["bash", str(HOST_DIR / "fetch_nimble.sh")], check=True)
+            subprocess.run(["make", "-C", str(HOST_DIR), binary], check=True)
         _BUILT[binary] = HOST_DIR / binary
     return _BUILT[binary]
 

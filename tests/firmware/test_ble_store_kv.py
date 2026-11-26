@@ -13,9 +13,9 @@ import zlib
 
 import pytest
 
-from .conftest import HOST_DIR
+from .conftest import build_host
 
-# One xdist worker: every test's fixture runs `make` in firmware/host (tools/ci.sh test uses -n auto).
+# Under `--dist loadgroup` one xdist worker; build_host() locks the shared firmware/host build for `--dist loadfile` (CI).
 pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
 
 MAX_BONDS = 3  # firmware/host/syscfg/syscfg.h BLE_STORE_MAX_BONDS
@@ -24,9 +24,7 @@ MAX_CCCDS = 8  # ... BLE_STORE_MAX_CCCDS
 
 @pytest.fixture(scope="module")
 def store_cli():
-    subprocess.run(["bash", str(HOST_DIR / "fetch_nimble.sh")], check=True)
-    subprocess.run(["make", "-C", str(HOST_DIR), "store-cli"], check=True)
-    return HOST_DIR / "store-cli"
+    return build_host("store-cli")
 
 
 def run(store_cli, store, script):

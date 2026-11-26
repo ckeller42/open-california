@@ -85,7 +85,8 @@ firmware() {   # CI's firmware-host-e2e job: all of tests/firmware, incl. the li
     [ -f "$f" ] || { echo "firmware: expected test file missing: $f" >&2; exit 1; }
   done
   local out status=0
-  out=$(CALI_REQUIRE_CHROMIUM=1 "$PY" -m pytest tests/firmware -v -rs 2>&1) || status=$?
+  # 4 xdist workers, each test file whole on one worker (build_host() locks the shared firmware/host build).
+  out=$(CALI_REQUIRE_CHROMIUM=1 "$PY" -m pytest tests/firmware -v -rs -n 4 --dist loadfile 2>&1) || status=$?
   printf '%s\n' "$out"
   [ $status -eq 0 ] || exit $status
   # test_qemu_boot.py is a separate tier (gated on CALI_QEMU=1, its own CI job firmware-qemu) and
