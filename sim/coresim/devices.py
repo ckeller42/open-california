@@ -151,6 +151,13 @@ class Rak3172:
             "CFM": "0",
             "CLASS": "A",
             "ADR": "1",
+            # the RX windows and join delays, RUI3's EU868 defaults (assumed until a board capture reads them)
+            "RX1DL": "1000",
+            "RX2DL": "2000",
+            "JN1DL": "5000",
+            "JN2DL": "6000",
+            "RX2DR": "0",
+            "RX2FQ": "869525000",
         }
     )
 
@@ -185,6 +192,8 @@ class Rak3172:
             return [rx("OK")]
         if line.startswith("AT+") and line.endswith("=?"):
             name = line[3:-2]
+            if name == "NJS":  # the join state
+                return [rx(f"AT+NJS={int(self.joined)}"), rx("OK")]
             if name not in self.values:
                 raise Unmodelled(f"RAK3172 query {line}")
             return [rx(f"AT+{name}={self.values[name]}"), rx("OK")]
@@ -215,7 +224,24 @@ class Rak3172:
         raise Unmodelled(f"RAK3172 command {line}")
 
     # The settings this model takes (RUI3 AT command manual): AT+<name>=<value> -> OK, AT+<name>=? -> value.
-    SETTINGS = ("NWM", "BAND", "NJM", "CFM", "CLASS", "ADR", "DEVEUI", "APPEUI", "APPKEY", "DR")
+    SETTINGS = (
+        "NWM",
+        "BAND",
+        "NJM",
+        "CFM",
+        "CLASS",
+        "ADR",
+        "DEVEUI",
+        "APPEUI",
+        "APPKEY",
+        "DR",
+        "RX1DL",
+        "RX2DL",
+        "JN1DL",
+        "JN2DL",
+        "RX2DR",
+        "RX2FQ",
+    )
 
     def gpio(self, t, pin, what, value):
         if what == "DIR" and pin == self.tx_pin:

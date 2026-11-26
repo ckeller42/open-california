@@ -51,7 +51,7 @@ def test_rak3172_queries_settings_join_send():
     assert [a for *_, a in r.sends] == ["AT_NO_NETWORK_JOINED", "AT_NO_NETWORK_JOINED", "OK"]
 
 
-@pytest.mark.parametrize("line", ["AT+FOO=1", "AT+FOO=?", "ATZ", "AT+RX1DL=?"])
+@pytest.mark.parametrize("line", ["AT+FOO=1", "AT+FOO=?", "ATZ", "AT+NWKSKEY=?"])
 def test_rak3172_unmodelled_command_fails_loudly(line):
     with pytest.raises(Unmodelled):
         Rak3172().uart(0, line)
@@ -123,3 +123,11 @@ def test_rak3172_restart_drops_its_pending_output():
     r.gpio(1, 5, "LVL", "0")
     r.gpio(2, 5, "LVL", "1")  # RST: the board sends RXCLEAR, the JOINED never comes
     assert restarts == [1] and not r.is_joined(10_000)
+
+
+def test_rak3172_rx_settings_and_join_state():
+    r = Rak3172()
+    assert [t for _, t in ev(r.uart(0, "AT+RX2DR=?"))] == ["AT+RX2DR=0", "OK"]
+    assert [t for _, t in ev(r.uart(0, "AT+NJS=?"))][0] == "AT+NJS=0"
+    r.joined = True
+    assert [t for _, t in ev(r.uart(0, "AT+NJS=?"))][0] == "AT+NJS=1"

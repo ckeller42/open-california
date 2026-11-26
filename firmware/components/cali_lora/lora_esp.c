@@ -73,6 +73,8 @@ static volatile bool s_on;   /* the newest snapshot's switch, set by the owner t
  * value it served only after a successful open, so a request made during an open is never lost and a
  * failed open stays pending (retried on the next pass). */
 static atomic_uint s_setup_req, s_setup_done;
+static char s_at_name[8];          /* a queued `lora at` query (cali_lora_port_at), valid while s_at_pending */
+static atomic_bool s_at_pending;
 static atomic_bool s_forgot;   /* cali_lora_forget() ran: the next pass with the switch off erases the keys again */
 #define SETUP_FAIL_LOG_MS 60000u   /* at most one "setup: store failed" line per minute while a request is pending */
 static cali_lora_xfer_t s_xfer;     /* the key transfer in progress (ciphertext only) */
@@ -147,6 +149,13 @@ void cali_lora_port_setup_request(void) {
 }
 
 void cali_lora_port_forgotten(void) { atomic_store(&s_forgot, true); }
+
+int cali_lora_port_at(const char *name) {
+    if (!s_mu || !cali_lora_at_query_ok(name) || atomic_load(&s_at_pending)) return -1;
+    snprintf(s_at_name, sizeof s_at_name, "%s", name);
+    atomic_store(&s_at_pending, true);   /* after the name: the task reads it only once this is set */
+    return 0;
+}
 
 /* ---- the AT driver ---- */
 
@@ -636,6 +645,7 @@ static void lora_task(void *arg) {
         (void)xQueueReceive(s_snap_q, &s_snap, pdMS_TO_TICKS(1000));   /* the newest snapshot, or the last one */
         if (!s_snap.enabled) {   /* off: no pin is touched, nothing is sent */
             atomic_store(&s_setup_done, atomic_load(&s_setup_req));   /* a request made while off never rotates the key later */
+            if (atomic_exchange(&s_at_pending, false)) cali_log("lora: at: LoRa is off");
             /* forgotten keys, or a module changed meanwhile: on again starts like the first use */
             ready = false;
             s_st.joined = false;
@@ -672,6 +682,12 @@ static void lora_task(void *arg) {
                     (void)xQueueReceive(s_snap_q, &s_snap, pdMS_TO_TICKS(1000));
                 continue;
             }
+        }
+        if (atomic_load(&s_at_pending)) {   /* the console's `lora at <setting>`: both directions go to the log */
+            char cmd[16];
+            snprintf(cmd, sizeof cmd, "AT+%s=?", s_at_name);
+            (void)at(cmd, 2000);
+            atomic_store(&s_at_pending, false);
         }
         unsigned want = atomic_load(&s_setup_req);
         if (want != atomic_load(&s_setup_done)) {   /* done only once the new transfer key is stored (the display waits on it) */
