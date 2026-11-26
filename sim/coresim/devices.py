@@ -126,7 +126,11 @@ class Rak3172:
     refuse: int = 0  # the next N AT+SEND answer AT_BUSY_ERROR (van log, the refused port-2 sends behind #566)
     join: str = "ok"  # ok | fail (JOIN_FAILED_RX_TIMEOUT) | silent: no accept ever (six lost join accepts, 2026-11-26)
     join_ms: int = JOIN_ACCEPT_MS
-    joined: bool = False
+    joined: bool = (
+        False  # joined from the start (a test's shortcut); a JOIN joins only once its accept is due
+    )
+    join_at: int | None = None  # t_ms when the pending join's accept arrives
+    on_restart: object = lambda: None  # the board drops the module's pending output (sim_hw.c RXCLEAR)
     in_reset: bool = False
     tx_released: bool = False
     rst_released: bool = False
@@ -152,8 +156,14 @@ class Rak3172:
     def alive(self):
         return self.powered() and not self.latched and not self.in_reset
 
+    def is_joined(self, t):
+        return self.joined or (self.join_at is not None and t >= self.join_at)
+
     def reboot(self):
+        """Power-up or reset: no join, and nothing it had scheduled to send comes any more."""
         self.joined = False
+        self.join_at = None
+        self.on_restart()
 
     def lost_power(self):
         self.reboot()  # the module starts over when its 5 V comes back
@@ -179,14 +189,14 @@ class Rak3172:
         if line.startswith("AT+JOIN="):
             out = [rx("OK")]
             if self.join == "ok":
-                self.joined = True
-                out.append(rx("+EVT:JOINED", self.join_ms))
+                self.join_at = t + REPLY_MS + self.join_ms
+                out.append(rx("+EVT:JOINED", REPLY_MS + self.join_ms))
             elif self.join == "fail":
                 out.append(rx("+EVT:JOIN_FAILED_RX_TIMEOUT", self.join_ms))
             return out
         if line.startswith("AT+SEND="):
             port, _, payload = line[8:].partition(":")
-            if not self.joined:
+            if not self.is_joined(t):
                 answer = "AT_NO_NETWORK_JOINED"
             elif self.refuse:
                 self.refuse -= 1
@@ -224,7 +234,7 @@ class Rak3172:
             self.tx_released = False  # the UART drives TX again
 
     def bus_changed(self, t, before, after, powered_before):
-        if before != (1, 1) and after == (1, 1) and self.tx_released and self.rst_released and self.latched:
+        if before == (0, 0) and after == (1, 1) and self.tx_released and self.rst_released and self.latched:
             self.latched = False
             self.cured.append(t)
             self.reboot()

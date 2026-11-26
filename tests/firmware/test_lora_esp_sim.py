@@ -50,7 +50,7 @@ def test_switch_off_touches_no_pin(sim):
     b = sim(esp_sim.Board(lora_on=False), 2 * MIN)
     assert not [r for _, r in b.hw if r.split()[0] in ("UART", "GPIO", "PINS")]
     assert not [r for _, r in b.hw if r.startswith("I2C W 58")]  # only the display's probe of the AW9523
-    assert "lora" not in b.states[-1] or b.states[-1] == {}  # device.lora only while exp_lora is on
+    assert b.states and all(lora is None for _, lora in b.states)  # device.lora only while exp_lora is on
 
 
 def test_join_then_ports_2_3_4(sim):
@@ -237,3 +237,22 @@ def test_supply_dip_latches_the_module_power_cycle_cures(sim):
     joins = [t for t, c in b.rak.cmds if c.startswith("AT+JOIN=")]
     assert joins[-1] > b.rak.cured[0]
     assert state_at(b, 12 * HOUR)["joined"] is True
+
+
+def test_power_loss_drops_the_modules_pending_events(sim):
+    """USB gone with the bus at 0/0 while the join accept is still due (the boot's 0/0, LoRa not started yet
+    on the bus): the module restarts and its scheduled +EVT:JOINED never reaches the firmware."""
+    b = esp_sim.Board()
+    b.rak.join_ms = 20_000
+
+    def cut(board):
+        board.aw.regs[0x02] &= ~0x02  # force 0/0 behind the firmware's back: no 5 V without VBUS
+        board.aw.regs[0x03] &= ~0x80
+        board.set_usb(False)
+
+    joins = []
+    b.at(5_000, lambda board: joins.append([t for t, c in board.rak.cmds if c.startswith("AT+JOIN=")]))
+    b.at(6_000, cut)
+    b = sim(b, 40_000)
+    assert joins[0], "no join before the cut"
+    assert not [line for t, line in b.log if "<< +EVT:JOINED" in line and t < 26_000]

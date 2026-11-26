@@ -34,7 +34,8 @@ The firmware writes `HW <now_ms> <request>` and waits. The board answers with ze
   `I2C PROBE <addr>`, `I2C W <addr> <hex>`, `I2C R <addr> <written hex> <n>`, and the firmware's own
   requests.
 - **Answers:** `ACK`, `NACK`, `DATA <hex>`, `EV <delay_ms> RX <text>` (UART bytes from the module after a
-  delay), `EV <delay_ms> <event>` (the firmware's own events, e.g. `TICK`), `QUIT`.
+  delay), `EV <delay_ms> RXCLEAR` (the module restarted: the RX text it scheduled and did not yet send is
+  dropped), `EV <delay_ms> <event>` (the firmware's own events, e.g. `TICK`), `QUIT`.
 - **Other firmware lines:** `T <ms>` means that the virtual clock moved on. Every other line is the
   firmware's log.
 
@@ -78,7 +79,7 @@ esp-stable.
 ## Running
 
 ```sh
-pip install -e sim   # or nothing: tests/firmware/esp_sim.py falls back to this checkout's sim/
+pip install -e sim   # sim/tests imports coresim (or run them with PYTHONPATH=sim)
 python -m pytest sim/tests -q
 ```
 

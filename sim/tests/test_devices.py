@@ -41,12 +41,14 @@ def test_rak3172_queries_settings_join_send():
     assert ev(r.uart(0, "AT+DR=?")) == [(1, "AT+DR=0"), (1, "OK")]
     assert ev(r.uart(0, "AT+CLASS=C")) == [(1, "OK")] and r.values["CLASS"] == "C"
     assert ev(r.uart(0, "AT+SEND=2:00")) == [(SEND_REPLY_MS, "AT_NO_NETWORK_JOINED")]
-    assert ev(r.uart(0, "AT+JOIN=1:0:8:1")) == [(1, "OK"), (JOIN_ACCEPT_MS, "+EVT:JOINED")]
-    assert ev(r.uart(0, "AT+SEND=2:00")) == [
+    assert ev(r.uart(0, "AT+JOIN=1:0:8:1")) == [(1, "OK"), (1 + JOIN_ACCEPT_MS, "+EVT:JOINED")]
+    assert ev(r.uart(2, "AT+SEND=2:00"))[0][1] == "AT_NO_NETWORK_JOINED"  # the accept is not there yet
+    t = 1 + JOIN_ACCEPT_MS
+    assert ev(r.uart(t, "AT+SEND=2:00")) == [
         (SEND_REPLY_MS, "OK"),
         (SEND_REPLY_MS + TX_DONE_MS, "+EVT:TX_DONE"),
     ]
-    assert r.sends == [(0, 2, "00", "AT_NO_NETWORK_JOINED"), (0, 2, "00", "OK")]
+    assert [a for *_, a in r.sends] == ["AT_NO_NETWORK_JOINED", "AT_NO_NETWORK_JOINED", "OK"]
 
 
 @pytest.mark.parametrize("line", ["AT+FOO=1", "AT+FOO=?", "ATZ", "AT+RX1DL=?"])
@@ -76,6 +78,9 @@ def test_rak3172_latch_rst_does_not_help_bus_step_with_released_pins_does():
     r.gpio(2, 43, "DIR", "in")
     r.gpio(2, 5, "DIR", "in")
     r.bus_changed(3, (1, 1), (1, 1), True)  # no 0/0 -> 1/1 step: no cure
+    r.bus_changed(3, (0, 1), (1, 1), True)  # one bit stayed on: no cure either
+    r.bus_changed(3, (1, 0), (1, 1), True)
+    assert r.latched
     r.bus_changed(4, (0, 0), (1, 1), True)
     assert not r.latched and r.cured == [4] and ev(r.uart(5, "AT")) == [(1, "OK")]
 
@@ -109,3 +114,12 @@ def test_axp2101_unmodelled_register_fails_loudly(op):
 
     with pytest.raises(Unmodelled):
         Axp2101().read(0x90, 1) if op == "read" else Axp2101().write(bytes([0x90, 0xBF]))
+
+
+def test_rak3172_restart_drops_its_pending_output():
+    restarts = []
+    r = Rak3172(on_restart=lambda: restarts.append(1))
+    r.uart(0, "AT+JOIN=1:0:8:1")
+    r.gpio(1, 5, "LVL", "0")
+    r.gpio(2, 5, "LVL", "1")  # RST: the board sends RXCLEAR, the JOINED never comes
+    assert restarts == [1] and not r.is_joined(10_000)

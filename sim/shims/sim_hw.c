@@ -6,6 +6,7 @@
  *   ACK | NACK              the I2C device acknowledged (or not) the address
  *   DATA <hex>              the bytes an I2C read returns (with ACK)
  *   EV <delay_ms> RX <text> the module sends <text>\r\n on UART1 after <delay_ms>
+ *   EV <delay_ms> RXCLEAR   the module restarted: RX text it had scheduled and not yet sent never comes
  *   EV <delay_ms> <other>   handed to sim_event() of the firmware's sim main (its own events)
  *   QUIT                    end the run (exit 0)
  * Requests: BOOT | UART <line the firmware wrote> | GPIO <pin> DIR in|out | GPIO <pin> LVL 0|1 |
@@ -37,13 +38,20 @@ static uint8_t s_data[64];   /* the last DATA answer */
 static size_t s_data_n;
 static size_t s_tx_n;
 
+/* A scheduled RX text, tagged with the module generation it belongs to (RXCLEAR starts a new one). */
+typedef struct {
+    unsigned gen;
+    char text[];
+} rx_ev_t;
+static unsigned s_rx_gen;
+
 static void rx_fire(void *arg) {
-    char *text = arg;
-    for (const char *p = text; *p; p++) {
+    rx_ev_t *ev = arg;
+    for (const char *p = ev->text; ev->gen == s_rx_gen && *p; p++) {
         if (s_rx_n == RX_CAP) break;   /* a full ring drops bytes, as the driver's RX buffer would */
         s_rx[(s_rx_head + s_rx_n++) % RX_CAP] = *p;
     }
-    free(text);
+    free(ev);
     sim_notify(s_rx);
 }
 
@@ -76,13 +84,16 @@ int sim_hw_req(const char *fmt, ...) {
                 s_data_n++;
         else if (sscanf(line, "EV %llu %n", &delay, &off) == 1 && off) {
             const char *what = line + off;
-            if (!strncmp(what, "RX ", 3)) {
+            if (!strcmp(what, "RXCLEAR")) {
+                s_rx_gen++;   /* at once, whatever the delay: the restart is now */
+            } else if (!strncmp(what, "RX ", 3)) {
                 size_t n = strlen(what + 3);
-                char *text = malloc(n + 3);
-                if (!text) abort();
-                memcpy(text, what + 3, n);
-                memcpy(text + n, "\r\n", 3);
-                sim_at(sim_now_ms() + delay, rx_fire, text);
+                rx_ev_t *ev = malloc(sizeof *ev + n + 3);
+                if (!ev) abort();
+                ev->gen = s_rx_gen;
+                memcpy(ev->text, what + 3, n);
+                memcpy(ev->text + n, "\r\n", 3);
+                sim_at(sim_now_ms() + delay, rx_fire, ev);
             } else {
                 char *copy = strdup(what);
                 if (!copy) abort();

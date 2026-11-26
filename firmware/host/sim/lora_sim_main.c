@@ -59,8 +59,10 @@ void sim_event(const char *ev) {
         char buf[1024];
         cali_json_t j;
         cali_json_begin(&j, buf, sizeof buf);
-        cali_json_key(&j, "lora");
-        cali_lora_json(&j);
+        if (cali_exp_lora()) {   /* device.lora only while the switch is on, as web.c's /api/state */
+            cali_json_key(&j, "lora");
+            cali_lora_json(&j);
+        }
         cali_json_key(&j, "battery");
         cali_battery_json(&j);
         sim_hw_req("TICK %s", cali_json_end(&j) < 0 ? "{\"overflow\":1}" : buf);

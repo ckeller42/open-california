@@ -15,7 +15,7 @@ class CoreS3:
     def __init__(self, vbus=True, aw9523=True, axp2101=True):
         self.aw = Aw9523(aw9523)
         self.axp = Axp2101(present=axp2101, vbus=vbus)
-        self.rak = Rak3172(powered=self.powered)
+        self.rak = Rak3172(powered=self.powered, on_restart=lambda: self.emit("EV 0 RXCLEAR"))
         self.i2c = {self.aw.addr: self.aw, self.axp.addr: self.axp}
         self.t = 0
         self.log: list[tuple[int, str]] = []  # (virtual t_ms, line)

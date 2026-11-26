@@ -40,7 +40,7 @@ class Board(coresim.CoreS3):
 
     def tick(self, t, payload):
         doc = json.loads(payload)
-        self.states.append((t, doc["lora"]))
+        self.states.append((t, doc.get("lora")))  # None while exp_lora is off
         self.battery.append((t, doc["battery"]))
 
     def set_usb(self, on):
