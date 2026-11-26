@@ -152,7 +152,7 @@ repos:
       # coresim (sim/): its own unit tests (the fakes, the virtual clock, the isolation guard)
       - id: coresim
         name: coresim unit tests (sim/tests)
-        entry: sh -c '"${PY:-python3}" -m pytest sim/tests -q -p no:cacheprovider'
+        entry: sh -c 'PYTHONPATH=sim "${PY:-python3}" -m pytest sim/tests -q -p no:cacheprovider'   # this checkout's coresim, not an installed one
         language: system
         pass_filenames: false
         files: ^sim/
