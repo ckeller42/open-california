@@ -257,3 +257,15 @@ def test_power_loss_drops_the_modules_pending_events(sim):
     b = sim(b, 40_000)
     assert joins[0], "no join before the cut"
     assert not [line for t, line in b.log if "<< +EVT:JOINED" in line and t < 26_000]
+
+
+def test_bus_power_on_is_retried_until_it_works(sim):
+    """The AW9523 does not answer at the LoRa start (logged, no abort) and answers 2 min later: the bus goes to
+    1/1 at the next retry (every 60 s), so the module keeps its 5 V without USB from then on."""
+    b = esp_sim.Board(aw9523=False)
+    b.at(2 * MIN, lambda board: setattr(board.aw, "present", True))
+    b = sim(b, 5 * MIN)
+    assert b.logged("lora: bus power on failed")
+    on = [t for t, bits in b.bus_history if bits == (1, 1)]
+    assert on and 2 * MIN <= on[0] <= 3 * MIN + 2_000, on
+    assert b.logged("lora: bus power on")

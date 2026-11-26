@@ -15,7 +15,6 @@ from __future__ import annotations
 import os
 import re
 import select
-import termios
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -66,6 +65,8 @@ class Console:
     """The board's console, opened like tools/esplab/esp_cmd.py: no HUPCL, raw, no DTR/RTS toggle (no reset)."""
 
     def __init__(self, port):
+        import termios  # POSIX only: the sim target and the transcript helpers import without it
+
         self.fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
         attrs = termios.tcgetattr(self.fd)
         attrs[0] = 0  # iflag: raw

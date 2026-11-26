@@ -152,7 +152,8 @@ output goes to `$HIL_OUT` (default `~/hil/<date-time>`).
 
 After the session, copy the new captures (`capture-join.log`, `rx-diag.log`, the console tails) into
 `sim/tests/data/` as `rak3172-<what>.log`, with only the `lora:` lines kept. `tests/test_replay.py` then
-replays them, and a fake that does not match fails.
+replays them (both line formats: the console tail's clock times and `hil.sh`'s elapsed milliseconds), and a
+fake that does not match fails. A capture without a parsed AT command fails too.
 
 **Not yet possible:** a dump of the AW9523 and AXP2101 registers. The firmware has no console command for
 that, so the session reads only what `status` reports (`battery`). A read-only `i2c` dump command is a

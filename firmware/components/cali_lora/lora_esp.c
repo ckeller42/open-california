@@ -73,8 +73,9 @@ static volatile bool s_on;   /* the newest snapshot's switch, set by the owner t
  * value it served only after a successful open, so a request made during an open is never lost and a
  * failed open stays pending (retried on the next pass). */
 static atomic_uint s_setup_req, s_setup_done;
-static char s_at_name[8];          /* a queued `lora at` query (cali_lora_port_at), valid while s_at_pending */
-static atomic_bool s_at_pending;
+static char s_at_name[8];          /* a queued `lora at` query (cali_lora_port_at), valid while AT_QUEUED */
+enum { AT_FREE, AT_WRITING, AT_QUEUED };
+static atomic_int s_at_state;      /* AT_WRITING reserves the slot for one caller; the task reads only AT_QUEUED */
 static atomic_bool s_forgot;   /* cali_lora_forget() ran: the next pass with the switch off erases the keys again */
 #define SETUP_FAIL_LOG_MS 60000u   /* at most one "setup: store failed" line per minute while a request is pending */
 static cali_lora_xfer_t s_xfer;     /* the key transfer in progress (ciphertext only) */
@@ -151,9 +152,11 @@ void cali_lora_port_setup_request(void) {
 void cali_lora_port_forgotten(void) { atomic_store(&s_forgot, true); }
 
 int cali_lora_port_at(const char *name) {
-    if (!s_mu || !cali_lora_at_query_ok(name) || atomic_load(&s_at_pending)) return -1;
+    int free_ = AT_FREE;
+    if (!s_mu || !cali_lora_at_query_ok(name) || !atomic_compare_exchange_strong(&s_at_state, &free_, AT_WRITING))
+        return -1;   /* another query still waits (or is being written) */
     snprintf(s_at_name, sizeof s_at_name, "%s", name);
-    atomic_store(&s_at_pending, true);   /* after the name: the task reads it only once this is set */
+    atomic_store(&s_at_state, AT_QUEUED);   /* after the name: the task reads it only once this is set */
     return 0;
 }
 
@@ -224,17 +227,36 @@ static int bus_power(uint32_t on) {
  * feed the module through its pins; the UART driver stays installed and gets its pins back.
  * Outside the cycle both bits stay 1 in every supply state (uart_up): the module keeps its 5 V when USB goes
  * away. An A/B on the bench (0/0 on USB) showed that the boost is not why join accepts were lost. */
+#define BUS_RETRY_S 60
+static bool s_bus_ok;            /* both bits are 1 (bus_steady_on, or the power cycle) */
+static uint32_t s_bus_retry_at;  /* uptime s of the next bus_steady_on try after a failure */
+
 static bool bus_power_cycle(void) {
     cali_log("lora: module silent after reset: bus power cycle");
     gpio_set_direction(RAK_TX, GPIO_MODE_INPUT);
     gpio_set_direction(RAK_RST, GPIO_MODE_INPUT);
     if (bus_power(0) == 0) vTaskDelay(pdMS_TO_TICKS(BUS_OFF_MS));
     if (bus_power(1) != 0 && bus_power(1) != 0) return false;   /* no 5 V: the pins stay released */
+    s_bus_ok = true;
     vTaskDelay(pdMS_TO_TICKS(500));
     (void)uart_set_pin(RAK_UART, RAK_TX, RAK_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     gpio_set_level(RAK_RST, 1);   /* high before it drives: no extra reset pulse */
     gpio_set_direction(RAK_RST, GPIO_MODE_OUTPUT);
     return true;
+}
+
+/* Both bits to 1 once, at the LoRa start (the boot leaves 0/0), and again every BUS_RETRY_S while that failed
+ * (an AW9523 that did not answer yet): until it works, a module on 0/0 has no 5 V without USB. */
+
+static void bus_steady_on(void) {
+    uint32_t now = (uint32_t)(cali_uptime_ms() / 1000);
+    if (s_bus_ok || now < s_bus_retry_at) return;
+    if (bus_power(1) == 0) {
+        s_bus_ok = true;
+        cali_log("lora: bus power on");
+    } else {
+        s_bus_retry_at = now + BUS_RETRY_S;
+    }
 }
 
 static bool uart_up(void) {
@@ -251,7 +273,7 @@ static bool uart_up(void) {
     }
     gpio_set_level(RAK_RST, 1);
     gpio_set_direction(RAK_RST, GPIO_MODE_OUTPUT);
-    if (bus_power(1) == 0) cali_log("lora: bus power on");   /* the boot leaves 0/0; 1/1 from here on */
+    bus_steady_on();
     s_uart_up = true;
     return true;
 }
@@ -645,7 +667,8 @@ static void lora_task(void *arg) {
         (void)xQueueReceive(s_snap_q, &s_snap, pdMS_TO_TICKS(1000));   /* the newest snapshot, or the last one */
         if (!s_snap.enabled) {   /* off: no pin is touched, nothing is sent */
             atomic_store(&s_setup_done, atomic_load(&s_setup_req));   /* a request made while off never rotates the key later */
-            if (atomic_exchange(&s_at_pending, false)) cali_log("lora: at: LoRa is off");
+            int queued = AT_QUEUED;
+            if (atomic_compare_exchange_strong(&s_at_state, &queued, AT_FREE)) cali_log("lora: at: LoRa is off");
             /* forgotten keys, or a module changed meanwhile: on again starts like the first use */
             ready = false;
             s_st.joined = false;
@@ -683,12 +706,13 @@ static void lora_task(void *arg) {
                 continue;
             }
         }
-        if (atomic_load(&s_at_pending)) {   /* the console's `lora at <setting>`: both directions go to the log */
+        if (atomic_load(&s_at_state) == AT_QUEUED) {   /* the console's `lora at <setting>`: both directions go to the log */
             char cmd[16];
             snprintf(cmd, sizeof cmd, "AT+%s=?", s_at_name);
             (void)at(cmd, 2000);
-            atomic_store(&s_at_pending, false);
+            atomic_store(&s_at_state, AT_FREE);
         }
+        if (s_uart_up) bus_steady_on();   /* a retry only while the bus is not on yet */
         unsigned want = atomic_load(&s_setup_req);
         if (want != atomic_load(&s_setup_done)) {   /* done only once the new transfer key is stored (the display waits on it) */
             int fresh = setup_open();
@@ -736,7 +760,7 @@ static void lora_task(void *arg) {
             }
             now = (uint32_t)(cali_uptime_ms() / 1000);
             next_energy = now + cali_lora_next_round_s(&s_bud, now, (unsigned)s_st.sf, r < 0, &retried);
-            next_probe = now + LIVENESS_S;   /* the round's ATs were the check */
+            next_probe = now + (s_silent ? PROBE_RETRY_S : LIVENESS_S);   /* the round's ATs were the check */
         } else if (now >= next_probe) {
             (void)at("AT", 1000);   /* unanswered counts towards the watchdog at the top of the loop */
             next_probe = (uint32_t)(cali_uptime_ms() / 1000) + (s_silent ? PROBE_RETRY_S : LIVENESS_S);
