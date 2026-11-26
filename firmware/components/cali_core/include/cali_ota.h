@@ -62,8 +62,11 @@
 extern "C" {
 #endif
 
-/** @brief printf format of the release URL; the `%s` takes cali_ota_channel_name(). */
+/** @brief printf format of the release URL; the `%s` takes cali_ota_channel_name(). The QEMU tier's OTA test
+ *        defines another one (CONFIG_CALI_OTA_URL_FMT, the QEMU probe build only). */
+#ifndef CALI_OTA_URL_FMT
 #define CALI_OTA_URL_FMT "https://github.com/ckeller42/open-california/releases/download/esp-%s/"
+#endif
 /** @brief printf format of the manifest URL (`%s` = the channel name). */
 #define CALI_OTA_MANIFEST_FMT CALI_OTA_URL_FMT "manifest.json"
 /** @brief printf format of the firmware image URL (`%s` = the channel name). */

@@ -30,6 +30,7 @@ def hits(*paths):
         (["tests/e2e/test_gui.py"], {"gui"}),
         (["tests/firmware/test_thermostat_e2e.py"], {"host_e2e"}),
         (["tests/firmware/test_qemu_boot.py"], {"firmware", "host_e2e"}),
+        (["tests/firmware/test_qemu_ota.py"], {"firmware", "host_e2e"}),
         (
             ["sim/coresim/devices.py"],
             {"firmware", "host_e2e"},

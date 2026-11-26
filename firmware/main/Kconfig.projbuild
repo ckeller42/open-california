@@ -16,6 +16,26 @@ menu "open-california firmware (#154)"
                record through cali_kv_set/cali_kv_get (the bond store's NVS path) so the QEMU test
                can prove NVS survives a reboot.
 
+    config CALI_QEMU_ETH
+        bool "QEMU build: the OTA path over QEMU's Ethernet (open_eth) to a local release server"
+        depends on CALI_QEMU_PROBE
+        default n
+        select ETH_USE_OPENETH
+        help
+            For the QEMU tier's OTA test only (tests/firmware/test_qemu_ota.py). With WiFi off
+            (CALI_WIFI=n), app_main brings up QEMU's OpenCores Ethernet MAC with DHCP from QEMU's
+            user network ("LOG eth: up <ip>") and starts the OTA task on it, so "ota check|install"
+            reach the release server CALI_OTA_URL_FMT names. Nothing else runs on this network.
+
+    config CALI_OTA_URL_FMT
+        string "QEMU build: the release URL format (empty: GitHub)"
+        depends on CALI_QEMU_PROBE
+        default ""
+        help
+            printf format of the release directory, %s = the channel (cali_ota.h CALI_OTA_URL_FMT),
+            e.g. "http://10.0.2.2:8070/esp-%s/" (QEMU's user network reaches the host as 10.0.2.2).
+            Only the QEMU probe build can set it, so the release image always fetches from GitHub.
+
     config CALI_WIFI
         bool "WiFi: the station/setup-hotspot runtime and the HTTP page (cali_net on esp_wifi)"
         default y

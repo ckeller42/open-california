@@ -544,7 +544,7 @@ jobs:
         run: |
           . "$IDF_PATH/export.sh"
           pip install pytest
-          CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v
+          CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py tests/firmware/test_qemu_ota.py -v
 
   # Which heavy jobs a PR needs: tools/ci_changes.py holds one path filter per area (what each job
   # builds, imports or serves; ci.yml itself runs everything) and prints one output per area. A push

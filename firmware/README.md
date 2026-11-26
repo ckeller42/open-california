@@ -228,7 +228,7 @@ Locally (repo root; the image runs natively on Apple silicon):
 docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '
   . $IDF_PATH/export.sh >/dev/null &&
   idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build &&
-  cd /project && pip install -q pytest && CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v'
+  cd /project && pip install -q pytest && CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py tests/firmware/test_qemu_ota.py -v'
 ```
 
 Interactive: `docker run --rm -it -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c
