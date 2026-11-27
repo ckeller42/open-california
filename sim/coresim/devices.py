@@ -46,6 +46,7 @@ class Aw9523:
         self.present = present
         self.regs = [0] * 256
         self.regs[0x10] = 0x23  # the AW9523B's ID (datasheet)
+        self.regs[0x12] = self.regs[0x13] = 0xFF  # LED mode: every pin GPIO (datasheet reset value)
         for r, v in self.POWER_ON.items():
             self.regs[r] = v
 
@@ -59,6 +60,7 @@ class Aw9523:
             # on the AD pins; the board package's init writes output and direction right after it anyway)
             self.regs = [0] * 256
             self.regs[0x10] = 0x23
+            self.regs[0x12] = self.regs[0x13] = 0xFF
             return
         for i, b in enumerate(data[1:]):
             self.regs[reg + i] = b

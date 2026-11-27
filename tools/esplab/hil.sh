@@ -54,7 +54,9 @@ sim_half() {
   if ! "$eng" pull -q "$img" >/dev/null 2>&1; then
     img=oc-linux-local; "$eng" build -q -t "$img" -f "$root/tools/docker/linux.Dockerfile" "$root" >/dev/null || return 1
   fi
-  "$eng" run --rm --userns=keep-id -v "$root":/w:Z -v "$out":/out:Z -w /w -e HIL_OUT=/out -e HIL_TARGET=sim \
+  local user=(--userns=keep-id)   # podman: the files it writes belong to the caller
+  [ "$(basename "$eng")" = docker ] && user=(--user "$(id -u):$(id -g)")
+  "$eng" run --rm "${user[@]}" -v "$root":/w:Z -v "$out":/out:Z -w /w -e HIL_OUT=/out -e HIL_TARGET=sim \
     -e HIL_ACTIONS="$1" "$img" sh -c 'bash firmware/host/fetch_nimble.sh && python3 -m pytest \
     tests/firmware/test_lora_scenarios.py -v -rs -p no:cacheprovider --junitxml /out/junit-sim.xml'
 }
@@ -77,8 +79,8 @@ case "$step" in
       "${PY:-python3}" -m pytest tests/firmware/test_lora_scenarios.py -v -rs -p no:cacheprovider \
       --junitxml "$out/junit-board.xml" || status=$?
     # ... then the sim half in the oc-linux container (the 32-bit host build), which writes the drift reports
-    sim_half "$actions" || echo "the sim half failed (see $out/junit-sim.xml): drift reports may be missing" >&2
-    exit "${status:-0}" ;;
+    sim_half "$actions" || { sim_status=$?; echo "the sim half failed (see $out/junit-sim.xml): drift reports may be missing" >&2; }
+    exit "${status:-${sim_status:-0}}" ;;   # a board failure first, else the sim half's
   capture-join)
     echo "changes the board: LoRa off and on, a real join and uplinks"
     run_steps 160 "lora off" "lora status" "lora on" | tee "$out/capture-join.log" ;;

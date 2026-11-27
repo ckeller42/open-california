@@ -60,7 +60,8 @@ code trips this, extend the fake and give the evidence for the new behaviour in 
 | AW9523: power-on output registers 0x11/0x03 (both bus bits 0) | The owner's register probe of the bench CoreS3, 2026-11-22 | verified |
 | AW9523: the state after a 0x7F soft reset (all outputs, all 0) | Assumption: the board package writes direction and output right after it | assumed |
 | AXP2101: 0x00 bit 5 VBUS good, bit 3 battery present; 0x01 bits 6:5 charge state; 0x34/0x35 mV; 0xA4 %; enable bits 0x30 bit 0, 0x18 bit 3 | M5Unified `AXP2101_Class.inl`, XPowersLib's register map (AXP2101 datasheet) | datasheet; the board's live readings matched (`device.battery`) |
-| AXP2101: the power-on values of 0x18 and 0x30 (0) | No saved register dump of the board | assumed |
+| AXP2101: the power-on values of 0x18 and 0x30 (0) | No saved register dump of the board before init | assumed |
+| AXP2101: 0x02 0x10 0x26 0x27 0x68 0x80 0x90 (read only by `i2c dump 0x34`) | Placeholders (0) until a HIL dump of the running board | assumed |
 | CoreS3: the M-Bus module has power while VBUS is there or both bus bits are 1 | M5Stack CoreS3 schematic (M5Unified's ext output) | assumed |
 
 ## Limits: what a green sim does not prove
@@ -155,6 +156,7 @@ After the session, copy the new captures (`capture-join.log`, `rx-diag.log`, the
 replays them (both line formats: the console tail's clock times and `hil.sh`'s elapsed milliseconds), and a
 fake that does not match fails. A capture without a parsed AT command fails too.
 
-The register dumps (`i2c-dump.log`, `identify.txt`) replace the fakes' assumed register values: the AW9523
-power-on state and the AXP2101 registers that only the dump reads (`coresim/devices.py` marks them as
-placeholders).
+The register dumps (`i2c-dump.log`, `identify.txt`) show the running state: the values after the boot and
+the drivers' writes, not the power-on state. They check the fakes' running state (the drift report compares
+them) and replace the AXP2101 placeholders that only the dump reads, as running values. The AW9523 power-on
+values stay tied to a capture taken before any init (the 2026-11-22 probe).

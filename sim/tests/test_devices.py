@@ -7,6 +7,11 @@ from coresim.devices import JOIN_ACCEPT_MS, SEND_REPLY_MS, TX_DONE_MS, Aw9523, R
 def test_aw9523_power_on_state_is_the_probed_board():
     aw = Aw9523()
     assert aw.read(0x02, 2) == bytes([0x11, 0x03]) and aw.bus == (0, 0)
+    assert (
+        aw.read(0x10, 1) == b"\x23" and aw.read(0x12, 2) == b"\xff\xff"
+    )  # ID; LED mode reset value (all GPIO)
+    aw.write(bytes([0x7F, 0x00]))
+    assert aw.read(0x12, 2) == b"\xff\xff"
 
 
 def test_aw9523_bus_bits_need_output_direction():
