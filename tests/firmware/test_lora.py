@@ -882,3 +882,22 @@ def test_drop_empties_the_slot_and_the_queue(cli):
     )
     assert _submits(out) == ["SUBMIT airheater power on lora", "SUBMIT airheater power off lora"]
     assert [o for o in out if "dropped" in o] == ["LOG lora: 2 held commands dropped: new data key"]
+
+
+HIL_DIAG = "RX1DL,RX2DL,RX2DR,RX2FQ,JN1DL,JN2DL,BAND,CLASS,ADR,DR,NJS"  # tools/esplab/hil.sh diag
+
+
+def test_console_lora_at_takes_long_lists(cli):
+    """A list longer than the console's 23-character token buffer is still one list (the field bug on fw
+    97924c08: it fell through to the usage line). Up to CALI_LORA_AT_LIST_MAX (96) characters; one more is
+    refused, and so is a second word."""
+    assert run(cli, f"console at {HIL_DIAG}") == [f"AT {HIL_DIAG}"]
+    at_max = "RX1DL," * 15 + "NJS,DR"
+    assert len(at_max) == 96
+    assert run(cli, f"console at {at_max}") == [f"AT {at_max}"]
+    too_long = at_max + ",DR"
+    assert run(cli, f"console at {too_long}")[0].startswith("LOG lora: at: not a readable setting")
+    out = run(cli, "console at RX1DL RX2DL")
+    assert out[0].startswith("LOG lora: at: one list, no spaces") and not [
+        x for x in out if x.startswith("AT ")
+    ]

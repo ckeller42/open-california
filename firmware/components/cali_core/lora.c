@@ -610,10 +610,13 @@ int cali_lora_console(const char *args) {
         else if (cali_kv_set(CALI_LORA_KEYS_KEY, k, sizeof k) != 0) cali_log("lora: keys: store failed");
         else cali_log("lora: keys stored (used at the next join attempt)");
         cali_wipe(k, sizeof k);
-    } else if (n == 2 && !strcmp(op, "at")) {
-        const char *list = strstr(args, "at") + 2, *bad;   /* the whole list: a[] holds only 23 characters */
+    } else if (n >= 2 && !strcmp(op, "at")) {
+        /* the list from args itself: a[] holds only 23 characters, and a longer list spills into b (n == 3) */
+        const char *list = strstr(args, "at") + 2, *bad;
         list += strspn(list, " ");
-        if (!cali_lora_at_list_ok(list, &bad))
+        if (list[strcspn(list, " ")])
+            cali_log("lora: at: one list, no spaces: lora at <setting>[,<setting>...]");
+        else if (!cali_lora_at_list_ok(list, &bad))
             cali_log("lora: at: not a readable setting: %.*s", bad ? (int)strcspn(bad, ",") : 8, bad ? bad : list);
         else if (cali_lora_port_at(list) != 0) cali_log("lora: at: not queued (busy or no module driver)");
     } else {
