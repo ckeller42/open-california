@@ -16,3 +16,7 @@ idf_component_register(SRCS "energy.c" "lora.c" "lora_setup.c" ${lora_port} "pai
                        PRIV_REQUIRES platform heap
                        LDFRAGMENTS "linker.lf")
 include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/cali_strict.cmake)
+# the QEMU tier's OTA test: its local release server in place of GitHub (Kconfig CALI_OTA_URL_FMT, probe builds only)
+if(CONFIG_CALI_OTA_URL_FMT)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE "CALI_OTA_URL_FMT=\"${CONFIG_CALI_OTA_URL_FMT}\"")
+endif()

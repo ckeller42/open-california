@@ -20,7 +20,7 @@ AREAS = {
     # firmware-sim: coresim (sim/: fakes, shims, its tests), the satellite's sim build (firmware/host/sim)
     # and its adapter + scenarios in tests/firmware.
     "firmware": r"firmware/|csrc/|protocol/|sim/|tools/check_fw_build\.py$"
-    r"|tests/firmware/(conftest|test_qemu_boot|esp_sim|hil|test_lora_esp_sim|test_lora_scenarios)\.py$",
+    r"|tests/firmware/(conftest|test_qemu_boot|test_qemu_ota|esp_sim|hil|test_lora_esp_sim|test_lora_scenarios)\.py$",
     # firmware-host-e2e: firmware/host builds firmware/components, csrc/ and firmware/web; the tests
     # import calictl and tools (the fake unit, mock, vectors) and tests/test_semantics_js_parity.py.
     "host_e2e": r"firmware/|csrc/|protocol/|sim/|calictl/|tools/|tests/(firmware|vectors)/|tests/conftest\.py$"

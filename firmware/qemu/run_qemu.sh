@@ -16,7 +16,8 @@
 # every run (idf.py qemu re-merges and so wipes NVS unless given --flash-file), and UART0 goes to
 # stdio WITHOUT the QEMU monitor multiplexed onto it (`-serial stdio -monitor none` instead of
 # `-nographic -serial mon:stdio`): stdin/stdout are the firmware console's line protocol, nothing
-# else. Stop with SIGTERM (or SIGINT).
+# else. Stop with SIGTERM (or SIGINT). The Ethernet NIC (open_eth) is on QEMU's user network: the image's
+# DHCP lease is 10.0.2.x and the host is 10.0.2.2 (the OTA test's release server, CONFIG_CALI_QEMU_ETH).
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -48,4 +49,5 @@ exec qemu-system-xtensa -M esp32s3 -m 32M \
     -drive "file=$efuse,if=none,format=raw,id=efuse" \
     -global driver=nvram.esp32s3.efuse,property=drive,value=efuse \
     -global driver=timer.esp32s3.timg,property=wdt_disable,value=true \
+    -nic user,model=open_eth \
     -display none -monitor none -serial stdio

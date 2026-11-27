@@ -80,6 +80,10 @@
 #include "esp_system.h"
 #include "esp_event.h"
 #include "esp_netif.h"
+#if CONFIG_CALI_QEMU_ETH
+#include "esp_eth.h"
+#include "esp_eth_mac_openeth.h"
+#endif
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
@@ -519,6 +523,36 @@ static void console_init(void) {
     setvbuf(stdout, NULL, _IOLBF, 0);
 }
 
+#if CONFIG_CALI_QEMU_ETH
+/* The QEMU tier's OTA network (Kconfig CALI_QEMU_ETH): QEMU's OpenCores Ethernet MAC with DHCP from its user
+ * network. The OTA task is the only user. */
+static void qemu_eth_got_ip(void *arg, esp_event_base_t base, int32_t id, void *data) {
+    (void)arg, (void)base, (void)id;
+    const ip_event_got_ip_t *e = data;
+    cali_log("eth: up " IPSTR, IP2STR(&e->ip_info.ip));
+}
+
+static int qemu_eth_start(void) {
+    esp_netif_config_t ncfg = ESP_NETIF_DEFAULT_ETH();
+    esp_netif_t *netif = esp_netif_new(&ncfg);
+    eth_mac_config_t mcfg = ETH_MAC_DEFAULT_CONFIG();
+    eth_phy_config_t pcfg = ETH_PHY_DEFAULT_CONFIG();
+    pcfg.autonego_timeout_ms = 100;
+    esp_eth_mac_t *mac = esp_eth_mac_new_openeth(&mcfg);
+    esp_eth_phy_t *phy = esp_eth_phy_new_generic(&pcfg);
+    esp_eth_config_t ecfg = ETH_DEFAULT_CONFIG(mac, phy);
+    esp_eth_handle_t eth = NULL;
+    if (!netif || !mac || !phy || esp_eth_driver_install(&ecfg, &eth) != ESP_OK ||
+        esp_netif_attach(netif, esp_eth_new_netif_glue(eth)) != ESP_OK ||
+        esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, qemu_eth_got_ip, NULL) != ESP_OK ||
+        esp_eth_start(eth) != ESP_OK) {
+        cali_log("eth: unavailable");
+        return -1;
+    }
+    return 0;
+}
+#endif
+
 /* The network side, before the owner task starts (like cali_console_init). t: the BLE transport the
  * console runs on (the page's pairing address). */
 static void wifi_init(const cali_transport_t *t) {
@@ -535,6 +569,9 @@ static void wifi_init(const cali_transport_t *t) {
     if (e != ESP_OK || id_rc < 0 || cali_net_esp_init(ap_ssid, ap_psk) != 0) {
         cali_log("wifi: driver unavailable");   /* exact text: test_qemu_boot.py */
         memset(ap_psk, 0, sizeof ap_psk);
+#if CONFIG_CALI_QEMU_ETH
+        if (e == ESP_OK && qemu_eth_start() == 0) cali_ota_esp_start();   /* test_qemu_ota.py */
+#endif
         return;
     }
     memset(ap_psk, 0, sizeof ap_psk);
