@@ -322,3 +322,13 @@ def test_lora_at_list_is_checked_whole(sim):
     assert "AT+RX1DL=?" not in [
         c for _, c in b.rak.cmds
     ]  # nothing of a list with a bad name (apply_keys reads APPKEY itself)
+
+
+def test_lora_at_answers_the_hil_diag_list(sim):
+    """The whole list tools/esplab/hil.sh diag sends (11 names, longer than the console's 23-character token)."""
+    names = "RX1DL,RX2DL,RX2DR,RX2FQ,JN1DL,JN2DL,BAND,CLASS,ADR,DR,NJS"
+    b = esp_sim.Board()
+    b.at(MIN, lambda board: board.emit(f"EV 0 CONSOLE lora at {names}"))
+    b = sim(b, 2 * MIN)
+    asked = [c for t, c in b.rak.cmds if t >= MIN and c.endswith("=?")]
+    assert [f"AT+{n}=?" for n in names.split(",")] == [c for c in asked if c[3:-2] in names.split(",")][:11]
