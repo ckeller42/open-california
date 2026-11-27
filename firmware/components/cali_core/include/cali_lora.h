@@ -645,13 +645,25 @@ void cali_lora_port_setup_request(void);
  * @return 1 when `name` is one of them, else 0.
  */
 int cali_lora_at_query_ok(const char *name);
+/** @brief The longest `lora at` list (comma-separated setting names). */
+#define CALI_LORA_AT_LIST_MAX 96
 /**
- * @brief Queue one module query `AT+<name>=?` (cali_lora_at_query_ok) for the LoRa task; any task. The task runs it
- *        at its next pass with the module set up and logs both directions (`lora: >>` / `lora: <<`).
- * @param name The setting's AT name (cali_lora_at_query_ok), copied.
- * @return 0 queued, -1 another query still waits or no module driver (host, QEMU).
+ * @brief Check a `lora at` list: 1 to CALI_LORA_AT_LIST_MAX characters of comma-separated names, each one
+ *        cali_lora_at_query_ok. On a bad name, *bad points to it (up to the next comma).
+ * @param list The list, e.g. `RX1DL,RX2DL,RX2DR`.
+ * @param bad Set to the first unreadable name, or NULL.
+ * @return 1 when the whole list is readable, else 0.
  */
-int cali_lora_port_at(const char *name);
+int cali_lora_at_list_ok(const char *list, const char **bad);
+/**
+ * @brief Queue the module queries `AT+<name>=?` of a list (cali_lora_at_list_ok) for the LoRa task; any task.
+ *        The task runs them in order, one at a time, at its next pass with the module set up or during a
+ *        join's backoff wait (between joins, never while another AT waits for its answer), and logs both
+ *        directions (`lora: >>` / `lora: <<`).
+ * @param list The comma-separated setting names, copied.
+ * @return 0 queued, -1 another list still waits or no module driver (host, QEMU).
+ */
+int cali_lora_port_at(const char *list);
 
 #ifdef __cplusplus
 }

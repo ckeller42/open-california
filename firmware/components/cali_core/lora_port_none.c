@@ -47,7 +47,7 @@ int cali_lora_port_setup_pending(void) { return 0; }
 
 void cali_lora_port_forgotten(void) {}
 
-int cali_lora_port_at(const char *name) {
-    (void)name;
+int cali_lora_port_at(const char *list) {
+    (void)list;
     return -1;
 }

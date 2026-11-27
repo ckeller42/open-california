@@ -73,7 +73,7 @@ static volatile bool s_on;   /* the newest snapshot's switch, set by the owner t
  * value it served only after a successful open, so a request made during an open is never lost and a
  * failed open stays pending (retried on the next pass). */
 static atomic_uint s_setup_req, s_setup_done;
-static char s_at_name[8];          /* a queued `lora at` query (cali_lora_port_at), valid while AT_QUEUED */
+static char s_at_list[CALI_LORA_AT_LIST_MAX + 1];   /* a queued `lora at` list (cali_lora_port_at), valid while AT_QUEUED */
 enum { AT_FREE, AT_WRITING, AT_QUEUED };
 static atomic_int s_at_state;      /* AT_WRITING reserves the slot for one caller; the task reads only AT_QUEUED */
 static atomic_bool s_forgot;   /* cali_lora_forget() ran: the next pass with the switch off erases the keys again */
@@ -151,11 +151,11 @@ void cali_lora_port_setup_request(void) {
 
 void cali_lora_port_forgotten(void) { atomic_store(&s_forgot, true); }
 
-int cali_lora_port_at(const char *name) {
+int cali_lora_port_at(const char *list) {
     int free_ = AT_FREE;
-    if (!s_mu || !cali_lora_at_query_ok(name) || !atomic_compare_exchange_strong(&s_at_state, &free_, AT_WRITING))
-        return -1;   /* another query still waits (or is being written) */
-    snprintf(s_at_name, sizeof s_at_name, "%s", name);
+    if (!s_mu || !cali_lora_at_list_ok(list, NULL) || !atomic_compare_exchange_strong(&s_at_state, &free_, AT_WRITING))
+        return -1;   /* another list still waits (or is being written) */
+    snprintf(s_at_list, sizeof s_at_list, "%s", list);
     atomic_store(&s_at_state, AT_QUEUED);   /* after the name: the task reads it only once this is set */
     return 0;
 }
@@ -522,6 +522,20 @@ static int setup_open(void) {
     return changed;
 }
 
+/* The console's queued `lora at` list, one query after the other: both directions go to the log. Called
+ * between AT exchanges only: at the pass's start and during a join's backoff wait. */
+static void serve_at(void) {
+    if (atomic_load(&s_at_state) != AT_QUEUED) return;
+    for (const char *p = s_at_list; *p;) {
+        char cmd[16];
+        size_t n = strcspn(p, ",");
+        snprintf(cmd, sizeof cmd, "AT+%.*s=?", (int)n, p);
+        (void)at(cmd, 2000);
+        p += n + (p[n] == ',');
+    }
+    atomic_store(&s_at_state, AT_FREE);
+}
+
 static void join(void) {
     unsigned attempt = 0;
     while (!s_st.joined && s_on && s_silent < CALI_LORA_SILENT_MAX && !setup_pending()) {
@@ -557,6 +571,7 @@ static void join(void) {
         for (uint32_t t = 0; t < wait && s_on && !setup_pending(); t++) {
             vTaskDelay(pdMS_TO_TICKS(1000));
             (void)xQueueReceive(s_snap_q, &s_snap, 0);
+            serve_at();   /* the RX settings are wanted exactly while joins fail */
         }
     }
 }
@@ -706,12 +721,7 @@ static void lora_task(void *arg) {
                 continue;
             }
         }
-        if (atomic_load(&s_at_state) == AT_QUEUED) {   /* the console's `lora at <setting>`: both directions go to the log */
-            char cmd[16];
-            snprintf(cmd, sizeof cmd, "AT+%s=?", s_at_name);
-            (void)at(cmd, 2000);
-            atomic_store(&s_at_state, AT_FREE);
-        }
+        serve_at();
         if (s_uart_up) bus_steady_on();   /* a retry only while the bus is not on yet */
         unsigned want = atomic_load(&s_setup_req);
         if (want != atomic_load(&s_setup_done)) {   /* done only once the new transfer key is stored (the display waits on it) */
