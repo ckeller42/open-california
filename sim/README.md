@@ -60,7 +60,8 @@ code trips this, extend the fake and give the evidence for the new behaviour in 
 | AW9523: power-on output registers 0x11/0x03 (both bus bits 0) | The owner's register probe of the bench CoreS3, 2026-11-22 | verified |
 | AW9523: the state after a 0x7F soft reset (all outputs, all 0) | Assumption: the board package writes direction and output right after it | assumed |
 | AXP2101: 0x00 bit 5 VBUS good, bit 3 battery present; 0x01 bits 6:5 charge state; 0x34/0x35 mV; 0xA4 %; enable bits 0x30 bit 0, 0x18 bit 3 | M5Unified `AXP2101_Class.inl`, XPowersLib's register map (AXP2101 datasheet) | datasheet; the board's live readings matched (`device.battery`) |
-| AXP2101: the power-on values of 0x18 and 0x30 (0) | No saved register dump of the board | assumed |
+| AXP2101: the power-on values of 0x18 and 0x30 (0) | No saved register dump of the board before init | assumed |
+| AXP2101: 0x02 0x10 0x26 0x27 0x68 0x80 0x90 (read only by `i2c dump 0x34`) | Placeholders (0) until a HIL dump of the running board | assumed |
 | CoreS3: the M-Bus module has power while VBUS is there or both bus bits are 1 | M5Stack CoreS3 schematic (M5Unified's ext output) | assumed |
 
 ## Limits: what a green sim does not prove
@@ -129,15 +130,15 @@ output goes to `$HIL_OUT` (default `~/hil/<date-time>`).
 
 1. Once per machine: make a Python environment with the test tools and coresim, and select it:
    `python3 -m venv ~/hil-venv && ~/hil-venv/bin/pip install -r requirements-dev.txt && export PY=~/hil-venv/bin/python`.
-   The drift report also needs the 32-bit host build of the sim (`gcc-multilib g++-multilib`). Without it,
-   `hil.sh scenarios` runs only on the board and says so.
+   The sim half of `hil.sh scenarios` runs in a container (podman): the GHCR `oc-linux` image when it pulls,
+   else a local build of `tools/docker/linux.Dockerfile`. The host needs no 32-bit toolchain.
 2. Find the board's by-id path: `ls -l /dev/serial/by-id/`.
 3. Set the board's port: `export HIL_PORT=/dev/serial/by-id/usb-Espressif_..._<MAC>-if00`.
 4. Identify the board (the MAC is in the by-id name; `status`, `lora status`, `wifi status`):
    `tools/esplab/hil.sh identify`.
 5. Record the console for 2 min (the AT traffic, among it the liveness probe): `tools/esplab/hil.sh tail 120`.
 6. Read the RX settings for the join-accept diagnosis (`RX1DL`, `RX2DL`, `RX2DR`, `RX2FQ`, `JN1DL`,
-   `JN2DL`, `BAND`, `CLASS`, `ADR`, `DR`, `NJS`): `tools/esplab/hil.sh diag`.
+   `JN2DL`, `BAND`, `CLASS`, `ADR`, `DR`, `NJS`) and the register dumps: `tools/esplab/hil.sh diag`.
 7. Run the read-only dual-target scenarios on the board and on the sim, with a JUnit report and the drift
    reports: `tools/esplab/hil.sh scenarios`.
 8. Read the drift reports: `cat $HIL_OUT/drift-*.txt`.
@@ -155,6 +156,7 @@ After the session, copy the new captures (`capture-join.log`, `rx-diag.log`, the
 replays them (both line formats: the console tail's clock times and `hil.sh`'s elapsed milliseconds), and a
 fake that does not match fails. A capture without a parsed AT command fails too.
 
-**Not yet possible:** a dump of the AW9523 and AXP2101 registers. The firmware has no console command for
-that, so the session reads only what `status` reports (`battery`). A read-only `i2c` dump command is a
-follow-up.
+The register dumps (`i2c-dump.log`, `identify.txt`) show the running state: the values after the boot and
+the drivers' writes, not the power-on state. They check the fakes' running state (the drift report compares
+them) and replace the AXP2101 placeholders that only the dump reads, as running values. The AW9523 power-on
+values stay tied to a capture taken before any init (the 2026-11-22 probe).

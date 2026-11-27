@@ -116,7 +116,7 @@ the QEMU image) — `firmware/components/cali_core/include/cali_console.h`:
   <psk>`, `wifi status`, `wifi forget`, `wifi scan` (see [the network section](#network-wifi-setup-and-the-web-ui);
   `LOG wifi: not enabled` while WiFi is off), the sensor probe `sensors [on|off|add …|remove …]`
   ([External sensors](#external-sensors-r_fw_sensors)), the LoRa commands `lora on|off|status|forget` (`forget` erases every LoRa key and switches LoRa off, as `POST /api/lora` does without the confirm; `status` adds the setup state by the same names as `device.lora.setup`, never a key) and
-  `lora keys <deveui> <joineui> <appkey>` (hex; stored in NVS, never printed), `lora at <setting>` (reads one module setting for a diagnosis: `RX1DL`, `RX2DL`, `RX2DR`, `RX2FQ`, `JN1DL`, `JN2DL`, `BAND`, `CLASS`, `ADR`, `DR`, `NWM`, `NJM`, `NJS`, `CFM`, never a key; both directions appear as `lora: >>` / `lora: <<`;
+  `lora keys <deveui> <joineui> <appkey>` (hex; stored in NVS, never printed), `lora at <setting>` (reads one module setting for a diagnosis: `RX1DL`, `RX2DL`, `RX2DR`, `RX2FQ`, `JN1DL`, `JN2DL`, `BAND`, `CLASS`, `ADR`, `DR`, `NWM`, `NJM`, `NJS`, `CFM`, never a key; both directions appear as `lora: >>` / `lora: <<`), `i2c dump 0x58|0x34` (board only: reads a fixed list of AW9523 or AXP2101 registers, one `LOG i2c: 0x<addr> reg 0x<reg> = 0x<val>` line each, after a probe; never a write, never another address;
   [LoRaWAN telemetry](#lorawan-telemetry-r_fw_lora)), and `set <function> <what> [value]` — a control
   command in calictl's `set` vocabulary (`set cooler power on`, `set lighting kitchen 5`,
   `set lighting save_profile 3 amber`; the value is the rest of the line, `""` when absent), see

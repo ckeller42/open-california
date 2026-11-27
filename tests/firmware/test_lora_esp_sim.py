@@ -269,3 +269,30 @@ def test_bus_power_on_is_retried_until_it_works(sim):
     on = [t for t, bits in b.bus_history if bits == (1, 1)]
     assert on and 2 * MIN <= on[0] <= 3 * MIN + 2_000, on
     assert b.logged("lora: bus power on")
+
+
+# ---- the console's read-only register dump (cali_display/i2c_dump.c) ----
+
+
+def test_i2c_dump_reads_only_the_listed_registers(sim):
+    b = esp_sim.Board()
+    for i, line in enumerate(["i2c dump 0x58", "i2c dump 0x34", "i2c dump 0x23"]):
+        b.at(2 * MIN + i * 1000, lambda board, line=line: board.emit(f"EV 0 CONSOLE {line}"))
+    b = sim(b, 3 * MIN)
+    lines = [line for _, line in b.log if line.startswith("LOG i2c: ")]
+    aw = [x for x in lines if x.startswith("LOG i2c: 0x58 reg")]
+    axp = [x for x in lines if x.startswith("LOG i2c: 0x34 reg")]
+    assert len(aw) == 12 and "LOG i2c: 0x58 reg 0x10 = 0x23" in aw  # the AW9523B's ID
+    assert "LOG i2c: 0x58 reg 0x02 = 0x02" in aw and "LOG i2c: 0x58 reg 0x03 = 0x80" in aw  # the bus bits 1/1
+    assert len(axp) == 14 and "LOG i2c: 0x34 reg 0x00 = 0x28" in axp  # VBUS good + battery present
+    assert any("usage: i2c dump 0x58|0x34" in x for x in lines)
+    dump = [r for t, r in b.hw if t >= 2 * MIN and r.startswith("I2C")]
+    assert dump and not [r for r in dump if r.startswith("I2C W")]  # reads only
+    assert not [r for r in dump if r.startswith("I2C R 58 7f")]
+
+
+def test_i2c_dump_of_a_missing_chip(sim):
+    b = esp_sim.Board(aw9523=False)
+    b.at(MIN, lambda board: board.emit("EV 0 CONSOLE i2c dump 0x58"))
+    b = sim(b, 2 * MIN)
+    assert b.logged("i2c: 0x58 does not answer")

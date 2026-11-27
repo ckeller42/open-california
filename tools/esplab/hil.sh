@@ -5,10 +5,13 @@
 #   HIL_PORT=/dev/serial/by-id/usb-Espressif_..._<MAC>-if00 tools/esplab/hil.sh <step> [args]
 #
 # Read-only steps (they never write to the board's flash or NVS):
-#   identify     status, lora status, wifi status (chip and MAC come from the by-id name: no esptool, no reset)
+#   identify     status, lora status, wifi status, the AW9523 + AXP2101 register dumps (i2c dump: reads only)
+#                (chip and MAC come from the by-id name: no esptool, no reset)
 #   tail S       the console for S seconds, timestamped, into a capture file
-#   diag         the RX settings for the join-accept diagnosis (lora at RX1DL ... NJS) into a capture file
-#   scenarios    the dual-target scenarios on the board (and the sim), JUnit report + drift reports
+#   diag         the RX settings for the join-accept diagnosis (lora at RX1DL ... NJS) and the register dumps
+#                into capture files
+#   scenarios    the dual-target scenarios on the board, then on the sim in the oc-linux container (podman):
+#                JUnit reports + drift reports
 # Steps that change the board, each only with the owner present:
 #   scenarios --actions   also the scenarios that join and send uplinks (HIL_ACTIONS=1)
 #   capture-join          lora off, lora on, then 150 s of console: a raw AT transcript of setup, join, uplinks
@@ -43,25 +46,41 @@ for t, line in res.log:
 PY
   )
 }
+# the sim half of `scenarios` in a container (odelly: podman, no gcc-multilib): the GHCR oc-linux image when
+# it pulls, else a local build of tools/docker/linux.Dockerfile (as tools/ci.sh linux does)
+sim_half() {
+  local eng img=ghcr.io/ckeller42/open-california/oc-linux:latest
+  eng=$(command -v podman || command -v docker) || { echo "no podman or docker: no sim half" >&2; return 1; }
+  if ! "$eng" pull -q "$img" >/dev/null 2>&1; then
+    img=oc-linux-local; "$eng" build -q -t "$img" -f "$root/tools/docker/linux.Dockerfile" "$root" >/dev/null || return 1
+  fi
+  local user=(--userns=keep-id)   # podman: the files it writes belong to the caller
+  [ "$(basename "$eng")" = docker ] && user=(--user "$(id -u):$(id -g)")
+  "$eng" run --rm "${user[@]}" -v "$root":/w:Z -v "$out":/out:Z -w /w -e HIL_OUT=/out -e HIL_TARGET=sim \
+    -e HIL_ACTIONS="$1" "$img" sh -c 'bash firmware/host/fetch_nimble.sh && python3 -m pytest \
+    tests/firmware/test_lora_scenarios.py -v -rs -p no:cacheprovider --junitxml /out/junit-sim.xml'
+}
 step="${1:-}"; shift || true
 case "$step" in
   identify)
-    { echo "port $port -> $real"; cmd 2 "status" "lora status" "wifi status"; } | tee "$out/identify.txt" ;;
+    { echo "port $port -> $real"; cmd 2 "status" "lora status" "wifi status" "i2c dump 0x58" "i2c dump 0x34"; } \
+      | tee "$out/identify.txt" ;;
   tail)
     cmd --tail "${1:-60}" | tee "$out/console-tail.log" ;;
   diag)
     run_steps 45 "lora status" "lora at RX1DL" "lora at RX2DL" "lora at RX2DR" "lora at RX2FQ" "lora at JN1DL" \
-      "lora at JN2DL" "lora at BAND" "lora at CLASS" "lora at ADR" "lora at DR" "lora at NJS" | tee "$out/rx-diag.log" ;;
+      "lora at JN2DL" "lora at BAND" "lora at CLASS" "lora at ADR" "lora at DR" "lora at NJS" | tee "$out/rx-diag.log"
+    run_steps 12 "i2c dump 0x58" "i2c dump 0x34" | tee "$out/i2c-dump.log" ;;
   scenarios)
     actions=0; [ "${1:-}" = --actions ] && actions=1
     cd "$root"
-    # the sim side of the drift report needs the 32-bit host build (gcc-multilib): without it, no drift report
-    sim_bin="$root/firmware/host/lora-sim"
-    if ! { bash firmware/host/fetch_nimble.sh && make -s -C firmware/host lora-sim; } >"$out/sim-build.log" 2>&1; then
-      echo "no lora-sim build (see $out/sim-build.log): board runs only, no drift report" >&2; sim_bin=""
-    fi
-    HIL_TARGET=board HIL_PORT="$port" HIL_ACTIONS="$actions" HIL_OUT="$out" HIL_SIM_BIN="$sim_bin" \
-      "${PY:-python3}" -m pytest tests/firmware/test_lora_scenarios.py -v -rs -p no:cacheprovider --junitxml "$out/junit.xml" ;;
+    # the board half on the host (it needs the serial port) ...
+    HIL_TARGET=board HIL_PORT="$port" HIL_ACTIONS="$actions" HIL_OUT="$out" \
+      "${PY:-python3}" -m pytest tests/firmware/test_lora_scenarios.py -v -rs -p no:cacheprovider \
+      --junitxml "$out/junit-board.xml" || status=$?
+    # ... then the sim half in the oc-linux container (the 32-bit host build), which writes the drift reports
+    sim_half "$actions" || { sim_status=$?; echo "the sim half failed (see $out/junit-sim.xml): drift reports may be missing" >&2; }
+    exit "${status:-${sim_status:-0}}" ;;   # a board failure first, else the sim half's
   capture-join)
     echo "changes the board: LoRa off and on, a real join and uplinks"
     run_steps 160 "lora off" "lora status" "lora on" | tee "$out/capture-join.log" ;;

@@ -84,7 +84,13 @@ def test_drift_reports_differences_only():
     assert hil.drift(result("sim", same), result("board", same)) == []
     other = ["LOG lora: >> AT+DR=?", "LOG lora: << AT_ERROR"]
     assert hil.drift(result("sim", same), result("board", other)) == [
-        "AT+DR=?: answers sim ['AT+DR=…', 'OK'] vs board ['AT_ERROR']"
+        "AT+DR=?: answers sim ['AT+DR=0', 'OK'] vs board ['AT_ERROR']"
+    ]
+    other_value = [same[0], "LOG lora: << AT+DR=3", same[2]]
+    assert hil.drift(result("sim", same), result("board", other_value))
+    regs = ["LOG i2c: 0x58 reg 0x02 = 0x11"]
+    assert hil.drift(result("sim", regs), result("board", ["LOG i2c: 0x58 reg 0x02 = 0x13"])) == [
+        "i2c 0x58 reg 0x02: sim 0x11, board 0x13"
     ]
     slow = hil.Result("board", [(0, same[0]), (5000, same[1]), (5000, same[2])])
     assert [d for d in hil.drift(result("sim", same), slow) if "after" in d]

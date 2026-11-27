@@ -40,4 +40,9 @@ int cali_display_shot_line(const char *line);
  * (returns 1) by pressing the screen in the touch read for that long, as a finger; a bad argument logs the usage.
  * Any other line returns 0. Owner task. */
 int cali_display_touch_line(const char *line);
+/* Console hook (i2c_dump.c): handles "i2c dump 0x58" (the AW9523) and "i2c dump 0x34" (the AXP2101) (returns 1):
+ * a read of a fixed list of registers, one "LOG i2c: 0x<addr> reg 0x<reg> = 0x<val>" line each, after a probe
+ * ("LOG i2c: 0x<addr> does not answer"). Never a write, never another address. Owner task. Any other line
+ * returns 0. */
+int cali_i2c_dump_line(const char *line);
 #endif
